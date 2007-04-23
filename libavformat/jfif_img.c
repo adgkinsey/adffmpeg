@@ -1,0 +1,1817 @@
+// $HDR$
+//$Log:  126596: jfif_img.c 
+//
+//    Rev 1.0    30/11/2006 08:53:02  pcolbran
+// AD JPEG to JFIF conversion routines
+
+//  25/08/06  klawson     Use host2network16() and friends instead of htons().
+//  27/07/06  klawson     FSIMAGE/Chipwrights merge:
+//                        * Separate ehost_compress and common_compress.
+//                        * Codewarrior compiler warnings.
+//                        * Switch to timer_clock_get().
+//                        * Add VGA resolutions.
+//  21/07/06  klawson     Use malloc/free instead of NU_Allocate_Memory().
+//  20/07/06  klawson     Remove Nucleus calls (missed comment on previous commit).
+//  18/07/06  klawson     Sync with codeport rev 1.11 04/05/06
+//
+//    Rev 1.11    04/05/2006 18:41:10  Phester
+// Delays rate of outputting mismatched Q setting as lots of IP cams will cause
+// this error
+//
+//    Rev 1.10    26/04/2006 15:44:38  Phester
+// Adding ip cam JVC VN-C20 - different stream - no mime boundaries, just
+// contiguous jfif's
+//
+//    Rev 1.9    24/03/2006 15:47:46  ARoss
+// Moved function read_jfif() from voutput.c to jfif_img.c
+
+//  06/07/07  klawson     Backport changes from uCOS.
+// DLawrence 23 June.  Fix for GCC 4.1
+//
+//   Rev 1.8    19/10/2005 16:09:18  pbarker
+// Added function build_jpeg_header_lite()
+
+//
+//   Rev 1.7    04/10/2005 16:47:30  ARoss
+// Sync with adh.
+
+	//
+	//   Rev 1.11    09/08/05 10:01:54  pcolbran
+	// Made improvements to parse_jfif_header. Corrected camera number read in
+	// parse_comment()
+
+	//
+	//   Rev 1.10    31/05/05 13:48:52  pcolbran
+	// Added code for checking huffman tables
+
+//
+//   Rev 1.6    20/07/2005 18:02:22  SGannon
+// added new zone offset
+
+//
+//   Rev 1.5    22/03/2005 10:32:36  ARoss
+// Sync to adh.
+
+	//
+	//   Rev 1.9    25/01/05 11:50:12  cblood
+	// Added parameter to parse_jfif_header() to allow the comment field to be
+	// ignored because NetVu compatible IP streams may not have the comment fields
+	// we are looking for
+
+	//
+	//   Rev 1.8    18/01/05 11:17:22  cblood
+	// Corrected comment
+
+	//
+	//   Rev 1.7    18/01/05 10:17:42  cblood
+	// Add title parameter to add_jpeg_comment() and insert the site ID, skip
+	// unknown fields in parse_jfif_header() instead of aborting
+
+	//
+	//   Rev 1.6    16/09/04 10:26:52  pcolbran
+	// Converted Q tables to unsigned char. Speeded up find_q()
+
+	//
+	//   Rev 1.5    14/09/04 08:26:08  pcolbran
+	// Corrected baseline Luma Q table
+
+	//
+	//   Rev 1.4    25/08/04 13:47:32  cblood
+	// Removed Q table debug
+
+//
+//   Rev 1.4    19/10/2004 11:32:44  ARoss
+// Remove DM_BUILD define.
+
+//
+//   Rev 1.3    23/09/04 11:28:00  Gmartin
+// Correction to #include statement - must use angle brackets for compiler
+// system headers. Otherwise include paths do not work correctly and may pick up
+// incorrect header.
+
+//
+//   Rev 1.2    20/08/2004 13:34:00  ARoss
+// Sync with adh.
+
+//
+//   Rev 1.3    17/05/04 09:28:42  pcolbran
+// Made parse_comment() a global function
+
+//
+//   Rev 1.2    28/04/04 10:45:18  pcolbran
+// Made parsing functions detect 422 or 411 image format.
+// Added build_comment_text() function
+// made q_init static to module instead of each function having it's own version
+
+//
+//   Rev 1.1    02/04/04 12:09:54  cblood
+// Added Active-detectors comment to JFIF images
+
+//
+//   Rev 1.0    09/02/04 13:14:30  pcolbran
+// Initial Version from Sourcesafe
+
+/* ------------------------------------------------------------------------
+*   Module name : jfif_img.c
+*   Description : Build a C550 compressed image into a JFIF format
+*	Author  : RW/MJN & others.
+*  ------------------------------------------------------------------------
+   Version Initials   Date      Comments
+   ------------------------------------------------------------------------
+
+	001		MJN		22/08/96	Initial creation from assorted separate files.
+	002		JCB		30/04/98	Cut down from ADS1 compression routines to
+								simply modify a standard 550 output data stream
+								into a JFIF image
+	003		JCB		22/09/98	Added med & low res sof headers and select the
+								header depending upon the picture resolution
+	004		JCB 	13/10/98	Added JFIF comment fields to images
+	005		JCB		11/11/99	Added locale & UTC offset to image headers, made
+								arrays static
+	006		JCB		20/12/99	Moved set_active_alarms to application, set
+								alarm bitmask, locale & utc_offset from picture structure
+	007		PRC		09/06/00	Made YQuantizationFactors paased parameters to calcQtabs
+								to avois re-entrancy problems on calculating Q tables
+	008		PRC		29/09/00	Pre-compute qtables to speed things up. Added function
+								build_jpeg_header() which just builds the header without
+								memcpying thge picture on the end of it.
+	009		PRC		08/11/00	Added millisec entry to comment field
+	010		PRC		13/12/00	Added function  add_jpeg_comment() which given a jfif image,
+								adds a comment marker and info
+	011		PRC		19/01/01	Made build_jpeg and build_jpeg_header add variable length
+								comments
+	012		PRC		06/08/01	Make build_jpeg produce an image which is 32 bit aligned
+	013		PRC		15/10/01	Changed milliseconds format to unsigned
+	014		PRC		28/05/02	Added support for DMViewer
+	015		PRC		30/05/02	Added jfif parsing function parse_jfif_header() which
+								fills out an IMAGE structure based on the jfif contents
+	016		PRC		12/06/02	Reduced verbisity of debug comments in parse_comment().
+								Added parameter site to parse_comment() and parse_jfif_header()
+	017		PRC		09/07/02	Added function find_q
+	018		PRC		20/02/03	Added support for PIC_MODE_JPEG_422 and PIC_MODE_JPEG_411
+	019		JCB		21/08/03	Specified x/y density in the APPO header as 50/25 pixels/cm
+	020		PRC		04/12/03 	Removed Site-Id tag from JFIF comment. Now done in build_image_text()
+	021		JCB		02/04/04	Added Active-detectors comment to images
+	022		PRC		28/04/04	Made parsing functions detect 422 or 411 image format.
+								Added build_comment_text() function
+								made q_init static to module instead of each function having
+								it's own version
+	023		PRC		17/05/04	Made parse_comment() a global function
+	024		PRC		14/09/04	Corrected baseline Luma Q table
+	025		PRC		16/09/04	Converted Q tables to unsigned char. Speeded up find_q()
+	026		JCB		18/01/05	Add title parameter to add_jpeg_comment() and insert the site ID, skip
+								unknown fields in parse_jfif_header() instead of aborting
+	027		JCB		25/01/05	Added parameter to parse_jfif_header() to allow the comment field to
+								be ignored
+	028		PRC		31/05/05	Added code for checking huffman tables
+	029		PRC		09/08/05	Made improvements to parse_jfif_header. Corrected
+								camera number read in parse_comment()
+	030		JCB		19/01/06	Insert lines & pixels into sof header in correct order on a little endian system
+ 	031		JCB		10/05/06	Print time using %H:%M:%S instead of %X because %X prints
+								in 12 hour format under eCos
+ 	032		PRC		06/02/07	Corrected year offset in tm_year
+  ------------------------------------------------------------------------
+	Description of Operation
+
+build_jpeg()
+	Build the correct JFIF headers & tables for the supplied compressed image data
+
+calc_q_tables()
+	Calculate the correct Q tables for the specified Q factor
+
+*/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include "jfif_img.h"
+
+#include "adpic.h"
+#include "time.h"
+//#include "os.h"		/* byte-swapping routines */
+
+extern struct tm *localtime_r(const time_t *t, struct tm *tp);
+
+/* JCB 004 start */
+static const char comment_version[] = "Version: 00.02\r\n";
+static const char camera_title[] = "Name: ";
+static const char camera_number[] = "Number: ";
+static const char image_date[] = "Date: ";
+static const char image_time[] = "Time: ";
+static const char image_ms[] = "MSec: ";
+//static const char add_compress_tables[] = "Tables: NO\r\n";
+//static const char omit_compress_tables[] = "Tables: YES\r\n";
+static const char q_factor[] = "Q-Factor: ";
+static const char alarm_comment[] = "Alarm-text: ";
+static const char active_alarms[] = "Active-alarms: ";	/* JCB 007 */
+static const char active_detectors[] = "Active-detectors: ";	/* JCB 021 */
+static const char script_msg[] = "Comments: ";			/* JCB 007 */
+static const char time_zone[] = "Locale: ";				/* JCB 005 */
+static const char utc_offset[] = "UTCoffset: ";			/* JCB 005 */
+/* JCB 004 end */
+static char comment_msg[256];
+static const char site_id[] = "Site-Id: ";	/* JCB 006 */
+
+static const unsigned char jfif_header[] =
+// {	0xFF,0xD8,0xFF,0xE0,0x00,0x10,0x4A,0x46,0x49,0x46,0x00,0x01,0x01,0x00,0x00,0x01,0x00,0x01,0x00,0x00};
+{	0xFF,0xD8,0xFF,0xE0,0x00,0x10,0x4A,0x46,0x49,0x46,0x00,0x01,0x02,0x02,0x00,0x32,0x00,0x19,0x00,0x00};	// JCB 019
+
+static const unsigned char sof_422_header[] =
+{	0xFF,0xC0,0x00,0x11,0x08,0x01,0x00,0x01,0x60,0x03,0x01,0x21,0x00,0x02,0x11,0x01,0x03,0x11,0x01}; // 422
+static const unsigned char sof_411_header[] =
+{	0xFF,0xC0,0x00,0x11,0x08,0x01,0x00,0x01,0x60,0x03,0x01,0x22,0x00,0x02,0x11,0x01,0x03,0x11,0x01}; // 411
+
+static const unsigned char huf_header[] =
+{ 	0xFF,0xC4,0x00,0x1F,0x00,0x00,0x01,0x05,0x01,0x01,0x01,0x01,0x01,0x01,0x00,0x00,
+	0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,
+	0x0B,0xFF,0xC4,0x00,0xB5,0x10,0x00,0x02,0x01,0x03,0x03,0x02,0x04,0x03,0x05,0x05,
+	0x04,0x04,0x00,0x00,0x01,0x7D,0x01,0x02,0x03,0x00,0x04,0x11,0x05,0x12,0x21,0x31,
+	0x41,0x06,0x13,0x51,0x61,0x07,0x22,0x71,0x14,0x32,0x81,0x91,0xA1,0x08,0x23,0x42,
+	0xB1,0xC1,0x15,0x52,0xD1,0xF0,0x24,0x33,0x62,0x72,0x82,0x09,0x0A,0x16,0x17,0x18,
+	0x19,0x1A,0x25,0x26,0x27,0x28,0x29,0x2A,0x34,0x35,0x36,0x37,0x38,0x39,0x3A,0x43,
+	0x44,0x45,0x46,0x47,0x48,0x49,0x4A,0x53,0x54,0x55,0x56,0x57,0x58,0x59,0x5A,0x63,
+	0x64,0x65,0x66,0x67,0x68,0x69,0x6A,0x73,0x74,0x75,0x76,0x77,0x78,0x79,0x7A,0x83,
+	0x84,0x85,0x86,0x87,0x88,0x89,0x8A,0x92,0x93,0x94,0x95,0x96,0x97,0x98,0x99,0x9A,
+	0xA2,0xA3,0xA4,0xA5,0xA6,0xA7,0xA8,0xA9,0xAA,0xB2,0xB3,0xB4,0xB5,0xB6,0xB7,0xB8,
+	0xB9,0xBA,0xC2,0xC3,0xC4,0xC5,0xC6,0xC7,0xC8,0xC9,0xCA,0xD2,0xD3,0xD4,0xD5,0xD6,
+	0xD7,0xD8,0xD9,0xDA,0xE1,0xE2,0xE3,0xE4,0xE5,0xE6,0xE7,0xE8,0xE9,0xEA,0xF1,0xF2,
+	0xF3,0xF4,0xF5,0xF6,0xF7,0xF8,0xF9,0xFA,0xFF,0xC4,0x00,0x1F,0x01,0x00,0x03,0x01,
+	0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x02,
+	0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0xFF,0xC4,0x00,0xB5,0x11,0x00,0x02,
+	0x01,0x02,0x04,0x04,0x03,0x04,0x07,0x05,0x04,0x04,0x00,0x01,0x02,0x77,0x00,0x01,
+	0x02,0x03,0x11,0x04,0x05,0x21,0x31,0x06,0x12,0x41,0x51,0x07,0x61,0x71,0x13,0x22,
+	0x32,0x81,0x08,0x14,0x42,0x91,0xA1,0xB1,0xC1,0x09,0x23,0x33,0x52,0xF0,0x15,0x62,
+	0x72,0xD1,0x0A,0x16,0x24,0x34,0xE1,0x25,0xF1,0x17,0x18,0x19,0x1A,0x26,0x27,0x28,
+	0x29,0x2A,0x35,0x36,0x37,0x38,0x39,0x3A,0x43,0x44,0x45,0x46,0x47,0x48,0x49,0x4A,
+	0x53,0x54,0x55,0x56,0x57,0x58,0x59,0x5A,0x63,0x64,0x65,0x66,0x67,0x68,0x69,0x6A,
+	0x73,0x74,0x75,0x76,0x77,0x78,0x79,0x7A,0x82,0x83,0x84,0x85,0x86,0x87,0x88,0x89,
+	0x8A,0x92,0x93,0x94,0x95,0x96,0x97,0x98,0x99,0x9A,0xA2,0xA3,0xA4,0xA5,0xA6,0xA7,
+	0xA8,0xA9,0xAA,0xB2,0xB3,0xB4,0xB5,0xB6,0xB7,0xB8,0xB9,0xBA,0xC2,0xC3,0xC4,0xC5,
+	0xC6,0xC7,0xC8,0xC9,0xCA,0xD2,0xD3,0xD4,0xD5,0xD6,0xD7,0xD8,0xD9,0xDA,0xE2,0xE3,
+	0xE4,0xE5,0xE6,0xE7,0xE8,0xE9,0xEA,0xF2,0xF3,0xF4,0xF5,0xF6,0xF7,0xF8,0xF9,0xFA };
+
+static const unsigned char sos_header[] =
+{	0xFF,0xDA,0x00,0x0c,0x03,0x01,0x00,0x02,0x11,0x03,0x11,0x00,0x3F,0x00};
+#ifdef DRI_HEADER
+static const unsigned char dri_header[] =
+{	0xFF,0xDD,0x00,0x04,0x00,0x02};
+#endif
+static const unsigned char soc_header[] =	/* JCB 004 comment header */
+{	0xFF, 0xFE, 0x00, 0x00 };
+
+/****************************************************************************
+ Initialised Global Data
+****************************************************************************/
+
+
+/* VARIOUS TABLES */
+
+
+unsigned short Yvis[64] =
+    {
+     16   ,11   ,12   ,14   ,12   ,10   ,16   ,14,
+     13   ,14   ,18   ,17   ,16   ,19   ,24   ,40,	// PRC 024
+     26   ,24   ,22   ,22   ,24   ,49   ,35   ,37,
+     29   ,40   ,58   ,51   ,61   ,60   ,57   ,51,
+     56   ,55   ,64   ,72   ,92   ,78   ,64   ,68,
+     87   ,69   ,55   ,56   ,80   ,109  ,81   ,87,
+     95   ,98   ,103  ,104  ,103  ,62   ,77   ,113,
+     121  ,112  ,100  ,120  ,92   ,101  ,103  ,99
+    };
+
+unsigned short UVvis[64] =
+    {
+     17  ,18  ,18  ,24  ,21  ,24  ,47  ,26,
+     26  ,47  ,99  ,66  ,56  ,66  ,99  ,99,
+     99  ,99  ,99  ,99  ,99  ,99  ,99  ,99,
+     99  ,99  ,99  ,99  ,99  ,99  ,99  ,99,
+     99  ,99  ,99  ,99  ,99  ,99  ,99  ,99,
+     99  ,99  ,99  ,99  ,99  ,99  ,99  ,99,
+     99  ,99  ,99  ,99  ,99  ,99  ,99  ,99,
+     99  ,99  ,99  ,99  ,99  ,99  ,99  ,99   };
+
+
+unsigned char YQuantizationFactors[256][64], UVQuantizationFactors[256][64]; // PRC 025
+static void calcQtabs(void);
+//static long filesize( int handle );
+
+
+static int q_init;
+
+/****************************************************************************
+
+Prototype	  :	unsigned int build_jpeg(void *image, void *jfif, IMAGE *pic, unsigned int max)
+
+Procedure Desc: Build the correct JFIF headers & tables for the supplied
+				compressed image data
+
+	Inputs	  :	void *jfif		pointer to output buffer
+				IMAGE *pic		pointer to image structure - includes
+								Q factors, image size, mode etc
+				int add_comment flag to control addition of comment
+				unsigned int max		maximum size of compressed image
+	Outputs	  :	unsigned int	total bytes in the JFIF image
+	Globals   :	none
+
+****************************************************************************/
+unsigned int build_jpeg_header(void *jfif, IMAGE *pic, int add_comment, unsigned int max)	/* JCB 004 */
+{
+volatile unsigned int count;
+unsigned int comment_length;
+unsigned short    us1;
+char  *bufptr = jfif;
+char *comment_header;
+char line[128];
+char sof_copy[sizeof(sof_422_header)];
+char *txt;
+struct tm tim_s;
+
+
+	if (!q_init)
+	{
+		calcQtabs();
+		q_init = 1;
+	}
+
+	/*
+	*	Add all the fixed length headers prior to building comment field
+	*/
+	count = sizeof(jfif_header);
+	if (count > max)
+		return 0;
+
+	memcpy(bufptr, jfif_header, sizeof(jfif_header));
+	bufptr += sizeof(jfif_header);
+
+	/*
+	*	Now add the variable length comments
+	*/
+	/* JCB 006 end */
+	if (add_comment)
+	{
+		if ((count + + sizeof(soc_header) + strlen(comment_version)) > max)
+			return 0;
+		comment_header = bufptr + 2;
+		memcpy(bufptr, soc_header, sizeof(soc_header));
+		bufptr += sizeof(soc_header);
+		strcpy(bufptr, comment_version);
+		bufptr += strlen(comment_version);
+		
+		snprintf(line, 128, "%s%d\r\n",camera_number, pic->cam);
+		count += strlen(line);
+		if (count > max)
+			return 0;
+		else
+		{
+			strcpy(bufptr, line);
+			bufptr += strlen(line);
+		}
+
+		snprintf(line, 128, "%s%s\r\n",camera_title, pic->title);
+		count += strlen(line);
+		if (count > max)
+			return 0;
+		else
+		{
+			strcpy(bufptr, line);
+			bufptr += strlen(line);
+		}
+
+		if (pic->alarm[0])
+		{
+			snprintf(line, 128, "%s%s\r\n",alarm_comment, pic->alarm);
+			count += strlen(line);
+			if (count > max)
+				return 0;
+			else
+			{
+				strcpy(bufptr, line);
+				bufptr += strlen(line);
+			}
+		}
+
+		if (pic->alm_bitmask)	/* JCB 008 */
+		{
+			snprintf(line, 128, "%s%08X\r\n",active_alarms, pic->alm_bitmask);	/* JCB 008 */
+			count += strlen(line);
+			if (count > max)
+				return 0;
+			else
+			{
+				strcpy(bufptr, line);
+				bufptr += strlen(line);
+			}
+		}
+
+		if (pic->alm_bitmask_hi)	/* JCB 021 */
+		{
+			snprintf(line, 128, "%s%08X\r\n",active_detectors, pic->alm_bitmask_hi);
+			count += strlen(line);
+			if (count > max)
+				return 0;
+			else
+			{
+				strcpy(bufptr, line);
+				bufptr += strlen(line);
+			}
+		}
+
+		if (comment_msg[0])
+		{
+			snprintf(line, 128, "%s%s\r\n",script_msg, comment_msg);
+			count += strlen(line);
+			if (count > max)
+				return 0;
+			else
+			{
+				strcpy(bufptr, line);
+				bufptr += strlen(line);
+			}
+		}
+
+		count += strlen(image_date);
+		if (count > max)
+			return 0;
+		else
+		{
+			strcpy(bufptr, image_date);
+			bufptr += strlen(image_date);
+		}
+		strftime (line, sizeof(line), "%d/%m/%Y\r\n", localtime_r(&pic->session_time, &tim_s));
+		count += strlen(line);
+		if (count > max)
+			return 0;
+		else
+		{
+			strcpy(bufptr, line);
+			bufptr += strlen(line);
+		}
+
+		count += strlen(image_time);
+		if (count > max)
+			return 0;
+		else
+		{
+			strcpy(bufptr, image_time);
+			bufptr += strlen(image_time);
+		}
+		strftime (line, sizeof(line), "%H:%M:%S\r\n", localtime_r(&pic->session_time, &tim_s));
+		count += strlen(line);
+		if (count > max)
+			return 0;
+		else
+		{
+			strcpy(bufptr, line);
+			bufptr += strlen(line);
+		}
+
+		count += strlen(image_ms);	/* PRC 009 */
+		if (count > max)
+			return 0;
+		else
+		{
+			strcpy(bufptr, image_ms);
+			bufptr += strlen(image_ms);
+		}
+		snprintf (line, 128, "%u\r\n", pic->milliseconds%1000 );// PRC 013
+		count += strlen(line);
+		if (count > max)
+			return 0;
+		else
+		{
+			strcpy(bufptr, line);
+			bufptr += strlen(line);
+		}
+
+		snprintf(line, 128, "%s%s\r\n",time_zone, pic->locale);
+		count += strlen(line);
+		if (count > max)
+			return 0;
+		else
+		{
+			strcpy(bufptr, line);
+			bufptr += strlen(line);
+		}
+
+		snprintf(line, 128, "%s%d\r\n",utc_offset, pic->utc_offset);
+		count += strlen(line);
+		if (count > max)
+			return 0;
+		else
+		{
+			strcpy(bufptr, line);
+			bufptr += strlen(line);
+		}
+
+		if (pic->start_offset > 0)
+		{
+			txt = (char *)&pic[1];
+			count += pic->start_offset;
+			if (count > max)
+				return 0;
+			else
+			{
+#if 0
+			char cpy[80];
+				memset(cpy,0,80);
+				strncpy(cpy,txt,pic->start_offset);
+				logger (LOG_DEBUG, "JFIF_IMG: 1 adding text %s\n", cpy);
+#endif
+				strncpy(bufptr, txt, pic->start_offset);
+				bufptr += pic->start_offset;
+			}
+		}
+
+		comment_length = bufptr - comment_header;
+		*comment_header++ = comment_length>>8;
+		*comment_header++ = comment_length & 0xff;
+	}
+	count += 138;		/* Q tables and markers */
+	if (count > max)
+		return 0;
+	*bufptr++=0xff;
+	*bufptr++=0xdb;
+	*bufptr++=0x00;
+	*bufptr++=0x43;
+	*bufptr++=0x00;
+	for (us1=0; us1<64; us1++)
+		*bufptr++ = YQuantizationFactors[pic->factor][us1];
+	*bufptr++=0xff;
+	*bufptr++=0xdb;
+	*bufptr++=0x00;
+	*bufptr++=0x43;
+	*bufptr++=0x01;
+	for (us1=0; us1<64; us1++)
+		*bufptr++ = UVQuantizationFactors[pic->factor][us1];
+#ifdef DRI_HEADER
+	count += sizeof(dri_header);
+	if (count > max)
+		return 0;
+	else
+	{
+		memcpy(bufptr, dri_header, sizeof(dri_header));
+		bufptr += sizeof(dri_header);
+	}
+#endif
+	count += (sizeof(sof_copy) + sizeof(huf_header) + sizeof(sos_header));
+	if (count > max)
+		return 0;
+	else
+	{
+	unsigned short targ;
+		char *ptr1, *ptr2;
+		memcpy(sof_copy,(pic->vid_format == PIC_MODE_JPEG_411) ? sof_411_header: sof_422_header, sizeof( sof_copy ) );
+		targ = pic->format.target_pixels;
+		host2network16(targ);
+		ptr1 = (char *)&targ;
+		ptr2 = &sof_copy[7];
+		*ptr2++ = *ptr1++;
+		*ptr2 = *ptr1;
+
+		targ = pic->format.target_lines;
+		host2network16(targ);
+		ptr1 = (char *)&targ;
+		ptr2 = &sof_copy[5];
+		*ptr2++ = *ptr1++;
+		*ptr2 = *ptr1;
+
+		memcpy(bufptr, sof_copy, sizeof(sof_copy));
+		bufptr += sizeof(sof_copy);
+
+		memcpy(bufptr, huf_header, sizeof(huf_header));
+		bufptr += sizeof(huf_header);
+
+		memcpy(bufptr, sos_header, sizeof(sos_header));
+		bufptr += sizeof(sos_header);
+	}
+	if (count > max)
+		return 0;
+
+	return count;
+}
+
+/****************************************************************************
+
+Prototype	  :	unsigned int build_jpeg_header_lite(void *image, void *jfif, IMAGE *pic, unsigned int max)
+
+Procedure Desc: Build the correct JFIF headers with no tables for use with no data 
+
+	Inputs	  :	void *image		pointer to compressed image data
+				void *jfif		pointer to output buffer
+				IMAGE *pic		pointer to image structure - includes
+								Q factors, image size, mode etc
+				unsigned int max		maximum size of compressed image
+	Outputs	  :	unsigned int	total bytes in the JFIF image
+	Globals   :	none
+
+****************************************************************************/
+unsigned int build_jpeg_header_lite(void *image, void *jfif, IMAGE *pic, unsigned int max)	// PJB 001
+{
+volatile unsigned int count;
+unsigned int comment_length;
+//unsigned short    us1;
+char  *bufptr = jfif;
+char *comment_header;
+char line[128];
+//unsigned char sof_copy[sizeof(sof_422_header)];
+char *txt;
+struct tm tim_s;
+
+	image = image;		/*	Remove compiler warning  */
+
+	if (!q_init)
+	{
+		calcQtabs();
+		q_init = 1;
+	}
+
+	/*
+	*	Add all the fixed length headers prior to building comment field
+	*/
+	count = sizeof(jfif_header) + sizeof(soc_header) + strlen(comment_version);
+	if (count > max)
+		return 0;
+	else
+	{
+		memcpy(bufptr, jfif_header, sizeof(jfif_header));
+		bufptr += sizeof(jfif_header);
+		comment_header = bufptr + 2;
+		memcpy(bufptr, soc_header, sizeof(soc_header));
+		bufptr += sizeof(soc_header);
+		strcpy(bufptr, comment_version);
+		bufptr += strlen(comment_version);
+	}
+
+	/*
+	*	Now add the variable length comments
+	*/
+	/* JCB 006 end */
+
+	snprintf(line, 128, "%s%d\r\n",camera_number, pic->cam);
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, line);
+		bufptr += strlen(line);
+	}
+
+	snprintf(line, 128, "%s%s\r\n",camera_title, pic->title);
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, line);
+		bufptr += strlen(line);
+	}
+
+	if (pic->alarm[0])
+	{
+		snprintf(line, 128, "%s%s\r\n",alarm_comment, pic->alarm);
+		count += strlen(line);
+		if (count > max)
+			return 0;
+		else
+		{
+			strcpy(bufptr, line);
+			bufptr += strlen(line);
+		}
+	}
+
+	if (pic->alm_bitmask)	/* JCB 008 */
+	{
+		snprintf(line, 128, "%s%08X\r\n",active_alarms, pic->alm_bitmask);	/* JCB 008 */
+		count += strlen(line);
+		if (count > max)
+			return 0;
+		else
+		{
+			strcpy(bufptr, line);
+			bufptr += strlen(line);
+		}
+	}
+
+	if (pic->alm_bitmask_hi)	/* JCB 021 */
+	{
+		snprintf(line, 128, "%s%08X\r\n",active_detectors, pic->alm_bitmask_hi);
+		count += strlen(line);
+		if (count > max)
+			return 0;
+		else
+		{
+			strcpy(bufptr, line);
+			bufptr += strlen(line);
+		}
+	}
+
+	if (comment_msg[0])
+	{
+		snprintf(line, 128, "%s%s\r\n",script_msg, comment_msg);
+		count += strlen(line);
+		if (count > max)
+			return 0;
+		else
+		{
+			strcpy(bufptr, line);
+			bufptr += strlen(line);
+		}
+	}
+
+	count += strlen(image_date);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, image_date);
+		bufptr += strlen(image_date);
+	}
+	strftime (line, sizeof(line), "%d/%m/%Y\r\n", localtime_r(&pic->session_time, &tim_s));
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, line);
+		bufptr += strlen(line);
+	}
+
+	count += strlen(image_time);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, image_time);
+		bufptr += strlen(image_time);
+	}
+	strftime (line, sizeof(line), "%H:%M:%S\r\n", localtime_r(&pic->session_time, &tim_s));
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, line);
+		bufptr += strlen(line);
+	}
+
+	count += strlen(image_ms);	/* PRC 009 */
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, image_ms);
+		bufptr += strlen(image_ms);
+	}
+	snprintf (line, 128, "%u\r\n", pic->milliseconds%1000 );// PRC 013
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, line);
+		bufptr += strlen(line);
+	}
+
+	snprintf(line, 128, "%s%s\r\n",time_zone, pic->locale);
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, line);
+		bufptr += strlen(line);
+	}
+
+	snprintf(line, 128, "%s%d\r\n",utc_offset, pic->utc_offset);
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, line);
+		bufptr += strlen(line);
+	}
+
+#if 1 /* PJB */
+	if (pic->start_offset > 0)
+	{
+		txt = (char *)&pic[1];
+		count += pic->start_offset;
+		if (count > max)
+			return 0;
+		else
+		{
+#if 0
+			char cpy[80];
+
+			memset(cpy,0,80);
+			strncpy(cpy,txt,pic->start_offset);
+			fprintf(stderr, "JFIF_IMG: 1 adding text %s\n", cpy);
+#endif
+			strncpy(bufptr, txt, pic->start_offset);
+			bufptr += pic->start_offset;
+		}
+	}
+#endif /* PJB */
+
+	comment_length = bufptr - comment_header;
+	*comment_header++ = comment_length>>8;
+	*comment_header++ = comment_length & 0xff;
+
+	// May need some dummy data to keep things happy
+	*bufptr++=0xff;
+	*bufptr++=0xda;
+	*bufptr++=0x00;
+	*bufptr++=0x02;
+	count += 4;
+
+	*bufptr++=0xff;
+	*bufptr++=0xd9;
+	count += 2;
+	
+	return count;
+}
+
+/****************************************************************************
+
+Prototype	  :	unsigned int add_jpeg_comment(void *j_in, void *j_out, int max, int camera, time_t pictime, int utc_oset, char *locale, char *title)
+
+Procedure Desc: Inserts a JPEG comment field into a JFIF header just before the
+				Q tables
+
+	Inputs	  :	void *j_in		input data pointer
+				void *j_out		output data pointer
+				int max			max number of bytes to write (size of output buffer)
+				int  camera		camera number
+				time_t pictime	time & data of image
+				int utc_oset	UTC offset
+				char *locale	system locale string
+				char *title		camera title
+	Outputs	  :	int				number of bytes in new JFIF image
+	Globals   :	
+
+****************************************************************************/
+unsigned int add_jpeg_comment(void *j_in, void *j_out, int max, int camera, time_t pictime, int utc_oset, char *locale, char *title) // JCB 026
+{
+char *iptr, *optr, *comment_header;
+char line[128];
+struct tm tim_s;
+int count = 0, comment_length;
+
+	iptr = j_in;
+	optr = j_out;
+	while ( !(( (unsigned char)*iptr == 0xff ) && ( (unsigned char)*(iptr+1) == 0xdb )) && (count < max))
+	{
+		*optr++ = *iptr++;
+		count++;
+	}
+
+	if (count >= max)
+		return 0;
+	comment_header = optr + 2;
+	memcpy(optr, soc_header, sizeof(soc_header));
+	optr += sizeof(soc_header);
+	strcpy(optr, comment_version);
+	optr += strlen(comment_version);
+	/*
+	*	Now add the variable length comments
+	*/
+#if 0
+	snprintf(line, 128, "%s%s\r\n",site_id, system_site_id());	// JCB 026
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(optr, line);
+		optr += strlen(line);
+	}
+#endif
+	snprintf(line, 128, "%s%d\r\n",camera_number, camera);
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(optr, line);
+		optr += strlen(line);
+	}
+
+	snprintf(line, 128, "%s%s\r\n",camera_title, title);	// JCB 026 use title passed as a parameter
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(optr, line);
+		optr += strlen(line);
+	}
+
+	count += strlen(image_date);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(optr, image_date);
+		optr += strlen(image_date);
+	}
+	strftime (line, sizeof(line), "%d/%m/%Y\r\n", localtime_r(&pictime, &tim_s));
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(optr, line);
+		optr += strlen(line);
+	}
+
+	count += strlen(image_time);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(optr, image_time);
+		optr += strlen(image_time);
+	}
+	strftime (line, sizeof(line), "%H:%M:%S\r\n", localtime_r(&pictime, &tim_s));
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(optr, line);
+		optr += strlen(line);
+	}
+
+	snprintf(line, 128, "%s%s\r\n",time_zone, locale);
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(optr, line);
+		optr += strlen(line);
+	}
+
+	snprintf(line, 128, "%s%d\r\n",utc_offset, utc_oset);
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(optr, line);
+		optr += strlen(line);
+	}
+
+	comment_length = optr - comment_header;
+	*comment_header++ = comment_length>>8;
+	*comment_header++ = comment_length & 0xff;
+
+	while ( !(((unsigned char) *iptr == 0xff ) && ( (unsigned char)*(iptr+1) == 0xd9 ))  && (count < max) )
+	{
+		*optr++ = *iptr++;
+		count++;
+	}
+	*optr++ = *iptr++;
+	count++;
+	*optr++ = *iptr++;
+	count++;
+	if (count >= max)
+		return 0;
+
+	return optr-(char *)j_out;
+}
+#if 0
+int read_jfif(char *filename, struct _image_data *pic )
+{
+int h, n, rv=-1, offset;
+long size;
+unsigned char *jfif;
+char site[32];
+unsigned char *qy, *qc;
+
+	if ( (h=open(filename, O_RDONLY)) >= 0)
+	{
+		size = filesize( h );
+		if ((jfif = malloc (size)) != NULL)
+		{
+			if ((n=read(h,jfif,size)) == size)
+			{
+				memset(pic, 0 ,sizeof(*pic));
+				site[0] = 0;
+				if ( (offset = parse_jfif_header(jfif, pic, size, &qy, &qc, site, TRUE))>0)
+				{
+					if (qy)
+					{
+						pic->factor = find_q(qy);
+					}
+					else
+					{
+						pic->factor = 50;
+					}
+					pic->size = size-offset-2;
+					memcpy(start_of_image(pic), jfif+offset, pic->size );
+					rv = 0;
+				}
+				else
+				{
+					fprintf(stderr,"VOUTPUT: failed to parse_jfif_header from %s\n", filename );
+				}
+			}
+			else
+			{
+				fprintf(stderr,"VOUTPUT: failed to read %ld bytes from %s\n", size, filename );
+			}
+			free(jfif);
+		}
+		else
+		{
+			fprintf(stderr,"VOUTPUT: failed to allocate %ld bytes of memory for %s\n", size, filename );
+		}
+
+		close(h);
+	}
+	else
+	{
+		fprintf(stderr,"VOUTPUT: failed to open %s\n", filename );
+	}
+	return rv;
+}
+#endif
+/****************************************************************************
+
+Prototype	  :	static void calc_q_tables(short factor)
+
+Procedure Desc: Calculate the correct Q tables for the specified Q factor
+
+	Inputs	  :	short factor	picture Q factor
+	Outputs	  :	none
+	Globals   :	Updates the module Q factor tables
+
+****************************************************************************/
+static void calcQtabs(void)
+{
+short i;
+int uvfactor;
+short factor;
+short yval, uvval;	
+	for (factor = 1; factor < 256; factor++ )
+	{
+		uvfactor = factor * 1;
+		if (uvfactor > 255)
+			uvfactor = 255;
+	   	for (i=0;i<64;i++)
+   		{
+		    /* Version 2.0a modification:                                             */
+   			/*          lum_q[] and chr_q[] are now rounded, not truncated.           */
+
+        	yval  = (short)(((Yvis[i]*factor)+25)/50);
+	    	uvval= (short)(((UVvis[i]*uvfactor)+25)/50);
+
+		    /* Version 1.0a modification:                                             */
+   			/*     The boundry below has been changed from no less than               */
+   			/*     2 to no less than 1.                                               */
+	   		/* Version 3.1 modification:                                              */
+   			/*     The boundry below has been added to cap the quantization values    */
+   			/*     to no greater than 255.                                            */
+
+	        if ( yval < 1 )
+				yval = 1;  /* The DC and AC values cannot be   */
+   		    if ( uvval < 1)
+				uvval = 1;   /* less than 1                      */
+
+        	if ( yval > 255 )
+				yval = 255;  /* The DC and AC values cannot  */
+	   	    if ( uvval > 255)
+				uvval = 255;   /* be more than 255             */
+
+        	YQuantizationFactors[factor][i]  = (unsigned char)yval;  // PRC 025
+	    	UVQuantizationFactors[factor][i] = (unsigned char)uvval;
+
+
+   		}
+	}
+}
+
+typedef unsigned long testtype; // PRC 025
+#if 0
+int find_q(unsigned char *qy)
+{
+int factor, fail;
+testtype *q1, *q2, *qe;
+unsigned char qtest[64];
+int errs;
+
+	if (!q_init)
+	{
+		calcQtabs();
+		q_init = 1;
+	}
+
+	memcpy(&qtest[0], qy, 64); // PRC 025
+
+	qe = (testtype*)&qtest[32];
+
+	for (factor = 1; factor < 256; factor++ )
+	{
+		fail = FALSE;
+		q1 = (testtype*)&qtest[0];
+		q2 = (testtype*)&YQuantizationFactors[factor][0];
+		errs = 0;
+		while (q1<qe)
+		{
+			if ( *q1 != *q2 )
+			{
+				errs++;
+				if (errs>1)
+				{
+					fail = TRUE;
+					break;
+				}
+			}
+			q1++;
+			q2++;
+		}
+		if (!fail)
+			break;
+	}
+	if (factor == 256)
+	{
+		factor = 128;
+		fprintf(stderr, "JFIF_IMG: Unable to match Q setting 128\n" );
+	}
+	else
+		fprintf(stderr, "JFIF_IMG: Matching Q = %d\n", factor );
+	return factor;
+}
+#else
+int find_q(unsigned char *qy)
+{
+int factor, smallest_err=0, best_factor = 0;
+unsigned char *q1, *q2, *qe;
+unsigned char qtest[64];
+int err_diff;
+
+	if (!q_init)
+	{
+		calcQtabs();
+		q_init = 1;
+	}
+
+	memcpy(&qtest[0], qy, 64); // PRC 025
+
+	qe = &qtest[32];
+
+	for (factor = 1; factor < 256; factor++ )
+	{
+		q1 = &qtest[0];
+		q2 = &YQuantizationFactors[factor][0];
+		err_diff = 0;
+		while (q1<qe)
+		{
+			if (*q1>*q2)
+				err_diff = *q1-*q2;
+			else
+				err_diff = *q2-*q1;
+				
+			q1++;
+			q2++;
+		}
+		if (err_diff == 0)
+		{
+			best_factor = factor;
+			smallest_err = 0;
+			break;
+		}
+		else if ( err_diff < smallest_err || best_factor == 0 )
+		{
+			best_factor = factor;
+			smallest_err = err_diff;
+		}
+	}
+	if (factor == 256)
+	{
+		factor = best_factor;
+		fprintf(stderr, "JFIF_IMG: Unable to match Q setting %d\n", best_factor );
+	}
+	else
+	{
+#if 0
+		static time_t lastdisplay=0;
+		if (lastdisplay - time(NULL) > 10)
+		{
+			fprintf(stderr, "JFIF_IMG: Matching Q = %d\n", factor );
+			lastdisplay = time(NULL);
+		}
+#endif
+	}
+	return factor;
+}
+#endif
+
+
+int parse_jfif_stream(unsigned char *data, IMAGE *pic, int imglength, unsigned char **qy, unsigned char **qc, char *site, int handle, int (*read_func)(int handle, char *buff, int nbytes))
+{
+int i, sos = FALSE;
+unsigned short length, marker;
+#ifdef CHECK_HUFFMAN_TABLE // PRC 028
+int huf_cmp_offset=0, huf_tab_no=0;
+#endif
+	if (qc)                    // PRC 029
+		*qc  = NULL;
+	if (qy)
+		*qy = NULL;
+	pic->version = PIC_VERSION;
+	pic->factor = -1;
+	pic->start_offset = 0;
+	i = 0;
+	while( ((unsigned char)data[i] != 0xff) && (i<imglength) )
+		i++;
+	if ( i > 0 )
+		fprintf(stderr, "JFIF_IMG: parse_jfif_header, %d leading bytes\n", i);
+	i++;
+	if ( (unsigned char)data[i] != 0xd8)
+	{
+		fprintf(stderr, "JFIF_IMG: parse_jfif_header, incorrect SOI 0xff%02x\n", data[i]);
+		return -1;
+	}
+	i++;
+	while ( !sos && (i<imglength) )
+	{
+		if (read_func(handle, (char*) &data[i], 4)<4)
+			return -1;
+		memcpy(&marker, &data[i], 2 );
+		i+= 2;
+		memcpy(&length, &data[i], 2 );
+		i+= 2;
+		network2host16(marker);
+		network2host16(length);
+		if (read_func(handle, (char*) &data[i], length-2)<(length-2))
+			return -1;
+		switch (marker)
+		{
+		case 0xffe0 :	// APP0
+//			fprintf(stderr, "JFIF_IMG: found APP0 marker, length = %d\n", length );
+			i += length-2;
+			break;
+		case 0xffdb :	// Q table
+//			fprintf(stderr, "JFIF_IMG: found Q table marker, length = %d, Table no = %d\n", length, data[i] );
+			if (data[i])
+				*qc = &data[i+1];
+			else
+				*qy = &data[i+1];
+
+			i += length-2;
+			break;
+		case 0xffc0 :	// SOF
+			memcpy(&pic->format.target_pixels, &data[i+3], 2);
+			memcpy(&pic->format.target_lines, &data[i+1], 2);
+			network2host16(pic->format.target_pixels);
+			network2host16(pic->format.target_lines);
+			if (data[i+7]==0x22) // PRC 022
+			{
+				pic->vid_format = PIC_MODE_JPEG_411;
+			}
+			else if (data[i+7]==0x21)
+			{
+				pic->vid_format = PIC_MODE_JPEG_422;
+			}
+			else
+			{
+				fprintf(stderr, "JFIF_IMG: Unknown format byte 0x%02X\n", data[i+7]);
+			}
+//			fprintf(stderr, "JFIF_IMG: found SOF marker, length = %d, xres=%d, yres = %d, format = %s\n", length, pic->format.target_pixels, pic->format.target_lines, (pic->vid_format==PIC_MODE_JPEG_422) ? "422" : (pic->vid_format==PIC_MODE_JPEG_411) ? "411" : "Unknown" );
+			i += length-2;
+			break;
+		case 0xffc4 :	// Huffman table
+#ifdef CHECK_HUFFMAN_TABLE // PRC 028
+			huf_cmp_offset += 2; // skip past FFC4
+			if (memcmp(&data[i-2], &huf_header[huf_cmp_offset], length))
+			{
+				fprintf(stderr, "JFIF_IMG: found Non default Huffman table %d, length = %d, offset =%d\n", huf_tab_no, length, huf_cmp_offset );
+			}
+			else
+			{
+//				fprintf(stderr, "JFIF_IMG: found default Huffman table %d, length = %d, offset =%d\n", huf_tab_no, length, huf_cmp_offset );
+			}
+			huf_cmp_offset += length;
+			huf_tab_no++;
+#endif
+			i += length-2;
+			break;
+		case 0xffda :	// SOS
+//			fprintf(stderr, "JFIF_IMG: found SOS marker, length = %d\n", length );
+			i += length-2;
+			sos = TRUE;
+			break;
+		case 0xffdd :	// DRI
+//			fprintf(stderr, "JFIF_IMG: found DRI marker, length = %d\n", length );
+			i += length-2;
+			break;
+		case 0xfffe :	// Comment
+//			fprintf(stderr, "JFIF_IMG: found Comment marker, length = %d\n", length );
+			parse_comment((char*) &data[i], pic, site);
+			i += length-2;
+			break;
+		default :
+//			fprintf(stderr, "JFIF_IMG: Unknown marker 0x%04X, next byte = 0x%02X, length = %d\n", marker, data[i], length );
+			return -1;
+		}
+	}
+#if 0
+	dptr = &data[i];
+	sptr = dptr;
+	eptr = sptr + imglength-i;
+	optr = start_of_image(pic);
+	while ( dptr<eptr )
+		if ((*dptr == 0xff) && (*(dptr+1) == 0xd9) )
+			break;
+		else
+			*optr++ = *dptr++;
+	pic->size = dptr - sptr;
+#endif
+//	fprintf(stderr, "JFIF_IMG: pic->size = %d\n", pic->size );
+	return i;
+}
+
+/****************************************************************************
+
+Prototype	  :	int parse_jfif_header(unsigned char *data, IMAGE *pic, int imglength, unsigned char **qy, unsigned char **qc, char *site, int decode_comment)
+
+Procedure Desc: Analyses a JFIF header and fills out an IMAGE structure with the
+				info
+
+	Inputs	  :	unsigned char *data		input buffer
+				IMAGE *pic				IMAGE structure
+				int imglength			total length of input buffer
+				unsigned char **qy		pointer for luma   Q table
+				unsigned char **qc		pointer for chroma Q table
+				char *site				pointer to site_id string
+				int decode_comment		TRUE to try to parse any comment in the header
+	Outputs	  :	length of JFIF header in bytes
+	Globals   :
+
+****************************************************************************/
+int parse_jfif_header(unsigned char *data, IMAGE *pic, int imglength, unsigned char **qy, unsigned char **qc, char *site, int decode_comment)
+{
+int i, sos = FALSE;
+unsigned short length, marker;
+#ifdef CHECK_HUFFMAN_TABLE // PRC 028
+int huf_cmp_offset=0, huf_tab_no=0;
+#endif
+
+//	fprintf(stderr, "JFIF_IMG: parse_jfif_header, leading bytes 0x%02X, 0x%02X, imglength=%d\n", data[0], data[1], imglength);
+	memset(pic, 0, sizeof(*pic));
+	if (qc)
+		*qc  = NULL;
+	if (qy)
+		*qy = NULL;
+	if (site)
+		*site = 0;
+	pic->version = PIC_VERSION;
+	pic->factor = -1;
+	pic->start_offset = 0;
+	i = 0;
+	while( ((unsigned char)data[i] != 0xff) && (i<imglength) )
+		i++;
+	if ( i > 0 )
+		fprintf(stderr, "JFIF_IMG: parse_jfif_header, %d leading bytes\n", i);
+	i++;
+	if ( (unsigned char) data[i] != 0xd8)
+	{
+		fprintf(stderr, "JFIF_IMG: parse_jfif_header, incorrect SOI 0xff%02x\n", data[i]);
+		return -1;
+	}
+	i++;
+	while ( !sos && (i<imglength) )
+	{
+		memcpy(&marker, &data[i], 2 );
+		i+= 2;
+		memcpy(&length, &data[i], 2 );
+		i+= 2;
+		network2host16(marker);
+		network2host16(length);
+
+		switch (marker)
+		{
+		case 0xffe0 :	// APP0
+//			fprintf(stderr, "JFIF_IMG: found APP0 marker, length = %d\n", length );
+			i += length-2;
+			break;
+		case 0xffdb :	// Q table
+//			fprintf(stderr, "JFIF_IMG: found Q table marker, length = %d, Table no = %d\n", length, data[i] );
+			if (data[i]) // PRC 029
+			{
+				if (qc)
+					*qc = &data[i+1];
+			}
+			else
+			{
+				pic->factor =  find_q(&data[i+1]);
+				if (qy)
+					*qy = &data[i+1];
+			}
+			i += length-2;
+			break;
+		case 0xffc0 :	// SOF
+			memcpy(&pic->format.target_pixels, &data[i+3], 2);
+			network2host16(pic->format.target_pixels);
+			memcpy(&pic->format.target_lines, &data[i+1], 2);
+			network2host16(pic->format.target_lines);
+			if (data[i+7]==0x22)	// PRC 022
+			{
+				pic->vid_format = PIC_MODE_JPEG_411;
+			}
+			else if (data[i+7]==0x21)
+			{
+				pic->vid_format = PIC_MODE_JPEG_422;
+			}
+			else
+			{
+				fprintf(stderr, "JFIF_IMG: Unknown format byte 0x%02X\n", data[i+7]);
+			}
+//			fprintf(stderr, "JFIF_IMG: found SOF marker, length = %d, xres=%d, yres = %d\n", length, pic->format.target_pixels, pic->format.target_lines );
+			i += length-2;
+			break;
+		case 0xffc4 :	// Huffman table
+#ifdef CHECK_HUFFMAN_TABLE // PRC 028
+			huf_cmp_offset += 2; // skip past FFC4
+			if (memcmp(&data[i-2], &huf_header[huf_cmp_offset], length))
+			{
+				fprintf(stderr, "JFIF_IMG: found Non default Huffman table %d, length = %d, offset =%d\n", huf_tab_no, length, huf_cmp_offset );
+			}
+			else
+			{
+//				fprintf(stderr, "JFIF_IMG: found default Huffman table %d, length = %d, offset =%d\n", huf_tab_no, length, huf_cmp_offset );
+			}
+			huf_cmp_offset += length;
+			huf_tab_no++;
+#endif
+			i += length-2;
+			break;
+		case 0xffda :	// SOS
+//			fprintf(stderr, "JFIF_IMG: found SOS marker, length = %d\n", length );
+			i += length-2;
+			sos = TRUE;
+			break;
+		case 0xffdd :	// DRI
+//			fprintf(stderr, "JFIF_IMG: found DRI marker, length = %d\n", length );
+			i += length-2;
+			break;
+		case 0xfffe :	// Comment
+//			fprintf(stderr, "JFIF_IMG: found Comment marker, length = %d\n", length );
+			if (decode_comment)	// JCB 027
+				parse_comment((char *)&data[i], pic, site);
+			i += length-2;
+			break;
+		default :
+			fprintf(stderr, "JFIF_IMG: Unknown marker 0x%04X, next byte = 0x%02X, length = %d\n", marker, data[i], length );
+//			return -1;
+			i += length-2;	// JCB 026 skip past the unknown field
+			break;
+		}
+	}
+	pic->size = imglength-i-2; 	// 2 bytes for FFD9 PRC 029
+	return i;
+}
+
+
+static char *find_comment_field(const char *field_name, char *text, char *result, int result_len)
+{
+char *field;
+int i;
+	field = strstr(text, field_name);
+	if ( field )
+	{
+		field += strlen(field_name);
+		i = 0;
+		while ( field[i] && (field[i] != '\n') && (field[i] != '\r') && (i<(result_len-1)) )
+			*result++ = field[i++];
+		*result = 0;
+	}
+	return field;
+}
+
+void parse_comment(char *text, IMAGE *pic, char *site)
+{
+int result_length = 80;
+char result[80];
+struct tm t;
+
+	memset(&t, 0, sizeof(t));
+	if ( (  find_comment_field( comment_version, text , result, result_length ) ) )
+	{
+//		fprintf(stderr, "JFIF_IMG: Found comment version\n");
+	}
+	else
+	{
+//		fprintf(stderr, "JFIF_IMG: No comment version\n");
+	}
+	if ( (  find_comment_field( camera_title , text , result, result_length ) ) )
+	{
+		strncpy(pic->title, result, sizeof(pic->title));
+		pic->title[sizeof(pic->title)-1] = 0;
+//		fprintf(stderr, "JFIF_IMG: Found camera_title %s\n", pic->title);
+	}
+	else
+	{
+//		fprintf(stderr, "JFIF_IMG: No camera_title\n");
+	}
+	if ( (  find_comment_field(camera_number , text , result, result_length ) ) )
+	{
+		sscanf(result,"%d", &pic->cam);
+//		fprintf(stderr, "JFIF_IMG: Found camera_number %d\n", pic->cam);
+	}
+	else
+	{
+//		fprintf(stderr, "JFIF_IMG: No camera_number\n");
+	}
+	if ( (  find_comment_field(image_date , text , result, result_length ) ) )
+	{
+		sscanf(result,"%d/%d/%d", &t.tm_mday, &t.tm_mon, &t.tm_year);
+//		fprintf(stderr, "JFIF_IMG: Found date %d/%d/%d\n", t.tm_mday, t.tm_mon, t.tm_year);
+		t.tm_year -= 1970; // PRC 032
+		t.tm_mon--;
+	}
+	else
+	{
+//		fprintf(stderr, "JFIF_IMG: No date\n");
+	}
+	if ( (  find_comment_field( image_time, text , result, result_length ) ) )
+	{
+		sscanf(result,"%d:%d:%d", &t.tm_hour, &t.tm_min, &t.tm_sec);
+//		fprintf(stderr, "JFIF_IMG: Found time %d:%d:%d\n", t.tm_hour, t.tm_min, t.tm_sec);
+	}
+	else
+	{
+//		fprintf(stderr, "JFIF_IMG: No time\n");
+	}
+	if ( (  find_comment_field( image_ms , text , result, result_length ) ) )
+	{
+		sscanf(result,"%d", &pic->milliseconds);
+//		fprintf(stderr, "JFIF_IMG: Found milliseconds %d\n", pic->milliseconds);
+	}
+	else
+	{
+//		fprintf(stderr, "JFIF_IMG: No milliseconds\n");
+	}
+	if ( (  find_comment_field( q_factor, text , result, result_length ) ) )
+	{
+		sscanf(result,"%d", &pic->factor);
+//		fprintf(stderr, "JFIF_IMG: Found Q factor %d\n", pic->factor);
+	}
+	else
+	{
+//		fprintf(stderr, "JFIF_IMG: No Q factor\n");
+	}
+	if ( (  find_comment_field( alarm_comment, text , result, result_length ) ) )
+	{
+		strncpy(pic->alarm, result, sizeof(pic->title));
+//		fprintf(stderr, "JFIF_IMG: Found alarm_comment %s\n", pic->alarm);
+	}
+	else
+	{
+//		fprintf(stderr, "JFIF_IMG: No alarm_comment\n");
+	}
+	if ( (  find_comment_field( active_alarms, text , result, result_length ) ) )
+	{
+		sscanf(result,"%X", &pic->alm_bitmask);
+//		fprintf(stderr, "JFIF_IMG: Found active_alarms 0x%08X\n", pic->alm_bitmask);
+	}
+	else
+	{
+//		fprintf(stderr, "JFIF_IMG: No active_alarms\n");
+	}
+	if ( (  find_comment_field( active_detectors, text , result, result_length ) ) )	// JCB 021
+		sscanf(result,"%X", &pic->alm_bitmask_hi);
+	if ( (  find_comment_field( script_msg, text , result, result_length ) ) )
+	{
+	}
+	else
+	{
+	}
+	if ( (  find_comment_field( time_zone, text , result, result_length ) ) )
+	{
+		strncpy(pic->locale, result, sizeof(pic->locale));
+//		fprintf(stderr, "JFIF_IMG: Found timezone %s\n", pic->locale);
+	}
+	else
+	{
+//		fprintf(stderr, "JFIF_IMG: No timezone\n");
+	}
+	if ( (  find_comment_field( utc_offset, text , result, result_length ) ) )
+	{
+		sscanf(result,"%d", &pic->utc_offset);
+//		fprintf(stderr, "JFIF_IMG: Found utc_offset %d\n", pic->utc_offset);
+	}
+	else
+	{
+//		fprintf(stderr, "JFIF_IMG: No utc_offset\n");
+	}
+	if ( (  find_comment_field( site_id, text , result, result_length ) ) )
+	{
+		strncpy(site, result, 32);
+//		fprintf(stderr, "JFIF_IMG: Found site_id %s\n", site);
+	}
+	else
+	{
+//		fprintf(stderr, "JFIF_IMG: No site_id\n");
+	}
+	pic->session_time = mktime(&t);
+
+//	fprintf(stderr, "JFIF_IMG: computed session_time = %s\n", ctime(&pic->session_time));
+
+}
+
+int build_comment_text(char *buffer, IMAGE *pic, int max)
+{
+char *bufptr = buffer;
+char line[128];
+char *txt;
+struct tm tim_s;
+int count;
+
+	strcpy(bufptr, comment_version);
+	bufptr += strlen(comment_version);
+	count = strlen(comment_version);
+	/*
+	*	Now add the variable length comments
+	*/
+	snprintf(line, 128, "%s%d\r\n",camera_number, pic->cam);
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, line);
+		bufptr += strlen(line);
+	}
+
+	snprintf(line, 128, "%s%s\r\n",camera_title, pic->title);
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, line);
+		bufptr += strlen(line);
+	}
+
+	if (pic->alarm[0])
+	{
+		snprintf(line, 128, "%s%s\r\n",alarm_comment, pic->alarm);
+		count += strlen(line);
+		if (count > max)
+			return 0;
+		else
+		{
+			strcpy(bufptr, line);
+			bufptr += strlen(line);
+		}
+	}
+
+	if (pic->alm_bitmask)	/* JCB 008 */
+
+	{
+		snprintf(line, 128, "%s%08X\r\n",active_alarms, pic->alm_bitmask);	/* JCB 008 */
+		count += strlen(line);
+		if (count > max)
+			return 0;
+		else
+		{
+			strcpy(bufptr, line);
+			bufptr += strlen(line);
+		}
+	}
+
+	if (pic->alm_bitmask_hi)	/* JCB 021 */
+	{
+		snprintf(line, 128, "%s%08X\r\n",active_detectors, pic->alm_bitmask_hi);
+		count += strlen(line);
+		if (count > max)
+			return 0;
+		else
+		{
+			strcpy(bufptr, line);
+			bufptr += strlen(line);
+		}
+	}
+
+	if (comment_msg[0])
+	{
+		snprintf(line, 128, "%s%s\r\n",script_msg, comment_msg);
+		count += strlen(line);
+		if (count > max)
+			return 0;
+		else
+		{
+			strcpy(bufptr, line);
+			bufptr += strlen(line);
+		}
+	}
+
+	count += strlen(image_date);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, image_date);
+		bufptr += strlen(image_date);
+	}
+	strftime (line, sizeof(line), "%d/%m/%Y\r\n", localtime_r(&pic->session_time, &tim_s));
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, line);
+		bufptr += strlen(line);
+	}
+
+	count += strlen(image_time);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, image_time);
+		bufptr += strlen(image_time);
+	}
+	strftime (line, sizeof(line), "%H:%M:%S\r\n", localtime_r(&pic->session_time, &tim_s));
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, line);
+		bufptr += strlen(line);
+	}
+
+	count += strlen(image_ms);	/* PRC 009 */
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, image_ms);
+		bufptr += strlen(image_ms);
+	}
+	snprintf (line, 128, "%u\r\n", pic->milliseconds%1000 ); // PRC 013
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, line);
+		bufptr += strlen(line);
+	}
+
+	snprintf(line, 128, "%s%s\r\n",time_zone, pic->locale);
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, line);
+		bufptr += strlen(line);
+	}
+
+	snprintf(line, 128, "%s%d\r\n",utc_offset, pic->utc_offset);
+	count += strlen(line);
+	if (count > max)
+		return 0;
+	else
+	{
+		strcpy(bufptr, line);
+		bufptr += strlen(line);
+	}
+	if (pic->start_offset > 0)
+	{
+		txt = (char *)&pic[1];
+		count += pic->start_offset;
+		if (count > max)
+			return 0;
+		else
+		{
+#if 0
+		char cpy[80];
+			memset(cpy,0,80);
+			strncpy(cpy,txt,pic->start_offset);
+			fprintf(stderr, "JFIF_IMG: 1 adding text %s\n", cpy);
+#endif
+			strncpy(bufptr, txt, pic->start_offset);
+			bufptr += pic->start_offset;
+		}
+	}
+	return bufptr-buffer;
+}
+#if 0
+static long filesize( int handle )
+{
+struct stat st;
+
+	if (!fstat(handle, &st))
+		return st.st_size;
+	return -1;
+}
+#endif
