@@ -1532,7 +1532,11 @@ struct tm t;
 	{
 		sscanf(result,"%d/%d/%d", &t.tm_mday, &t.tm_mon, &t.tm_year);
 //		fprintf(stderr, "JFIF_IMG: Found date %d/%d/%d\n", t.tm_mday, t.tm_mon, t.tm_year);
+#ifdef __MINGW32__
+        t.tm_year -= 1900; // Win32 expects tm_year to be years since 1900
+#else
 		t.tm_year -= 1970; // PRC 032
+#endif
 		t.tm_mon--;
 	}
 	else
