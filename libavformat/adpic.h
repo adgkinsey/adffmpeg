@@ -18,7 +18,7 @@
 #ifndef __ADPIC_H__
 #define __ADPIC_H__
 
-#include <stdint.h>
+//#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -30,6 +30,10 @@
 #ifndef TRUE
 #define TRUE 1
 #endif
+
+enum tx_type { TX_MIME, TX_MIME_NV, TX_STREAM, TX_MINIMAL_STREAM };
+enum pkt_offsets { DATA_TYPE, DATA_CHANNEL, DATA_SIZE_BYTE_0 , DATA_SIZE_BYTE_1 , DATA_SIZE_BYTE_2 , DATA_SIZE_BYTE_3, SEPARATOR_SIZE };
+enum data_type { DATA_JPEG, DATA_JFIF, DATA_MPEG4I, DATA_MPEG4P, DATA_AUDIO_ADPCM, DATA_AUDIO_RAW, DATA_MINIMAL_MPEG4, DATA_MINIMAL_AUDIO_ADPCM, DATA_LAYOUT, DATA_INFO, MAX_DATA_TYPE  };
 
 #ifdef WORDS_BIGENDIAN
 #define network2host32(x) x = x
@@ -69,6 +73,8 @@
 
 #define pic_version_valid(v) ( ( (v)>=MIN_PIC_VERSION ) && ( (v)<=MAX_PIC_VERSION ) )
 #define pic_revision_level(v) ( (v) - MIN_PIC_VERSION )	// JCB 016
+
+#define AUDIO_STREAM_ID             1
 
 #define TITLE_LENGTH 30
 #define MAX_NAME_LEN 30
@@ -114,6 +120,25 @@ struct _image_data
 	int32_t utc_offset;				/* JCB 006 */
 	uint32_t alm_bitmask;
 };
+
+typedef struct _audioHeader
+{
+    uint32_t            version;
+    int32_t             mode;
+    int32_t             channel;
+    int32_t             sizeOfAdditionalData;
+    int32_t             sizeOfAudioData;
+    uint32_t            seconds;
+    uint32_t            msecs;
+    unsigned char *     additionalData;
+    //byte[] audioData;
+} AudioHeader;
+
+typedef struct _frameData
+{
+    enum data_type      dataType;       /* The type of the frame we have */
+    void *              typeInfo;       /* Pointer to either AudioHeader or _image_data depending on whether it's a video or audio frame */
+} FrameData;
 
 /* No more structure-packing after here */
 #ifdef __CWVX__

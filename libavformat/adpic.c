@@ -31,10 +31,6 @@
 
 #define BINARY_PUSH_MIME_STR "video/adhbinary"
 
-enum tx_type { TX_MIME, TX_MIME_NV, TX_STREAM, TX_MINIMAL_STREAM };
-enum pkt_offsets { DATA_TYPE, DATA_CHANNEL, DATA_SIZE_BYTE_0 , DATA_SIZE_BYTE_1 , DATA_SIZE_BYTE_2 , DATA_SIZE_BYTE_3, SEPARATOR_SIZE };
-enum data_type { DATA_JPEG, DATA_JFIF, DATA_MPEG4I, DATA_MPEG4P, DATA_AUDIO_ADPCM, DATA_AUDIO_RAW, DATA_MINIMAL_MPEG4, DATA_MINIMAL_AUDIO_ADPCM, DATA_LAYOUT, DATA_INFO, MAX_DATA_TYPE  };
-
 struct _minimal_video_header	// PRC 002
 {
 	uint32_t t;
@@ -87,6 +83,17 @@ void pic_network2host(struct _image_data *pic)
 	network2host16(pic->format.target_lines);
 	network2host16(pic->format.pixel_offset);
 	network2host16(pic->format.line_offset);
+}
+
+void audioheader_network2host( AudioHeader *hdr )
+{
+    network2host32(hdr->version);
+    network2host32(hdr->mode);
+    network2host32(hdr->channel);
+    network2host32(hdr->sizeOfAdditionalData);
+    network2host32(hdr->sizeOfAudioData);
+    network2host32(hdr->seconds);
+    network2host32(hdr->msecs);
 }
 
 void pic_host2network(struct _image_data *pic)
@@ -221,7 +228,11 @@ static int adpic_probe(AVProbeData *p)
 {
     if (p->buf_size <= 6)
         return 0;
-    if ( (p->buf[0] == 9) && (p->buf[2] == 0) && (p->buf[3] == 0) )
+
+    // CS - There is no way this scheme of identification is strong enough. Probably should attempt
+    // to parse a full frame out of the probedata buffer
+    if ( (p->buf[0] == 9) && (p->buf[2] == 0) && (p->buf[3] == 0) || 
+         (p->buf[0] >= 0 && p->buf[0] <= 7) && (p->buf[2] == 0) && (p->buf[3] == 0) )
     {
         return AVPROBE_SCORE_MAX;
     }
@@ -351,19 +362,57 @@ AVStream *st;
 	return st;
 }
 
+static AVStream *get_audio_stream( struct AVFormatContext *s, AudioHeader* audioHeader )
+{
+    int codec_type, codec_id, id;
+    int i, found;
+    AVStream *st;
+
+	found = FALSE;
+
+	id = AUDIO_STREAM_ID;
+
+	for( i = 0; i < s->nb_streams; i++ )
+	{
+		st = s->streams[i];
+		if( st->id == id )
+		{
+			found = TRUE;
+			break;
+		}
+	}
+
+    // Did we find our audio stream? If not, create a new one
+	if( !found )
+	{
+		st = av_new_stream( s, id );
+		if (st)
+		{
+		    st->codec->codec_type = CODEC_TYPE_AUDIO;
+		    st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
+			//st->codec->width = pic->format.target_pixels;
+			//st->codec->height = pic->format.target_lines;
+			st->index = i;
+		}
+	}
+
+	return st;
+}
+
 int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
-ByteIOContext *pb = &s->pb;
-ADPICContext *adpic = s->priv_data;
-AVStream *st;
-unsigned char adpkt[SEPARATOR_SIZE];
-int data_type;
-int data_channel;
-int n, size;
-int status;
-char scratch[1024];
-struct _image_data pic0, *pic;
-int i = 0;
+    ByteIOContext *         pb = &s->pb;
+    ADPICContext *          adpic = s->priv_data;
+    AVStream *              st;
+    unsigned char           adpkt[SEPARATOR_SIZE];
+    int                     data_type;
+    int                     data_channel;
+    int                     n, size;
+    int                     status;
+    char                    scratch[1024];
+
+    AudioHeader *           audio_data = NULL;
+    struct _image_data *    video_data = NULL;
 
 	// First read the 6 byte separator
 	if ((n=get_buffer(pb, &adpkt[0], SEPARATOR_SIZE)) != SEPARATOR_SIZE)
@@ -371,14 +420,24 @@ int i = 0;
 		logger(LOG_DEBUG,"ADPIC: short of data reading seperator, expected %d, read %d\n", SEPARATOR_SIZE, n);
 		return -1;
 	}
-	pic = &pic0;
 
+    // Get info out of the separator
 	memcpy(&size, &adpkt[DATA_SIZE_BYTE_0], 4);
 	network2host32(size);
-
 	data_type = adpkt[DATA_TYPE];
 	data_channel = adpkt[DATA_CHANNEL];
 
+    // Prepare for video or audio read
+    if( data_type == DATA_JPEG || data_type == DATA_JFIF || data_type == DATA_MPEG4I || data_type == DATA_MPEG4P )
+    {
+        video_data = av_mallocz( sizeof(struct _image_data) );
+    }
+    else if( data_type == DATA_AUDIO_ADPCM )
+    {
+        audio_data = av_mallocz( sizeof(AudioHeader) );
+    }
+
+    // Proceed based on the type of data in this frame
 	switch(data_type)
 	{
 	case DATA_JPEG:
@@ -386,34 +445,34 @@ int i = 0;
 		int header_size;
 		char jfif[2048], *ptr;
 			// Read the pic structure
-			if ((n=get_buffer(pb, (char *)pic, sizeof (*pic))) != sizeof (*pic))
+			if ((n=get_buffer(pb, (unsigned char*)video_data, sizeof (struct _image_data))) != sizeof (struct _image_data))
 			{
-				logger(LOG_DEBUG,"ADPIC: short of data reading pic struct, expected %d, read %d\n", sizeof (*pic), n);
+				logger(LOG_DEBUG,"ADPIC: short of data reading pic struct, expected %d, read %d\n", sizeof (struct _image_data), n);
 				return -1;
 			}
 			// Endian convert if necessary
-			pic_network2host(pic);
-			if (!pic_version_valid(pic->version))
+			pic_network2host(video_data);
+			if (!pic_version_valid(video_data->version))
 			{
-				logger(LOG_DEBUG,"ADPIC: invalid pic version 0x%08X\n", pic->version);
+				logger(LOG_DEBUG,"ADPIC: invalid pic version 0x%08X\n", video_data->version);
 				return -1;
 			}
 			// Skip any additional text in the image
-			if ((n=get_buffer(pb, scratch, pic->start_offset)) != pic->start_offset)
+			if ((n=get_buffer(pb, scratch, video_data->start_offset)) != video_data->start_offset)
 			{
 				logger(LOG_DEBUG,"ADPIC: short of data reading start_offset data, expected %d, read %d\n", size, n);
 				return -1;
 			}
 			// Use the pic struct to build a JFIF header 
-			if ((header_size = build_jpeg_header( jfif, pic, FALSE, 2048))<=0)
+			if ((header_size = build_jpeg_header( jfif, video_data, FALSE, 2048))<=0)
 			{
 				logger(LOG_DEBUG,"ADPIC: adpic_read_packet, build_jpeg_header failed\n");
 				return -1;
 			}
 			// We now know the packet size required for the image, allocate it.
-			if ((status = av_new_packet(pkt, header_size+pic->size+2))<0) // PRC 003
+			if ((status = av_new_packet(pkt, header_size+video_data->size+2))<0) // PRC 003
 			{
-				logger(LOG_DEBUG,"ADPIC: DATA_JPEG av_new_packet %d failed, status %d\n", header_size+pic->size+2, status);
+				logger(LOG_DEBUG,"ADPIC: DATA_JPEG av_new_packet %d failed, status %d\n", header_size+video_data->size+2, status);
 				return -1;
 			}
 			ptr = pkt->data;
@@ -422,12 +481,12 @@ int i = 0;
 			ptr += header_size;
 			// Now get the compressed JPEG data into the packet
 			// Read the pic structure
-			if ((n=get_buffer(pb, ptr, pic->size)) != pic->size)
+			if ((n=get_buffer(pb, ptr, video_data->size)) != video_data->size)
 			{
-				logger(LOG_DEBUG,"ADPIC: short of data reading pic body, expected %d, read %d\n", pic->size, n);
+				logger(LOG_DEBUG,"ADPIC: short of data reading pic body, expected %d, read %d\n", video_data->size, n);
 				return -1;
 			}
-			ptr += pic->size;
+			ptr += video_data->size;
 			// Add the EOI marker
 			*ptr++ = 0xff;
 			*ptr++ = 0xd9;
@@ -446,7 +505,7 @@ int i = 0;
 				logger(LOG_DEBUG,"ADPIC: short of data reading jfif image, expected %d, read %d\n", size, n);
 				return -1;
 			}
-			if ( parse_jfif_header(pkt->data, pic, size, NULL, NULL, site, TRUE) <= 0)
+			if ( parse_jfif_header(pkt->data, video_data, size, NULL, NULL, site, TRUE) <= 0)
 			{
 				logger(LOG_DEBUG,"ADPIC: adpic_read_packet, parse_jfif_header failed\n");
 				return -1;
@@ -456,34 +515,65 @@ int i = 0;
 	case DATA_MPEG4I:
 	case DATA_MPEG4P:
 		{
-			if ((n=get_buffer(pb, (char *)pic, sizeof (*pic))) != sizeof (*pic))
+			if ((n=get_buffer(pb, (unsigned char*)video_data, sizeof (struct _image_data))) != sizeof (struct _image_data))
 			{
-				logger(LOG_DEBUG,"ADPIC: short of data reading pic struct, expected %d, read %d\n", sizeof (*pic), n);
+				logger(LOG_DEBUG,"ADPIC: short of data reading pic struct, expected %d, read %d\n", sizeof (struct _image_data), n);
 				return -1;
 			}
-			pic_network2host(pic);
-			if (!pic_version_valid(pic->version))
+			pic_network2host(video_data);
+			if (!pic_version_valid(video_data->version))
 			{
-				logger(LOG_DEBUG,"ADPIC: invalid pic version 0x%08X\n", pic->version);
+				logger(LOG_DEBUG,"ADPIC: invalid pic version 0x%08X\n", video_data->version);
 				return -1;
 			}
-			if ((n=get_buffer(pb, scratch, pic->start_offset)) != pic->start_offset)
+			if ((n=get_buffer(pb, scratch, video_data->start_offset)) != video_data->start_offset)
 			{
 				logger(LOG_DEBUG,"ADPIC: short of data reading start_offset data, expected %d, read %d\n", size, n);
 				return -1;
 			}
-			if ((status = av_new_packet(pkt, pic->size))<0) // PRC 003
+			if ((status = av_new_packet(pkt, video_data->size))<0) // PRC 003
 			{
-				logger(LOG_DEBUG,"ADPIC: DATA_MPEG4 av_new_packet %d failed, status %d\n", pic->size, status);
+				logger(LOG_DEBUG,"ADPIC: DATA_MPEG4 av_new_packet %d failed, status %d\n", video_data->size, status);
 				return -1;
 			}
-			if ((n=get_buffer(pb, pkt->data, pic->size)) != pic->size)
+			if ((n=get_buffer(pb, pkt->data, video_data->size)) != video_data->size)
 			{
-				logger(LOG_DEBUG,"ADPIC: short of data reading pic body, expected %d, read %d\n", pic->size, n);
+				logger(LOG_DEBUG,"ADPIC: short of data reading pic body, expected %d, read %d\n", video_data->size, n);
 				return -1;
 			}
 		}	
 		break;
+
+        // CS - Support for ADPCM frames
+    case DATA_AUDIO_ADPCM:
+        {
+            // Get the fixed size portion of the audio header
+            if( (n = get_buffer( pb, (unsigned char*)audio_data, sizeof(AudioHeader) - 4 )) != sizeof(AudioHeader) - 4 )
+                return -1;
+
+            // endian fix it...
+            audioheader_network2host( audio_data );
+
+            // Now get the additional bytes
+            if( audio_data->sizeOfAdditionalData > 0 )
+            {
+                audio_data->additionalData = av_malloc( audio_data->sizeOfAdditionalData );
+
+                //ASSERT(audio_data->additionalData);
+
+                if( (n = get_buffer( pb, audio_data->additionalData, audio_data->sizeOfAdditionalData )) != audio_data->sizeOfAdditionalData )
+                    return -1;
+            }
+
+			if( (status = av_new_packet( pkt, audio_data->sizeOfAudioData )) < 0 )
+				return -1;
+
+            // Now get the actual audio data
+            if( (n = get_buffer( pb, pkt->data, audio_data->sizeOfAudioData)) != audio_data->sizeOfAudioData )
+				return -1;
+        }
+        break;
+
 	case DATA_INFO:
 	case DATA_LAYOUT:
 
@@ -493,7 +583,6 @@ int i = 0;
 			logger(LOG_DEBUG,"ADPIC: short of data reading scratch data body, expected %d, read %d\n", size, n);
 			return -1;
 		}
-
 		pkt->data = NULL;
 		pkt->size = 0;
 
@@ -505,22 +594,45 @@ int i = 0;
 		return -1;
 		
 	}
-	// At this point se have a legal pic structure which we use to determine 
-	// which codec stream to use
-	if (data_channel != (pic->cam-1))
-	{
-		logger(LOG_DEBUG,"ADPIC: adpic_read_packet, data channel (%d) and camera (%d) do not match%d\n", data_channel, pic->cam );
-	}
-	if ( (st = get_stream( s, pic)) == NULL )
-	{
-		logger(LOG_DEBUG,"ADPIC: adpic_read_packet, failed get_stream\n");
-		return -1;
-	}
+
+    if( video_data != NULL )
+    {
+	    // At this point se have a legal pic structure which we use to determine 
+	    // which codec stream to use
+	    if (data_channel != (video_data->cam-1))
+	    {
+		    logger(LOG_DEBUG,"ADPIC: adpic_read_packet, data channel (%d) and camera (%d) do not match%d\n", data_channel, video_data->cam );
+	    }
+	    if ( (st = get_stream( s, video_data)) == NULL )
+	    {
+		    logger(LOG_DEBUG,"ADPIC: adpic_read_packet, failed get_stream for video\n");
+		    return -1;
+	    }
+    }
+    else if( audio_data != NULL )
+    {
+        // Get the audio stream
+        if ( (st = get_audio_stream( s, audio_data )) == NULL )
+        {
+		    logger(LOG_DEBUG,"ADPIC: adpic_read_packet, failed get_stream for audio\n");
+		    return -1;
+        }
+    }
+
     pkt->stream_index = st->index;
-	pkt->priv =av_malloc(sizeof(*pic));
-	if (pkt->priv)
-		memcpy(pkt->priv, pic, sizeof(*pic));
+
+	pkt->priv = av_malloc(sizeof(FrameData));
+    ((FrameData*)pkt->priv)->dataType = data_type;
+
+    if( video_data != NULL )
+        ((FrameData*)pkt->priv)->typeInfo = video_data;
+    else if( audio_data != NULL )// Audio
+        ((FrameData*)pkt->priv)->typeInfo = audio_data;
+    else
+        ((FrameData*)pkt->priv)->typeInfo = NULL;
+
 	pkt->duration =  ((int)(AV_TIME_BASE * 1.0));
+
 	return 0;
 }
 
@@ -556,13 +668,5 @@ int adpic_init(void)
 
 int logger (int log_level, const char *fmt, ...)
 {
-#if 0
-    va_list args;
-
-    va_start( args, fmt ); 
-
-    TRACE( fmt, args );
-
-    va_end(args);
-#endif
+    return 0;
 }
