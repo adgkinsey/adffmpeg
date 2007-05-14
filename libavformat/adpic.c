@@ -1,4 +1,5 @@
 // $HDR$
+
 //$Log:  126591: adpic.c 
 //
 //    Rev 1.1    13/12/2006 12:53:22  pcolbran
@@ -37,11 +38,15 @@ static int process_line( char *line, int line_count, int *dataType, int *size );
 static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, struct _image_data *video_data );
 static int process_mp4data_line( char *line, int line_count, struct _image_data *video_data, struct tm *time );
 
-struct _minimal_video_header	// PRC 002
+/* CS - The following structure is used to extract 6 bytes from the incoming stream. It needs therefore to be aligned on a 
+   2 byte boundary. Not sure whether this solution is portable though */
+#pragma pack(push,2)
+typedef struct _minimal_video_header	// PRC 002
 {
-	uint32_t t;
-	unsigned short ms;
-};
+	uint32_t            t;
+	unsigned short      ms;
+}MinimalVideoHeader;
+#pragma pack(pop) /* Revert to the old alignment */
 
 union _minimal_video	// PRC 002
 {
@@ -49,12 +54,12 @@ union _minimal_video	// PRC 002
 	char payload[sizeof(uint32_t)+sizeof(unsigned short)];
 };
 
-struct _minimal_audio_header	// PRC 002
+typedef struct _minimal_audio_header	// PRC 002
 {
 	uint32_t t;
 	unsigned short ms;
 	unsigned short mode;
-};
+}MinimalAudioHeader;
 
 
 typedef struct {
@@ -658,12 +663,7 @@ static int process_mp4data_line( char *line, int line_count, struct _image_data 
     else if( !strcmp(tag, "Date" ) )
     {
 		sscanf( p, "%d/%d/%d", &time->tm_mday, &time->tm_mon, &time->tm_year );
-
-#ifdef __MINGW32__
-        time->tm_year -= 1900; /* Windows uses 1900, not 1970 */
-#else
-		time->tm_year -= 1970; /* Windows uses 1900, not 1970 */
-#endif
+		time->tm_year -= 1900; /* Windows uses 1900, not 1970 */
 		time->tm_mon--;
 
         if( time->tm_sec != 0 || time->tm_min != 0 || time->tm_hour != 0 )
@@ -734,11 +734,12 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 
 
     // Prepare for video or audio read
-    if( data_type == DATA_JPEG || data_type == DATA_JFIF || data_type == DATA_MPEG4I || data_type == DATA_MPEG4P )
+    if( data_type == DATA_JPEG || data_type == DATA_JFIF || data_type == DATA_MPEG4I || data_type == DATA_MPEG4P 
+        || data_type == DATA_MINIMAL_MPEG4 )
     {
         video_data = av_mallocz( sizeof(struct _image_data) );
     }
-    else if( data_type == DATA_AUDIO_ADPCM )
+    else if( data_type == DATA_AUDIO_ADPCM || data_type == DATA_MINIMAL_AUDIO_ADPCM )
     {
         audio_data = av_mallocz( sizeof(AudioHeader) );
     }
@@ -897,6 +898,63 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             }
 	    }	
 	    break;
+
+        /* CS - Support for minimal MPEG4 */
+    case DATA_MINIMAL_MPEG4:
+        {
+            MinimalVideoHeader      videoHeader;
+            int                     dataSize = size - sizeof(MinimalVideoHeader);
+
+            /* Get the minimal video header */
+	        if( (n = get_buffer( pb, (unsigned char*)&videoHeader, sizeof(MinimalVideoHeader) )) != sizeof(MinimalVideoHeader) )
+		        return -1;
+
+            network2host32(videoHeader.t);
+            network2host16(videoHeader.ms);
+
+            /* Copy pertinent data into generic video data structure */
+            video_data->session_time = videoHeader.t;
+            video_data->milliseconds = videoHeader.ms;
+
+            /* Remember to identify the type of frame data we have - this ensures the right codec is used to decode this frame */
+            video_data->vid_format = PIC_MODE_MPEG4_411;
+
+            /* Now get the main frame data into a new packet */
+	        if( (status = av_new_packet( pkt, dataSize )) < 0 )
+		        return -1;
+
+	        if( (n = get_buffer( pb, pkt->data, dataSize )) != dataSize )
+		        return -1;
+        }
+        break;
+
+        /* Support for minimal audio frames */
+    case DATA_MINIMAL_AUDIO_ADPCM:
+        {
+            MinimalAudioHeader      audioHeader;
+            int                     dataSize = size - sizeof(MinimalAudioHeader);
+
+            /* Get the minimal video header */
+	        if( (n = get_buffer( pb, (unsigned char*)&audioHeader, sizeof(MinimalAudioHeader) )) != sizeof(MinimalAudioHeader) )
+		        return -1;
+
+            network2host32(audioHeader.t);
+            network2host16(audioHeader.ms);
+            network2host16(audioHeader.mode);
+
+            /* Copy pertinent data into generic audio data structure */
+            audio_data->mode = audioHeader.mode;
+            audio_data->seconds = audioHeader.t;
+            audio_data->msecs = audioHeader.ms;
+
+            /* Now get the main frame data into a new packet */
+	        if( (status = av_new_packet( pkt, dataSize )) < 0 )
+		        return -1;
+
+	        if( (n = get_buffer( pb, pkt->data, dataSize )) != dataSize )
+		        return -1;
+        }
+        break;
 
         // CS - Support for ADPCM frames
     case DATA_AUDIO_ADPCM:
