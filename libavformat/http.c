@@ -352,3 +352,12 @@ URLProtocol http_protocol = {
     http_seek,
     http_close,
 };
+
+URLProtocol netvuProtocol = {
+    "netvu",
+    http_open,
+    http_read,
+    http_write,
+    NULL, /* seek */
+    http_close,
+};

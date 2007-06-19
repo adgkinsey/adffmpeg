@@ -6,9 +6,9 @@ include ../config.mak
 
 CFLAGS+=-I$(SRC_PATH)/libavcodec
 
-OBJS= utils.o cutils.o os_support.o allformats.o jfif_img.o adpic.o DebugTrace.o
+OBJS= utils.o cutils.o os_support.o allformats.o jfif_img.o adpic.o dspic.o dsenc.o DebugTrace.o
 
-HEADERS = avformat.h avio.h rtp.h rtsp.h rtspcodes.h
+HEADERS = avformat.h avio.h rtp.h rtsp.h rtspcodes.h ds_exports.h
 
 # muxers/demuxers
 OBJS-$(CONFIG_FOURXM_DEMUXER)            += 4xm.o
@@ -166,7 +166,7 @@ OBJS+= avio.o aviobuf.o
 ifeq ($(CONFIG_PROTOCOLS),yes)
 OBJS+= file.o
 ifeq ($(CONFIG_NETWORK),yes)
-OBJS+= network.o udp.o tcp.o http.o rtsp.o rtp.o rtpproto.o mpegts.o rtp_h264.o
+OBJS+= network.o udp.o tcp.o http.o rtsp.o rtp.o rtpproto.o mpegts.o rtp_h264.o ds.o
 endif
 endif
 

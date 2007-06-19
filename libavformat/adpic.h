@@ -23,6 +23,7 @@
 #include <string.h>
 #include <time.h>
 #include "avformat.h"
+#include "ds_exports.h"
 
 #ifndef FALSE
 #define FALSE 0
@@ -33,7 +34,6 @@
 
 enum tx_type { TX_MIME, TX_MIME_NV, TX_STREAM, TX_MINIMAL_STREAM };
 enum pkt_offsets { DATA_TYPE, DATA_CHANNEL, DATA_SIZE_BYTE_0 , DATA_SIZE_BYTE_1 , DATA_SIZE_BYTE_2 , DATA_SIZE_BYTE_3, SEPARATOR_SIZE };
-enum data_type { DATA_JPEG, DATA_JFIF, DATA_MPEG4I, DATA_MPEG4P, DATA_AUDIO_ADPCM, DATA_AUDIO_RAW, DATA_MINIMAL_MPEG4, DATA_MINIMAL_AUDIO_ADPCM, DATA_LAYOUT, DATA_INFO, DATA_PLAINTEXT, MAX_DATA_TYPE  };
 
 #ifdef WORDS_BIGENDIAN
 #define network2host32(x) x = x
@@ -75,75 +75,6 @@ enum data_type { DATA_JPEG, DATA_JFIF, DATA_MPEG4I, DATA_MPEG4P, DATA_AUDIO_ADPC
 #define pic_revision_level(v) ( (v) - MIN_PIC_VERSION )	// JCB 016
 
 #define AUDIO_STREAM_ID             1
-
-#define TITLE_LENGTH 30
-#define MAX_NAME_LEN 30
-
-typedef struct _image_data IMAGE;
-
-/* Ensure Picture is packed on a short boundary within _image_data */
-#ifdef __CWVX__
-#pragma options align=packed
-#endif
-
-/* Image collection parameters (for Brooktree decoder collection setup) */
-typedef struct
-{
-	uint16_t src_pixels;		/* Input image size (horizontal) */
-	uint16_t src_lines;		/* Input image size (vertical) */
-	uint16_t target_pixels;	/* Output image size (horizontal) */
-	uint16_t target_lines;	/* Output image size (vertical) */
-	uint16_t pixel_offset;	/* Image start offset (horizontal) */
-	uint16_t line_offset;		/* Image start offset (vertical) */
-}Picture;
-struct _image_data
-{
-	uint32_t version;	/* structure version number */
-	int32_t mode;				// in PIC_REVISION 0 this was the DFT style FULL_HI etc
-							// in PIC_REVISION 1 this is used to specify AD or JFIF format image amongst other things
-	int32_t cam;				/* camera number */
-	int32_t vid_format;			/* 422 or 411 */
-	uint32_t start_offset;	/* start of picture PRC 007 */
-	int32_t size;				/* size of image */
-	int32_t max_size;			/* maximum size allowed */
-	int32_t target_size;		/* size wanted for compression JCB 004 */
-	int32_t factor;				/* Q factor */
-	uint32_t alm_bitmask_hi;		/* High 32 bits of the alarm bitmask */
-	int32_t status;				/* status of last action performed on picture */
-	uint32_t session_time;	/* playback time of image */		/* JCB 002 */
-	uint32_t milliseconds;	/* sub-second count for playback speed control JCB 005  PRC 009 */
-	char res[3+1];			/* picture size JCB 004 */
-	char title[TITLE_LENGTH+1];		/* JCB 003 camera title */
-	char alarm[TITLE_LENGTH+1];		/* JCB 003 alarm text - title, comment etc */
-	Picture format;					/* NOTE: Do not assign to a pointer due to CW-alignment */
-	char locale[MAX_NAME_LEN];	/* JCB 006 */
-	int32_t utc_offset;				/* JCB 006 */
-	uint32_t alm_bitmask;
-};
-
-typedef struct _audioHeader
-{
-    uint32_t            version;
-    int32_t             mode;
-    int32_t             channel;
-    int32_t             sizeOfAdditionalData;
-    int32_t             sizeOfAudioData;
-    uint32_t            seconds;
-    uint32_t            msecs;
-    unsigned char *     additionalData;
-    //byte[] audioData;
-} AudioHeader;
-
-typedef struct _frameData
-{
-    enum data_type      dataType;       /* The type of the frame we have */
-    void *              typeInfo;       /* Pointer to either AudioHeader or _image_data depending on whether it's a video or audio frame */
-} FrameData;
-
-/* No more structure-packing after here */
-#ifdef __CWVX__
-#pragma options align=reset
-#endif
 
 
 // JCB 016 bit definitions for the mode element for revisions > 0

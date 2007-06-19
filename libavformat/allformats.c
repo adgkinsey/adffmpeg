@@ -20,6 +20,8 @@
  */
 #include "avformat.h"
 #include "allformats.h"
+#include "ds.h"
+#include "dspic.h"
 
 #define REGISTER_MUXER(X,x) \
           if(ENABLE_##X##_MUXER)   av_register_output_format(&x##_muxer)
@@ -45,6 +47,7 @@ void av_register_all(void)
     avcodec_register_all();
 
     adpic_init();
+    dspicInit();
 
     REGISTER_DEMUXER (AAC, aac);
     REGISTER_MUXDEMUX(AC3, ac3);
@@ -167,6 +170,8 @@ void av_register_all(void)
     register_protocol(&rtp_protocol);
     register_protocol(&tcp_protocol);
     register_protocol(&http_protocol);
+    register_protocol(&ds_protocol);
+    register_protocol(&netvuProtocol);
 #endif
 #endif
 }
