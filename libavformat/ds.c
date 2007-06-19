@@ -414,7 +414,6 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
                         }
                         else if( streamType == DS_PLAYBACK_MODE_PLAY )
                         {
-                            /* TODO: Implement playback startup here */
                             if( (imgRequestMsg = CreateNetworkMessage( TCP_CLI_IMG_PLAY_REQUEST, channelID )) )
                             {
                                 CliImgPlayRequestMsg *      msgBody = (CliImgPlayRequestMsg *)imgRequestMsg->body;
@@ -828,7 +827,7 @@ static int ReadConnectReplyMessage( URLContext * h, NetworkMessage *message )
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->maxMsgInterval, sizeof(long) ) != sizeof(long) )
         return AVERROR_IO;
 
-    if( DSReadBuffer( h, (uint8_t *)&bodyPtr->timestamp, sizeof(long64) ) != sizeof(long64) ) /* TODO: Check portability */
+    if( DSReadBuffer( h, (uint8_t *)&bodyPtr->timestamp, sizeof(long64) ) != sizeof(long64) )
         return AVERROR_IO;
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->cameraTitles, (16 * 28) ) != (16 * 28) )
@@ -897,7 +896,7 @@ static int ReadFeatureConnectReplyMessage( URLContext * h, NetworkMessage *messa
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->maxMsgInterval, sizeof(long) ) != sizeof(long) )
         return AVERROR_IO;
 
-    if( DSReadBuffer( h, (uint8_t *)&bodyPtr->timestamp, sizeof(long64) ) != sizeof(long64) ) /* TODO: Check portability */
+    if( DSReadBuffer( h, (uint8_t *)&bodyPtr->timestamp, sizeof(long64) ) != sizeof(long64) )
         return AVERROR_IO;
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->cameraTitles, (16 * 28) ) != (16 * 28) )
