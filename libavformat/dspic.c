@@ -39,17 +39,12 @@ static int dspicProbe( AVProbeData *p )
     long        magicNumber = 0;
 
     if( p->buf_size <= sizeof(long) )
-    {
-        av_sid_log_( "dspicProbe - Buffer too small (%d bytes)", p->buf_size );
         return 0;
-    }
 
     /* Get what should be the magic number field of the first header */
     memcpy( &magicNumber, p->buf, sizeof(long) );
     /* Adjust the byte ordering */
     magicNumber = NTOH32(magicNumber);
-
-    av_sid_log_( "dspicProbe - magic number = %d", magicNumber );
 
     if( magicNumber == DSPacketHeaderMagicNumber )
         return 100;

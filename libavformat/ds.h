@@ -26,6 +26,10 @@
 #define DS_PLAYBACK_MODE_LIVE                       0x00
 #define DS_PLAYBACK_MODE_PLAY                       0x01
 
+#define DS_RESOLUTION_HI                            2
+#define DS_RESOLUTION_MED                           1
+#define DS_RESOLUTION_LOW                           0
+
 /* -------------------------------------- Structures/types -------------------------------------- */
 typedef enum _controlMessages
 {

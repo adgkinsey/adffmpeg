@@ -536,8 +536,7 @@ static int CrackURI( const char *path, int *streamType, int *res, int *cam, time
     char *          pathStr = NULL;
     char *          token = NULL;
 
-    /* TODO: Define constants for these values based on supported options */
-    *res = 2;  
+    *res = DS_RESOLUTION_HI;  
     *streamType = DS_PLAYBACK_MODE_LIVE;
     *cam = 1;
 
@@ -571,12 +570,11 @@ static int CrackURI( const char *path, int *streamType, int *res, int *cam, time
                         if( strcmp( _strlwr(name), "res" ) == 0 )
                         {
                             if( strcmp( value, "hi" ) == 0 )
-                                *res = 2;
-                            /* TODO: Confirm the rest of the resolutions supported and the values those should take here */
-                            /*else if( strcmp( value, "med" ) == 0 )
-                                *res = 1;
+                                *res = DS_RESOLUTION_HI;
+                            else if( strcmp( value, "med" ) == 0 )
+                                *res = DS_RESOLUTION_MED;
                             else if( strcmp( value, "low" ) == 0 )
-                                *res = 0;*/
+                                *res = DS_RESOLUTION_LOW;
                         }
                         else if( strcmp( _strlwr(name), "stream" ) == 0 )
                         {
