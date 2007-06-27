@@ -97,6 +97,7 @@ Rotation is separate from addition to prevent recomputation.
 #define VIEWER_VERSION_104_001                      0x00104001
 
 char * EncryptPasswordString( char * Username, char * Password, long Timestamp, char * MacAddress, long RemoteApplicationVersion );
+void GetFingerPrint(char* FingerPrint, char* Source, unsigned int Length, char *cpublic_key);
 
 #endif /* __DM_ENCRYPTION_ROUTINES_H__ */
  

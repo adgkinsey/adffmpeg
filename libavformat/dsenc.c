@@ -2,7 +2,7 @@
 
 //#include <vcl.h>
 //#pragma hdrstop
-#ifdef WIN32  /* MSVC specific */
+#if defined(__MINGW32__) && defined(WIN32)  /* MSVC specific */
 #pragma warning(disable : 4995)
 #pragma warning(disable : 4996)
 #endif /* WIN32 */
@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "avformat.h"
 #include "dsenc.h"
 
 static void MD5Init(MD5_CTX * context, unsigned char *pub_key);
@@ -19,8 +20,7 @@ static void MD5Transform(UINT4 * state, unsigned char * block);
 static void Encode(unsigned char * output, UINT4 * input, unsigned int len);
 static void Decode(UINT4 * output, unsigned char * input, unsigned int len);
 static unsigned char hex_val (char *char2);
-static void GetFingerPrint(char* FingerPrint, char* Source, unsigned int Length, char *cpublic_key);
-static void MD5Print(char* FingerPrint, unsigned char * digest);
+static void MD5Print(char* FingerPrint, int size, unsigned char * digest);
 
 //---------------------------------------------------------------------------
 
@@ -260,7 +260,7 @@ static unsigned char hex_val (char *char2)
 }
 
 // Main Function to get a finger print
-static void GetFingerPrint(char* FingerPrint, char* Source, unsigned int Length, char *cpublic_key)
+void GetFingerPrint(char* FingerPrint, char* Source, unsigned int Length, char *cpublic_key)
 {
 	MD5_CTX context;
 	unsigned char digest[16];
@@ -284,7 +284,7 @@ static void GetFingerPrint(char* FingerPrint, char* Source, unsigned int Length,
 	MD5Final (digest, &context);
 
 
-	MD5Print (local_fp, digest);
+	MD5Print (local_fp, 32+1, digest);
 
 	strncpy (FingerPrint, local_fp, 32) ;
 	
@@ -292,7 +292,7 @@ static void GetFingerPrint(char* FingerPrint, char* Source, unsigned int Length,
 
 
 /* Prints a message digest in hexadecimal */
-static void MD5Print(char* FingerPrint, unsigned char * digest)
+static void MD5Print(char* FingerPrint, int size, unsigned char * digest)
 {
 	unsigned int i;
 	
@@ -302,9 +302,9 @@ static void MD5Print(char* FingerPrint, unsigned char * digest)
 
 	for (i = 0; i < 16; i++)
 	{
-		sprintf (temp, "%02x", digest[i]);
+		snprintf (temp, 20, "%02x", digest[i]);
 
-		strcat(FingerPrint, temp);
+		pstrcat(FingerPrint, size, temp);
 	}
 
 }
@@ -324,7 +324,7 @@ static char *CreateUserPassword( const char *Username, const char *Password )
             userPassword[strlen(Username)] = '\0';
 
             /* Now add the password */
-            strcat( userPassword, Password );
+            pstrcat( userPassword, strlen( Username ) + strlen( Password ) + 1, Password );
 
             /* NULL terminate */
             userPassword[strlen(Username) + strlen(Password)] = '\0';
@@ -369,8 +369,8 @@ char * EncryptPasswordString( char * Username, char * Password, long Timestamp, 
 
     if( canContinue )
     {
-        sprintf(Source,  "%08X",(int)Timestamp);
-        strcat(Source, strupr(EncPassword));
+        snprintf(Source, 128, "%08X",(int)Timestamp);
+        pstrcat(Source, 128, strupr(EncPassword));
 
         GetFingerPrint( TransmittedData, Source, (unsigned int)strlen(Source), MacAddress );
         TransmittedData[32] = '\0';
@@ -386,7 +386,7 @@ char * EncryptPasswordString( char * Username, char * Password, long Timestamp, 
     return EncryptedPassword;
 }
 
-#ifdef WIN32
+#if defined(__MINGW32__) && defined(WIN32)  /* MSVC specific */
 #pragma warning(default : 4996)
 #pragma warning(default : 4995)
-#endif /* WIN32 */
+#endif /* defined(__MINGW32__) && defined(WIN32) */

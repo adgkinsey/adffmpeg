@@ -21,6 +21,7 @@
 #include "avformat.h"
 #include <unistd.h>
 #include "network.h"
+#include "dsenc.h"
 
 #ifdef __MINGW32__
 #define sleep(x)                Sleep(x*1000)
@@ -38,6 +39,9 @@
 #define URL_SIZE    4096
 #define MAX_REDIRECTS 8
 
+#define AUTHENTICATION_MODE_BASIC       1
+#define AUTHENTICATION_MODE_DIGEST      2
+
 typedef struct {
     URLContext *hd;
     unsigned char buffer[BUFFER_SIZE], *buf_ptr, *buf_end;
@@ -45,12 +49,25 @@ typedef struct {
     int http_code;
     offset_t off, filesize;
     char location[URL_SIZE];
+
+    /* CS - added to support authentication */
+    int         authentication_mode;
+    char *      realm;
+    char *      nonce;
+    char *      algorithm;
+    char *      qop;
 } HTTPContext;
 
 static int http_connect(URLContext *h, const char *path, const char *hoststr,
-                        const char *auth, int *new_location);
+                        const char *auth, int *new_location, const char *tcpConnStr);
 static int http_write(URLContext *h, uint8_t *buf, int size);
 
+static void http_parse_authentication_header( char * p, HTTPContext *s );
+static void copy_value_to_field( const char *value, char **dest );
+static int http_do_request( URLContext *h, const char *path, const char *hoststr, const char *auth, int post, int *new_location );
+static int http_respond_to_basic_challenge( URLContext *h, const char *auth, int post, const char *path, const char *hoststr, int *new_location );
+static int http_respond_to_digest_challenge( URLContext *h, const char *auth, int post, const char *path, const char *hoststr, int *new_location );
+static void value_to_string( const char *input, int size, char *output );
 
 /* return non zero if error */
 static int http_open_cnx(URLContext *h)
@@ -98,7 +115,7 @@ static int http_open_cnx(URLContext *h)
         goto fail;
 
     s->hd = hd;
-    if (http_connect(h, path, hoststr, auth, &location_changed) < 0)
+    if (http_connect(h, path, hoststr, auth, &location_changed, buf) < 0)
         goto fail;
     if (s->http_code == 303 && location_changed == 1) {
         /* url moved, get next */
@@ -122,7 +139,7 @@ static int http_open(URLContext *h, const char *uri, int flags)
 
     h->is_streamed = 1;
 
-    s = av_malloc(sizeof(HTTPContext));
+    s = av_mallocz(sizeof(HTTPContext));
     if (!s) {
         return AVERROR(ENOMEM);
     }
@@ -201,24 +218,313 @@ static int process_line(URLContext *h, char *line, int line_count,
             }
             h->is_streamed = 0; /* we _can_ in fact seek */
         }
+        else if( strcmp( tag, "WWW-Authenticate" ) == 0 ) /* Check for authentication headers */
+        {
+            char * mode = p;
+
+            while (!isspace(*p) && *p != '\0')
+                p++;
+
+            if( isspace(*p) )
+            {
+                *p = '\0';
+                p++;
+            }
+
+            /* Basic or digest requested? */
+            if( strncmp( strlwr(mode), "basic", 5 ) == 0 )
+            {
+                s->authentication_mode = AUTHENTICATION_MODE_BASIC;
+            }
+            else if( strncmp( strlwr(mode), "digest", 6 ) == 0 )
+            {
+                /* If it's digest that's been requested, we need to extract the nonce and store it in the context */
+                s->authentication_mode = AUTHENTICATION_MODE_DIGEST;
+            }
+
+            http_parse_authentication_header( p, s );
+        }
     }
     return 1;
 }
 
+static void http_parse_authentication_header( char * p, HTTPContext *s )
+{
+    char *  name = NULL;
+    char *  value = NULL;
+
+    while( *p != '\0' )
+    {
+        while(isspace(*p))p++; /* Skip whitespace */
+        name = p;
+
+        /* Now we get attributes in <name>=<value> pairs */
+        while (*p != '\0' && *p != '=')
+            p++;
+
+        if (*p != '=')
+            return;
+
+        *p = '\0';
+        p++;
+
+        value = p;
+
+        while (*p != '\0' && *p != ',')
+            p++;
+
+        if (*p == ',')
+        {
+            *p = '\0';
+            p++;
+        }
+
+        /* Strip any "s off */
+        if( strlen(value) > 0 )
+        {
+            if( *value == '"' && *(value + strlen(value) - 1) == '"' )
+            {
+                *(value + strlen(value) - 1) = '\0';
+                value += 1;
+            }
+        }
+
+        /* Copy the attribute into the relevant field */
+        if( strcmp( name, "realm" ) == 0 )
+            copy_value_to_field( value, &s->realm );
+        else if( strcmp( name, "nonce" ) == 0 )
+            copy_value_to_field( value, &s->nonce );
+        else if( strcmp( name, "qop" ) == 0 )
+            copy_value_to_field( value, &s->qop );
+        else if( strcmp( name, "algorithm" ) == 0 )
+            copy_value_to_field( value, &s->algorithm );
+    }
+}
+
+static void copy_value_to_field( const char *value, char **dest )
+{
+    if( *dest != NULL )
+        av_free( *dest );
+
+    *dest = av_malloc( strlen(value) + 1 );
+    strcpy( *dest, value );
+    (*dest)[strlen(value)] = '\0';
+}
+
 static int http_connect(URLContext *h, const char *path, const char *hoststr,
-                        const char *auth, int *new_location)
+                        const char *auth, int *new_location, const char *tcpConnStr )
 {
     HTTPContext *s = h->priv_data;
-    int post, err, ch;
+    int post;
     char line[1024], *q;
-    char *auth_b64;
-    offset_t off = s->off;
-
 
     /* send http header */
     post = h->flags & URL_WRONLY;
 
+    snprintf(s->buffer, sizeof(s->buffer),
+             "%s %s HTTP/1.1\r\n"
+             "User-Agent: %s\r\n"
+             "Accept: */*\r\n"
+             "Range: bytes=%"PRId64"-\r\n"
+             "Host: %s\r\n"
+             "\r\n",
+             post ? "POST" : "GET",
+             path,
+             LIBAVFORMAT_IDENT,
+             s->off,
+             hoststr);
+
+    if( http_do_request( h, path, hoststr, auth, post, new_location ) < 0 )
+        return AVERROR_IO;
+
+    /* If we got a 401 authentication challenge back, we need to respond to that challenge accordingly if we have the credentials */
+    if( s->http_code == 401 )
+    {
+        int     err;
+
+        /* Close the underlying TCP connection and reopen it for the second request */
+        url_close(s->hd);
+        s->hd = NULL;
+        err = url_open( &s->hd, tcpConnStr, URL_RDWR );
+
+        if (err < 0)
+        {
+            if( s->hd != NULL )
+                url_close(s->hd);
+
+            return AVERROR_IO;
+        }
+
+        if( s->authentication_mode == AUTHENTICATION_MODE_BASIC )
+        {
+            return http_respond_to_basic_challenge( h, auth, post, path, hoststr, new_location );
+        }
+        else if( s->authentication_mode == AUTHENTICATION_MODE_DIGEST )
+        {
+            /* Respond to the digest challenge */
+            return http_respond_to_digest_challenge( h, auth, post, path, hoststr, new_location );
+        }
+        else
+        {
+            return AVERROR_IO;
+        }
+    }
+
+    return 0;
+}
+
+static int http_respond_to_digest_challenge( URLContext *h, const char *auth, int post, const char *path, const char *hoststr, int *new_location )
+{
+    HTTPContext *       s = h->priv_data;
+    char                A1Hash[33];
+    char                A2Hash[33];
+    char                requestDigest[33];
+    char                buffer[2048];
+    const char *        p = NULL;
+    int                 i = 0;
+    int                 cnonce = 0xdecade11;
+    unsigned int        nc = 1;
+    char                cnonceStr[9];
+    char                ncStr[9];
+
+    /* Validate that the server supports the QOP=auth method (which is all we support) */
+    strlwr( s->qop );
+    if( strstr( s->qop, "auth" ) == NULL )
+        return AVERROR_IO;
+
+    /* Prepare a request using digest authentication */
+    p = auth;
+
+    /* Copy the username into the buffer */
+    while( *p != ':' )
+        buffer[i++] = *p++;
+
+    /* Now copy the realm */
+    buffer[i++] = ':';
+    p++;
+
+    strcpy( &buffer[i], s->realm );
+    i += (int)strlen(s->realm);
+
+    buffer[i++] = ':';
+
+    /* Now the password */
+    while( *p != '\0' )
+        buffer[i++] = *p++;
+
+    buffer[i] = '\0';
+
+    /* MD5 this */
+    GetFingerPrint( A1Hash, buffer, i, NULL );
+    A1Hash[32] = '\0';
+
+    /* Now create the A2 hash */
+    i = 0;
+    strcpy( &buffer[i], post ? "POST" : "GET" );
+    i+= post ? (int)strlen("POST") : (int)strlen("GET");
+
+    buffer[i++] = ':';
+
+    strcpy( &buffer[i], path );
+    i += (int)strlen(path);
+
+    buffer[i] = '\0';
+
+    GetFingerPrint( A2Hash, buffer, i, NULL );
+    A2Hash[32] = '\0';
+
+    /* CS - New QOP=auth implementation */
+    /* Now concatenate the 2 hashes and md5 them */
+    i = 0;
+    strncpy( &buffer[i], A1Hash, 32 );
+    i += 32;
+
+    buffer[i++] = ':';
+
+    strcpy( &buffer[i], s->nonce );
+    i += (int)strlen(s->nonce);
+
+    buffer[i++] = ':';
+
+    /* Add the nc counter in hex here */
+#ifndef WORDS_BIGENDIAN
+    /* We need the integer in big endian before we do the conversion to hex... */
+    nc = bswap_32(nc);
+#endif
+    value_to_string( (char *)&nc, 4, ncStr );
+    ncStr[8] = '\0';
+    strncpy( &buffer[i], ncStr, 8 );
+    i += 8;
+    buffer[i++] = ':';
+
+    /* Add the cnonce in hex here */
+    value_to_string( (char *)&cnonce, 4, cnonceStr );
+    cnonceStr[8] = '\0';
+    strncpy( &buffer[i], cnonceStr, 8 );
+    i += 8;
+    buffer[i++] = ':';
+
+    /* Add the QOP method in here */
+    strncpy( &buffer[i], "auth", 4 );
+    i += 4;
+    buffer[i++] = ':';
+
+    strncpy( &buffer[i], A2Hash, 32 );
+    i += 32;
+
+    buffer[i] = '\0';
+
+    GetFingerPrint( requestDigest, buffer, i, NULL );
+    requestDigest[32] = '\0';
+
+    snprintf(s->buffer, sizeof(s->buffer),
+        "%s %s HTTP/1.0\r\n"
+        "User-Agent: %s\r\n"
+        "Accept: */*\r\n"
+        "Range: bytes=%"PRId64"-\r\n"
+        "Host: %s\r\n"
+        "Authorization: Digest username=\"%s\",realm=\"%s\",nonce=\"%s\",uri=\"%s\",cnonce=\"%s\",nc=%s,algorithm=%s,response=\"%s\",qop=\"%s\"\r\n"
+        "\r\n",
+        post ? "POST" : "GET",
+        path,
+        LIBAVFORMAT_IDENT,
+        s->off,
+        hoststr,
+        "craig",
+        s->realm,
+        s->nonce,
+        path,
+        cnonceStr,
+        ncStr,
+        s->algorithm,
+        requestDigest,
+        "auth");
+
+    if( http_do_request( h, path, hoststr, auth, post, new_location ) < 0 )
+        return AVERROR_IO;
+
+    return 0;
+}
+
+static void value_to_string( const char *input, int size, char *output )
+{
+    int j = 0;
+    char hexval[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+
+    for( j = 0; j < size; j++ )
+    {
+        output[j*2] = hexval[((input[j] >> 4) & 0xF)];
+        output[(j*2) + 1] = hexval[(input[j]) & 0x0F];
+    }
+}
+
+static int http_respond_to_basic_challenge( URLContext *h, const char *auth, int post, const char *path, const char *hoststr, int *new_location )
+{
+    HTTPContext *       s = h->priv_data;
+    char *              auth_b64 = NULL;
+
     auth_b64 = av_base64_encode((uint8_t *)auth, strlen(auth));
+
     snprintf(s->buffer, sizeof(s->buffer),
              "%s %s HTTP/1.1\r\n"
              "User-Agent: %s\r\n"
@@ -235,7 +541,21 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
              auth_b64);
 
     av_freep(&auth_b64);
-    if (http_write(h, s->buffer, strlen(s->buffer)) < 0)
+
+    if( http_do_request( h, path, hoststr, auth, post, new_location ) < 0 )
+        return AVERROR_IO;
+
+    return 0;
+}
+
+static int http_do_request( URLContext *h, const char *path, const char *hoststr, const char *auth, int post, int *new_location )
+{
+    HTTPContext *s = h->priv_data;
+    char line[1024], *q;
+    int err, ch;
+    offset_t off = s->off;
+
+    if (http_write(h, s->buffer, (int)strlen(s->buffer)) < 0)
         return AVERROR_IO;
 
     /* init input buffer */
@@ -311,6 +631,20 @@ static int http_close(URLContext *h)
 {
     HTTPContext *s = h->priv_data;
     url_close(s->hd);
+
+    /* Make sure we release any memory that may have been allocated to store authentication info */
+    if( s->realm )
+        av_free( s->realm );
+
+    if( s->nonce )
+        av_free( s->nonce );
+
+    if( s->qop )
+        av_free( s->qop );
+
+    if( s->algorithm )
+        av_free( s->algorithm );
+
     av_free(s);
     return 0;
 }
