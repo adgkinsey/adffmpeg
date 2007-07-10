@@ -22,6 +22,7 @@
 #include "allformats.h"
 #include "ds.h"
 #include "dspic.h"
+#include "adaudio.h"
 
 #define REGISTER_MUXER(X,x) \
           if(ENABLE_##X##_MUXER)   av_register_output_format(&x##_muxer)
@@ -47,6 +48,7 @@ void av_register_all(void)
     avcodec_register_all();
 
     adpic_init();
+    adaudio_init();
     dspicInit();
 
     REGISTER_DEMUXER (AAC, aac);
