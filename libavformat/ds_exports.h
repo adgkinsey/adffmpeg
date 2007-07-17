@@ -138,6 +138,21 @@ long64 TimeTolong64( time_t time );
 #define SET_FLAG_DST(flags, dst)            ((flags) |= (unsigned short)(dst << 8))
 #define SET_FLAG_ZONE(flags, zone)          ((flags) |= (unsigned short)(zone << 10))
 
+#define RTP_PAYLOAD_TYPE_8000HZ_ADPCM                       5
+#define RTP_PAYLOAD_TYPE_11025HZ_ADPCM                      16
+#define RTP_PAYLOAD_TYPE_16000HZ_ADPCM                      6
+#define RTP_PAYLOAD_TYPE_22050HZ_ADPCM                      17
+#define RTP_PAYLOAD_TYPE_32000HZ_ADPCM                      96
+#define RTP_PAYLOAD_TYPE_44100HZ_ADPCM                      97
+#define RTP_PAYLOAD_TYPE_48000HZ_ADPCM                      98
+#define RTP_PAYLOAD_TYPE_8000HZ_PCM                         100
+#define RTP_PAYLOAD_TYPE_11025HZ_PCM                        101
+#define RTP_PAYLOAD_TYPE_16000HZ_PCM                        102
+#define RTP_PAYLOAD_TYPE_22050HZ_PCM                        103
+#define RTP_PAYLOAD_TYPE_32000HZ_PCM                        104
+#define RTP_PAYLOAD_TYPE_44100HZ_PCM                        11
+#define RTP_PAYLOAD_TYPE_48000HZ_PCM                        105
+
 #ifdef __cplusplus
 }
 #endif
