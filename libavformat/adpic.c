@@ -29,12 +29,13 @@
 #include <stdio.h>
 #include "avcodec.h"
 #include "adpic.h"
+#include "adaudio.h"    // RTP payload values. For inserting into MIME audio packets
 
 #define BINARY_PUSH_MIME_STR "video/adhbinary"
 
 static int adpic_read_line( ByteIOContext *pb, unsigned char * buffer, int bufferSize );
-static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size );
-static int process_line( char *line, int line_count, int *dataType, int *size );
+static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size, long *extra );
+static int process_line( char *line, int line_count, int *dataType, int *size, long *extra );
 static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, struct _image_data *video_data );
 static int process_mp4data_line( char *line, int line_count, struct _image_data *video_data, struct tm *time );
 
@@ -426,7 +427,7 @@ static AVStream *get_audio_stream( struct AVFormatContext *s, AudioHeader* audio
 	return st;
 }
 
-static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size )
+static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size, long *extra )
 {
 #define TEMP_BUFFER_SIZE        1024
     unsigned char               buffer[TEMP_BUFFER_SIZE];
@@ -450,7 +451,7 @@ static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size 
 #ifdef DEBUG
             printf("header='%s'\n", buffer);
 #endif
-            err = process_line( buffer, lineCount, dataType, size );
+            err = process_line( buffer, lineCount, dataType, size, extra );
 
             /* First line contains a \n */
             if( !(err == 0 && lineCount == 0) )
@@ -473,7 +474,7 @@ static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size 
     return 1;
 }
 
-static int process_line( char *line, int line_count, int *dataType, int *size )
+static int process_line( char *line, int line_count, int *dataType, int *size, long *extra )
 {
     char        *tag, *p = NULL;
     int         http_code = 0;
@@ -535,9 +536,58 @@ static int process_line( char *line, int line_count, int *dataType, int *size )
             {
                 *dataType = DATA_PLAINTEXT;
             }
-            else if( strcmp( p, MIME_TYPE_ADPCM ) == 0 )
+            else if( memcmp( p, MIME_TYPE_ADPCM, strlen(MIME_TYPE_ADPCM) ) == 0 )
             {
                 *dataType = DATA_AUDIO_ADPCM;
+
+                // If we find audio in a mime header, we need to extract the mode out. The header takes the form,
+                // Content-Type: audio/adpcm;rate=<mode>
+                while (*p != '\0' && *p != ';')
+                    p++;
+
+                if( *p != ';' )
+                    return 1;
+
+                p++;
+                while (isspace(*p))
+                    p++;
+
+                // p now pointing at the rate. Look for the first '='
+                while (*p != '\0' && *p != '=')
+                    p++;
+                if (*p != '=')
+                    return 1;
+
+                p++;
+
+                tag = p;
+
+                while( *p != '\0' && !isspace(*p) )
+                    p++;
+
+                if( *p != '\0' )
+                    *p = '\0';
+
+                // p pointing at the rate
+                *extra = strtol(tag, NULL, 10); /* convert the rate string into a long */
+
+                // Map the rate to a RTP payload value for consitency - the other audio headers all contain mode values in this format.
+                if( *extra == 8000 )
+                    *extra = RTP_PAYLOAD_TYPE_8000HZ_ADPCM;
+                else if( *extra == 11025 )
+                    *extra = RTP_PAYLOAD_TYPE_11025HZ_ADPCM;
+                else if( *extra == 16000 )
+                    *extra = RTP_PAYLOAD_TYPE_16000HZ_ADPCM;
+                else if( *extra == 22050 )
+                    *extra = RTP_PAYLOAD_TYPE_22050HZ_ADPCM;
+                else if( *extra == 32000 )
+                    *extra = RTP_PAYLOAD_TYPE_32000HZ_ADPCM;
+                else if( *extra == 44100 )
+                    *extra = RTP_PAYLOAD_TYPE_44100HZ_ADPCM;
+                else if( *extra == 48000 )
+                    *extra = RTP_PAYLOAD_TYPE_48000HZ_ADPCM;
+                else
+                    *extra = RTP_PAYLOAD_TYPE_8000HZ_ADPCM; // Default
             }
         }
     }
@@ -704,6 +754,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     int                     n, size;
     int                     status;
     char                    scratch[1024];
+    long                    extra = 0;
 
     AudioHeader *           audio_data = NULL;
     struct _image_data *    video_data = NULL;
@@ -711,7 +762,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     if( TRUE == isMIME )
     {
         /* Parse and validate the header. If this succeeds, we should have the type and the data size out of it */
-        if(  adpic_parse_mime_header( pb, &data_type, &size ) != 0 )
+        if(  adpic_parse_mime_header( pb, &data_type, &size, &extra ) != 0 )
             return -1;
 
         /* Now we should be able to read the data in as a whole block */
@@ -834,7 +885,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                     return -1;
 
                 /* Now we should have a text block following this which contains the frame data that we cna place in a _image_data struct */
-                if(  adpic_parse_mime_header( pb, &data_type, &size ) != 0 )
+                if(  adpic_parse_mime_header( pb, &data_type, &size, &extra ) != 0 )
                     return -1;
 
                 /* Validate the data type and then extract the text buffer */
@@ -984,6 +1035,9 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 /* No presentation information is sent with audio frames in a mime stream so there's not a lot we can do here other than
                    ensure the struct contains the size of the audio data */
                 audio_data->sizeOfAudioData = size;
+                audio_data->mode = extra;
+                audio_data->seconds = 0;
+                audio_data->msecs = 0;
             }
 
 		    if( (status = av_new_packet( pkt, audio_data->sizeOfAudioData )) < 0 )

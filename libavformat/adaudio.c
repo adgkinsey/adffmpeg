@@ -65,6 +65,10 @@ int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 {
                     pkt->stream_index = st->index;
 	                pkt->duration =  ((int)(AV_TIME_BASE * 1.0));
+
+                    // Insert the mode value into the priv member
+                    pkt->priv = (void*)(ioContext->buf_ptr[1]);
+
                     retVal = 0;
                 }
             }
