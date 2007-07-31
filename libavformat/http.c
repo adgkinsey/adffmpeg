@@ -386,6 +386,8 @@ static int http_respond_to_digest_challenge( URLContext *h, const char *auth, in
     unsigned int        nc = 1;
     char                cnonceStr[9];
     char                ncStr[9];
+    char *              userName = NULL;
+    int                 retVal = 0;
 
     /* Validate that the server supports the QOP=auth method (which is all we support) */
     strlwr( s->qop );
@@ -398,6 +400,15 @@ static int http_respond_to_digest_challenge( URLContext *h, const char *auth, in
     /* Copy the username into the buffer */
     while( *p != ':' )
         buffer[i++] = *p++;
+
+    /* Take a temporary copy of the username */
+    if( i > 0 )
+    {
+        if( (userName = av_mallocz( i + 1 )) != NULL ) /* i will be length of the username string here */
+        {
+            memcpy( userName, buffer, i );
+        }
+    }
 
     /* Now copy the realm */
     buffer[i++] = ':';
@@ -490,7 +501,7 @@ static int http_respond_to_digest_challenge( URLContext *h, const char *auth, in
         LIBAVFORMAT_IDENT,
         s->off,
         hoststr,
-        "craig",
+        userName,
         s->realm,
         s->nonce,
         path,
@@ -501,9 +512,14 @@ static int http_respond_to_digest_challenge( URLContext *h, const char *auth, in
         "auth");
 
     if( http_do_request( h, path, hoststr, auth, post, new_location ) < 0 )
-        return AVERROR_IO;
+        retVal = AVERROR_IO;
 
-    return 0;
+    if( userName != NULL )
+    {
+        av_free( userName );
+    }
+
+    return retVal;
 }
 
 static void value_to_string( const char *input, int size, char *output )
