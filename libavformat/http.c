@@ -357,12 +357,18 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
 
         if( s->authentication_mode == AUTHENTICATION_MODE_BASIC )
         {
-            return http_respond_to_basic_challenge( h, auth, post, path, hoststr, new_location );
+            if( strcmp(auth, "" ) == 0 )
+                return AVERROR_INVALIDDATA; /* We can't proceed without any supplied credentials */
+            else
+                return http_respond_to_basic_challenge( h, auth, post, path, hoststr, new_location );
         }
         else if( s->authentication_mode == AUTHENTICATION_MODE_DIGEST )
         {
             /* Respond to the digest challenge */
-            return http_respond_to_digest_challenge( h, auth, post, path, hoststr, new_location );
+            if( strcmp(auth, "" ) == 0 )
+                return AVERROR_INVALIDDATA; /* We can't proceed without any supplied credentials */
+            else
+                return http_respond_to_digest_challenge( h, auth, post, path, hoststr, new_location );
         }
         else
         {
