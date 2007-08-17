@@ -3163,3 +3163,41 @@ static void av_frac_add(AVFrac *f, int64_t incr)
     }
     f->num = num;
 }
+
+char * av_strlwr( char *str )
+{
+    if( str != NULL )
+    {
+        int     strLen = (int)strlen( str );
+        int     pos = 0;
+        char *  currentChar = NULL;
+
+        while( pos < strLen )
+        {
+            str[pos] = (char)tolower( str[pos] );
+
+            pos++;
+        }
+    }
+
+    return str;
+}
+
+char * av_strupr( char *str )
+{
+    if( str != NULL )
+    {
+        int     strLen = (int)strlen( str );
+        int     pos = 0;
+        char *  currentChar = NULL;
+
+        while( pos < strLen )
+        {
+            str[pos] = (char)toupper( str[pos] );
+
+            pos++;
+        }
+    }
+
+    return str;
+}

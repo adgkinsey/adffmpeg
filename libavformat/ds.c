@@ -566,7 +566,7 @@ static int CrackURI( const char *path, int *streamType, int *res, int *cam, time
                     if( name != NULL && value != NULL )
                     {
                         /* Which parameter have we got? */
-                        if( strcmp( _strlwr(name), "res" ) == 0 )
+                        if( strcmp( av_strlwr(name), "res" ) == 0 )
                         {
                             if( strcmp( value, "hi" ) == 0 )
                                 *res = DS_RESOLUTION_HI;
@@ -575,42 +575,42 @@ static int CrackURI( const char *path, int *streamType, int *res, int *cam, time
                             else if( strcmp( value, "low" ) == 0 )
                                 *res = DS_RESOLUTION_LOW;
                         }
-                        else if( strcmp( _strlwr(name), "stream" ) == 0 )
+                        else if( strcmp( av_strlwr(name), "stream" ) == 0 )
                         {
-                            if( strcmp( _strlwr(value), "live" ) == 0 )
+                            if( strcmp( av_strlwr(value), "live" ) == 0 )
                                 *streamType = DS_PLAYBACK_MODE_LIVE;
-                            else if( strcmp( _strlwr(value), "play" ) == 0 )
+                            else if( strcmp( av_strlwr(value), "play" ) == 0 )
                                 *streamType = DS_PLAYBACK_MODE_PLAY;
                         }
-                        else if( strcmp( _strlwr(name), "cam" ) == 0 )
+                        else if( strcmp( av_strlwr(name), "cam" ) == 0 )
                         {
                             *cam = atoi( value );
                         }
-                        else if( strcmp( _strlwr(name), "from" ) == 0 )
+                        else if( strcmp( av_strlwr(name), "from" ) == 0 )
                         {
                             *from = (time_t)atoi( value );
                         }
-                        else if( strcmp( _strlwr(name), "to" ) == 0 )
+                        else if( strcmp( av_strlwr(name), "to" ) == 0 )
                         {
                             *to = (time_t)atoi( value );
                         }
-                        else if( strcmp( _strlwr(name), "rate" ) == 0 )
+                        else if( strcmp( av_strlwr(name), "rate" ) == 0 )
                         {
                             *rate = atoi( value );
                         }
-                        else if( strcmp( _strlwr(name), "mode" ) == 0 )
+                        else if( strcmp( av_strlwr(name), "mode" ) == 0 )
                         {
-                            if( strcmp( _strlwr(value), "play" ) == 0 )
+                            if( strcmp( av_strlwr(value), "play" ) == 0 )
                                 *playMode = VM_PLAY;
-                            else if( strcmp( _strlwr(value), "rwd" ) == 0 )
+                            else if( strcmp( av_strlwr(value), "rwd" ) == 0 )
                                 *playMode = VM_VIS_REW;
-                            else if( strcmp( _strlwr(value), "fwd" ) == 0 )
+                            else if( strcmp( av_strlwr(value), "fwd" ) == 0 )
                                 *playMode = VM_VIS_FF;
-                            else if( strcmp( _strlwr(value), "stop" ) == 0 )
+                            else if( strcmp( av_strlwr(value), "stop" ) == 0 )
                                 *playMode = VM_STOP;
-                            else if( strcmp( _strlwr(value), "shuttle" ) == 0 )
+                            else if( strcmp( av_strlwr(value), "shuttle" ) == 0 )
                                 *playMode = VM_PLAY_SHUTTLE;
-                            else if( strcmp( _strlwr(value), "finish" ) == 0 )
+                            else if( strcmp( av_strlwr(value), "finish" ) == 0 )
                                 *playMode = VM_FINISH;
                         }
                     }

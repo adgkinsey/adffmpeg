@@ -232,11 +232,11 @@ static int process_line(URLContext *h, char *line, int line_count,
             }
 
             /* Basic or digest requested? */
-            if( strncmp( strlwr(mode), "basic", 5 ) == 0 )
+            if( strncmp( av_strlwr(mode), "basic", 5 ) == 0 )
             {
                 s->authentication_mode = AUTHENTICATION_MODE_BASIC;
             }
-            else if( strncmp( strlwr(mode), "digest", 6 ) == 0 )
+            else if( strncmp( av_strlwr(mode), "digest", 6 ) == 0 )
             {
                 /* If it's digest that's been requested, we need to extract the nonce and store it in the context */
                 s->authentication_mode = AUTHENTICATION_MODE_DIGEST;
@@ -396,7 +396,7 @@ static int http_respond_to_digest_challenge( URLContext *h, const char *auth, in
     int                 retVal = 0;
 
     /* Validate that the server supports the QOP=auth method (which is all we support) */
-    strlwr( s->qop );
+    av_strlwr( s->qop );
     if( strstr( s->qop, "auth" ) == NULL )
         return AVERROR_IO;
 

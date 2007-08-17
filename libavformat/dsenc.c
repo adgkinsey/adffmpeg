@@ -330,7 +330,7 @@ static char *CreateUserPassword( const char *Username, const char *Password )
             userPassword[strlen(Username) + strlen(Password)] = '\0';
 
             /* Now convert it to uppercase */
-            strupr( userPassword );
+            av_strupr( userPassword );
         }
     }
 
@@ -370,7 +370,7 @@ char * EncryptPasswordString( char * Username, char * Password, long Timestamp, 
     if( canContinue )
     {
         snprintf(Source, 128, "%08X",(int)Timestamp);
-        pstrcat(Source, 128, strupr(EncPassword));
+        pstrcat(Source, 128, av_strlwr(EncPassword));
 
         GetFingerPrint( TransmittedData, Source, (unsigned int)strlen(Source), MacAddress );
         TransmittedData[32] = '\0';
