@@ -11,12 +11,6 @@ extern "C" {
 have to conditionally typedef the 64 bit value here based on the compiler/platform we're building for */
 typedef long long                       long64;
 
-/* These are the data types that are supported by the DS2 video servers. */
-/* NOTE: DATA_DM_VID_SERVER_FRAME added to this enum to represent a frame received from a legacy DM video server. This is the logical place to put this value. If any new types are added server side, this client side library will not support the new types without some rework
-   so the value of DATA_DM_VID_SERVER_FRAME should never be an issue. Only data associated with this type can be a DMImageData. */
-enum data_type { DATA_JPEG, DATA_JFIF, DATA_MPEG4I, DATA_MPEG4P, DATA_AUDIO_ADPCM, DATA_AUDIO_RAW, DATA_MINIMAL_MPEG4, DATA_MINIMAL_AUDIO_ADPCM, DATA_LAYOUT, DATA_INFO, DATA_DM_VID_SERVER_FRAME, MAX_DATA_TYPE };
-#define DATA_PLAINTEXT              (MAX_DATA_TYPE + 1)   /* This value is only used internally within the library DATA_PLAINTEXT blocks should not be exposed to the client */
-
 #define TITLE_LENGTH 30
 #define MAX_NAME_LEN 30
 
@@ -100,11 +94,20 @@ typedef struct _dmImageData
 #pragma options align=reset
 #endif
 
+typedef enum _frameType
+{
+    FrameTypeUnknown = 0,
+    NetVuVideo,
+    NetVuAudio,
+    DMVideo,
+    DMNudge
+} FrameType;
+
 /* This is the data structure that the ffmpeg parser fills in as part of the parsing routines. It will be shared between adpic and dspic so that our clients
    can be compatible with either stream more easily */
 typedef struct _framedata
 {
-    uint32_t            dataType;       /* Type of data we have. This is server specific so shouldn't be read until the serverType is known */
+    FrameType           frameType;      /* Type of frame we have. See FrameType enum for supported types */
     void *              frameData;      /* Pointer to structure holding the information for the frame. Type determined by the data type field */
 } FrameData;
 

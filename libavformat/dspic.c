@@ -67,6 +67,7 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
     AVStream *              stream = NULL;
     FrameData *             frameData = NULL;
     int                     readImageHeader = FALSE;
+    FrameType               frameType = FrameTypeUnknown;
 
     /* Attempt to read in a network message header */
     if( (retVal = ReadNetworkMessageHeader( ioContext, &header )) != 0 )
@@ -77,6 +78,8 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
     {
         if( header.messageType == TCP_SRV_NUDGE )
         {
+            frameType = DMNudge;
+
             /* Read any extra bytes then try again */
             dataSize = header.length - (SIZEOF_MESSAGE_HEADER_IO - sizeof(unsigned long));
 
@@ -88,6 +91,8 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
         }
         else if( header.messageType == TCP_SRV_IMG_DATA )
         {
+            frameType = DMVideo;
+
             /* This should be followed by a jfif image */
             dataSize = header.length - (SIZEOF_MESSAGE_HEADER_IO - sizeof(unsigned long));
 
@@ -115,7 +120,7 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
     /* Now create a wrapper to hold this frame's data which we'll store in the packet's private member field */
     if( (frameData = av_malloc( sizeof(FrameData) )) != NULL )
     {
-        frameData->dataType = DATA_DM_VID_SERVER_FRAME;
+        frameData->frameType = frameType;
         frameData->frameData = videoFrameData;
 
         pkt->priv = frameData;

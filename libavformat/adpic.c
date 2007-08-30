@@ -33,6 +33,10 @@
 
 #define BINARY_PUSH_MIME_STR "video/adhbinary"
 
+/* These are the data types that are supported by the DS2 video servers. */
+enum data_type { DATA_JPEG, DATA_JFIF, DATA_MPEG4I, DATA_MPEG4P, DATA_AUDIO_ADPCM, DATA_AUDIO_RAW, DATA_MINIMAL_MPEG4, DATA_MINIMAL_AUDIO_ADPCM, DATA_LAYOUT, DATA_INFO, MAX_DATA_TYPE };
+#define DATA_PLAINTEXT              (MAX_DATA_TYPE + 1)   /* This value is only used internally within the library DATA_PLAINTEXT blocks should not be exposed to the client */
+
 static int adpic_read_line( ByteIOContext *pb, unsigned char * buffer, int bufferSize );
 static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size, long *extra );
 static int process_line( char *line, int line_count, int *dataType, int *size, long *extra );
@@ -804,10 +808,16 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         || data_type == DATA_MINIMAL_MPEG4 )
     {
         video_data = av_mallocz( sizeof(NetVuImageData) );
+
+        if( video_data == NULL )
+            return AVERROR_NOMEM;
     }
     else if( data_type == DATA_AUDIO_ADPCM || data_type == DATA_MINIMAL_AUDIO_ADPCM )
     {
         audio_data = av_mallocz( sizeof(NetVuAudioData) );
+
+        if( audio_data == NULL )
+            return AVERROR_NOMEM;
     }
 
     // Proceed based on the type of data in this frame
@@ -1115,14 +1125,21 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 
     frameData = av_malloc(sizeof(FrameData));
 
-    frameData->dataType = data_type;
-
     if( video_data != NULL )                // Video frame
+    {
+        frameData->frameType = NetVuVideo;
         frameData->frameData = video_data;
+    }
     else if( audio_data != NULL )           // Audio frame
+    {
+        frameData->frameType = NetVuAudio;
         frameData->frameData = audio_data;
-    else
+    }
+    else  // Shouldn't really get here
+    {
+        frameData->frameType = FrameTypeUnknown;
         frameData->frameData = NULL;
+    }
 
     pkt->priv = frameData;
 
@@ -1186,7 +1203,7 @@ static void adpic_release_packet( AVPacket *pkt )
             // Have a look what type of frame we have and then delete anything inside as appropriate
             FrameData *     frameData = (FrameData *)pkt->priv;
 
-            if( frameData->dataType == DATA_AUDIO_ADPCM )
+            if( frameData->frameType == NetVuAudio )
             {
                 NetVuAudioData *   audioHeader = (NetVuAudioData *)frameData->frameData;
 
