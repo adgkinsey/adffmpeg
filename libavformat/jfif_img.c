@@ -144,7 +144,7 @@
 	013		PRC		15/10/01	Changed milliseconds format to unsigned
 	014		PRC		28/05/02	Added support for DMViewer
 	015		PRC		30/05/02	Added jfif parsing function parse_jfif_header() which
-								fills out an IMAGE structure based on the jfif contents
+								fills out an NetVuImageData structure based on the jfif contents
 	016		PRC		12/06/02	Reduced verbisity of debug comments in parse_comment().
 								Added parameter site to parse_comment() and parse_jfif_header()
 	017		PRC		09/07/02	Added function find_q
@@ -301,13 +301,13 @@ static int q_init;
 
 /****************************************************************************
 
-Prototype	  :	unsigned int build_jpeg(void *image, void *jfif, IMAGE *pic, unsigned int max)
+Prototype	  :	unsigned int build_jpeg(void *image, void *jfif, NetVuImageData *pic, unsigned int max)
 
 Procedure Desc: Build the correct JFIF headers & tables for the supplied
 				compressed image data
 
 	Inputs	  :	void *jfif		pointer to output buffer
-				IMAGE *pic		pointer to image structure - includes
+				NetVuImageData *pic		pointer to image structure - includes
 								Q factors, image size, mode etc
 				int add_comment flag to control addition of comment
 				unsigned int max		maximum size of compressed image
@@ -315,7 +315,7 @@ Procedure Desc: Build the correct JFIF headers & tables for the supplied
 	Globals   :	none
 
 ****************************************************************************/
-unsigned int build_jpeg_header(void *jfif, IMAGE *pic, int add_comment, unsigned int max)	/* JCB 004 */
+unsigned int build_jpeg_header(void *jfif, NetVuImageData *pic, int add_comment, unsigned int max)	/* JCB 004 */
 {
 volatile unsigned int count;
 unsigned int comment_length;
@@ -593,20 +593,20 @@ struct tm tim_s;
 
 /****************************************************************************
 
-Prototype	  :	unsigned int build_jpeg_header_lite(void *image, void *jfif, IMAGE *pic, unsigned int max)
+Prototype	  :	unsigned int build_jpeg_header_lite(void *image, void *jfif, NetVuImageData *pic, unsigned int max)
 
 Procedure Desc: Build the correct JFIF headers with no tables for use with no data 
 
 	Inputs	  :	void *image		pointer to compressed image data
 				void *jfif		pointer to output buffer
-				IMAGE *pic		pointer to image structure - includes
+				NetVuImageData *pic		pointer to image structure - includes
 								Q factors, image size, mode etc
 				unsigned int max		maximum size of compressed image
 	Outputs	  :	unsigned int	total bytes in the JFIF image
 	Globals   :	none
 
 ****************************************************************************/
-unsigned int build_jpeg_header_lite(void *image, void *jfif, IMAGE *pic, unsigned int max)	// PJB 001
+unsigned int build_jpeg_header_lite(void *image, void *jfif, NetVuImageData *pic, unsigned int max)	// PJB 001
 {
 volatile unsigned int count;
 unsigned int comment_length;
@@ -1212,7 +1212,7 @@ int err_diff;
 #endif
 
 
-int parse_jfif_stream(unsigned char *data, IMAGE *pic, int imglength, unsigned char **qy, unsigned char **qc, char *site, int handle, int (*read_func)(int handle, char *buff, int nbytes))
+int parse_jfif_stream(unsigned char *data, NetVuImageData *pic, int imglength, unsigned char **qy, unsigned char **qc, char *site, int handle, int (*read_func)(int handle, char *buff, int nbytes))
 {
 int i, sos = FALSE;
 unsigned short length, marker;
@@ -1338,13 +1338,13 @@ int huf_cmp_offset=0, huf_tab_no=0;
 
 /****************************************************************************
 
-Prototype	  :	int parse_jfif_header(unsigned char *data, IMAGE *pic, int imglength, unsigned char **qy, unsigned char **qc, char *site, int decode_comment)
+Prototype	  :	int parse_jfif_header(unsigned char *data, NetVuImageData *pic, int imglength, unsigned char **qy, unsigned char **qc, char *site, int decode_comment)
 
-Procedure Desc: Analyses a JFIF header and fills out an IMAGE structure with the
+Procedure Desc: Analyses a JFIF header and fills out an NetVuImageData structure with the
 				info
 
 	Inputs	  :	unsigned char *data		input buffer
-				IMAGE *pic				IMAGE structure
+				NetVuImageData *pic				NetVuImageData structure
 				int imglength			total length of input buffer
 				unsigned char **qy		pointer for luma   Q table
 				unsigned char **qc		pointer for chroma Q table
@@ -1354,7 +1354,7 @@ Procedure Desc: Analyses a JFIF header and fills out an IMAGE structure with the
 	Globals   :
 
 ****************************************************************************/
-int parse_jfif_header(unsigned char *data, IMAGE *pic, int imglength, unsigned char **qy, unsigned char **qc, char *site, int decode_comment)
+int parse_jfif_header(unsigned char *data, NetVuImageData *pic, int imglength, unsigned char **qy, unsigned char **qc, char *site, int decode_comment)
 {
 int i, sos = FALSE;
 unsigned short length, marker;
@@ -1494,7 +1494,7 @@ int i;
 	return field;
 }
 
-void parse_comment(char *text, IMAGE *pic, char *site)
+void parse_comment(char *text, NetVuImageData *pic, char *site)
 {
 int result_length = 80;
 char result[80];
@@ -1629,7 +1629,7 @@ struct tm t;
 
 }
 
-int build_comment_text(char *buffer, IMAGE *pic, int max)
+int build_comment_text(char *buffer, NetVuImageData *pic, int max)
 {
 char *bufptr = buffer;
 char line[128];

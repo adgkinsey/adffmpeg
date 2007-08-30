@@ -10,8 +10,8 @@ static int dspicReadSeek( AVFormatContext *s, int stream_index, int64_t timestam
 static int64_t dspicReadPts( AVFormatContext *s, int stream_index, int64_t *ppos, int64_t pos_limit );
 static AVStream * GetStream( struct AVFormatContext *s, int camera, int width, int height );
 static int ReadNetworkMessageHeader( ByteIOContext *context, MessageHeader *header );
-static DS1VideoFrameData * parseDSJFIFHeader( uint8_t *data, int dataSize );
-static int ExtractDSFrameData( uint8_t * buffer, DS1VideoFrameData *frameData );
+static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize );
+static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData );
 
 static const long       DSPacketHeaderMagicNumber = 0xfaced0ff;
 static const char *     DSApp0Identifier = "DigiSpr";
@@ -63,13 +63,10 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
     int                     retVal = 0;
     MessageHeader           header;
     int                     dataSize = 0;
-    DS1VideoFrameData *        videoFrameData = NULL;
+    DMImageData *           videoFrameData = NULL;
     AVStream *              stream = NULL;
     FrameData *             frameData = NULL;
     int                     readImageHeader = FALSE;
-    DS1FrameData *          ds1FrameData = NULL;
-    DS1AudioFrameData *     audioFrameData = NULL;
-    unsigned char           frameType = 0;
 
     /* Attempt to read in a network message header */
     if( (retVal = ReadNetworkMessageHeader( ioContext, &header )) != 0 )
@@ -80,12 +77,10 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
     {
         if( header.messageType == TCP_SRV_NUDGE )
         {
-            frameType = DS1_PACKET_TYPE_NUDGE;
-
             /* Read any extra bytes then try again */
             dataSize = header.length - (SIZEOF_MESSAGE_HEADER_IO - sizeof(unsigned long));
 
-            if( (retVal = av_new_packet( pkt, dataSize )) < 0 )
+            if( (retVal = adpic_new_packet( pkt, dataSize )) < 0 )
                 return retVal;
 
             if( get_buffer( ioContext, pkt->data, dataSize ) != dataSize )
@@ -93,13 +88,11 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
         }
         else if( header.messageType == TCP_SRV_IMG_DATA )
         {
-            frameType = DS1_PACKET_TYPE_VIDEO;
-
             /* This should be followed by a jfif image */
             dataSize = header.length - (SIZEOF_MESSAGE_HEADER_IO - sizeof(unsigned long));
 
             /* Allocate packet data large enough for what we have */
-            if( (retVal = av_new_packet( pkt, dataSize )) < 0 )
+            if( (retVal = adpic_new_packet( pkt, dataSize )) < 0 )
                 return retVal;
 
             /* Read the jfif data out of the buffer */
@@ -107,7 +100,6 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
                 return AVERROR_IO;
 
             /* Now extract the frame info that's in there */
-            /* TODO: Allegedly sudio is stored in the jfif headers. If this is the case, extended this function to extract audio data too */
             if( (videoFrameData = parseDSJFIFHeader( pkt->data, dataSize )) == NULL )
                 return AVERROR_IO;
 
@@ -123,23 +115,10 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
     /* Now create a wrapper to hold this frame's data which we'll store in the packet's private member field */
     if( (frameData = av_malloc( sizeof(FrameData) )) != NULL )
     {
-        if( (ds1FrameData = av_mallocz( sizeof(DS1FrameData) )) != NULL )
-        {
-            frameData->dataType = DS1_FRAME_DATA_TYPE;
-            frameData->typeInfo = (void *)ds1FrameData;
-            pkt->priv = frameData;
+        frameData->dataType = DATA_DM_VID_SERVER_FRAME;
+        frameData->frameData = videoFrameData;
 
-            ds1FrameData->type = frameType;
-
-            /* Now what have we got to put in the frame? */
-            if( (ds1FrameData->type & DS1_PACKET_TYPE_VIDEO) && videoFrameData != NULL )
-                ds1FrameData->imageData = videoFrameData;
-
-            if( (ds1FrameData->type & DS1_PACKET_TYPE_AUDIO) && audioFrameData != NULL )
-                ds1FrameData->audioData = audioFrameData;
-        }
-        else
-            goto fail_mem;
+        pkt->priv = frameData;
     }
     else
         goto fail_mem;
@@ -152,15 +131,13 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
 fail_mem:
     /* Make sure everything that might have been allocated is released before we return... */
     av_free( frameData );
-    av_free( ds1FrameData );
     av_free( videoFrameData );
-    av_free( audioFrameData );
     return AVERROR_NOMEM;
 }
 
-static DS1VideoFrameData * parseDSJFIFHeader( uint8_t *data, int dataSize )
+static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize )
 {
-    DS1VideoFrameData *            frameData = NULL;
+    DMImageData *            frameData = NULL;
     int                         i;
     unsigned short              length, marker;
     int                         sos = FALSE;
@@ -192,7 +169,7 @@ static DS1VideoFrameData * parseDSJFIFHeader( uint8_t *data, int dataSize )
                 {
                     int         offset = i;
 
-                    if( (frameData = av_mallocz( sizeof(DS1VideoFrameData) )) != NULL )
+                    if( (frameData = av_mallocz( sizeof(DMImageData) )) != NULL )
                     {
                         /* Extract the values into a data structure */
                         if( ExtractDSFrameData( &data[offset], frameData ) < 0 )
@@ -242,7 +219,7 @@ static DS1VideoFrameData * parseDSJFIFHeader( uint8_t *data, int dataSize )
     return frameData;
 }
 
-static int ExtractDSFrameData( uint8_t * buffer, DS1VideoFrameData *frameData )
+static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData )
 {
     int         retVal = AVERROR_IO;
     int         bufIdx = 0;

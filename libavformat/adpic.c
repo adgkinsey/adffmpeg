@@ -22,7 +22,7 @@
   								Don't free streams in adpic_read_close() this
   								is done at the av_bif level
   	003		PRC		25/01/07	Switched lo logger debug. Added error checking to 
-  								av_new_packet calls
+  								adpic_new_packet calls
 	---------------------------------------------------------------------------
 */
 
@@ -36,9 +36,9 @@
 static int adpic_read_line( ByteIOContext *pb, unsigned char * buffer, int bufferSize );
 static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size, long *extra );
 static int process_line( char *line, int line_count, int *dataType, int *size, long *extra );
-static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, struct _image_data *video_data );
-static int process_mp4data_line( char *line, int line_count, struct _image_data *video_data, struct tm *time );
-
+static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, NetVuImageData *video_data );
+static int process_mp4data_line( char *line, int line_count, NetVuImageData *video_data, struct tm *time );
+static void adpic_release_packet( AVPacket *pkt );
 /* CS - The following structure is used to extract 6 bytes from the incoming stream. It needs therefore to be aligned on a 
    2 byte boundary. Not sure whether this solution is portable though */
 #pragma pack(push,2)
@@ -72,7 +72,7 @@ typedef struct {
 
 
 
-void pic_network2host(struct _image_data *pic)
+void pic_network2host(NetVuImageData *pic)
 {
 	network2host32(pic->version);
 	network2host32(pic->mode);
@@ -97,7 +97,7 @@ void pic_network2host(struct _image_data *pic)
 	network2host16(pic->format.line_offset);
 }
 
-void audioheader_network2host( AudioHeader *hdr )
+void audioheader_network2host( NetVuAudioData *hdr )
 {
     network2host32(hdr->version);
     network2host32(hdr->mode);
@@ -108,7 +108,7 @@ void audioheader_network2host( AudioHeader *hdr )
     network2host32(hdr->msecs);
 }
 
-void pic_host2network(struct _image_data *pic)
+void pic_host2network(NetVuImageData *pic)
 {
 	host2network32(pic->version);
 	host2network32(pic->mode);
@@ -133,7 +133,7 @@ void pic_host2network(struct _image_data *pic)
 	host2network16(pic->format.line_offset);
 }
 
-void pic_le2host(struct _image_data *pic)
+void pic_le2host(NetVuImageData *pic)
 {
 	le2host32(pic->version);
 	le2host32(pic->mode);
@@ -158,7 +158,7 @@ void pic_le2host(struct _image_data *pic)
 	le2host16(pic->format.line_offset);
 }
 
-void pic_host2le(struct _image_data *pic)
+void pic_host2le(NetVuImageData *pic)
 {
 	host2le32(pic->version);
 	host2le32(pic->mode);
@@ -183,7 +183,7 @@ void pic_host2le(struct _image_data *pic)
 	host2le16(pic->format.line_offset);
 }
 
-void pic_be2host(struct _image_data *pic)
+void pic_be2host(NetVuImageData *pic)
 {
 	be2host32(pic->version);
 	be2host32(pic->mode);
@@ -208,7 +208,7 @@ void pic_be2host(struct _image_data *pic)
 	be2host16(pic->format.line_offset);
 }
 
-void pic_host2be(struct _image_data *pic)
+void pic_host2be(NetVuImageData *pic)
 {
 	host2be32(pic->version);
 	host2be32(pic->mode);
@@ -339,7 +339,7 @@ h0 = hptr = &header_str[0];
 	return 0;
 }
 
-static AVStream *get_stream(struct AVFormatContext *s, struct _image_data *pic)
+static AVStream *get_stream(struct AVFormatContext *s, NetVuImageData *pic)
 {
 int xres = pic->format.target_pixels;
 int yres = pic->format.target_lines;
@@ -390,7 +390,7 @@ AVStream *st;
 	return st;
 }
 
-static AVStream *get_audio_stream( struct AVFormatContext *s, AudioHeader* audioHeader )
+static AVStream *get_audio_stream( struct AVFormatContext *s, NetVuAudioData* audioHeader )
 {
     int codec_type, codec_id, id;
     int i, found;
@@ -618,7 +618,7 @@ static int adpic_read_line( ByteIOContext *pb, unsigned char * buffer, int buffe
     return (count < bufferSize)?1:0;
 }
 
-static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, struct _image_data *video_data )
+static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, NetVuImageData *video_data )
 {
 #define TEMP_BUFFER_SIZE        1024
     unsigned char               buffer[TEMP_BUFFER_SIZE];
@@ -675,10 +675,11 @@ static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize
     return 1;
 }
 
-static int process_mp4data_line( char *line, int line_count, struct _image_data *video_data, struct tm *time )
+static int process_mp4data_line( char *line, int line_count, NetVuImageData *video_data, struct tm *time )
 {
     char        *tag, *p = NULL;
     int         http_code = 0;
+    int         valueLen = 0;
 
     /* end of header */
     if (line[0] == '\0')
@@ -695,8 +696,22 @@ static int process_mp4data_line( char *line, int line_count, struct _image_data 
     *p = '\0';
     tag = line;
     p++;
-    while (isspace(*p))
+
+    while( *p != '\0' && *p == ' '  )  /* While the current char is a space */
         p++;
+
+    if (*p == '\0')
+        return 1;
+    else
+    {
+        char * temp = p;
+
+        /* Get the length of the rest of the line */
+        while( *temp != '\0' )
+            temp++;
+
+        valueLen = temp - p;
+    }
 
     if( !strcmp(tag, "Number") )
     {
@@ -748,6 +763,9 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     ByteIOContext *         pb = &s->pb;
     ADPICContext *          adpic = s->priv_data;
     AVStream *              st;
+    FrameData *             frameData = NULL;
+    NetVuAudioData *        audio_data = NULL;
+    NetVuImageData *        video_data = NULL;
     unsigned char           adpkt[SEPARATOR_SIZE];
     int                     data_type;
     int                     data_channel;
@@ -755,9 +773,6 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     int                     status;
     char                    scratch[1024];
     long                    extra = 0;
-
-    AudioHeader *           audio_data = NULL;
-    struct _image_data *    video_data = NULL;
 
     if( TRUE == isMIME )
     {
@@ -788,11 +803,11 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     if( data_type == DATA_JPEG || data_type == DATA_JFIF || data_type == DATA_MPEG4I || data_type == DATA_MPEG4P 
         || data_type == DATA_MINIMAL_MPEG4 )
     {
-        video_data = av_mallocz( sizeof(struct _image_data) );
+        video_data = av_mallocz( sizeof(NetVuImageData) );
     }
     else if( data_type == DATA_AUDIO_ADPCM || data_type == DATA_MINIMAL_AUDIO_ADPCM )
     {
-        audio_data = av_mallocz( sizeof(AudioHeader) );
+        audio_data = av_mallocz( sizeof(NetVuAudioData) );
     }
 
     // Proceed based on the type of data in this frame
@@ -803,9 +818,9 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 	    int header_size;
 	    char jfif[2048], *ptr;
 		    // Read the pic structure
-		    if ((n=get_buffer(pb, (unsigned char*)video_data, sizeof (struct _image_data))) != sizeof (struct _image_data))
+		    if ((n=get_buffer(pb, (unsigned char*)video_data, sizeof (NetVuImageData))) != sizeof (NetVuImageData))
 		    {
-			    logger(LOG_DEBUG,"ADPIC: short of data reading pic struct, expected %d, read %d\n", sizeof (struct _image_data), n);
+			    logger(LOG_DEBUG,"ADPIC: short of data reading pic struct, expected %d, read %d\n", sizeof (NetVuImageData), n);
 			    return -1;
 		    }
 		    // Endian convert if necessary
@@ -828,9 +843,9 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 			    return -1;
 		    }
 		    // We now know the packet size required for the image, allocate it.
-		    if ((status = av_new_packet(pkt, header_size+video_data->size+2))<0) // PRC 003
+		    if ((status = adpic_new_packet(pkt, header_size+video_data->size+2))<0) // PRC 003
 		    {
-			    logger(LOG_DEBUG,"ADPIC: DATA_JPEG av_new_packet %d failed, status %d\n", header_size+video_data->size+2, status);
+			    logger(LOG_DEBUG,"ADPIC: DATA_JPEG adpic_new_packet %d failed, status %d\n", header_size+video_data->size+2, status);
 			    return -1;
 		    }
 		    ptr = pkt->data;
@@ -853,9 +868,9 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     case DATA_JFIF:
 	    {
 	    char site[32];
-		    if ((status = av_new_packet(pkt, size))<0) // PRC 003
+		    if ((status = adpic_new_packet(pkt, size))<0) // PRC 003
 		    {
-			    logger(LOG_DEBUG,"ADPIC: DATA_JFIF av_new_packet %d failed, status %d\n", size, status);
+			    logger(LOG_DEBUG,"ADPIC: DATA_JFIF adpic_new_packet %d failed, status %d\n", size, status);
 			    return -1;
 		    }
 		    if ((n=get_buffer(pb, pkt->data, size)) != size)
@@ -876,8 +891,10 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             /* We have to parse the data for this frame differently depending on whether we're getting a MIME or binary stream */
             if( TRUE == isMIME )
             {
+                int mimeBlockType = 0;
+
                 /* Allocate a new packet to hold the frame's image data */
-		        if( (status = av_new_packet( pkt, size )) < 0 )
+		        if( (status = adpic_new_packet( pkt, size )) < 0 )
 			        return -1;
 
                 /* Now read the frame data into the packet */
@@ -885,11 +902,11 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                     return -1;
 
                 /* Now we should have a text block following this which contains the frame data that we cna place in a _image_data struct */
-                if(  adpic_parse_mime_header( pb, &data_type, &size, &extra ) != 0 )
+                if(  adpic_parse_mime_header( pb, &mimeBlockType, &size, &extra ) != 0 )
                     return -1;
 
                 /* Validate the data type and then extract the text buffer */
-                if( data_type == DATA_PLAINTEXT )
+                if( mimeBlockType == DATA_PLAINTEXT )
                 {
                     unsigned char *         textBuffer = av_malloc( size );
 
@@ -920,9 +937,9 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             }
             else
             {
-		        if ((n=get_buffer(pb, (unsigned char*)video_data, sizeof (struct _image_data))) != sizeof (struct _image_data))
+		        if ((n=get_buffer(pb, (unsigned char*)video_data, sizeof (NetVuImageData))) != sizeof (NetVuImageData))
 		        {
-			        logger(LOG_DEBUG,"ADPIC: short of data reading pic struct, expected %d, read %d\n", sizeof (struct _image_data), n);
+			        logger(LOG_DEBUG,"ADPIC: short of data reading pic struct, expected %d, read %d\n", sizeof (NetVuImageData), n);
 			        return -1;
 		        }
 		        pic_network2host(video_data);
@@ -936,9 +953,9 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 			        logger(LOG_DEBUG,"ADPIC: short of data reading start_offset data, expected %d, read %d\n", size, n);
 			        return -1;
 		        }
-		        if ((status = av_new_packet(pkt, video_data->size))<0) // PRC 003
+		        if ((status = adpic_new_packet(pkt, video_data->size))<0) // PRC 003
 		        {
-			        logger(LOG_DEBUG,"ADPIC: DATA_MPEG4 av_new_packet %d failed, status %d\n", video_data->size, status);
+			        logger(LOG_DEBUG,"ADPIC: DATA_MPEG4 adpic_new_packet %d failed, status %d\n", video_data->size, status);
 			        return -1;
 		        }
 		        if ((n=get_buffer(pb, pkt->data, video_data->size)) != video_data->size)
@@ -971,7 +988,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             video_data->vid_format = PIC_MODE_MPEG4_411;
 
             /* Now get the main frame data into a new packet */
-	        if( (status = av_new_packet( pkt, dataSize )) < 0 )
+	        if( (status = adpic_new_packet( pkt, dataSize )) < 0 )
 		        return -1;
 
 	        if( (n = get_buffer( pb, pkt->data, dataSize )) != dataSize )
@@ -999,7 +1016,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             audio_data->msecs = audioHeader.ms;
 
             /* Now get the main frame data into a new packet */
-	        if( (status = av_new_packet( pkt, dataSize )) < 0 )
+	        if( (status = adpic_new_packet( pkt, dataSize )) < 0 )
 		        return -1;
 
 	        if( (n = get_buffer( pb, pkt->data, dataSize )) != dataSize )
@@ -1013,7 +1030,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             if( FALSE == isMIME )
             {
                 // Get the fixed size portion of the audio header
-                if( (n = get_buffer( pb, (unsigned char*)audio_data, sizeof(AudioHeader) - 4 )) != sizeof(AudioHeader) - 4 )
+                if( (n = get_buffer( pb, (unsigned char*)audio_data, sizeof(NetVuAudioData) - 4 )) != sizeof(NetVuAudioData) - 4 )
                     return -1;
 
                 // endian fix it...
@@ -1040,7 +1057,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 audio_data->msecs = 0;
             }
 
-		    if( (status = av_new_packet( pkt, audio_data->sizeOfAudioData )) < 0 )
+		    if( (status = adpic_new_packet( pkt, audio_data->sizeOfAudioData )) < 0 )
 			    return -1;
 
             // Now get the actual audio data
@@ -1096,15 +1113,18 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 
     pkt->stream_index = st->index;
 
-	pkt->priv = av_malloc(sizeof(FrameData));
-    ((FrameData*)pkt->priv)->dataType = data_type;
+    frameData = av_malloc(sizeof(FrameData));
 
-    if( video_data != NULL )
-        ((FrameData*)pkt->priv)->typeInfo = video_data;
-    else if( audio_data != NULL )// Audio
-        ((FrameData*)pkt->priv)->typeInfo = audio_data;
+    frameData->dataType = data_type;
+
+    if( video_data != NULL )                // Video frame
+        frameData->frameData = video_data;
+    else if( audio_data != NULL )           // Audio frame
+        frameData->frameData = audio_data;
     else
-        ((FrameData*)pkt->priv)->typeInfo = NULL;
+        frameData->frameData = NULL;
+
+    pkt->priv = frameData;
 
 	pkt->duration =  ((int)(AV_TIME_BASE * 1.0));
 
@@ -1144,4 +1164,48 @@ int adpic_init(void)
 int logger (int log_level, const char *fmt, ...)
 {
     return 0;
+}
+
+int adpic_new_packet(AVPacket *pkt, int size)
+{
+    int     retVal = av_new_packet( pkt, size );
+
+    if( retVal >= 0 )
+    {
+        // Give the packet its own destruct function
+        pkt->destruct = adpic_release_packet;
+    }
+}
+
+static void adpic_release_packet( AVPacket *pkt )
+{
+    if( pkt != NULL )
+    {
+        if( pkt->priv != NULL )
+        {
+            // Have a look what type of frame we have and then delete anything inside as appropriate
+            FrameData *     frameData = (FrameData *)pkt->priv;
+
+            if( frameData->dataType == DATA_AUDIO_ADPCM )
+            {
+                NetVuAudioData *   audioHeader = (NetVuAudioData *)frameData->frameData;
+
+                if( audioHeader->additionalData )
+                {
+                    av_free( audioHeader->additionalData );
+                    audioHeader->additionalData = NULL;
+                }
+            }
+
+            // Nothing else has nested allocs so just delete the frameData if it exists
+            if( frameData->frameData != NULL )
+            {
+                av_free( frameData->frameData );
+                frameData->frameData = NULL;
+            }
+        }
+
+        // Now use the default routine to release the rest of the packet's resources
+        av_destruct_packet( pkt );
+    }
 }

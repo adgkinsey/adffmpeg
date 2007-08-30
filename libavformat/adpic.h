@@ -94,10 +94,10 @@ enum pkt_offsets { DATA_TYPE, DATA_CHANNEL, DATA_SIZE_BYTE_0 , DATA_SIZE_BYTE_1 
 #define PIC_MODE_MPEG4_411_GOV_I 5
 
 #define start_of_image(x) ((void *)((int8_t *)&(x)[1]+(x)->start_offset))	/* PRC 007 */
-#define size_of_image(x) ((x)->size+(x)->start_offset+sizeof( struct _image_data ))
+#define size_of_image(x) ((x)->size+(x)->start_offset+sizeof( NetVuImageData ))
 
 
-/*	Define bits within status field of IMAGE structure  */
+/*	Define bits within status field of NetVuImageData structure  */
 #define CAMFAIL_MASK			0x007		/* camera fail bits */
 #define PIC_NEW_TEXT			0x008		/* set when image has new POS text */
 #define PIC_HAS_BMP				0x010		/* set when image include a bitmap */
@@ -116,20 +116,20 @@ enum pkt_offsets { DATA_TYPE, DATA_CHANNEL, DATA_SIZE_BYTE_0 , DATA_SIZE_BYTE_1 
 #define PIC_REC_MODE7  0x07
 
 
-#define get_pic_rec_mode(pic) ({ struct _image_data *_pic=(pic);((_pic->status & PIC_REC_MODE_MASK)>>5)&0x07;})
-#define set_pic_rec_mode(pic, mode) ({ struct _image_data *_pic=(pic);_pic->status &= ~PIC_REC_MODE_MASK; _pic->status |= (((mode)&7)<<5);})
+#define get_pic_rec_mode(pic) ({ NetVuImageData *_pic=(pic);((_pic->status & PIC_REC_MODE_MASK)>>5)&0x07;})
+#define set_pic_rec_mode(pic, mode) ({ NetVuImageData *_pic=(pic);_pic->status &= ~PIC_REC_MODE_MASK; _pic->status |= (((mode)&7)<<5);})
 
 #define PIC_FIRST_PRETRIG_PIC 0x1
 #define PIC_LAST_PRETRIG_PIC  0x2
 
 
-#define get_pic_pretrig_mode(pic) ({ struct _image_data *_pic=(pic);((_pic->status & PIC_PRETRIG_MODE_MASK)>>8)&0x03;})
-#define set_pic_pretrig_mode(pic, mode) ({ struct _image_data *_pic=(pic);_pic->status &= ~PIC_PRETRIG_MODE_MASK; _pic->status |= (((mode)&3)<<8);})
+#define get_pic_pretrig_mode(pic) ({ NetVuImageData *_pic=(pic);((_pic->status & PIC_PRETRIG_MODE_MASK)>>8)&0x03;})
+#define set_pic_pretrig_mode(pic, mode) ({ NetVuImageData *_pic=(pic);_pic->status &= ~PIC_PRETRIG_MODE_MASK; _pic->status |= (((mode)&3)<<8);})
 
 
 #define BMP_OFFSET 64
 
-/*	Special values for image size that can be set in the IMAGE structure,
+/*	Special values for image size that can be set in the NetVuImageData structure,
 	to indicate conditions where image acquisition has failed.            */
 #define PICSIZE_IN_PROGRESS		0			/* acquisition still in progress */
 #define PICSIZE_CAM_FAIL		-1			/* camera signal failure */
@@ -143,22 +143,22 @@ enum pkt_offsets { DATA_TYPE, DATA_CHANNEL, DATA_SIZE_BYTE_0 , DATA_SIZE_BYTE_1 
 #define PICSIZE_ERROR			-9			/* error in image grab task */
 
 
-extern void fprint_pic(FILE *f, struct _image_data *pic);
+extern void fprint_pic(FILE *f, NetVuImageData *pic);
 
 /****************************************************************************
 
-Prototype	  :	static inline uint8_t *start_of_bitmap(struct _image_data *pic, int32_t *size);
+Prototype	  :	static inline uint8_t *start_of_bitmap(NetVuImageData *pic, int32_t *size);
 
 Procedure Desc: Inline function to find the start address of the bitmap data and
 				its size
 
-	Inputs	  :	struct _image_data *pic		the picture
+	Inputs	  :	NetVuImageData *pic		the picture
 				int32_t *size					size (Null if not required)
 	Outputs	  :	pointer to start of bitmap or NULL if no bitmap present
 	Globals   :
 
 ****************************************************************************/
-static inline int8_t *start_of_bitmap(struct _image_data *pic, int32_t *size) // PRC 013
+static inline int8_t *start_of_bitmap(NetVuImageData *pic, int32_t *size) // PRC 013
 {
 uint8_t *bmp=NULL;
 
@@ -175,16 +175,16 @@ uint8_t *bmp=NULL;
 
 /****************************************************************************
 
-Prototype	  :	static inline int32_t size_of_image_and_bitmap(struct _image_data *pic);
+Prototype	  :	static inline int32_t size_of_image_and_bitmap(NetVuImageData *pic);
 
 Procedure Desc: Inline function to compute the total size of an image + bitmap
 
-	Inputs	  :	struct _image_data *pic		the picture
+	Inputs	  :	NetVuImageData *pic		the picture
 	Outputs	  :	Image size
 	Globals   :
 
 ****************************************************************************/
-static inline int32_t size_of_image_and_bitmap(struct _image_data *pic) // PRC 013
+static inline int32_t size_of_image_and_bitmap(NetVuImageData *pic) // PRC 013
 {
 int8_t *bmp=NULL, *p;
 int32_t bmpsize, size;
@@ -231,13 +231,13 @@ static inline  int32_t ismpeg4pframe(int32_t vid_format)
 }
 
 
-extern void pic_network2host(struct _image_data *pic);
-extern void pic_host2network(struct _image_data *pic);
-extern void pic_le2host(struct _image_data *pic);
-extern void pic_host2le(struct _image_data *pic);
-extern void pic_be2host(struct _image_data *pic);
-extern void pic_host2be(struct _image_data *pic);
-extern void add_pic_stats(IMAGE *pic, int32_t size);
+extern void pic_network2host(NetVuImageData *pic);
+extern void pic_host2network(NetVuImageData *pic);
+extern void pic_le2host(NetVuImageData *pic);
+extern void pic_host2le(NetVuImageData *pic);
+extern void pic_be2host(NetVuImageData *pic);
+extern void pic_host2be(NetVuImageData *pic);
+extern void add_pic_stats(NetVuImageData *pic, int32_t size);
 
 typedef struct {
     int num;
