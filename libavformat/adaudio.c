@@ -4,8 +4,6 @@ static AVStream *get_audio_stream( struct AVFormatContext *s );
 
 static int adaudio_probe(AVProbeData *p)
 {
-    long        magicNumber = 0;
-
     if( p->buf_size < 4 )
         return 0;
 

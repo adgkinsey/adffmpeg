@@ -2,7 +2,7 @@
 
 //#include <vcl.h>
 //#pragma hdrstop
-#if defined(__MINGW32__) && defined(WIN32)  /* MSVC specific */
+#if !defined(__MINGW32__) && defined(WIN32)  /* MSVC specific */
 #pragma warning(disable : 4995)
 #pragma warning(disable : 4996)
 #endif /* WIN32 */
@@ -386,7 +386,7 @@ char * EncryptPasswordString( char * Username, char * Password, long Timestamp, 
     return EncryptedPassword;
 }
 
-#if defined(__MINGW32__) && defined(WIN32)  /* MSVC specific */
+#if !defined(__MINGW32__) && defined(WIN32)  /* MSVC specific */
 #pragma warning(default : 4996)
 #pragma warning(default : 4995)
 #endif /* defined(__MINGW32__) && defined(WIN32) */

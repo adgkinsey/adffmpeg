@@ -30,6 +30,7 @@
 #include "avcodec.h"
 #include "adpic.h"
 #include "adaudio.h"    // RTP payload values. For inserting into MIME audio packets
+#include "jfif_img.h"
 
 #define BINARY_PUSH_MIME_STR "video/adhbinary"
 
@@ -37,12 +38,12 @@
 enum data_type { DATA_JPEG, DATA_JFIF, DATA_MPEG4I, DATA_MPEG4P, DATA_AUDIO_ADPCM, DATA_AUDIO_RAW, DATA_MINIMAL_MPEG4, DATA_MINIMAL_AUDIO_ADPCM, DATA_LAYOUT, DATA_INFO, MAX_DATA_TYPE };
 #define DATA_PLAINTEXT              (MAX_DATA_TYPE + 1)   /* This value is only used internally within the library DATA_PLAINTEXT blocks should not be exposed to the client */
 
-static int adpic_read_line( ByteIOContext *pb, unsigned char * buffer, int bufferSize );
 static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size, long *extra );
 static int process_line( char *line, int line_count, int *dataType, int *size, long *extra );
 static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, NetVuImageData *video_data );
 static int process_mp4data_line( char *line, int line_count, NetVuImageData *video_data, struct tm *time );
 static void adpic_release_packet( AVPacket *pkt );
+
 /* CS - The following structure is used to extract 6 bytes from the incoming stream. It needs therefore to be aligned on a 
    2 byte boundary. Not sure whether this solution is portable though */
 #pragma pack(push,2)
@@ -240,8 +241,8 @@ void pic_host2be(NetVuImageData *pic)
 static const char *     MIMEBoundarySeparator = "--0plm(NetVu-Connected:Server-Push:Boundary-String)1qaz";
 static const char *     MIME_TYPE_JPEG = "image/jpeg";
 static const char *     MIME_TYPE_MP4  = "image/admp4";
-static const char *     MIME_TYPE_MP4I = "image/admp4i";
-static const char *     MIME_TYPE_MP4P = "image/admp4p";
+//static const char *     MIME_TYPE_MP4I = "image/admp4i";
+//static const char *     MIME_TYPE_MP4P = "image/admp4p";
 static const char *     MIME_TYPE_TEXT = "text/plain";
 static const char *     MIME_TYPE_ADPCM = "audio/adpcm";
 static int              isMIME = 0;
@@ -253,8 +254,8 @@ static int adpic_probe(AVProbeData *p)
 
     // CS - There is no way this scheme of identification is strong enough. Probably should attempt
     // to parse a full frame out of the probedata buffer
-    if ( (p->buf[0] == 9) && (p->buf[2] == 0) && (p->buf[3] == 0) || 
-         (p->buf[0] >= 0 && p->buf[0] <= 7) && (p->buf[2] == 0) && (p->buf[3] == 0) )
+    if ( ((p->buf[0] == 9) && (p->buf[2] == 0) && (p->buf[3] == 0)) || 
+         ((p->buf[0] >= 0 && p->buf[0] <= 7) && (p->buf[2] == 0) && (p->buf[3] == 0) ))
     {
         isMIME = FALSE;
         return AVPROBE_SCORE_MAX;
@@ -396,7 +397,7 @@ AVStream *st;
 
 static AVStream *get_audio_stream( struct AVFormatContext *s, NetVuAudioData* audioHeader )
 {
-    int codec_type, codec_id, id;
+    int id;
     int i, found;
     AVStream *st;
 
@@ -435,7 +436,7 @@ static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size,
 {
 #define TEMP_BUFFER_SIZE        1024
     unsigned char               buffer[TEMP_BUFFER_SIZE];
-    int                         lineSize = 0, ch, err;
+    int                         ch, err;
     unsigned char *             q = NULL;
     int                         lineCount = 0;
 
@@ -598,35 +599,11 @@ static int process_line( char *line, int line_count, int *dataType, int *size, l
     return 1;
 }
 
-// Returns 1 if a line was read successfully, 0 if the buffer was filled before a \r\n sequence was encountered
-static int adpic_read_line( ByteIOContext *pb, unsigned char * buffer, int bufferSize )
-{
-    unsigned char       byte1 = 0, byte2 = 0;
-    int                 count = 0;
-
-    // Loop until the end of the line is reached or until the buffer is full
-    byte1 = (unsigned char)get_byte( pb );
-    byte2 = (unsigned char)get_byte( pb );
-
-    while( !(byte1 == '0x0d' && byte2 == '0x0a') && count < bufferSize )
-    {
-        // Write the current byte to the buffer
-        buffer[count] = byte1;
-
-        // Read the next one in
-        byte1 = byte2;
-        byte2 = (unsigned char)get_byte( pb );
-        count++;
-    }
-
-    return (count < bufferSize)?1:0;
-}
-
 static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, NetVuImageData *video_data )
 {
 #define TEMP_BUFFER_SIZE        1024
     unsigned char               buffer[TEMP_BUFFER_SIZE];
-    int                         lineSize = 0, ch, err;
+    int                         ch, err;
     unsigned char *             q = NULL;
     int                         lineCount = 0;
     unsigned char *             currentChar = mp4TextData;
@@ -682,7 +659,6 @@ static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize
 static int process_mp4data_line( char *line, int line_count, NetVuImageData *video_data, struct tm *time )
 {
     char        *tag, *p = NULL;
-    int         http_code = 0;
     int         valueLen = 0;
 
     /* end of header */
@@ -765,8 +741,7 @@ static int process_mp4data_line( char *line, int line_count, NetVuImageData *vid
 int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
     ByteIOContext *         pb = &s->pb;
-    ADPICContext *          adpic = s->priv_data;
-    AVStream *              st;
+    AVStream *              st = NULL;
     FrameData *             frameData = NULL;
     NetVuAudioData *        audio_data = NULL;
     NetVuImageData *        video_data = NULL;
@@ -1153,7 +1128,7 @@ static int64_t adpic_read_pts(AVFormatContext *s, int stream_index, int64_t *ppo
 	return -1;
 }
 
-static int adpic_read_seek(AVFormatContext *s, int stream_index, int64_t timestamp)
+static int adpic_read_seek(AVFormatContext *s, int stream_index, int64_t timestamp, int flags)
 {
 	return -1;
 }
@@ -1192,6 +1167,8 @@ int adpic_new_packet(AVPacket *pkt, int size)
         // Give the packet its own destruct function
         pkt->destruct = adpic_release_packet;
     }
+
+    return retVal;
 }
 
 static void adpic_release_packet( AVPacket *pkt )

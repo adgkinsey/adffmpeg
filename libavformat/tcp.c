@@ -96,7 +96,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     }
 
     /* CS - Added this section to size the buffers to a reasonable size */
-    if (setsockopt( fd, SOL_SOCKET, SO_RCVBUF, &recvBufSize, sizeof(recvBufSize)) < 0) {
+    if (setsockopt( fd, SOL_SOCKET, SO_RCVBUF, (char*)&recvBufSize, sizeof(recvBufSize)) < 0) {
         goto fail;
     }
 
@@ -129,7 +129,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
 
         /* test error */
         optlen = sizeof(ret);
-        getsockopt (fd, SOL_SOCKET, SO_ERROR, &ret, &optlen);
+        getsockopt (fd, SOL_SOCKET, SO_ERROR, (char*)&ret, &optlen);
         if (ret != 0)
             goto fail;
     }

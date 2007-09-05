@@ -984,7 +984,7 @@ int count = 0, comment_length;
 	return optr-(char *)j_out;
 }
 #if 0
-int read_jfif(char *filename, struct _image_data *pic )
+int read_jfif(char *filename, NetVuImageData *pic )
 {
 int h, n, rv=-1, offset;
 long size;

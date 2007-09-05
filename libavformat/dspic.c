@@ -66,7 +66,6 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
     DMImageData *           videoFrameData = NULL;
     AVStream *              stream = NULL;
     FrameData *             frameData = NULL;
-    int                     readImageHeader = FALSE;
     FrameType               frameType = FrameTypeUnknown;
 
     /* Attempt to read in a network message header */
@@ -380,7 +379,6 @@ static AVStream * GetStream( struct AVFormatContext *s, int camera, int width, i
 int long64ToTimeValues( const long64 *timeValue, time_t * time, unsigned short *ms, unsigned short *flags )
 {
     int         retVal = AVERROR_IO;
-    int         offset = 0;
     uint8_t *   bufPtr = NULL;
 
     /* Format of the input 64 bit block is as follows:

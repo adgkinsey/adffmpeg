@@ -316,7 +316,6 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
 {
     HTTPContext *s = h->priv_data;
     int post;
-    char line[1024], *q;
 
     /* send http header */
     post = h->flags & URL_WRONLY;

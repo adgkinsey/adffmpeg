@@ -316,7 +316,6 @@ static inline int MessageSize( const NetworkMessage *message )
  ****************************************************************************************************************/
 static int DSConnect( URLContext *h, const char *path, const char *hoststr, const char *auth )
 {
-    DSContext *         s = h->priv_data;
     NetworkMessage *    sendMessage = NULL;
     NetworkMessage *    recvMessage = NULL;
     int                 retVal = 0;
@@ -400,7 +399,6 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
                     {
                         /* Great, we're connected - we just need to send a IMG_LIVE_REQUEST to the server to start the streaming */
                         NetworkMessage *        imgRequestMsg = NULL;
-                        NetworkMessage *        tempMessage = NULL;
 
                         if( streamType == DS_PLAYBACK_MODE_LIVE )
                         {
@@ -432,8 +430,6 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
                         {
                             /* Fire the request message off */
                             retVal = SendNetworkMessage( h, imgRequestMsg );
-
-                            //retVal = ReceiveNetworkMessage( h, &tempMessage );
                         }
 
                         isConnecting = 0;
@@ -641,7 +637,6 @@ static int CrackURI( const char *path, int *streamType, int *res, int *cam, time
  ****************************************************************************************************************/
 static int ReceiveNetworkMessage( URLContext *h, NetworkMessage **message )
 {
-    int     messageBodyLength = 0;
     int     retVal = 0;
 
     /* Allocate a new NetworkMessage struct */
