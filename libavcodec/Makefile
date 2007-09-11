@@ -246,6 +246,8 @@ OBJS-$(CONFIG_ADPCM_XA_DECODER)        += adpcm.o
 OBJS-$(CONFIG_ADPCM_XA_ENCODER)        += adpcm.o
 OBJS-$(CONFIG_ADPCM_YAMAHA_DECODER)    += adpcm.o
 OBJS-$(CONFIG_ADPCM_YAMAHA_ENCODER)    += adpcm.o
+OBJS-$(CONFIG_ADPCM_ADH_DECODER)       += adpcm.o
+OBJS-$(CONFIG_ADPCM_ADH_ENCODER)       += adpcm.o
 
 # external codec libraries
 OBJS-$(CONFIG_LIBA52)                  += a52dec.o

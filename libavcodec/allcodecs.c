@@ -235,6 +235,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC (ADPCM_SWF, adpcm_swf);
     REGISTER_ENCDEC (ADPCM_XA, adpcm_xa);
     REGISTER_ENCDEC (ADPCM_YAMAHA, adpcm_yamaha);
+    REGISTER_DECODER (ADPCM_ADH, adpcm_adh);
 
     /* subtitles */
     REGISTER_ENCDEC (DVBSUB, dvbsub);

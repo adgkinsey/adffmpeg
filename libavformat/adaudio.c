@@ -137,7 +137,9 @@ static AVStream *get_audio_stream( struct AVFormatContext *s )
 		if (st)
 		{
 		    st->codec->codec_type = CODEC_TYPE_AUDIO;
-		    st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
+		    st->codec->codec_id = CODEC_ID_ADPCM_ADH;
+            st->codec->channels = 1;
+            st->codec->block_align = 0;
 			st->index = i;
 		}
 	}

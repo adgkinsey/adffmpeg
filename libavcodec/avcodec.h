@@ -189,6 +189,7 @@ enum CodecID {
     CODEC_ID_ADPCM_SBPRO_4,
     CODEC_ID_ADPCM_SBPRO_3,
     CODEC_ID_ADPCM_SBPRO_2,
+    CODEC_ID_ADPCM_ADH,
 
     /* AMR */
     CODEC_ID_AMR_NB= 0x12000,
@@ -2370,6 +2371,7 @@ PCM_CODEC(CODEC_ID_ADPCM_SMJPEG,  adpcm_ima_smjpeg);
 PCM_CODEC(CODEC_ID_ADPCM_SWF,     adpcm_swf);
 PCM_CODEC(CODEC_ID_ADPCM_XA,      adpcm_xa);
 PCM_CODEC(CODEC_ID_ADPCM_YAMAHA,  adpcm_yamaha);
+PCM_CODEC(CODEC_ID_ADPCM_ADH,     adpcm_adh);
 
 #undef PCM_CODEC
 
