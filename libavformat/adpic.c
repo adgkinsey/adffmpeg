@@ -22,7 +22,7 @@
   								Don't free streams in adpic_read_close() this
   								is done at the av_bif level
   	003		PRC		25/01/07	Switched lo logger debug. Added error checking to 
-  								adpic_new_packet calls
+  								av_new_packet calls
 	---------------------------------------------------------------------------
 */
 
@@ -255,7 +255,7 @@ static int adpic_probe(AVProbeData *p)
     // CS - There is no way this scheme of identification is strong enough. Probably should attempt
     // to parse a full frame out of the probedata buffer
     if ( ((p->buf[0] == 9) && (p->buf[2] == 0) && (p->buf[3] == 0)) || 
-         ((p->buf[0] >= 0 && p->buf[0] <= 7) && (p->buf[2] == 0) && (p->buf[3] == 0) ))
+         ((p->buf[0] >= 0 && p->buf[0] <= 7) && (p->buf[2] == 0) && (p->buf[3] == 0)) )
     {
         isMIME = FALSE;
         return AVPROBE_SCORE_MAX;
@@ -425,6 +425,8 @@ static AVStream *get_audio_stream( struct AVFormatContext *s, NetVuAudioData* au
 		    st->codec->codec_id = CODEC_ID_ADPCM_ADH;
             st->codec->channels = 1;
             st->codec->block_align = 0;
+            // Should probably fill in other known values here. Like bit rate, sample rate, num channels, etc
+
 			st->index = i;
 		}
 	}
@@ -619,7 +621,8 @@ static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize
         if (ch < 0)
             return 1;
 
-        if (ch == '\n') {
+        if (ch == '\n') 
+        {
             /* process line */
             if (q > buffer && q[-1] == '\r')
                 q--;
@@ -636,18 +639,44 @@ static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize
             /* Check we're not at the end of the buffer. If the following statement is true and we haven't encountered an error then we've finished parsing the buffer */
             if( err == 1 )
             {
+                /* CS - Not particularly happy with this code but it seems there's little consistency in the way these buffers end. This block catches all of those
+                   variations. The variations that indicate the end of a MP4 MIME text block are:
+
+                   1. The amount of buffer parsed successfully is equal to the total buffer size
+
+                   2. The buffer ends with two NULL characters
+
+                   3. The buffer ends with the sequence \r\n\0
+                */
+
                 if( currentChar - mp4TextData == bufferSize )
                     return 0;
 
+                /* CS - I *think* lines should end either when we've processed all the buffer OR it's padded with 0s */
+                /* Is detection of a NULL character here sufficient? */
+                if( *currentChar == '\0' )
+                    return 0;
+
+/* The following code is how the original implementation was. See the comment above for indications of the buffer endings I've seen. I've since then seen one that ends
+   \r\n\0\0\0. Some server code just dumping a memory buffer perhaps and therefore leaving padding bytes in? */
+#if 0
                 /* CS - This is horrible but has to go in as there are discrepancies between servers. Some servers appended two 0 bytes after the last \r\n which screws up the generic line extraction routine.
                    This code catches that case and returns as appropriate */
+                /* Actually, I don't think the above statement is true, more likely that the discrepancy is between packets ^ */
                 if( currentChar - mp4TextData == bufferSize - 2 && *currentChar == '\0' && *(currentChar+1) == '\0' )
                     return 0;
+
+                /* CS - Another variation on the end of buffer - This one detects the case where the buffer is terminated with the sequence \r\n\0*/
+                if( currentChar - mp4TextData == bufferSize - 1 && *currentChar == '\0' && *(currentChar-1) == '\n' && *(currentChar-2) == '\r' )
+                    return 0;
+#endif
             }
 
             lineCount++;
             q = buffer;
-        } else {
+        } 
+        else 
+        {
             if ((q - buffer) < sizeof(buffer) - 1)
                 *q++ = ch;
         }
@@ -752,12 +781,13 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     int                     status;
     char                    scratch[1024];
     long                    extra = 0;
+    int                     errorVal = -1;
 
     if( TRUE == isMIME )
     {
         /* Parse and validate the header. If this succeeds, we should have the type and the data size out of it */
         if(  adpic_parse_mime_header( pb, &data_type, &size, &extra ) != 0 )
-            return -1;
+            goto cleanup;
 
         /* Now we should be able to read the data in as a whole block */
     }
@@ -767,7 +797,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 	    if ((n=get_buffer(pb, &adpkt[0], SEPARATOR_SIZE)) != SEPARATOR_SIZE)
 	    {
 		    logger(LOG_DEBUG,"ADPIC: short of data reading seperator, expected %d, read %d\n", SEPARATOR_SIZE, n);
-		    return -1;
+		    goto cleanup;
 	    }
 
         // Get info out of the separator
@@ -785,14 +815,20 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         video_data = av_mallocz( sizeof(NetVuImageData) );
 
         if( video_data == NULL )
-            return AVERROR_NOMEM;
+        {
+            errorVal = AVERROR_NOMEM;
+            goto cleanup;
+        }
     }
     else if( data_type == DATA_AUDIO_ADPCM || data_type == DATA_MINIMAL_AUDIO_ADPCM )
     {
         audio_data = av_mallocz( sizeof(NetVuAudioData) );
 
         if( audio_data == NULL )
-            return AVERROR_NOMEM;
+        {
+            errorVal = AVERROR_NOMEM;
+            goto cleanup;
+        }
     }
 
     // Proceed based on the type of data in this frame
@@ -806,32 +842,43 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		    if ((n=get_buffer(pb, (unsigned char*)video_data, sizeof (NetVuImageData))) != sizeof (NetVuImageData))
 		    {
 			    logger(LOG_DEBUG,"ADPIC: short of data reading pic struct, expected %d, read %d\n", sizeof (NetVuImageData), n);
-			    return -1;
+			    goto cleanup;
 		    }
 		    // Endian convert if necessary
 		    pic_network2host(video_data);
 		    if (!pic_version_valid(video_data->version))
 		    {
 			    logger(LOG_DEBUG,"ADPIC: invalid pic version 0x%08X\n", video_data->version);
-			    return -1;
+			    goto cleanup;
 		    }
-		    // Skip any additional text in the image
-		    if ((n=get_buffer(pb, scratch, video_data->start_offset)) != video_data->start_offset)
+            
+            /* Get the additional text block */
+            video_data->text_data = av_malloc( video_data->start_offset );
+
+            if( video_data->text_data == NULL )
+            {
+                errorVal = AVERROR_NOMEM;
+                goto cleanup;
+            }
+
+		    /* Copy the additional text block */
+		    if( (n = get_buffer( pb, video_data->text_data, video_data->start_offset )) != video_data->start_offset )
 		    {
 			    logger(LOG_DEBUG,"ADPIC: short of data reading start_offset data, expected %d, read %d\n", size, n);
-			    return -1;
+			    goto cleanup;
 		    }
+
 		    // Use the pic struct to build a JFIF header 
 		    if ((header_size = build_jpeg_header( jfif, video_data, FALSE, 2048))<=0)
 		    {
 			    logger(LOG_DEBUG,"ADPIC: adpic_read_packet, build_jpeg_header failed\n");
-			    return -1;
+			    goto cleanup;
 		    }
 		    // We now know the packet size required for the image, allocate it.
 		    if ((status = adpic_new_packet(pkt, header_size+video_data->size+2))<0) // PRC 003
 		    {
 			    logger(LOG_DEBUG,"ADPIC: DATA_JPEG adpic_new_packet %d failed, status %d\n", header_size+video_data->size+2, status);
-			    return -1;
+			    goto cleanup;
 		    }
 		    ptr = pkt->data;
 		    // Copy the JFIF header into the packet
@@ -842,7 +889,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		    if ((n=get_buffer(pb, ptr, video_data->size)) != video_data->size)
 		    {
 			    logger(LOG_DEBUG,"ADPIC: short of data reading pic body, expected %d, read %d\n", video_data->size, n);
-			    return -1;
+			    goto cleanup;
 		    }
 		    ptr += video_data->size;
 		    // Add the EOI marker
@@ -856,17 +903,17 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		    if ((status = adpic_new_packet(pkt, size))<0) // PRC 003
 		    {
 			    logger(LOG_DEBUG,"ADPIC: DATA_JFIF adpic_new_packet %d failed, status %d\n", size, status);
-			    return -1;
+			    goto cleanup;
 		    }
 		    if ((n=get_buffer(pb, pkt->data, size)) != size)
 		    {
 			    logger(LOG_DEBUG,"ADPIC: short of data reading jfif image, expected %d, read %d\n", size, n);
-			    return -1;
+			    goto cleanup;
 		    }
 		    if ( parse_jfif_header(pkt->data, video_data, size, NULL, NULL, site, TRUE) <= 0)
 		    {
 			    logger(LOG_DEBUG,"ADPIC: adpic_read_packet, parse_jfif_header failed\n");
-			    return -1;
+			    goto cleanup;
 		    }
 	    }
 	    break;
@@ -880,44 +927,45 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 
                 /* Allocate a new packet to hold the frame's image data */
 		        if( (status = adpic_new_packet( pkt, size )) < 0 )
-			        return -1;
+			        goto cleanup;
 
                 /* Now read the frame data into the packet */
                 if( (n = get_buffer( pb, pkt->data, size )) != size )
-                    return -1;
+                    goto cleanup;
 
-                /* Now we should have a text block following this which contains the frame data that we cna place in a _image_data struct */
+                /* Now we should have a text block following this which contains the frame data that we can place in a _image_data struct */
                 if(  adpic_parse_mime_header( pb, &mimeBlockType, &size, &extra ) != 0 )
-                    return -1;
+                    goto cleanup;
 
                 /* Validate the data type and then extract the text buffer */
                 if( mimeBlockType == DATA_PLAINTEXT )
                 {
                     unsigned char *         textBuffer = av_malloc( size );
 
-                    if( textBuffer )
+                    if( textBuffer != NULL )
                     {
-                        int ret = 0;
-
                         if( (n = get_buffer( pb, textBuffer, size )) == size )
                         {
                             /* Now parse the text buffer and populate the _image_data struct */
                             if( adpic_parse_mp4_text_data( textBuffer, size, video_data ) != 0 )
-                                ret = -1;
+                            {
+                                av_free( textBuffer );
+                                goto cleanup;
+                            }
 
                             /* Remember to set the format so that the right codec is loaded for this stream */
                             video_data->vid_format = PIC_MODE_MPEG4_411;
                         }
                         else
-                            ret = -1;
+                        {
+                            av_free( textBuffer );
+                            goto cleanup;
+                        }
 
                         av_free( textBuffer );
-
-                        if( ret == -1 )
-                            return ret;
                     }
                     else
-                        return -1;
+                        goto cleanup;
                 }
             }
             else
@@ -925,28 +973,40 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		        if ((n=get_buffer(pb, (unsigned char*)video_data, sizeof (NetVuImageData))) != sizeof (NetVuImageData))
 		        {
 			        logger(LOG_DEBUG,"ADPIC: short of data reading pic struct, expected %d, read %d\n", sizeof (NetVuImageData), n);
-			        return -1;
+			        goto cleanup;
 		        }
 		        pic_network2host(video_data);
 		        if (!pic_version_valid(video_data->version))
 		        {
 			        logger(LOG_DEBUG,"ADPIC: invalid pic version 0x%08X\n", video_data->version);
-			        return -1;
+			        goto cleanup;
 		        }
-		        if ((n=get_buffer(pb, scratch, video_data->start_offset)) != video_data->start_offset)
+
+                /* Get the additional text block */
+                video_data->text_data = av_malloc( video_data->start_offset );
+
+                if( video_data->text_data == NULL )
+                {
+                    errorVal = AVERROR_NOMEM;
+                    goto cleanup;
+                }
+
+		        /* Copy the additional text block */
+		        if( (n = get_buffer( pb, video_data->text_data, video_data->start_offset )) != video_data->start_offset )
 		        {
 			        logger(LOG_DEBUG,"ADPIC: short of data reading start_offset data, expected %d, read %d\n", size, n);
-			        return -1;
+			        goto cleanup;
 		        }
+
 		        if ((status = adpic_new_packet(pkt, video_data->size))<0) // PRC 003
 		        {
 			        logger(LOG_DEBUG,"ADPIC: DATA_MPEG4 adpic_new_packet %d failed, status %d\n", video_data->size, status);
-			        return -1;
+			        goto cleanup;
 		        }
 		        if ((n=get_buffer(pb, pkt->data, video_data->size)) != video_data->size)
 		        {
 			        logger(LOG_DEBUG,"ADPIC: short of data reading pic body, expected %d, read %d\n", video_data->size, n);
-			        return -1;
+			        goto cleanup;
 		        }
             }
 	    }	
@@ -960,7 +1020,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 
             /* Get the minimal video header */
 	        if( (n = get_buffer( pb, (unsigned char*)&videoHeader, sizeof(MinimalVideoHeader) )) != sizeof(MinimalVideoHeader) )
-		        return -1;
+		        goto cleanup;
 
             network2host32(videoHeader.t);
             network2host16(videoHeader.ms);
@@ -974,10 +1034,10 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 
             /* Now get the main frame data into a new packet */
 	        if( (status = adpic_new_packet( pkt, dataSize )) < 0 )
-		        return -1;
+		        goto cleanup;
 
 	        if( (n = get_buffer( pb, pkt->data, dataSize )) != dataSize )
-		        return -1;
+		        goto cleanup;
         }
         break;
 
@@ -989,7 +1049,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 
             /* Get the minimal video header */
 	        if( (n = get_buffer( pb, (unsigned char*)&audioHeader, sizeof(MinimalAudioHeader) )) != sizeof(MinimalAudioHeader) )
-		        return -1;
+		        goto cleanup;
 
             network2host32(audioHeader.t);
             network2host16(audioHeader.ms);
@@ -1002,10 +1062,10 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 
             /* Now get the main frame data into a new packet */
 	        if( (status = adpic_new_packet( pkt, dataSize )) < 0 )
-		        return -1;
+		        goto cleanup;
 
 	        if( (n = get_buffer( pb, pkt->data, dataSize )) != dataSize )
-		        return -1;
+		        goto cleanup;
         }
         break;
 
@@ -1016,7 +1076,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             {
                 // Get the fixed size portion of the audio header
                 if( (n = get_buffer( pb, (unsigned char*)audio_data, sizeof(NetVuAudioData) - 4 )) != sizeof(NetVuAudioData) - 4 )
-                    return -1;
+                    goto cleanup;
 
                 // endian fix it...
                 audioheader_network2host( audio_data );
@@ -1029,7 +1089,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                     //ASSERT(audio_data->additionalData);
 
                     if( (n = get_buffer( pb, audio_data->additionalData, audio_data->sizeOfAdditionalData )) != audio_data->sizeOfAdditionalData )
-                        return -1;
+                        goto cleanup;
                 }
             }
             else
@@ -1043,11 +1103,11 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             }
 
 		    if( (status = adpic_new_packet( pkt, audio_data->sizeOfAudioData )) < 0 )
-			    return -1;
+			    goto cleanup;
 
             // Now get the actual audio data
             if( (n = get_buffer( pb, pkt->data, audio_data->sizeOfAudioData)) != audio_data->sizeOfAudioData )
-			    return -1;
+			    goto cleanup;
         }
         break;
 
@@ -1058,7 +1118,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 	    if ((n=get_buffer(pb, scratch, size)) != size)
 	    {
 		    logger(LOG_DEBUG,"ADPIC: short of data reading scratch data body, expected %d, read %d\n", size, n);
-		    return -1;
+		    goto cleanup;
 	    }
 	    pkt->data = NULL;
 	    pkt->size = 0;
@@ -1068,7 +1128,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 	    return adpic_read_packet( s, pkt );
     default:
 	    logger(LOG_DEBUG,"ADPIC: adpic_read_packet, No handler for data_type=%d\n", data_type );
-	    return -1;
+	    goto cleanup;
 		
     }
 
@@ -1083,7 +1143,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 	    if ( (st = get_stream( s, video_data)) == NULL )
 	    {
 		    logger(LOG_DEBUG,"ADPIC: adpic_read_packet, failed get_stream for video\n");
-		    return -1;
+		    goto cleanup;
 	    }
     }
     else if( audio_data != NULL )
@@ -1092,13 +1152,16 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         if ( (st = get_audio_stream( s, audio_data )) == NULL )
         {
 		    logger(LOG_DEBUG,"ADPIC: adpic_read_packet, failed get_stream for audio\n");
-		    return -1;
+		    goto cleanup;
         }
     }
 
     pkt->stream_index = st->index;
 
     frameData = av_malloc(sizeof(FrameData));
+
+    if( frameData == NULL )
+        goto cleanup;
 
     if( video_data != NULL )                // Video frame
     {
@@ -1110,7 +1173,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         frameData->frameType = NetVuAudio;
         frameData->frameData = audio_data;
     }
-    else  // Shouldn't really get here
+    else  // Shouldn't really get here...
     {
         frameData->frameType = FrameTypeUnknown;
         frameData->frameData = NULL;
@@ -1120,7 +1183,25 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 
 	pkt->duration =  ((int)(AV_TIME_BASE * 1.0));
 
-	return 0;
+    errorVal = 0;
+
+cleanup:
+    if( errorVal < 0 )
+    {
+        /* If there was an error, make sure we release any memory that might have been allocated */
+        if( video_data != NULL )
+        {
+            if( video_data->text_data != NULL )
+                av_free( video_data->text_data );
+
+            av_free( video_data );
+        }
+
+        if( audio_data != NULL )
+            av_free( audio_data );
+    }
+
+	return errorVal;
 }
 
 static int64_t adpic_read_pts(AVFormatContext *s, int stream_index, int64_t *ppos, int64_t pos_limit)
@@ -1188,6 +1269,16 @@ static void adpic_release_packet( AVPacket *pkt )
                 {
                     av_free( audioHeader->additionalData );
                     audioHeader->additionalData = NULL;
+                }
+            }
+            else if( frameData->frameType == NetVuVideo )  /* A video frame might have some data in the text data field */
+            {
+                NetVuImageData *    imageHeader = (NetVuImageData *)frameData->frameData;
+
+                if( imageHeader->text_data != NULL )
+                {
+                    av_free( imageHeader->text_data );
+                    imageHeader->text_data = NULL;
                 }
             }
 
