@@ -40,8 +40,8 @@ enum data_type { DATA_JPEG, DATA_JFIF, DATA_MPEG4I, DATA_MPEG4P, DATA_AUDIO_ADPC
 
 static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size, long *extra );
 static int process_line( char *line, int line_count, int *dataType, int *size, long *extra );
-static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, NetVuImageData *video_data );
-static int process_mp4data_line( char *line, int line_count, NetVuImageData *video_data, struct tm *time );
+static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, NetVuImageData *video_data, char **additionalTextData );
+static int process_mp4data_line( char *line, int line_count, NetVuImageData *video_data, struct tm *time, char ** additionalText );
 static void adpic_release_packet( AVPacket *pkt );
 
 /* CS - The following structure is used to extract 6 bytes from the incoming stream. It needs therefore to be aligned on a 
@@ -601,7 +601,7 @@ static int process_line( char *line, int line_count, int *dataType, int *size, l
     return 1;
 }
 
-static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, NetVuImageData *video_data )
+static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, NetVuImageData *video_data, char **additionalTextData )
 {
 #define TEMP_BUFFER_SIZE        1024
     unsigned char               buffer[TEMP_BUFFER_SIZE];
@@ -628,7 +628,7 @@ static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize
                 q--;
             *q = '\0';
 
-            err = process_mp4data_line( buffer, lineCount, video_data, &time );
+            err = process_mp4data_line( buffer, lineCount, video_data, &time, additionalTextData );
 
             if( err < 0 )
                 return err;
@@ -685,10 +685,10 @@ static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize
     return 1;
 }
 
-static int process_mp4data_line( char *line, int line_count, NetVuImageData *video_data, struct tm *time )
+static int process_mp4data_line( char *line, int line_count, NetVuImageData *video_data, struct tm *time, char ** additionalText )
 {
-    char        *tag, *p = NULL;
-    int         valueLen = 0;
+    char        *tag = NULL, *p = NULL;
+    int         lineLen = 0;
 
     /* end of header */
     if (line[0] == '\0')
@@ -702,7 +702,9 @@ static int process_mp4data_line( char *line, int line_count, NetVuImageData *vid
     if (*p != ':')
         return 1;
 
-    *p = '\0';
+    /* *p = '\0';          CS - Removing this additional of NULL terminator so that whole string can be copied later with ease 
+                           subsequent string operations have been changed to memory ops to remove the dependency on NULL temrinator */
+
     tag = line;
     p++;
 
@@ -719,22 +721,22 @@ static int process_mp4data_line( char *line, int line_count, NetVuImageData *vid
         while( *temp != '\0' )
             temp++;
 
-        valueLen = temp - p;
+        lineLen = temp - line;
     }
 
-    if( !strcmp(tag, "Number") )
+    if( !memcmp( tag, "Number", strlen( "Number" ) ) )
     {
         video_data->cam = strtol(p, NULL, 10); /* Get the camera number */
     }
-    else if( !strcmp(tag, "Name") )
+    else if( !memcmp( tag, "Name", strlen( "Name" ) ) )
     {
         memcpy( video_data->title, p, FFMIN( TITLE_LENGTH, strlen(p) ) );
     }
-    else if( !strcmp(tag, "Version") )
+    else if( !memcmp( tag, "Version", strlen( "Version" ) ) )
     {
         video_data->version = strtol(p, NULL, 10); /* Get the version number */
     }
-    else if( !strcmp(tag, "Date" ) )
+    else if( !memcmp( tag, "Date", strlen( "Date" ) ) )
     {
 		sscanf( p, "%d/%d/%d", &time->tm_mday, &time->tm_mon, &time->tm_year );
 		time->tm_year -= 1900; /* Windows uses 1900, not 1970 */
@@ -743,25 +745,48 @@ static int process_mp4data_line( char *line, int line_count, NetVuImageData *vid
         if( time->tm_sec != 0 || time->tm_min != 0 || time->tm_hour != 0 )
             video_data->session_time = mktime( time );
     }
-    else if( !strcmp(tag, "Time" ) )
+    else if( !memcmp( tag, "Time", strlen( "Time" ) ) )
     {
         sscanf( p, "%d:%d:%d", &time->tm_hour, &time->tm_min, &time->tm_sec );
 
         if( time->tm_year != 0 )
             video_data->session_time = mktime( time );
     }
-    else if( !strcmp(tag, "MSec") )
+    else if( !memcmp( tag, "MSec", strlen( "MSec" ) ) )
     {
         video_data->milliseconds = strtol(p, NULL, 10); /* Get the millisecond offset */
     }
-    else if( !strcmp(tag, "Locale") )
+    else if( !memcmp( tag, "Locale", strlen( "Locale" ) ) )
     {
         /* Get the locale */
         memcpy( video_data->locale, p, FFMIN( MAX_NAME_LEN, strlen(p) ) );
     }
-    else if( !strcmp(tag, "UTCoffset") )
+    else if( !memcmp( tag, "UTCoffset", strlen( "UTCoffset" ) ) )
     {
         video_data->utc_offset = strtol(p, NULL, 10); /* Get the version number */
+    }
+    else
+    {
+        /* Any lines that aren't part of the pic struct, tag onto the additional text block */
+        if( additionalText != NULL && lineLen > 0 )
+        {
+#define LINE_END_LEN        3
+            int             strLen  = 0;
+            const char      lineEnd[LINE_END_LEN] = { '\r', '\n', '\0' };
+
+            /* Get the length of the existing text block if it exists */
+            if( *additionalText != NULL )
+                strLen = strlen( *additionalText );
+
+            /* Ok, now allocate some space to hold the new string */
+            *additionalText = av_realloc( *additionalText, strLen + lineLen + LINE_END_LEN );
+
+            /* Copy the line into the text block */
+            memcpy( &(*additionalText)[strLen], line, lineLen );
+
+            /* Add a NULL terminator */
+            memcpy( &(*additionalText)[strLen + lineLen], lineEnd, LINE_END_LEN );
+        }
     }
 
     return 1;
@@ -774,6 +799,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     FrameData *             frameData = NULL;
     NetVuAudioData *        audio_data = NULL;
     NetVuImageData *        video_data = NULL;
+    char *                  text_data = NULL;
     unsigned char           adpkt[SEPARATOR_SIZE];
     int                     data_type;
     int                     data_channel;
@@ -853,20 +879,23 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		    }
             
             /* Get the additional text block */
-            video_data->text_data = av_malloc( video_data->start_offset );
+            text_data = av_malloc( video_data->start_offset + 1 );
 
-            if( video_data->text_data == NULL )
+            if( text_data == NULL )
             {
                 errorVal = AVERROR_NOMEM;
                 goto cleanup;
             }
 
 		    /* Copy the additional text block */
-		    if( (n = get_buffer( pb, video_data->text_data, video_data->start_offset )) != video_data->start_offset )
+		    if( (n = get_buffer( pb, text_data, video_data->start_offset )) != video_data->start_offset )
 		    {
 			    logger(LOG_DEBUG,"ADPIC: short of data reading start_offset data, expected %d, read %d\n", size, n);
 			    goto cleanup;
 		    }
+
+            /* CS - somtimes the buffer seems to end with a NULL terminator, other times it doesn't. I'm adding a NULL temrinator here regardless */
+            text_data[video_data->start_offset] = '\0';
 
 		    // Use the pic struct to build a JFIF header 
 		    if ((header_size = build_jpeg_header( jfif, video_data, FALSE, 2048))<=0)
@@ -899,18 +928,19 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 	    break;
     case DATA_JFIF:
 	    {
-	    char site[32];
 		    if ((status = adpic_new_packet(pkt, size))<0) // PRC 003
 		    {
 			    logger(LOG_DEBUG,"ADPIC: DATA_JFIF adpic_new_packet %d failed, status %d\n", size, status);
 			    goto cleanup;
 		    }
+
 		    if ((n=get_buffer(pb, pkt->data, size)) != size)
 		    {
 			    logger(LOG_DEBUG,"ADPIC: short of data reading jfif image, expected %d, read %d\n", size, n);
 			    goto cleanup;
 		    }
-		    if ( parse_jfif_header(pkt->data, video_data, size, NULL, NULL, site, TRUE) <= 0)
+
+		    if ( parse_jfif_header( pkt->data, video_data, size, NULL, NULL, NULL, TRUE, &text_data ) <= 0)
 		    {
 			    logger(LOG_DEBUG,"ADPIC: adpic_read_packet, parse_jfif_header failed\n");
 			    goto cleanup;
@@ -947,7 +977,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                         if( (n = get_buffer( pb, textBuffer, size )) == size )
                         {
                             /* Now parse the text buffer and populate the _image_data struct */
-                            if( adpic_parse_mp4_text_data( textBuffer, size, video_data ) != 0 )
+                            if( adpic_parse_mp4_text_data( textBuffer, size, video_data, &text_data ) != 0 )
                             {
                                 av_free( textBuffer );
                                 goto cleanup;
@@ -983,20 +1013,23 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		        }
 
                 /* Get the additional text block */
-                video_data->text_data = av_malloc( video_data->start_offset );
+                text_data = av_malloc( video_data->start_offset + 1 );
 
-                if( video_data->text_data == NULL )
+                if( text_data == NULL )
                 {
                     errorVal = AVERROR_NOMEM;
                     goto cleanup;
                 }
 
 		        /* Copy the additional text block */
-		        if( (n = get_buffer( pb, video_data->text_data, video_data->start_offset )) != video_data->start_offset )
+		        if( (n = get_buffer( pb, text_data, video_data->start_offset )) != video_data->start_offset )
 		        {
 			        logger(LOG_DEBUG,"ADPIC: short of data reading start_offset data, expected %d, read %d\n", size, n);
 			        goto cleanup;
 		        }
+
+                /* CS - somtimes the buffer seems to end with a NULL terminator, other times it doesn't. I'm adding a NULL temrinator here regardless */
+                text_data[video_data->start_offset] = '\0';
 
 		        if ((status = adpic_new_packet(pkt, video_data->size))<0) // PRC 003
 		        {
@@ -1163,6 +1196,8 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     if( frameData == NULL )
         goto cleanup;
 
+    frameData->additionalData = NULL;
+
     if( video_data != NULL )                // Video frame
     {
         frameData->frameType = NetVuVideo;
@@ -1179,6 +1214,9 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         frameData->frameData = NULL;
     }
 
+    if( text_data != NULL )
+        frameData->additionalData = text_data;
+
     pkt->priv = frameData;
 
 	pkt->duration =  ((int)(AV_TIME_BASE * 1.0));
@@ -1190,15 +1228,13 @@ cleanup:
     {
         /* If there was an error, make sure we release any memory that might have been allocated */
         if( video_data != NULL )
-        {
-            if( video_data->text_data != NULL )
-                av_free( video_data->text_data );
-
             av_free( video_data );
-        }
 
         if( audio_data != NULL )
             av_free( audio_data );
+
+        if( text_data != NULL )
+            av_free( text_data );
     }
 
 	return errorVal;
@@ -1271,22 +1307,18 @@ static void adpic_release_packet( AVPacket *pkt )
                     audioHeader->additionalData = NULL;
                 }
             }
-            else if( frameData->frameType == NetVuVideo )  /* A video frame might have some data in the text data field */
-            {
-                NetVuImageData *    imageHeader = (NetVuImageData *)frameData->frameData;
-
-                if( imageHeader->text_data != NULL )
-                {
-                    av_free( imageHeader->text_data );
-                    imageHeader->text_data = NULL;
-                }
-            }
 
             // Nothing else has nested allocs so just delete the frameData if it exists
             if( frameData->frameData != NULL )
             {
                 av_free( frameData->frameData );
                 frameData->frameData = NULL;
+            }
+
+            if( frameData->additionalData != NULL )
+            {
+                av_free( frameData->additionalData );
+                frameData->additionalData = NULL;
             }
         }
 

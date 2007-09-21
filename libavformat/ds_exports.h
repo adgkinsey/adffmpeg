@@ -34,7 +34,7 @@ typedef struct _imageData
 	uint32_t version;	            /* structure version number */
 	int32_t mode;				    // in PIC_REVISION 0 this was the DFT style FULL_HI etc
 							        // in PIC_REVISION 1 this is used to specify AD or JFIF format image amongst other things
-	int32_t cam;				    /* camera number */
+	int32_t cam;				    /*  camera number */
 	int32_t vid_format;			    /* 422 or 411 */
 	uint32_t start_offset;	        /* start of picture PRC 007 */
 	int32_t size;				    /* size of image */
@@ -52,7 +52,6 @@ typedef struct _imageData
 	char locale[MAX_NAME_LEN];	    /* JCB 006 */
 	int32_t utc_offset;				/* JCB 006 */
 	uint32_t alm_bitmask;
-    char * text_data;               /* CS - Addition of text-in-image text block */
 } NetVuImageData;
 
 typedef struct _audioHeader
@@ -110,6 +109,7 @@ typedef struct _framedata
 {
     FrameType           frameType;      /* Type of frame we have. See FrameType enum for supported types */
     void *              frameData;      /* Pointer to structure holding the information for the frame. Type determined by the data type field */
+    void *              additionalData; /* CS - Added to hold text data. Not sure I prefer it here but as a first version, it works */
 } FrameData;
 
 int long64ToTimeValues( const long64 *timeValue, time_t * time, unsigned short *ms, unsigned short *flags );

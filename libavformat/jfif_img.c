@@ -195,6 +195,7 @@ extern struct tm *localtime_r(const time_t *t, struct tm *tp);
 
 /* JCB 004 start */
 static const char comment_version[] = "Version: 00.02\r\n";
+static const char comment_version_0_1[] = "Version: 00.01\r\n";
 static const char camera_title[] = "Name: ";
 static const char camera_number[] = "Number: ";
 static const char image_date[] = "Date: ";
@@ -597,12 +598,12 @@ Prototype	  :	unsigned int build_jpeg_header_lite(void *image, void *jfif, NetVu
 
 Procedure Desc: Build the correct JFIF headers with no tables for use with no data 
 
-	Inputs	  :	void *image		pointer to compressed image data
-				void *jfif		pointer to output buffer
-				NetVuImageData *pic		pointer to image structure - includes
-								Q factors, image size, mode etc
-				unsigned int max		maximum size of compressed image
-	Outputs	  :	unsigned int	total bytes in the JFIF image
+	Inputs	  :	void *image		    pointer to compressed image data
+				void *jfif		    pointer to output buffer
+				NetVuImageData *pic	pointer to image structure - includes
+								    Q factors, image size, mode etc
+				unsigned int max	maximum size of compressed image
+	Outputs	  :	unsigned int	    total bytes in the JFIF image
 	Globals   :	none
 
 ****************************************************************************/
@@ -1212,7 +1213,7 @@ int err_diff;
 #endif
 
 
-int parse_jfif_stream(unsigned char *data, NetVuImageData *pic, int imglength, unsigned char **qy, unsigned char **qc, char *site, int handle, int (*read_func)(int handle, char *buff, int nbytes))
+int parse_jfif_stream(unsigned char *data, NetVuImageData *pic, int imglength, unsigned char **qy, unsigned char **qc, char *site, int handle, int (*read_func)(int handle, char *buff, int nbytes), char **additionalText )
 {
 int i, sos = FALSE;
 unsigned short length, marker;
@@ -1312,7 +1313,7 @@ int huf_cmp_offset=0, huf_tab_no=0;
 			break;
 		case 0xfffe :	// Comment
 //			fprintf(stderr, "JFIF_IMG: found Comment marker, length = %d\n", length );
-			parse_comment((char*) &data[i], pic, site);
+			parse_comment( (char*) &data[i], length-2, pic, additionalText );
 			i += length-2;
 			break;
 		default :
@@ -1354,7 +1355,7 @@ Procedure Desc: Analyses a JFIF header and fills out an NetVuImageData structure
 	Globals   :
 
 ****************************************************************************/
-int parse_jfif_header(unsigned char *data, NetVuImageData *pic, int imglength, unsigned char **qy, unsigned char **qc, char *site, int decode_comment)
+int parse_jfif_header( unsigned char *data, NetVuImageData *pic, int imglength, unsigned char **qy, unsigned char **qc, char *site, int decode_comment, char **additionalText )
 {
 int i, sos = FALSE;
 unsigned short length, marker;
@@ -1463,7 +1464,7 @@ int huf_cmp_offset=0, huf_tab_no=0;
 		case 0xfffe :	// Comment
 //			fprintf(stderr, "JFIF_IMG: found Comment marker, length = %d\n", length );
 			if (decode_comment)	// JCB 027
-				parse_comment((char *)&data[i], pic, site);
+				parse_comment( (char *)&data[i], length-2, pic, additionalText );
 			i += length-2;
 			break;
 		default :
@@ -1494,139 +1495,131 @@ int i;
 	return field;
 }
 
-void parse_comment(char *text, NetVuImageData *pic, char *site)
+void parse_comment( char *text, int text_len, NetVuImageData *pic, char **additionalText )
 {
-int result_length = 80;
-char result[80];
-struct tm t;
+#define RESULT_LEN  512
+    char            result[RESULT_LEN];
+    int             i = 0;
+    int             j = 0;
+    struct tm       t;
 
 	memset(&t, 0, sizeof(t));
-	if ( (  find_comment_field( comment_version, text , result, result_length ) ) )
-	{
-//		fprintf(stderr, "JFIF_IMG: Found comment version\n");
-	}
-	else
-	{
-//		fprintf(stderr, "JFIF_IMG: No comment version\n");
-	}
-	if ( (  find_comment_field( camera_title , text , result, result_length ) ) )
-	{
-		strncpy(pic->title, result, sizeof(pic->title));
-		pic->title[sizeof(pic->title)-1] = 0;
-//		fprintf(stderr, "JFIF_IMG: Found camera_title %s\n", pic->title);
-	}
-	else
-	{
-//		fprintf(stderr, "JFIF_IMG: No camera_title\n");
-	}
-	if ( (  find_comment_field(camera_number , text , result, result_length ) ) )
-	{
-		sscanf(result,"%d", &pic->cam);
-//		fprintf(stderr, "JFIF_IMG: Found camera_number %d\n", pic->cam);
-	}
-	else
-	{
-//		fprintf(stderr, "JFIF_IMG: No camera_number\n");
-	}
-	if ( (  find_comment_field(image_date , text , result, result_length ) ) )
-	{
-		sscanf(result,"%d/%d/%d", &t.tm_mday, &t.tm_mon, &t.tm_year);
-//		fprintf(stderr, "JFIF_IMG: Found date %d/%d/%d\n", t.tm_mday, t.tm_mon, t.tm_year);
+
+    /* CS - Have to refactor this function so that it processes the comment block line by line and puts anything that's not in the pic struct
+       into an additional text block */
+    while( 1 )
+    {
+        j = 0;
+
+        /* Check we haven't covered all the buffer already */
+        if( i >= text_len - 1 || text[i] <= 0 )
+            break;
+
+        /* Get the next line from the text block */
+        while( text[i] && text[i] != '\n' && (i < (text_len - 1)) )
+            result[j++] = text[i++];
+
+        /* Skip the \n */
+        if( text[i] == '\n' )
+        {
+            result[j-1] = 0;
+            i++;
+        }
+
+        /* NULL terminate */
+        /* result[j] = 0; */
+
+        if( !memcmp( result, comment_version, strlen(comment_version) - 2 ) )  /* CS - Changed this line so it doesn't include the \r\n from the end of comment_version */
+        {
+            pic->version = 0xdecade11;
+        }
+        else if ( !memcmp( result, comment_version, strlen(comment_version_0_1) - 2 ) )
+        {
+            pic->version = 0xdecade10;
+        }
+        else if( !memcmp( result, camera_title, strlen(camera_title) ) )
+        {
+            strncpy( pic->title, &result[strlen(camera_title)], sizeof(pic->title) );
+            pic->title[sizeof(pic->title)-1] = 0;
+        }
+        else if( !memcmp( result, camera_number, strlen(camera_number) ) )
+        {
+            sscanf( &result[strlen(camera_number)], "%d", &pic->cam );
+        }
+        else if( !memcmp( result, image_date, strlen(image_date) ) )
+        {
+		    sscanf( &result[strlen(image_date)], "%d/%d/%d", &t.tm_mday, &t.tm_mon, &t.tm_year );
 #ifdef __MINGW32__
-        t.tm_year -= 1900; // Win32 expects tm_year to be years since 1900
+            t.tm_year -= 1900; // Win32 expects tm_year to be years since 1900
 #else
-		t.tm_year -= 1970; // PRC 032
+		    t.tm_year -= 1970; // PRC 032
 #endif
-		t.tm_mon--;
-	}
-	else
-	{
-//		fprintf(stderr, "JFIF_IMG: No date\n");
-	}
-	if ( (  find_comment_field( image_time, text , result, result_length ) ) )
-	{
-		sscanf(result,"%d:%d:%d", &t.tm_hour, &t.tm_min, &t.tm_sec);
-//		fprintf(stderr, "JFIF_IMG: Found time %d:%d:%d\n", t.tm_hour, t.tm_min, t.tm_sec);
-	}
-	else
-	{
-//		fprintf(stderr, "JFIF_IMG: No time\n");
-	}
-	if ( (  find_comment_field( image_ms , text , result, result_length ) ) )
-	{
-		sscanf(result,"%d", &pic->milliseconds);
-//		fprintf(stderr, "JFIF_IMG: Found milliseconds %d\n", pic->milliseconds);
-	}
-	else
-	{
-//		fprintf(stderr, "JFIF_IMG: No milliseconds\n");
-	}
-	if ( (  find_comment_field( q_factor, text , result, result_length ) ) )
-	{
-		sscanf(result,"%d", &pic->factor);
-//		fprintf(stderr, "JFIF_IMG: Found Q factor %d\n", pic->factor);
-	}
-	else
-	{
-//		fprintf(stderr, "JFIF_IMG: No Q factor\n");
-	}
-	if ( (  find_comment_field( alarm_comment, text , result, result_length ) ) )
-	{
-		strncpy(pic->alarm, result, sizeof(pic->title));
-//		fprintf(stderr, "JFIF_IMG: Found alarm_comment %s\n", pic->alarm);
-	}
-	else
-	{
-//		fprintf(stderr, "JFIF_IMG: No alarm_comment\n");
-	}
-	if ( (  find_comment_field( active_alarms, text , result, result_length ) ) )
-	{
-		sscanf(result,"%X", &pic->alm_bitmask);
-//		fprintf(stderr, "JFIF_IMG: Found active_alarms 0x%08X\n", pic->alm_bitmask);
-	}
-	else
-	{
-//		fprintf(stderr, "JFIF_IMG: No active_alarms\n");
-	}
-	if ( (  find_comment_field( active_detectors, text , result, result_length ) ) )	// JCB 021
-		sscanf(result,"%X", &pic->alm_bitmask_hi);
-	if ( (  find_comment_field( script_msg, text , result, result_length ) ) )
-	{
-	}
-	else
-	{
-	}
-	if ( (  find_comment_field( time_zone, text , result, result_length ) ) )
-	{
-		strncpy(pic->locale, result, sizeof(pic->locale));
-//		fprintf(stderr, "JFIF_IMG: Found timezone %s\n", pic->locale);
-	}
-	else
-	{
-//		fprintf(stderr, "JFIF_IMG: No timezone\n");
-	}
-	if ( (  find_comment_field( utc_offset, text , result, result_length ) ) )
-	{
-		sscanf(result,"%d", &pic->utc_offset);
-//		fprintf(stderr, "JFIF_IMG: Found utc_offset %d\n", pic->utc_offset);
-	}
-	else
-	{
-//		fprintf(stderr, "JFIF_IMG: No utc_offset\n");
-	}
-	if ( (  find_comment_field( site_id, text , result, result_length ) ) )
-	{
-		strncpy(site, result, 32);
-//		fprintf(stderr, "JFIF_IMG: Found site_id %s\n", site);
-	}
-	else
-	{
-//		fprintf(stderr, "JFIF_IMG: No site_id\n");
-	}
-	pic->session_time = mktime(&t);
+		    t.tm_mon--;
+        }
+        else if( !memcmp( result, image_time, strlen(image_time) ) )
+        {
+		    sscanf( &result[strlen(image_time)], "%d:%d:%d", &t.tm_hour, &t.tm_min, &t.tm_sec );
+        }
+        else if( !memcmp( result, image_ms, strlen(image_ms) ) )
+        {
+		    sscanf( &result[strlen(image_ms)], "%d", &pic->milliseconds );
+        }
+        else if( !memcmp( result, q_factor, strlen(q_factor) ) )
+        {
+            sscanf( &result[strlen(q_factor)], "%d", &pic->factor );
+        }
+	    else if( !memcmp( result, alarm_comment, strlen(alarm_comment) ) )
+	    {
+		    strncpy( pic->alarm, &result[strlen(alarm_comment)], sizeof(pic->title) );
+        }
+	    else if( !memcmp( result, active_alarms, strlen(active_alarms) ) )
+	    {
+		    sscanf( &result[strlen(active_alarms)], "%X", &pic->alm_bitmask );
+        }
+	    else if( !memcmp( result, active_detectors, strlen(active_detectors) ) )
+        {
+		    sscanf( &result[strlen(active_detectors)], "%X", &pic->alm_bitmask_hi );
+        }
+        else if( !memcmp( result, script_msg, strlen(script_msg) ) )
+        {
+        }
+        else if( !memcmp( result, time_zone, strlen(time_zone) ) )
+        {
+            strncpy( pic->locale, &result[strlen(time_zone)], sizeof(pic->locale) );
+        }
+        else if( !memcmp( result, utc_offset, strlen(utc_offset) ) )
+        {
+            sscanf( &result[strlen(utc_offset)], "%d", &pic->utc_offset );
+        }
+        else
+        {
+            /* Any line we don't explicitly detect for extraction to the pic struct, we must add to the additional text block */
+            /* Any lines that aren't part of the pic struct, tag onto the additional text block */
+            if( additionalText != NULL )
+            {
+                int             strLen  = 0;
+                const char      lineEnd[3] = { '\r', '\n', '\0' };
 
-//	fprintf(stderr, "JFIF_IMG: computed session_time = %s\n", ctime(&pic->session_time));
+                /* Get the length of the existing text block if it exists */
+                if( *additionalText != NULL )
+                    strLen = strlen( *additionalText );
 
+                /* Ok, now allocate some space to hold the new string */
+                *additionalText = av_realloc( *additionalText, strLen + strlen(result) + 3 );
+
+                /* Copy the line into the text block */
+                memcpy( &(*additionalText)[strLen], result, strlen(result) );
+
+                /* Add a \r\n and NULL termination */
+                memcpy( &(*additionalText)[strLen + strlen(result)], lineEnd, 3 );
+
+                /* NULL terminate */
+                /* (*additionalText)[strLen + strlen(result)] = 0; */
+            }
+        }
+    }
+
+    pic->session_time = mktime(&t);
 }
 
 int build_comment_text(char *buffer, NetVuImageData *pic, int max)
