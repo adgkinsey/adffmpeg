@@ -121,6 +121,7 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
     {
         frameData->frameType = frameType;
         frameData->frameData = videoFrameData;
+        frameData->additionalData = NULL;
 
         pkt->priv = frameData;
     }
@@ -243,7 +244,6 @@ static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData )
 
         memcpy( &frameData->imgTime, &buffer[bufIdx], sizeof(long64) );
         bufIdx += sizeof(long64);
-        frameData->imgTime = NTOH64(frameData->imgTime);
 
         memcpy( &frameData->camera, &buffer[bufIdx], sizeof(unsigned char) );
         bufIdx += sizeof(unsigned char);
@@ -395,6 +395,17 @@ int long64ToTimeValues( const long64 *timeValue, time_t * time, unsigned short *
     {
         bufPtr = (uint8_t*)timeValue;
 
+        memcpy( time, bufPtr, sizeof(time_t) );
+        bufPtr += sizeof(time_t);
+        *time = NTOH32( *time );
+
+        memcpy( ms, bufPtr, sizeof(unsigned short) );
+        bufPtr += sizeof(unsigned short);
+        *ms = NTOH16( *ms );
+
+        memcpy( flags, bufPtr, sizeof(unsigned short) );
+        *flags = NTOH16( *flags );
+#if 0
         memcpy( flags, bufPtr, sizeof(unsigned short) );
         bufPtr += sizeof(unsigned short);
 
@@ -402,6 +413,7 @@ int long64ToTimeValues( const long64 *timeValue, time_t * time, unsigned short *
         bufPtr += sizeof(unsigned short);
 
         memcpy( time, bufPtr, sizeof(time_t) );
+#endif
 
         retVal = 0;
     }
