@@ -370,7 +370,7 @@ char * EncryptPasswordString( char * Username, char * Password, long Timestamp, 
     if( canContinue )
     {
         snprintf(Source, 128, "%08X",(int)Timestamp);
-        pstrcat(Source, 128, av_strlwr(EncPassword));
+        pstrcat(Source, 128, av_strupr(EncPassword));
 
         GetFingerPrint( TransmittedData, Source, (unsigned int)strlen(Source), MacAddress );
         TransmittedData[32] = '\0';
