@@ -447,7 +447,7 @@ static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size,
     for(;;) {
         ch = get_byte(pb);
 
-        if (ch < 0)
+        if (ch <= 0)
             return 1;
 
         if (ch == '\n') {
