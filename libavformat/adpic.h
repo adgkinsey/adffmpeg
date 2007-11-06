@@ -75,6 +75,7 @@ enum pkt_offsets { DATA_TYPE, DATA_CHANNEL, DATA_SIZE_BYTE_0 , DATA_SIZE_BYTE_1 
 #define pic_revision_level(v) ( (v) - MIN_PIC_VERSION )	// JCB 016
 
 #define AUDIO_STREAM_ID             1
+#define DATA_STREAM_ID              2
 
 
 // JCB 016 bit definitions for the mode element for revisions > 0

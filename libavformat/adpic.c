@@ -434,6 +434,54 @@ static AVStream *get_audio_stream( struct AVFormatContext *s, NetVuAudioData* au
 	return st;
 }
 
+/****************************************************************************************************************
+ * Function: get_data_stream
+ * Desc: Returns the data stream for associated with the current connection. If there isn't one already, a new 
+ *       one will be created and added to the AVFormatContext passed in
+ * Params: 
+ *   s - Pointer to AVFormatContext associated with the active connection
+ * Return:
+ *  Pointer to the data stream on success, NULL on failure
+ ****************************************************************************************************************/
+static AVStream * get_data_stream( struct AVFormatContext *s ) 
+{
+    int id;
+    int i, found;
+    AVStream *st;
+
+	found = FALSE;
+
+	id = DATA_STREAM_ID;
+
+	for( i = 0; i < s->nb_streams; i++ )
+	{
+		st = s->streams[i];
+		if( st->id == id )
+		{
+			found = TRUE;
+			break;
+		}
+	}
+
+    // Did we find our audio stream? If not, create a new one
+	if( !found )
+	{
+		st = av_new_stream( s, id );
+		if (st)
+		{
+            st->codec->codec_type = CODEC_TYPE_DATA;
+		    st->codec->codec_id = 0;
+            st->codec->channels = 0;
+            st->codec->block_align = 0;
+            // Should probably fill in other known values here. Like bit rate, sample rate, num channels, etc
+
+			st->index = i;
+		}
+	}
+
+	return st;
+}
+
 static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size, long *extra )
 {
 #define TEMP_BUFFER_SIZE        1024
@@ -809,6 +857,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     char                    scratch[1024];
     long                    extra = 0;
     int                     errorVal = -1;
+    FrameType               currentFrameType = FrameTypeUnknown;
 
     if( TRUE == isMIME )
     {
@@ -839,6 +888,8 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     if( data_type == DATA_JPEG || data_type == DATA_JFIF || data_type == DATA_MPEG4I || data_type == DATA_MPEG4P 
         || data_type == DATA_MINIMAL_MPEG4 )
     {
+        currentFrameType = NetVuVideo;
+
         video_data = av_mallocz( sizeof(NetVuImageData) );
 
         if( video_data == NULL )
@@ -849,6 +900,8 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     }
     else if( data_type == DATA_AUDIO_ADPCM || data_type == DATA_MINIMAL_AUDIO_ADPCM )
     {
+        currentFrameType = NetVuAudio;
+
         audio_data = av_mallocz( sizeof(NetVuAudioData) );
 
         if( audio_data == NULL )
@@ -856,6 +909,10 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             errorVal = AVERROR_NOMEM;
             goto cleanup;
         }
+    }
+    else if( data_type == DATA_INFO )
+    {
+        currentFrameType = NetVuDataInfo;
     }
 
     // Proceed based on the type of data in this frame
@@ -1145,28 +1202,42 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         }
         break;
 
+        // CS - Data info extraction. A DATA_INFO frame simply contains a type byte followed by a text block. Due to its simplicity,
+        // we'll just extract the whole block into the AVPacket's data structure and let the client deal with checking its type and
+        // parsing its text
     case DATA_INFO:
-    case DATA_LAYOUT:
+        {
+            // Allocate a new packet
+            if( (status = adpic_new_packet( pkt, size )) < 0 )
+                goto cleanup;
 
-	    logger(LOG_DEBUG,"ADPIC: adpic_read_packet, found data_type=%d, %d bytes, skipping\n", data_type, size );		
-	    if ((n=get_buffer(pb, scratch, size)) != size)
-	    {
-		    logger(LOG_DEBUG,"ADPIC: short of data reading scratch data body, expected %d, read %d\n", size, n);
-		    goto cleanup;
-	    }
-	    pkt->data = NULL;
-	    pkt->size = 0;
+            // Get the data
+            if( (n = get_buffer( pb, pkt->data, size)) != size )
+			    goto cleanup;
+        }
+        break;
+
+
+    case DATA_LAYOUT:
+        logger(LOG_DEBUG,"ADPIC: adpic_read_packet, found data_type=%d, %d bytes, skipping\n", data_type, size );		
+        if ((n=get_buffer(pb, scratch, size)) != size)
+        {
+	        logger(LOG_DEBUG,"ADPIC: short of data reading scratch data body, expected %d, read %d\n", size, n);
+	        goto cleanup;
+        }
+        pkt->data = NULL;
+        pkt->size = 0;
 
         // CS - We can't return 0 here as if this is called during setup, we won't have initialised the stream and this will cause a crash
         // in ffmpeg. Make a recursive call here to read the next packet which should be an image frame1
-	    return adpic_read_packet( s, pkt );
+        return adpic_read_packet( s, pkt );
     default:
 	    logger(LOG_DEBUG,"ADPIC: adpic_read_packet, No handler for data_type=%d\n", data_type );
 	    goto cleanup;
 		
     }
 
-    if( video_data != NULL )
+    if( currentFrameType == NetVuVideo )
     {
 	    // At this point se have a legal pic structure which we use to determine 
 	    // which codec stream to use
@@ -1180,13 +1251,21 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		    goto cleanup;
 	    }
     }
-    else if( audio_data != NULL )
+    else if( currentFrameType == NetVuAudio )
     {
         // Get the audio stream
         if ( (st = get_audio_stream( s, audio_data )) == NULL )
         {
 		    logger(LOG_DEBUG,"ADPIC: adpic_read_packet, failed get_stream for audio\n");
 		    goto cleanup;
+        }
+    }
+    else if( currentFrameType == NetVuDataInfo || currentFrameType == NetVuDataLayout )
+    {
+        // Get or create a data stream
+        if ( (st = get_data_stream( s )) == NULL )
+        {
+            goto cleanup;
         }
     }
 
@@ -1198,16 +1277,19 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         goto cleanup;
 
     frameData->additionalData = NULL;
+    frameData->frameType = currentFrameType;
 
-    if( video_data != NULL )                // Video frame
+    if( frameData->frameType == NetVuVideo )                // Video frame
     {
-        frameData->frameType = NetVuVideo;
         frameData->frameData = video_data;
     }
-    else if( audio_data != NULL )           // Audio frame
+    else if( frameData->frameType == NetVuAudio )           // Audio frame
     {
-        frameData->frameType = NetVuAudio;
         frameData->frameData = audio_data;
+    }
+    else if( frameData->frameType == NetVuDataInfo )        // Data info
+    {
+        frameData->frameData = NULL;
     }
     else  // Shouldn't really get here...
     {
@@ -1215,8 +1297,10 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         frameData->frameData = NULL;
     }
 
-    if( text_data != NULL )
+    if( (frameData->frameType == NetVuAudio || frameData->frameType == NetVuVideo) && text_data != NULL )
+    {
         frameData->additionalData = text_data;
+    }
 
     pkt->priv = frameData;
 
@@ -1322,6 +1406,9 @@ static void adpic_release_packet( AVPacket *pkt )
                 frameData->additionalData = NULL;
             }
         }
+
+        av_free( pkt->priv );
+        pkt->priv = NULL;
 
         // Now use the default routine to release the rest of the packet's resources
         av_destruct_packet( pkt );

@@ -100,7 +100,9 @@ typedef enum _frameType
     NetVuVideo,
     NetVuAudio,
     DMVideo,
-    DMNudge
+    DMNudge,
+    NetVuDataInfo,
+    NetVuDataLayout
 } FrameType;
 
 /* This is the data structure that the ffmpeg parser fills in as part of the parsing routines. It will be shared between adpic and dspic so that our clients
