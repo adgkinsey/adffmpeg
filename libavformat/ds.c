@@ -321,14 +321,18 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
     int                 retVal = 0;
     int                 isConnecting = 1;
     char *              encCredentials = NULL;
-    char                user[MAX_USER_ID_LENGTH] = "user";
-    char                password[MAX_USER_ID_LENGTH] = "password";
     ClientConnectMsg *  connectMsg = NULL;
     int                 channelID = -2;
     int                 streamType, res, cam;
     time_t              from, to;
     int                 rate;
     vcrMode             playMode;
+    // This is a bit strange but I'm going to leave it here as a default option
+    // Even when you turn the password protection for playback off at the server, the connection protocol still requires prompts you for a username and password.
+    // The defaults seem to be 'user' and 'password'. In initialising them here, they'll get sent if there are no credentials supplied in the connection URL, therefore
+    // remain invisible to the user. Could do with getting confirmation and reasons behind this behaviour from someone on the server side with experience of DS1 hardware.
+    char                user[MAX_USER_ID_LENGTH] = "user";              
+    char                password[MAX_USER_ID_LENGTH] = "password";
 
     /* Extract the username and password */
     if( (retVal = GetUserAndPassword( auth, user, password )) == 0 )
@@ -802,11 +806,13 @@ static int ReadConnectReplyMessage( URLContext * h, NetworkMessage *message )
 {
     SrvConnectReplyMsg *        bodyPtr = NULL;
 
+    /* Allocate memory in which to store the message body */
     if( (message->body = av_malloc( sizeof(SrvConnectReplyMsg) )) == NULL )
         return AVERROR_NOMEM;
 
     bodyPtr = (SrvConnectReplyMsg *)message->body;
 
+    /* Now read the message body, a field at a time */
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->numCameras, sizeof(long) ) != sizeof(long) )
         return AVERROR_IO;
 
@@ -846,7 +852,9 @@ static int ReadConnectReplyMessage( URLContext * h, NetworkMessage *message )
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->numFixedRealms, sizeof(long) ) != sizeof(long) )
         return AVERROR_IO;
 
-    if( DSReadBuffer( h, (uint8_t *)bodyPtr->realmFlags, (sizeof(unsigned long) * NUM_FIXED_REALMS) ) != (sizeof(unsigned long) * NUM_FIXED_REALMS) )
+    bodyPtr->numFixedRealms = NTOH32(bodyPtr->numFixedRealms);
+
+    if( DSReadBuffer( h, (uint8_t *)bodyPtr->realmFlags, (sizeof(unsigned long) * bodyPtr->numFixedRealms) ) != (sizeof(unsigned long) * bodyPtr->numFixedRealms) )
         return AVERROR_IO;
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->minimumViewerVersion, sizeof(unsigned long) ) != sizeof(unsigned long) )
