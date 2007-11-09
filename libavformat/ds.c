@@ -466,7 +466,7 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
 
 static int GetUserAndPassword( const char * auth, char *user, char *password  )
 {
-    int             retVal = AVERROR_INVALIDDATA;
+    int             retVal = 0;
     char *          authStr = NULL;
     char *          token = NULL;
     const char *    delim = ":";
@@ -474,55 +474,60 @@ static int GetUserAndPassword( const char * auth, char *user, char *password  )
 
     if( auth != NULL )
     {
-        /* Copy the string as strtok needs to modify as it goes */
-        if( (authStr = (char*)av_mallocz( strlen(auth) + 1 )) != NULL )
+        if( strcmp( auth, "" ) != 0 )
         {
-            strcpy( authStr, auth );
+            retVal = AVERROR_INVALIDDATA;
 
-            /* Now split it into the user and password */
-            token = strtok( authStr, delim );
-
-            while( token != NULL )
+            /* Copy the string as strtok needs to modify as it goes */
+            if( (authStr = (char*)av_mallocz( strlen(auth) + 1 )) != NULL )
             {
-                count++;
+                strcpy( authStr, auth );
 
-                if( count == 1 )
+                /* Now split it into the user and password */
+                token = strtok( authStr, delim );
+
+                while( token != NULL )
                 {
-                    if( strlen(token) <= MAX_USER_ID_LENGTH )
+                    count++;
+
+                    if( count == 1 )
                     {
-                        strcpy( user, token );
+                        if( strlen(token) <= MAX_USER_ID_LENGTH )
+                        {
+                            strcpy( user, token );
 
-                        if( strlen(token) < MAX_USER_ID_LENGTH )
-                            user[strlen(token)] = '\0';
+                            if( strlen(token) < MAX_USER_ID_LENGTH )
+                                user[strlen(token)] = '\0';
+                        }
                     }
-                }
-                else if( count == 2 )
-                {
-                    /* TODO: Verify whether checking against the length of the max user id is ok. Ultimately, the password is hashed before transmission
-                       so the length is not imperative here. Maybe server defines a maximum length though? */
-                    if( strlen(token) <= MAX_USER_ID_LENGTH )
+                    else if( count == 2 )
                     {
-                        strcpy( password, token );
+                        /* TODO: Verify whether checking against the length of the max user id is ok. Ultimately, the password is hashed before transmission
+                           so the length is not imperative here. Maybe server defines a maximum length though? */
+                        if( strlen(token) <= MAX_USER_ID_LENGTH )
+                        {
+                            strcpy( password, token );
 
-                        if( strlen(token) < MAX_USER_ID_LENGTH )
-                            password[strlen(token)] = '\0';
+                            if( strlen(token) < MAX_USER_ID_LENGTH )
+                                password[strlen(token)] = '\0';
 
-                        retVal = 0;
+                            retVal = 0;
+                        }
                     }
-                }
-                else /* There shouldn't be more than 2 tokens, better flag an error */
-                {
-                    retVal = AVERROR_INVALIDDATA;
+                    else /* There shouldn't be more than 2 tokens, better flag an error */
+                    {
+                        retVal = AVERROR_INVALIDDATA;
+                    }
+
+                    token = strtok( NULL, delim );
                 }
 
-                token = strtok( NULL, delim );
+                av_free( authStr );
+                authStr = NULL;
             }
-
-            av_free( authStr );
-            authStr = NULL;
+            else
+                retVal = AVERROR_NOMEM;
         }
-        else
-            retVal = AVERROR_NOMEM;
     }
 
     return retVal;
