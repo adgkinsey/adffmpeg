@@ -84,7 +84,7 @@ static int http_open_cnx(URLContext *h)
     char auth[1024];
     char path1[1024];
     char buf[1024];
-    int port, use_proxy, err, location_changed = 0, redirects = 0;
+    int port, use_proxy, location_changed = 0, redirects = 0;
     HTTPContext *s = h->priv_data;
     URLContext *hd = NULL;
     int retVal = AVERROR_IO;
@@ -118,8 +118,7 @@ static int http_open_cnx(URLContext *h)
         port = 80;
 
     snprintf(buf, sizeof(buf), "tcp://%s:%d", hostname, port);
-    err = url_open(&hd, buf, URL_RDWR);
-    if (err < 0)
+    if( (retVal = url_open( &hd, buf, URL_RDWR )) < 0 )
         goto fail;
 
     s->hd = hd;

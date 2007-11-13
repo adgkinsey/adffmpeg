@@ -44,7 +44,7 @@ int resolve_host(struct in_addr *sin_addr, const char *hostname)
     if ((inet_aton(hostname, sin_addr)) == 0) {
         hp = gethostbyname(hostname);
         if (!hp)
-            return -1;
+            return ADFFMPEG_ERROR_DNS_HOST_RESOLUTION_FAILURE;
         memcpy (sin_addr, hp->h_addr, sizeof(struct in_addr));
     }
     return 0;
@@ -58,6 +58,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     int port, fd = -1;
     TCPContext *s = NULL;
     fd_set wfds;
+    fd_set efds;    /* CS - Added to detect error condition on connect() */
     int fd_max, ret;
     struct timeval tv;
     socklen_t optlen;
@@ -84,10 +85,8 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
 
     dest_addr.sin_family = AF_INET;
     dest_addr.sin_port = htons(port);
-    if (resolve_host(&dest_addr.sin_addr, hostname) < 0)
-    {
-        goto fail;
-    }
+    if( (ret = resolve_host( &dest_addr.sin_addr, hostname )) < 0 )
+        goto fail1;
 
     fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0)
@@ -120,11 +119,21 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
             fd_max = fd;
             FD_ZERO(&wfds);
             FD_SET(fd, &wfds);
+            /* CS - Added error set here to detect error in connect operation */
+            FD_ZERO(&efds);
+            FD_SET(fd, &efds);
             tv.tv_sec = 0;
             tv.tv_usec = 100 * 1000;
-            ret = select(fd_max + 1, NULL, &wfds, NULL, &tv);
+            ret = select(fd_max + 1, NULL, &wfds, &efds, &tv);
+
             if (ret > 0 && FD_ISSET(fd, &wfds))
-                break;
+                break; /* Connected ok, break out of the loop here */
+            else if( ret > 0 && FD_ISSET(fd, &efds) )
+            {
+                /* There was an error during connection */
+                ret = ADFFMPEG_ERROR_HOST_UNREACHABLE;
+                goto fail1;
+            }
         }
 
         /* test error */
