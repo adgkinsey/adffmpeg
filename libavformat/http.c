@@ -39,9 +39,6 @@
 #define URL_SIZE    4096
 #define MAX_REDIRECTS 8
 
-#define AUTHENTICATION_MODE_BASIC       1
-#define AUTHENTICATION_MODE_DIGEST      2
-
 typedef struct {
     URLContext *hd;
     unsigned char buffer[BUFFER_SIZE], *buf_ptr, *buf_end;
@@ -69,6 +66,16 @@ static int http_respond_to_basic_challenge( URLContext *h, const char *auth, int
 static int http_respond_to_digest_challenge( URLContext *h, const char *auth, int post, const char *path, const char *hoststr, int *new_location );
 static void value_to_string( const char *input, int size, char *output );
 
+typedef int (*HTTPAuthenticationResponseFunc)( URLContext *h, const char *auth, int post, const char *path, const char *hoststr );
+
+static HTTPAuthenticationResponseFunc   http_auth_responses[2] = {
+    http_respond_to_basic_challenge,
+    http_respond_to_digest_challenge
+};
+/* Use these to index the array above */
+#define AUTHENTICATION_MODE_BASIC       0
+#define AUTHENTICATION_MODE_DIGEST      1
+
 /* return non zero if error */
 static int http_open_cnx(URLContext *h)
 {
@@ -80,6 +87,7 @@ static int http_open_cnx(URLContext *h)
     int port, use_proxy, err, location_changed = 0, redirects = 0;
     HTTPContext *s = h->priv_data;
     URLContext *hd = NULL;
+    int retVal = AVERROR_IO;
 
     proxy_path = getenv("http_proxy");
     use_proxy = (proxy_path != NULL) && !getenv("no_proxy") &&
@@ -115,8 +123,9 @@ static int http_open_cnx(URLContext *h)
         goto fail;
 
     s->hd = hd;
-    if (http_connect(h, path, hoststr, auth, &location_changed, buf) < 0)
+    if( (retVal = http_connect( h, path, hoststr, auth, &location_changed, buf )) < 0 )
         goto fail;
+
     if (s->http_code == 303 && location_changed == 1) {
         /* url moved, get next */
         url_close(hd);
@@ -129,7 +138,7 @@ static int http_open_cnx(URLContext *h)
  fail:
     if (hd)
         url_close(hd);
-    return AVERROR_IO;
+    return retVal;
 }
 
 static int http_open(URLContext *h, const char *uri, int flags)
@@ -339,35 +348,29 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
     /* If we got a 401 authentication challenge back, we need to respond to that challenge accordingly if we have the credentials */
     if( s->http_code == 401 )
     {
-        int     err;
-
-        /* Close the underlying TCP connection and reopen it for the second request */
-        url_close(s->hd);
-        s->hd = NULL;
-        err = url_open( &s->hd, tcpConnStr, URL_RDWR );
-
-        if (err < 0)
+        if( s->authentication_mode == AUTHENTICATION_MODE_BASIC || s->authentication_mode == AUTHENTICATION_MODE_DIGEST )
         {
-            if( s->hd != NULL )
+            if( strcmp(auth, "" ) == 0 )
+                return ADFFMPEG_ERROR_HTTP_AUTH_REQUIRED; /* We can't proceed without any supplied credentials */
+            else
+            {
+                int     err;
+
+                /* Close the underlying TCP connection and reopen it for the second request */
                 url_close(s->hd);
+                s->hd = NULL;
+                err = url_open( &s->hd, tcpConnStr, URL_RDWR );
 
-            return AVERROR_IO;
-        }
+                if (err < 0)
+                {
+                    if( s->hd != NULL )
+                        url_close(s->hd);
 
-        if( s->authentication_mode == AUTHENTICATION_MODE_BASIC )
-        {
-            if( strcmp(auth, "" ) == 0 )
-                return AVERROR_INVALIDDATA; /* We can't proceed without any supplied credentials */
-            else
-                return http_respond_to_basic_challenge( h, auth, post, path, hoststr, new_location );
-        }
-        else if( s->authentication_mode == AUTHENTICATION_MODE_DIGEST )
-        {
-            /* Respond to the digest challenge */
-            if( strcmp(auth, "" ) == 0 )
-                return AVERROR_INVALIDDATA; /* We can't proceed without any supplied credentials */
-            else
-                return http_respond_to_digest_challenge( h, auth, post, path, hoststr, new_location );
+                    return AVERROR_IO;
+                }
+
+                return http_auth_responses[s->authentication_mode]( h, auth, post, path, hoststr );
+            }
         }
         else
         {

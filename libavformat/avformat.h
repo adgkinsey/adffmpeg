@@ -36,6 +36,7 @@ extern "C" {
 #include "avcodec.h"
 
 #include "avio.h"
+#include "adffmpeg_errors.h"
 
 /* packet functions */
 
