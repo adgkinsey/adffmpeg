@@ -43,6 +43,7 @@ static int process_line( char *line, int line_count, int *dataType, int *size, l
 static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, NetVuImageData *video_data, char **additionalTextData );
 static int process_mp4data_line( char *line, int line_count, NetVuImageData *video_data, struct tm *time, char ** additionalText );
 static void adpic_release_packet( AVPacket *pkt );
+static int adpic_is_valid_separator( unsigned char * buf, int bufLen );
 
 /* CS - The following structure is used to extract 6 bytes from the incoming stream. It needs therefore to be aligned on a 
    2 byte boundary. Not sure whether this solution is portable though */
@@ -238,7 +239,8 @@ void pic_host2be(NetVuImageData *pic)
 	host2be16(pic->format.line_offset);
 }
 
-static const char *     MIMEBoundarySeparator = "--0plm(NetVu-Connected:Server-Push:Boundary-String)1qaz";
+static const char *     MIME_BOUNDARY_PREFIX = "--0plm(";
+static const char *     MIME_BOUNDARY_SUFFIX = ":Server-Push:Boundary-String)1qaz";
 static const char *     MIME_TYPE_JPEG = "image/jpeg";
 static const char *     MIME_TYPE_MP4  = "image/admp4";
 //static const char *     MIME_TYPE_MP4I = "image/admp4i";
@@ -262,15 +264,78 @@ static int adpic_probe(AVProbeData *p)
     }
     else
     {
-        // Check whether it's a multipart MIME stream that we're dealing with...
-        if( p->buf[0] == 0x0a && memcmp( &p->buf[1], MIMEBoundarySeparator, strlen(MIMEBoundarySeparator) ) == 0 )
+        int server_adjustment = 0;
+
+        // This is nasty but it's got to go here as we don't want to try and deal with fixes for certain server nuances in the HTTP layer.
+        // DS 2 servers seem to end their HTTP header section with the byte sequence, 0x0d, 0x0a, 0x0d, 0x0a, 0x0a
+        // Eco 9 server ends its HTTP headers section with the sequence,              0x0d, 0x0a, 0x0d, 0x0a, 0x0d, 0x0a
+        // Both of which are incorrect. We'll try and detect these cases here and make adjustments to the buffers so that a standard validation
+        // routine can be called...
+
+        // DS2 detection
+        if( p->buf[0] == 0x0a )
         {
-            isMIME = TRUE; // Flag this fact so that we can adjust the parser later
+            server_adjustment = 1;
+        }
+        else if( p->buf[0] == 0x0d &&  p->buf[1] == 0x0a )  // Eco 9 detection
+        {
+            server_adjustment = 2;
+        }
+
+        /* Good start, Now check whether we have the start of a MIME boundary separator */
+        if( adpic_is_valid_separator( &p->buf[server_adjustment], p->buf_size - server_adjustment ) > 0 )
+        {
+            isMIME = TRUE;
             return AVPROBE_SCORE_MAX;
         }
-        else
-            return 0;
     }
+
+    return 0;
+}
+
+/****************************************************************************************************************
+ * Function: adpic_is_valid_separator
+ * Desc: Validates a multipart MIME boundary separator against the convention used by NetVu video servers
+ * Params: 
+ *   buf - Buffer containing the boundary separator
+ *   bufLen - Size of the buffer
+ * Return:
+ *  1 if boundary separator is valid, 0 if not
+ ****************************************************************************************************************/
+static int adpic_is_valid_separator( unsigned char * buf, int bufLen )
+{
+    int is_valid = 0;
+
+    if( buf != NULL )
+    {
+        if( bufLen > strlen(MIME_BOUNDARY_PREFIX) + strlen(MIME_BOUNDARY_SUFFIX) )
+        {
+            if( strncmp( buf, MIME_BOUNDARY_PREFIX, strlen(MIME_BOUNDARY_PREFIX) ) == 0 )
+            {
+                unsigned char *     b = &buf[strlen(MIME_BOUNDARY_PREFIX)];
+
+                /* We're getting closer. Now we have a server type string. We must skip past this */
+                while( !isspace(*b) && *b != ':' && (b - buf) < bufLen )
+                {
+                    b++;
+                }
+
+                if( *b == ':' )
+                {
+                    if( (b - buf) + strlen(MIME_BOUNDARY_SUFFIX)  <= bufLen )
+                    {
+                        if( strncmp( b, MIME_BOUNDARY_SUFFIX, strlen(MIME_BOUNDARY_SUFFIX) ) == 0 )
+                        {
+                            is_valid = 1; /* Flag this fact so that we can adjust the parser later */
+                            return AVPROBE_SCORE_MAX;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return is_valid;
 }
 
 static int adpic_read_close(AVFormatContext *s)
@@ -517,9 +582,10 @@ static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size,
 
                 if( err == 0 )
                     return 0;
+
+                lineCount++;
             }
 
-            lineCount++;
             q = buffer;
         } else {
             if ((q - buffer) < sizeof(buffer) - 1)
@@ -541,13 +607,13 @@ static int process_line( char *line, int line_count, int *dataType, int *size, l
 
     p = line;
 
-    /* The second line will be the boundary string - validate this here */
-    if( line_count == 1 )
+    /* The first valid line will be the boundary string - validate this here */
+    if( line_count == 0 )
     {
-        if( memcmp( p, MIMEBoundarySeparator, strlen(MIMEBoundarySeparator) ) != 0 )
+        if( adpic_is_valid_separator( p, strlen(p) ) == FALSE )
             return -1;
     }
-    else if (line_count == 2) /* The third line will contain the HTTP status code */
+    else if( line_count == 1 ) /* The second line will contain the HTTP status code */
     {
         while (!isspace(*p) && *p != '\0')
             p++;
