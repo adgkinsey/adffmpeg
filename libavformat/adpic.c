@@ -247,6 +247,7 @@ static const char *     MIME_TYPE_MP4  = "image/admp4";
 //static const char *     MIME_TYPE_MP4P = "image/admp4p";
 static const char *     MIME_TYPE_TEXT = "text/plain";
 static const char *     MIME_TYPE_ADPCM = "audio/adpcm";
+static const char *     MIME_TYPE_LAYOUT = "data/layout";
 static int              isMIME = 0;
 
 static int adpic_probe(AVProbeData *p)
@@ -646,19 +647,23 @@ static int process_line( char *line, int line_count, int *dataType, int *size, l
 
         if (!strcmp(tag, "Content-type")) {
             /* Work out what type we actually have */
-            if( strcmp( p, MIME_TYPE_JPEG ) == 0 )
+            if( strcmp( av_strlwr(p), MIME_TYPE_JPEG ) == 0 )
             {
                 *dataType = DATA_JFIF;
             }
-            else if( memcmp( p, MIME_TYPE_MP4, strlen(MIME_TYPE_MP4) ) == 0 ) /* Or if it starts image/mp4  - this covers all the supported mp4 variations (i and p frames) */
+            else if( memcmp( av_strlwr(p), MIME_TYPE_MP4, strlen(MIME_TYPE_MP4) ) == 0 ) /* Or if it starts image/mp4  - this covers all the supported mp4 variations (i and p frames) */
             {
                 *dataType = DATA_MPEG4P; /* P for now - as they are both processed the same subsequently, this is sufficient */
             }
-            else if( strcmp( p, MIME_TYPE_TEXT ) == 0 )
+            else if( strcmp( av_strlwr(p), MIME_TYPE_TEXT ) == 0 )
             {
                 *dataType = DATA_PLAINTEXT;
             }
-            else if( memcmp( p, MIME_TYPE_ADPCM, strlen(MIME_TYPE_ADPCM) ) == 0 )
+            else if( strcmp( av_strlwr(p), MIME_TYPE_LAYOUT ) == 0 )
+            {
+                *dataType = DATA_LAYOUT;
+            }
+            else if( memcmp( av_strlwr(p), MIME_TYPE_ADPCM, strlen(MIME_TYPE_ADPCM) ) == 0 )
             {
                 *dataType = DATA_AUDIO_ADPCM;
 
@@ -980,6 +985,10 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     {
         currentFrameType = NetVuDataInfo;
     }
+    else if( data_type == DATA_LAYOUT )
+    {
+        currentFrameType = NetVuDataLayout;
+    }
 
     // Proceed based on the type of data in this frame
     switch(data_type)
@@ -1285,21 +1294,23 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 
 
     case DATA_LAYOUT:
-        logger(LOG_DEBUG,"ADPIC: adpic_read_packet, found data_type=%d, %d bytes, skipping\n", data_type, size );		
-        if ((n=get_buffer(pb, scratch, size)) != size)
         {
-	        logger(LOG_DEBUG,"ADPIC: short of data reading scratch data body, expected %d, read %d\n", size, n);
+            /* Allocate a new packet */
+            if( (status = adpic_new_packet( pkt, size )) < 0 )
+                goto cleanup;
+
+            /* Get the data */
+            if( (n = get_buffer( pb, pkt->data, size)) != size )
+			    goto cleanup;
+        }
+        break;
+
+    default:
+        {
+	        logger(LOG_DEBUG,"ADPIC: adpic_read_packet, No handler for data_type=%d\n", data_type );
 	        goto cleanup;
         }
-        pkt->data = NULL;
-        pkt->size = 0;
-
-        // CS - We can't return 0 here as if this is called during setup, we won't have initialised the stream and this will cause a crash
-        // in ffmpeg. Make a recursive call here to read the next packet which should be an image frame1
-        return adpic_read_packet( s, pkt );
-    default:
-	    logger(LOG_DEBUG,"ADPIC: adpic_read_packet, No handler for data_type=%d\n", data_type );
-	    goto cleanup;
+        break;
 		
     }
 
@@ -1353,7 +1364,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     {
         frameData->frameData = audio_data;
     }
-    else if( frameData->frameType == NetVuDataInfo )        // Data info
+    else if( frameData->frameType == NetVuDataInfo || frameData->frameType == NetVuDataLayout )        // Data info
     {
         frameData->frameData = NULL;
     }
