@@ -350,7 +350,7 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
         if( s->authentication_mode == AUTHENTICATION_MODE_BASIC || s->authentication_mode == AUTHENTICATION_MODE_DIGEST )
         {
             if( strcmp(auth, "" ) == 0 )
-                return ADFFMPEG_ERROR_HTTP_AUTH_REQUIRED; /* We can't proceed without any supplied credentials */
+                return ADFFMPEG_ERROR_AUTH_REQUIRED; /* We can't proceed without any supplied credentials */
             else
             {
                 int     err;

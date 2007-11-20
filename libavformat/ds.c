@@ -170,7 +170,8 @@ static int DSOpen( URLContext *h, const char *uri, int flags )
     h->is_streamed = 1;
 
     s = av_malloc( sizeof(DSContext) );
-    if (!s) {
+    if (!s) 
+    {
         return -ENOMEM;
     }
     h->priv_data = s;
@@ -189,38 +190,48 @@ static int DSOpen( URLContext *h, const char *uri, int flags )
 
     /* Add the URL parameters (if any) */
     if (path1[0] == '\0')
+    {
         path = "/";
+    }
     else
+    {
         path = path1;
+    }
 
     /* Assume default port for this protocol if one isn't supplied */
     if (port < 0)
+    {
         port = DS_DEFAULT_PORT;
+    }
 
     /* Form the appropriate TCP URL */
     snprintf(buf, sizeof(buf), "tcp://%s:%d", hostname, port);
 
     /* Now open a connection to that TCP address */
-    err = url_open( &TCPContext, buf, URL_RDWR );
-
-    if (err < 0)
+    if( (err = url_open( &TCPContext, buf, URL_RDWR )) < 0 )
+    {
         goto fail;
+    }
 
     /* Save the TCP context */
     s->TCPContext = TCPContext;
 
     /* Now initiate connection using the DS protocol */
-    if( DSConnect( h, path, hoststr, auth ) < 0 )
+    if( (err = DSConnect( h, path, hoststr, auth )) < 0 )
+    {
         goto fail;
+    }
 
     return 0;
  fail:
     if( TCPContext )
+    {
         url_close( TCPContext );
+    }
 
     av_free( s );
 
-    return AVERROR_IO;
+    return err;
 }
 
 /****************************************************************************************************************
@@ -327,12 +338,12 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
     time_t              from, to;
     int                 rate;
     vcrMode             playMode;
-    // This is a bit strange but I'm going to leave it here as a default option
-    // Even when you turn the password protection for playback off at the server, the connection protocol still requires prompts you for a username and password.
-    // The defaults seem to be 'user' and 'password'. In initialising them here, they'll get sent if there are no credentials supplied in the connection URL, therefore
-    // remain invisible to the user. Could do with getting confirmation and reasons behind this behaviour from someone on the server side with experience of DS1 hardware.
-    char                user[MAX_USER_ID_LENGTH] = "user";              
-    char                password[MAX_USER_ID_LENGTH] = "password";
+    char                user[MAX_USER_ID_LENGTH];
+    char                password[MAX_USER_ID_LENGTH];
+
+    /* Initialise the user and password fields */
+    memset( user, 0, sizeof(char) * MAX_USER_ID_LENGTH );
+    memset( password, 0, sizeof(char) * MAX_USER_ID_LENGTH );
 
     /* Extract the username and password */
     if( (retVal = GetUserAndPassword( auth, user, password )) == 0 )
@@ -387,8 +398,20 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
                             channelID = recvMessage->header.channelID;
 
                             /* Encrypt the username / password */
-                            if( (encCredentials = EncryptPasswordString( user, password, msg->timestamp, msg->macAddr, msg->appVersion )) == NULL )
-                                retVal = AVERROR_NOMEM;
+                            if( strlen( user ) > 0 && strlen( password ) > 0 )
+                            {
+                                if( (encCredentials = EncryptPasswordString( user, password, msg->timestamp, msg->macAddr, msg->appVersion )) == NULL )
+                                    retVal = AVERROR_NOMEM;
+                            }
+                            else
+                            {
+                                /* If we haven't got a user and password string then we have to notify the client */
+                                retVal = ADFFMPEG_ERROR_AUTH_REQUIRED;
+                            }
+                        }
+                        else if( msg->reason == REJECT_AUTHENTIFICATION_INVALID ) /* Supplied credentials are invalid */
+                        {
+                            retVal = ADFFMPEG_ERROR_INVALID_CREDENTIALS;
                         }
                         else /* Fail */
                         {
