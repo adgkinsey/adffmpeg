@@ -1,4 +1,5 @@
 #include "adaudio.h"
+#include "ds_exports.h"
 
 static AVStream *get_audio_stream( struct AVFormatContext *s );
 
@@ -38,6 +39,8 @@ int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     int                     packetSize = 0;
     int                     sampleSize = 0;
     AVStream *              st = NULL;
+	FrameData *             frameData = NULL;
+	int					    isPacketAlloced = 0;
 
     /* Get the next packet */
     if( (packetSize = ioContext->read_packet( ioContext->opaque, ioContext->buf_ptr, ioContext->buffer_size )) > 0 )
@@ -55,6 +58,8 @@ int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             /* Create a new AVPacket */
             if( av_new_packet( pkt, sampleSize ) >= 0 )
             {
+				isPacketAlloced = 1;
+
                 /* Copy data into packet */
                 memcpy( pkt->data, &ioContext->buf_ptr[SIZEOF_RTP_HEADER], sampleSize );
 
@@ -64,14 +69,27 @@ int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                     pkt->stream_index = st->index;
 	                pkt->duration =  ((int)(AV_TIME_BASE * 1.0));
 
-                    // Insert the mode value into the priv member
-                    pkt->priv = (void*)(ioContext->buf_ptr[1]);
+					if( (frameData = av_malloc( sizeof(FrameData) )) != NULL )
+					{
+						/* Set the frame info up */
+						frameData->frameType = RTPAudio;
+						frameData->frameData = (void*)(ioContext->buf_ptr[1]);
+						frameData->additionalData = NULL;
 
-                    retVal = 0;
+						pkt->priv = (void*)frameData;
+
+						retVal = 0;
+					}
                 }
             }
         }
     }
+
+	/* Check whether we need to release the packet data we allocated */
+	if( retVal < 0 && isPacketAlloced != 0 )
+	{
+		av_free_packet( pkt );
+	}
 
     return retVal;
 }
