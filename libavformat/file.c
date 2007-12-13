@@ -23,6 +23,13 @@
 #include <unistd.h>
 #include <sys/time.h>
 
+#ifdef CONFIG_WINCE
+# ifdef lseek
+# undef lseek
+# endif
+
+# define lseek(f,p,w) _lseek((f), (p), (w))
+#endif /* CONFIG_WINCE */
 
 /* standard file protocol */
 

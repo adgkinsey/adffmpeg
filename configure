@@ -1090,9 +1090,9 @@ EOF
     dc1394="no"
     ffserver="no"
     #network="no"
-    if enabled wince; then
-        protocols="no"
-    fi
+    #if enabled wince; then
+    #    protocols="no"
+    #fi
     SLIBPREF=""
     SLIBSUF=".dll"
     EXESUF=".exe"

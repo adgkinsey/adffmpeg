@@ -28,6 +28,12 @@
 #define RTP_TX_BUF_SIZE  (64 * 1024)
 #define RTP_RX_BUF_SIZE  (128 * 1024)
 
+#ifdef __MINGW32__
+#define LastSocketError         WSAGetLastError()
+#else
+#define LastSocketError         errno
+#endif
+
 typedef struct RTPContext {
     URLContext *rtp_hd, *rtcp_hd;
     int rtp_fd, rtcp_fd;
@@ -178,7 +184,7 @@ static int rtp_read(URLContext *h, uint8_t *buf, int size)
         len = recvfrom (s->rtp_fd, buf, size, 0,
                         (struct sockaddr *)&from, &from_len);
         if (len < 0) {
-            if (errno == EAGAIN || errno == EINTR)
+            if (LastSocketError == EAGAIN || LastSocketError == EINTR)
                 continue;
             return AVERROR_IO;
         }
@@ -201,7 +207,7 @@ static int rtp_read(URLContext *h, uint8_t *buf, int size)
                 len = recvfrom (s->rtcp_fd, buf, size, 0,
                                 (struct sockaddr *)&from, &from_len);
                 if (len < 0) {
-                    if (errno == EAGAIN || errno == EINTR)
+                    if (LastSocketError == EAGAIN || LastSocketError == EINTR)
                         continue;
                     return AVERROR_IO;
                 }
@@ -213,7 +219,7 @@ static int rtp_read(URLContext *h, uint8_t *buf, int size)
                 len = recvfrom (s->rtp_fd, buf, size, 0,
                                 (struct sockaddr *)&from, &from_len);
                 if (len < 0) {
-                    if (errno == EAGAIN || errno == EINTR)
+                    if (LastSocketError == EAGAIN || LastSocketError == EINTR)
                         continue;
                     return AVERROR_IO;
                 }

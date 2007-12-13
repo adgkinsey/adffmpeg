@@ -116,7 +116,7 @@ videohook: .libs
 documentation:
 	$(MAKE) -C doc all
 
-install: install-progs install-libs install-headers $(INSTALLMAN) $(INSTALLVHOOK)
+install: install-libs install-headers $(INSTALLMAN) $(INSTALLVHOOK)
 
 ifeq ($(BUILD_SHARED),yes)
 install-progs: $(PROGS) install-libs

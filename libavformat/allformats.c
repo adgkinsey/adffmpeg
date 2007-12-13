@@ -169,7 +169,7 @@ void av_register_all(void)
     register_protocol(&pipe_protocol);
 #ifdef CONFIG_NETWORK
     register_protocol(&udp_protocol);
-    register_protocol(&rtp_protocol);
+    //register_protocol(&rtp_protocol);
     register_protocol(&tcp_protocol);
     register_protocol(&http_protocol);
     register_protocol(&ds_protocol);

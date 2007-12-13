@@ -6,7 +6,7 @@ include ../config.mak
 
 CFLAGS+=-I$(SRC_PATH)/libavcodec
 
-OBJS= utils.o cutils.o os_support.o allformats.o jfif_img.o adpic.o adaudio.o dspic.o dsenc.o
+OBJS= utils.o cutils.o os_support.o allformats.o jfif_img.o adpic.o adaudio.o ds.o dspic.o dsenc.o
 
 HEADERS = avformat.h avio.h rtp.h rtsp.h rtspcodes.h ds_exports.h adffmpeg_errors.h
 

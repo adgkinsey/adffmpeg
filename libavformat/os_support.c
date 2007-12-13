@@ -50,7 +50,18 @@
 int64_t av_gettime(void)
 {
 #if defined(CONFIG_WINCE)
-    return timeGetTime() * INT64_C(1000);
+     SYSTEMTIME sysTimeStruct; 
+     FILETIME fTime; 
+     ULARGE_INTEGER int64time; 
+
+     GetSystemTime( &sysTimeStruct ); 
+     SystemTimeToFileTime( &sysTimeStruct, &fTime ); 
+     memcpy( &int64time, &fTime, sizeof( FILETIME ) ); 
+     /* Subtract the value for 1970-01-01 00:00 (UTC) */ 
+     int64time.QuadPart -= 0x19db1ded53e8000; 
+     /* Convert to microseconds. */ 
+     int64time.QuadPart /= 10; 
+     return int64time.QuadPart;
 #elif defined(__MINGW32__)
     struct timeb tb;
     _ftime(&tb);
@@ -73,6 +84,44 @@ struct tm *localtime_r(const time_t *t, struct tm *tp)
     *tp = *l;
     return tp;
 }
+#else if defined(CONFIG_WINCE)
+struct tm * wce_localtime( const time_t *timer ) 
+{
+    static struct   tm s_tm; 
+    FILETIME        uf, lf; 
+    SYSTEMTIME      ls; 
+
+    /* Convert time_t to FILETIME  */
+    unsigned __int64 i64 = Int32x32To64(timer, 10000000) + 116444736000000000; 
+    uf.dwLowDateTime = (DWORD) i64; 
+    uf.dwHighDateTime = (DWORD) (i64 >> 32); 
+    /* Convert UTC(GMT) FILETIME to local FILETIME */
+    FileTimeToLocalFileTime( &uf, &lf ); 
+    /* Convert FILETIME to SYSTEMTIME */
+    FileTimeToSystemTime( &lf, &ls ); 
+    /* Convert SYSTEMTIME to tm */
+    s_tm.tm_sec  = ls.wSecond; 
+    s_tm.tm_min  = ls.wMinute; 
+    s_tm.tm_hour = ls.wHour; 
+    s_tm.tm_mday = ls.wDay; 
+    s_tm.tm_mon  = ls.wMonth -1; 
+    s_tm.tm_year = ls.wYear - 1900; 
+    s_tm.tm_wday = ls.wDayOfWeek; 
+    /* Return pointer to static data */
+    return &s_tm; 
+}
+
+struct tm *localtime_r(const time_t *t, struct tm *tp)
+{
+    struct tm *l;
+
+    l = wce_localtime(t);
+    if (!l)
+        return 0;
+    *tp = *l;
+    return tp;
+}
+
 #endif /* !defined(CONFIG_WINCE) && !defined(HAVE_LOCALTIME_R) */
 
 #if !defined(HAVE_INET_ATON) && defined(CONFIG_NETWORK)

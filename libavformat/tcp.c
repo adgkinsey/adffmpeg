@@ -94,10 +94,13 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
         goto fail;
     }
 
+#ifndef CONFIG_WINCE
+    /* CS - NOTE: WinCE only supports this socket option for UDP sockets. Default buffer size in CE in 8192 */
     /* CS - Added this section to size the buffers to a reasonable size */
     if (setsockopt( fd, SOL_SOCKET, SO_RCVBUF, (char*)&recvBufSize, sizeof(recvBufSize)) < 0) {
         goto fail;
     }
+#endif /* ifndef CONFIG_WINCE */
 
     fcntl(fd, F_SETFL, O_NONBLOCK);
 

@@ -89,9 +89,15 @@ static int http_open_cnx(URLContext *h)
     URLContext *hd = NULL;
     int retVal = AVERROR_IO;
 
+    /* CS - I've omitted the following proxy resolution from WinCE builds as it doesn't support the concept of environment variables */
+    /* A better solution will be available but as yet I don't know what that solution should be. Registry or config files probably... */
+#ifndef CONFIG_WINCE
     proxy_path = getenv("http_proxy");
     use_proxy = (proxy_path != NULL) && !getenv("no_proxy") &&
         strstart(proxy_path, "http://", NULL);
+#else
+    use_proxy = 0;
+#endif /* ifndef CONFIG_WINCE */
 
     /* fill the dest addr */
  redo:

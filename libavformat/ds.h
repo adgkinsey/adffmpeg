@@ -303,9 +303,9 @@ extern URLProtocol ds_protocol;
 #endif /* WORDS_BIGENDIAN */
 
 /* -------------------------------------- Function declarations -------------------------------------- */
-NetworkMessage *    CreateNetworkMessage( ControlMessageTypes messageType, long channelID );
-void                FreeNetworkMessage( NetworkMessage **message );
-void                NToHMessageHeader( MessageHeader *header );
+extern NetworkMessage *     CreateNetworkMessage( ControlMessageTypes messageType, long channelID );
+extern void                 FreeNetworkMessage( NetworkMessage **message );
+extern void                 NToHMessageHeader( MessageHeader *header );
 
 
 #endif /* __DS_H__ */
