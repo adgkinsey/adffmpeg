@@ -84,7 +84,7 @@ struct tm *localtime_r(const time_t *t, struct tm *tp)
     *tp = *l;
     return tp;
 }
-#else if defined(CONFIG_WINCE)
+#elif defined(CONFIG_WINCE)
 struct tm * wce_localtime( const time_t *timer ) 
 {
     static struct   tm s_tm; 
