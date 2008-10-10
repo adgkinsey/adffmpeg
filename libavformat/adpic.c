@@ -252,7 +252,7 @@ static int              isMIME = 0;
 
 static int adpic_probe(AVProbeData *p)
 {
-    if (p->buf_size <= 6)
+	if (p->buf_size <= 6)
         return 0;
 
     // CS - There is no way this scheme of identification is strong enough. Probably should attempt
@@ -915,6 +915,7 @@ static int process_mp4data_line( char *line, int line_count, NetVuImageData *vid
 int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
     ByteIOContext *         pb = &s->pb;
+	URLContext*             urlContext = pb->opaque;
     AVStream *              st = NULL;
     FrameData *             frameData = NULL;
     NetVuAudioData *        audio_data = NULL;
@@ -1194,7 +1195,8 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             /* Copy pertinent data into generic video data structure */
             video_data->session_time = videoHeader.t;
             video_data->milliseconds = videoHeader.ms;
-
+			video_data->utc_offset = urlContext->utc_offset;
+			
             /* Remember to identify the type of frame data we have - this ensures the right codec is used to decode this frame */
             video_data->vid_format = PIC_MODE_MPEG4_411;
 

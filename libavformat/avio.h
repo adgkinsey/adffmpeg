@@ -38,6 +38,7 @@ struct URLContext {
 #else
     char filename[1]; /* specified filename */
 #endif
+	int utc_offset;
 };
 
 typedef struct URLContext URLContext;

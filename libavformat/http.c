@@ -53,6 +53,15 @@ typedef struct {
     char *      nonce;
     char *      algorithm;
     char *      qop;
+
+	/* BMOJ - added to hold utc_offset from header */
+	char* resolution;
+	char* compression;
+	char* rate;
+	char* pps;
+	char* site_id;
+
+	int utc_offset;
 } HTTPContext;
 
 static int http_connect(URLContext *h, const char *path, const char *hoststr,
@@ -60,6 +69,7 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
 static int http_write(URLContext *h, uint8_t *buf, int size);
 
 static void http_parse_authentication_header( char * p, HTTPContext *s );
+static void http_parse_content_header( char * p, HTTPContext *s );
 static void copy_value_to_field( const char *value, char **dest );
 static int http_do_request( URLContext *h, const char *path, const char *hoststr, const char *auth, int post, int *new_location );
 static int http_respond_to_basic_challenge( URLContext *h, const char *auth, int post, const char *path, const char *hoststr, int *new_location );
@@ -232,7 +242,15 @@ static int process_line(URLContext *h, char *line, int line_count,
             }
             h->is_streamed = 0; /* we _can_ in fact seek */
         }
-        else if( strcmp( tag, "WWW-Authenticate" ) == 0 ) /* Check for authentication headers */
+
+		/* Check for Content headers */
+		if(!strcmp(tag, "Content-type"))
+		{
+            http_parse_content_header( p, s );
+        }
+
+        /* Check for authentication headers */
+        if( strcmp( tag, "WWW-Authenticate" ) == 0 )
         {
             char * mode = p;
 
@@ -260,6 +278,63 @@ static int process_line(URLContext *h, char *line, int line_count,
         }
     }
     return 1;
+}
+
+static void http_parse_content_header( char * p, HTTPContext *s )
+{
+    char *  name = NULL;
+    char *  value = NULL;
+
+    while( *p != '\0' )
+    {
+        while(isspace(*p))p++; /* Skip whitespace */
+        name = p;
+
+        /* Now we get attributes in <name>=<value> pairs */
+        while (*p != '\0' && *p != '=')
+            p++;
+
+        if (*p != '=')
+            return;
+
+        *p = '\0';
+        p++;
+
+        value = p;
+
+        while (*p != '\0' && *p != ';')
+            p++;
+
+        if (*p == ';')
+        {
+            *p = '\0';
+            p++;
+        }
+
+        /* Strip any "s off */
+        if( strlen(value) > 0 )
+        {
+            if( *value == '"' && *(value + strlen(value) - 1) == '"' )
+            {
+                *(value + strlen(value) - 1) = '\0';
+                value += 1;
+            }
+        }
+
+        /* Copy the attribute into the relevant field */
+		if( strcmp( name, "resolution" ) == 0 )
+            copy_value_to_field( value, &s->resolution);
+        if( strcmp( name, "compression" ) == 0 )
+            copy_value_to_field( value, &s->compression);
+        if( strcmp( name, "rate" ) == 0 )
+            copy_value_to_field( value, &s->rate);
+        if( strcmp( name, "pps" ) == 0 )
+            copy_value_to_field( value, &s->pps);
+        if( strcmp( name, "utc_offset" ) == 0 )
+		    s->utc_offset = atoi(value);
+		if( strcmp( name, "site_id" ) == 0 )
+            copy_value_to_field( value, &s->site_id);
+    }
 }
 
 static void http_parse_authentication_header( char * p, HTTPContext *s )
