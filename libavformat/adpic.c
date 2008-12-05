@@ -944,6 +944,8 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 	    // First read the 6 byte separator
 	    if ((n=get_buffer(pb, &adpkt[0], SEPARATOR_SIZE)) != SEPARATOR_SIZE)
 	    {
+            errorVal = pb->error;
+            
 		    logger(LOG_DEBUG,"ADPIC: short of data reading seperator, expected %d, read %d\n", SEPARATOR_SIZE, n);
 		    goto cleanup;
 	    }

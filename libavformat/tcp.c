@@ -163,6 +163,7 @@ static int tcp_read(URLContext *h, uint8_t *buf, int size)
     int len, fd_max, ret;
     fd_set rfds;
     struct timeval tv;
+    clock_t TimeOut = clock () + (0.5 * CLOCKS_PER_SEC);
 
     for (;;) {
         if (url_interrupt_cb())
@@ -192,6 +193,10 @@ static int tcp_read(URLContext *h, uint8_t *buf, int size)
             } else return len;
         } else if (ret < 0) {
             return -1;
+        }
+        else if(TimeOut<clock())
+        { 
+            return -2;
         }
     }
 }

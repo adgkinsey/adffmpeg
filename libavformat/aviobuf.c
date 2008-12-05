@@ -276,13 +276,17 @@ static void fill_buffer(ByteIOContext *s)
     }
 
     len = s->read_packet(s->opaque, s->buffer, s->buffer_size);
-    if (len <= 0) {
+    if (len <= 0) 
+    {
         /* do not modify buffer if EOF reached so that a seek back can
            be done without rereading data */
-        s->eof_reached = 1;
-    if(len<0)
-        s->error= len;
-    } else {
+        if(len!=-2)
+            s->eof_reached = 1;
+        
+        if(len<0)
+            s->error= len;
+    } 
+    else {
         s->pos += len;
         s->buf_ptr = s->buffer;
         s->buf_end = s->buffer + len;
@@ -348,7 +352,9 @@ int get_buffer(ByteIOContext *s, unsigned char *buf, int size)
                 if (len <= 0) {
                     /* do not modify buffer if EOF reached so that a seek back can
                     be done without rereading data */
-                    s->eof_reached = 1;
+                    if(len!=-2)
+                        s->eof_reached = 1;
+
                     if(len<0)
                         s->error= len;
                     break;
