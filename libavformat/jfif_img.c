@@ -1619,7 +1619,8 @@ void parse_comment( char *text, int text_len, NetVuImageData *pic, char **additi
         }
     }
 
-    pic->session_time = mktime(&t);
+    pic->session_time = mktimegm(&t); 
+    //pic->session_time = mktime(&t);
 }
 
 int build_comment_text(char *buffer, NetVuImageData *pic, int max)
