@@ -39,6 +39,7 @@ struct URLContext {
     char filename[1]; /* specified filename */
 #endif
 	int utc_offset;
+    int isBinary;
 };
 
 typedef struct URLContext URLContext;

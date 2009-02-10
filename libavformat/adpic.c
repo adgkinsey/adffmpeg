@@ -934,7 +934,6 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     FrameType               currentFrameType = FrameTypeUnknown;
 
     // First read the 6 byte separator
-
 	if ((n=get_buffer(pb, &adpkt[0], SEPARATOR_SIZE)) != SEPARATOR_SIZE)
 	{
         errorVal = pb->error;
@@ -943,8 +942,13 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		goto cleanup;
 	}
 
-    if ( ((adpkt[0] == 9) && (adpkt[2] == 0) && (adpkt[3] == 0)) || 
-         ((adpkt[0] >= 0 && adpkt[0] <= 7) && (adpkt[2] == 0) && (adpkt[3] == 0)) )
+    // BMOJ - yep not strong enough.
+    // CS - There is no way this scheme of identification is strong enough. Probably should attempt
+    // to parse a full frame out of the data
+    //if ( ((adpkt[0] == 9) && (adpkt[2] == 0) && (adpkt[3] == 0)) || 
+    //     ((adpkt[0] >= 0 && adpkt[0] <= 7) && (adpkt[2] == 0) && (adpkt[3] == 0)) ||
+    //     ((adpkt[0] >= 0 && adpkt[0] <= 7) && (adpkt[2] == 0) && (adpkt[3] == 1))    )
+    if(urlContext->isBinary) 
     {
         isMIME = FALSE;
 
@@ -957,10 +961,12 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     else
     {
         isMIME = TRUE;
-
         //pb->buf_ptr -= SEPARATOR_SIZE;
         if(  adpic_parse_mime_header( pb, &data_type, &size, &extra ) != 0 )
+        {
+            errorVal = AVERROR_NOFMT;
             goto cleanup;
+        }
     }
 
     // Prepare for video or audio read

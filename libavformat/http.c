@@ -55,6 +55,7 @@ typedef struct {
     char *      qop;
 
 	/* BMOJ - added to hold utc_offset from header */
+    char* content;
 	char* resolution;
 	char* compression;
 	char* rate;
@@ -62,6 +63,7 @@ typedef struct {
 	char* site_id;
 
 	int utc_offset;
+    int isBinary;
 } HTTPContext;
 
 static int http_connect(URLContext *h, const char *path, const char *hoststr,
@@ -284,6 +286,24 @@ static void http_parse_content_header( char * p, HTTPContext *s )
 {
     char *  name = NULL;
     char *  value = NULL;
+
+    //strip the content-type from the headder
+    value = p;
+    while( *p != ';' )
+    {
+        p++;
+    }
+    *p = '\0';
+    p++;
+    copy_value_to_field( value, &s->content );
+
+
+    if( strstr(s->content, "adhbinary")!=NULL)//  strcmp( s->content, "adhbinary" ) == 1 )
+    {s->isBinary=1;}
+    else
+    {s->isBinary=0;}
+    
+
 
     while( *p != '\0' )
     {
@@ -691,7 +711,9 @@ static int http_do_request( URLContext *h, const char *path, const char *hoststr
             if (err < 0)
                 return err;
             if (err == 0)
-                break;
+                return 0;
+			h->utc_offset = s->utc_offset;
+            h->isBinary = s->isBinary;
             s->line_count++;
             q = line;
         } else {
