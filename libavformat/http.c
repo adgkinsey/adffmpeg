@@ -61,6 +61,7 @@ typedef struct {
 	char* rate;
 	char* pps;
 	char* site_id;
+    char* boundry;
 
 	int utc_offset;
     int isBinary;
@@ -354,6 +355,8 @@ static void http_parse_content_header( char * p, HTTPContext *s )
 		    s->utc_offset = atoi(value);
 		if( strcmp( name, "site_id" ) == 0 )
             copy_value_to_field( value, &s->site_id);
+        if( strcmp( name, "boundary" ) == 0 )
+            copy_value_to_field( value, &s->boundry);
     }
 }
 

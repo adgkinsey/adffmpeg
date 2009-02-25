@@ -39,7 +39,7 @@ enum data_type { DATA_JPEG, DATA_JFIF, DATA_MPEG4I, DATA_MPEG4P, DATA_AUDIO_ADPC
 #define DATA_PLAINTEXT              (MAX_DATA_TYPE + 1)   /* This value is only used internally within the library DATA_PLAINTEXT blocks should not be exposed to the client */
 
 static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size, long *extra );
-static int process_line( char *line, int line_count, int *dataType, int *size, long *extra );
+static int process_line( char *line, int* line_count, int *dataType, int *size, long *extra );
 static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, NetVuImageData *video_data, char **additionalTextData );
 static int process_mp4data_line( char *line, int line_count, NetVuImageData *video_data, struct tm *time, char ** additionalText );
 static void adpic_release_packet( AVPacket *pkt );
@@ -552,30 +552,38 @@ static AVStream * get_data_stream( struct AVFormatContext *s )
 
 static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size, long *extra )
 {
-#define TEMP_BUFFER_SIZE        1024
+    #define TEMP_BUFFER_SIZE    1024
+    int i=0;
     unsigned char               buffer[TEMP_BUFFER_SIZE];
-    int                         ch, err;
     unsigned char *             q = NULL;
-    int                         lineCount = 0;
+    int                         temp, ch, ch1, err, lineCount = 0;
+    unsigned char*              start = NULL;
+    unsigned char*              restore = NULL;
+    unsigned char*              end = NULL;
 
-    /* Try and parse the header */
+
     q = buffer;
-    for(;;) {
+    /* Try and parse the header */
+    for(;;) 
+    {
         /* ch = get_byte(pb); */
         ch = url_fgetc( pb );
 
         if (ch < 0)
-            return 1;
+        { return 1; }
 
-        if (ch == '\n') {
+        if (ch == '\n') 
+        {
             /* process line */
             if (q > buffer && q[-1] == '\r')
                 q--;
             *q = '\0';
-#ifdef DEBUG
-            printf("header='%s'\n", buffer);
-#endif
-            err = process_line( buffer, lineCount, dataType, size, extra );
+
+            #ifdef DEBUG
+                printf("header='%s'\n", buffer);
+            #endif
+
+            err = process_line( buffer, &lineCount, dataType, size, extra );
 
             /* First line contains a \n */
             if( !(err == 0 && lineCount == 0) )
@@ -584,22 +592,60 @@ static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size,
                     return err;
 
                 if( err == 0 )
+                {
+                    //NOTE size was not found in the header
+                    //temp = *size;
+                    //*size = -1;
+                    //if(*size==-1)
+                    //{
+
+                    //    restore = pb->buf_ptr;
+                    //    ch = ch1 = 0;
+                    //    ch1 = url_fgetc( pb );
+                    //    while(!(ch == 0xFF && ch1 == 0xD8))
+                    //    {
+                    //        ch = ch1;
+                    //        ch1 = url_fgetc( pb );
+                    //    }
+                    //    start = pb->buf_ptr; 
+
+                    //    ch = ch1 = 0;
+                    //    ch1 = url_fgetc( pb );
+
+                    //    while(!(ch == 0xFF && ch1 == 0xD9) )
+                    //    {
+                    //        ch = ch1;
+                    //        ch1 = url_fgetc( pb );
+                    //    }
+                    //    
+                    //    end = pb->buf_ptr;
+
+                    //    *size = end - start;
+
+                    //    //*size = temp;
+                    //    pb->buf_ptr = restore;
+                    //}
+
                     return 0;
+                }
 
                 lineCount++;
             }
 
             q = buffer;
-        } else {
+        } 
+        else 
+        {
             if ((q - buffer) < sizeof(buffer) - 1)
                 *q++ = ch;
         }
     }
 
+   
     return 1;
 }
 
-static int process_line( char *line, int line_count, int *dataType, int *size, long *extra )
+static int process_line( char *line, int *line_count, int *dataType, int *size, long *extra )
 {
     char        *tag, *p = NULL;
     int         http_code = 0;
@@ -610,22 +656,28 @@ static int process_line( char *line, int line_count, int *dataType, int *size, l
 
     p = line;
 
+    //NOTE the boundry string is missing some times so check for the HTTP header and scip to line 1
+    if(*line_count == 0 && 'H' == *(p) && 'T' == *(p+1) && 'T' == *(p+2) && 'P' == *(p+3))
+    {
+        *line_count = 1;
+    }
+
     /* The first valid line will be the boundary string - validate this here */
-    if( line_count == 0 )
+    if( *line_count == 0 )
     {
         if( adpic_is_valid_separator( p, strlen(p) ) == FALSE )
             return -1;
     }
-    else if( line_count == 1 ) /* The second line will contain the HTTP status code */
+    else if( *line_count == 1 ) /* The second line will contain the HTTP status code */
     {
         while (!isspace(*p) && *p != '\0')
             p++;
         while (isspace(*p))
             p++;
         http_code = strtol(p, NULL, 10);
-#ifdef DEBUG
-        printf("http_code=%d\n", http_code);
-#endif
+        #ifdef DEBUG
+                printf("http_code=%d\n", http_code);
+        #endif
     } 
     else /* Any other line we are just looking for particular headers - if we find them, we fill in the appropriate output data */
     {
@@ -926,7 +978,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     unsigned char           adpkt[SEPARATOR_SIZE];
     int                     data_type;
     int                     data_channel;
-    int                     n, size;
+    int                     n, size = -1;
     int                     status;
     char                    scratch[1024];
     long                    extra = 0;
@@ -961,7 +1013,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     else
     {
         isMIME = TRUE;
-        //pb->buf_ptr -= SEPARATOR_SIZE;
+        pb->buf_ptr -= SEPARATOR_SIZE;
         if(  adpic_parse_mime_header( pb, &data_type, &size, &extra ) != 0 )
         {
             errorVal = AVERROR_NOFMT;
