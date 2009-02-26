@@ -1375,17 +1375,30 @@ int huf_cmp_offset=0, huf_tab_no=0;
 	pic->factor = -1;
 	pic->start_offset = 0;
 	i = 0;
-	while( ((unsigned char)data[i] != 0xff) && (i<imglength) )
-		i++;
-	if ( i > 0 )
-		fprintf(stderr, "JFIF_IMG: parse_jfif_header, %d leading bytes\n", i);
-	i++;
-	if ( (unsigned char) data[i] != 0xd8)
-	{
-		fprintf(stderr, "JFIF_IMG: parse_jfif_header, incorrect SOI 0xff%02x\n", data[i]);
-		return -1;
-	}
-	i++;
+	
+    if(data[i]!= 0xff && data[i+1] != 0xd8)
+    {
+        //there is a header so skip it 
+        while( ((unsigned char)data[i] != 0xff) && (i<imglength) )
+		    i++;
+	    if ( i > 0 )
+		    fprintf(stderr, "JFIF_IMG: parse_jfif_header, %d leading bytes\n", i);
+	    i++;
+	    if ( (unsigned char) data[i] != 0xd8)
+	    {
+		    fprintf(stderr, "JFIF_IMG: parse_jfif_header, incorrect SOI 0xff%02x\n", data[i]);
+		    return -1;
+	    }
+	    i++;
+    }
+    else
+    {
+        //no header
+        i+=2;
+    }
+
+
+
 	while ( !sos && (i<imglength) )
 	{
 		memcpy(&marker, &data[i], 2 );

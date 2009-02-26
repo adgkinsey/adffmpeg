@@ -556,11 +556,7 @@ static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size,
     int i=0;
     unsigned char               buffer[TEMP_BUFFER_SIZE];
     unsigned char *             q = NULL;
-    int                         temp, ch, ch1, err, lineCount = 0;
-    unsigned char*              start = NULL;
-    unsigned char*              restore = NULL;
-    unsigned char*              end = NULL;
-
+    int                         temp, ch, err, lineCount = 0;
 
     q = buffer;
     /* Try and parse the header */
@@ -584,7 +580,6 @@ static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size,
             #endif
 
             err = process_line( buffer, &lineCount, dataType, size, extra );
-
             /* First line contains a \n */
             if( !(err == 0 && lineCount == 0) )
             {
@@ -593,42 +588,8 @@ static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size,
 
                 if( err == 0 )
                 {
-                    //NOTE size was not found in the header
-                    //temp = *size;
-                    //*size = -1;
-                    //if(*size==-1)
-                    //{
-
-                    //    restore = pb->buf_ptr;
-                    //    ch = ch1 = 0;
-                    //    ch1 = url_fgetc( pb );
-                    //    while(!(ch == 0xFF && ch1 == 0xD8))
-                    //    {
-                    //        ch = ch1;
-                    //        ch1 = url_fgetc( pb );
-                    //    }
-                    //    start = pb->buf_ptr; 
-
-                    //    ch = ch1 = 0;
-                    //    ch1 = url_fgetc( pb );
-
-                    //    while(!(ch == 0xFF && ch1 == 0xD9) )
-                    //    {
-                    //        ch = ch1;
-                    //        ch1 = url_fgetc( pb );
-                    //    }
-                    //    
-                    //    end = pb->buf_ptr;
-
-                    //    *size = end - start;
-
-                    //    //*size = temp;
-                    //    pb->buf_ptr = restore;
-                    //}
-
                     return 0;
                 }
-
                 lineCount++;
             }
 
@@ -975,16 +936,22 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     NetVuAudioData *        audio_data = NULL;
     NetVuImageData *        video_data = NULL;
     char *                  text_data = NULL;
+    unsigned char           ch, ch1;
     unsigned char           adpkt[SEPARATOR_SIZE];
-    int                     data_type;
+    int                     data_type = MAX_DATA_TYPE;
     int                     data_channel;
     int                     n, size = -1;
     int                     status;
+    int                     i =0, BuffSize;
+    int                     found = FALSE;
     char                    scratch[1024];
     long                    extra = 0;
     int                     errorVal = -1;
     FrameType               currentFrameType = FrameTypeUnknown;
-
+    char *                  restore;
+    char *                  ptr;
+    int                     manual_size = FALSE;
+    
     // First read the 6 byte separator
 	if ((n=get_buffer(pb, &adpkt[0], SEPARATOR_SIZE)) != SEPARATOR_SIZE)
 	{
@@ -1014,10 +981,79 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     {
         isMIME = TRUE;
         pb->buf_ptr -= SEPARATOR_SIZE;
+        restore = pb->buf_ptr;
+       
         if(  adpic_parse_mime_header( pb, &data_type, &size, &extra ) != 0 )
         {
-            errorVal = AVERROR_NOFMT;
-            goto cleanup;
+            pb->buf_ptr=restore;
+
+            //NOTE Invalid mime header howeve some times the header is missing and then there is a valid image
+            if( (pb->buf_ptr[0] == 0xff) && (pb->buf_ptr[1] == 0xD8))
+            {
+                //Set the data type
+                data_type = DATA_JFIF;
+ 
+                //look ahead through the buffer for end of image
+                ch = ch1 = 0;
+                i=0;
+                while (!found && pb->buf_ptr < pb->buf_end)
+                {
+                    if(ch==0xFF && ch1 == 0xD9)
+                    {
+                        found = TRUE;
+                    }
+
+                    i++;
+                    ch = ch1;
+                    ch1 = url_fgetc( pb );
+                }
+
+                if(found)
+                {
+                    BuffSize = i;
+                }
+                else
+                {
+                    BuffSize = (pb->buf_ptr - pb->buffer);
+                    BuffSize = pb->buffer_size - BuffSize;
+                }
+
+                if ((status = adpic_new_packet(pkt, BuffSize))<0) // PRC 003
+		        {
+			        logger(LOG_DEBUG,"ADPIC: DATA_JFIF adpic_new_packet %d failed, status %d\n", size, status);
+                    errorVal = - 16;
+			        goto cleanup;
+		        }
+
+                pb->buf_ptr = restore;
+                n=get_buffer(pb, pkt->data, BuffSize);
+                    
+                if(!found)
+                {
+                    //end of image not found in buffer to read further 
+                    ptr = pkt->data;
+
+                  
+                    ch = ch1 = 0;
+                    i=0;
+                    while(!(ch==0xFF && ch1==0xD9) )
+                    {
+                        i++;
+                        ptr++;
+
+                        ch = ch1;
+                        ch1 = *ptr;
+                    }
+                }
+                size = i;
+                manual_size = TRUE;
+            }
+            else
+            { 
+                //return -1; 
+                errorVal = AVERROR_NOFMT;
+                goto cleanup;
+            }
         }
     }
 
@@ -1131,20 +1167,22 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 	    break;
     case DATA_JFIF:
 	    {
-		    if ((status = adpic_new_packet(pkt, size))<0) // PRC 003
-		    {
-			    logger(LOG_DEBUG,"ADPIC: DATA_JFIF adpic_new_packet %d failed, status %d\n", size, status);
-                errorVal = - 16;
-			    goto cleanup;
-		    }
+            if(!manual_size)
+            {
+		        if ((status = adpic_new_packet(pkt, size))<0) // PRC 003
+		        {
+			        logger(LOG_DEBUG,"ADPIC: DATA_JFIF adpic_new_packet %d failed, status %d\n", size, status);
+                    errorVal = - 16;
+			        goto cleanup;
+		        }
 
-		    if ((n=get_buffer(pb, pkt->data, size)) != size)
-		    {
-			    logger(LOG_DEBUG,"ADPIC: short of data reading jfif image, expected %d, read %d\n", size, n);
-                errorVal = - 17;
-			    goto cleanup;
-		    }
-
+		        if ((n=get_buffer(pb, pkt->data, size)) != size)
+		        {
+			        logger(LOG_DEBUG,"ADPIC: short of data reading jfif image, expected %d, read %d\n", size, n);
+                    errorVal = - 17;
+			        goto cleanup;
+		        }
+            }
 		    if ( parse_jfif_header( pkt->data, video_data, size, NULL, NULL, NULL, TRUE, &text_data ) <= 0)
 		    {
 			    logger(LOG_DEBUG,"ADPIC: adpic_read_packet, parse_jfif_header failed\n");
