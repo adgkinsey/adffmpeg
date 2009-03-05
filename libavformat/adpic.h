@@ -143,6 +143,30 @@ enum pkt_offsets { DATA_TYPE, DATA_CHANNEL, DATA_SIZE_BYTE_0 , DATA_SIZE_BYTE_1 
 #define PICSIZE_INVALID_ADDR	-8			/* invalid address for remote camera */
 #define PICSIZE_ERROR			-9			/* error in image grab task */
 
+//AD pic error codes 
+#define ADPIC_ERROR                      -200 //used to offset ad pic errors so that adpic can be identifyed as the origon of the error
+
+#define ERROR_NO_ERROR                   0
+
+#define ERROR_UNKNOWN_ERROR              ADPIC_ERROR + AVERROR_UNKNOWN     // (-100 + -1) unknown error 
+#define ERROR_IO_ERROR                   ADPIC_ERROR + AVERROR_IO          // (-100 + -2) I/O error 
+#define ERROR_NUMEXPECTED                ADPIC_ERROR + AVERROR_NUMEXPECTED // (-100 + -3) number syntax expected in filename 
+#define ERROR_INVALIDDATA                ADPIC_ERROR + AVERROR_INVALIDDATA // (-100 + -4) invalid data found 
+#define ERROR_NOMEM                      ADPIC_ERROR + AVERROR_NOMEM       // (-100 + -5) not enough memory 
+#define ERROR_NOFMT                      ADPIC_ERROR + AVERROR_NOFMT       // (-100 + -6) unknown format 
+#define ERROR_NOTSUPP                    ADPIC_ERROR + AVERROR_NOTSUPP     // (-100 + -7) operation not supported
+
+//NOTE leave some head rooms so as not to clash with other adffmpeg error codes
+#define ERROR_INSUFISENT_DATA_IN_BUFFER  ADPIC_ERROR + -30
+#define ERROR_INVALID_PIC_VERSION        ADPIC_ERROR + -31
+#define ERROR_INVALID_HEADDER_SIZE       ADPIC_ERROR + -32
+#define ERROR_PARSE_JFIF_HEADER          ADPIC_ERROR + -33
+#define ERROR_PARSE_MIME_HEADER          ADPIC_ERROR + -34
+#define ERROR_PARSE_MP4_TEXT_DATA        ADPIC_ERROR + -35
+#define ERROR_UNSUPORTED_DATA_TYPE       ADPIC_ERROR + -36 
+#define ERROR_GET_STREAM                 ADPIC_ERROR + -37 
+#define ERROR_GET_AUDIO_STREAM           ADPIC_ERROR + -38 
+#define ERROR_GET_DATA_STREAM            ADPIC_ERROR + -39 
 
 extern void fprint_pic(FILE *f, NetVuImageData *pic);
 
