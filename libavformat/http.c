@@ -62,9 +62,12 @@ typedef struct {
 	char* pps;
 	char* site_id;
     char* boundry;
+    char* Transfer_Encoding;
 
 	int utc_offset;
     int isBinary;
+    int isChunked;
+    int ChunkSize;
 } HTTPContext;
 
 static int http_connect(URLContext *h, const char *path, const char *hoststr,
@@ -72,12 +75,17 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
 static int http_write(URLContext *h, uint8_t *buf, int size);
 
 static void http_parse_authentication_header( char * p, HTTPContext *s );
-static void http_parse_content_header( char * p, HTTPContext *s );
+static void http_parse_content_type_header( char * p, HTTPContext *s );
+static void http_parse_transfer_encoding_header( char * p, HTTPContext *s );
 static void copy_value_to_field( const char *value, char **dest );
 static int http_do_request( URLContext *h, const char *path, const char *hoststr, const char *auth, int post, int *new_location );
 static int http_respond_to_basic_challenge( URLContext *h, const char *auth, int post, const char *path, const char *hoststr, int *new_location );
 static int http_respond_to_digest_challenge( URLContext *h, const char *auth, int post, const char *path, const char *hoststr, int *new_location );
 static void value_to_string( const char *input, int size, char *output );
+
+
+static void http_read_ChunkSize(HTTPContext *h);
+static int LocalHTTP_read(HTTPContext *h, uint8_t *buf, int size);
 
 typedef int (*HTTPAuthenticationResponseFunc)( URLContext *h, const char *auth, int post, const char *path, const char *hoststr );
 
@@ -200,6 +208,7 @@ static int http_getc(HTTPContext *s)
 static int process_line(URLContext *h, char *line, int line_count,
                         int *new_location)
 {
+    //int i =0;
     HTTPContext *s = h->priv_data;
     char *tag, *p;
 
@@ -208,17 +217,20 @@ static int process_line(URLContext *h, char *line, int line_count,
         return 0;
 
     p = line;
-    if (line_count == 0) {
+    if (line_count == 0) 
+    {
         while (!isspace(*p) && *p != '\0')
             p++;
         while (isspace(*p))
             p++;
         s->http_code = strtol(p, NULL, 10);
 
-#ifdef DEBUG
-        printf("http_code=%d\n", s->http_code);
-#endif
-    } else {
+        #ifdef DEBUG
+            printf("http_code=%d\n", s->http_code);
+        #endif
+    } 
+    else 
+    {
         while (*p != '\0' && *p != ':')
             p++;
         if (*p != ':')
@@ -229,12 +241,18 @@ static int process_line(URLContext *h, char *line, int line_count,
         p++;
         while (isspace(*p))
             p++;
-        if (!strcmp(tag, "Location")) {
+
+        if (!strcmp(tag, "Location")) 
+        {
             strcpy(s->location, p);
             *new_location = 1;
-        } else if (!strcmp (tag, "Content-Length") && s->filesize == -1) {
+        } 
+        else if (!strcmp (tag, "Content-Length") && s->filesize == -1) 
+        {
             s->filesize = atoll(p);
-        } else if (!strcmp (tag, "Content-Range")) {
+        } 
+        else if (!strcmp (tag, "Content-Range"))
+        {
             /* "bytes $from-$to/$document_size" */
             const char *slash;
             if (!strncmp (p, "bytes ", 6)) {
@@ -249,7 +267,12 @@ static int process_line(URLContext *h, char *line, int line_count,
 		/* Check for Content headers */
 		if(!strcmp(tag, "Content-type"))
 		{
-            http_parse_content_header( p, s );
+            http_parse_content_type_header( p, s );
+        }
+
+        if(!strcmp(tag, "Transfer-Encoding"))
+        { 
+            http_parse_transfer_encoding_header( p, s );
         }
 
         /* Check for authentication headers */
@@ -283,9 +306,9 @@ static int process_line(URLContext *h, char *line, int line_count,
     return 1;
 }
 
-static void http_parse_content_header( char * p, HTTPContext *s )
+static void http_parse_content_type_header( char * p, HTTPContext *s )
 {
-    char *  name = NULL;
+    char *  name  = NULL;
     char *  value = NULL;
 
     //strip the content-type from the headder
@@ -298,14 +321,11 @@ static void http_parse_content_header( char * p, HTTPContext *s )
     p++;
     copy_value_to_field( value, &s->content );
 
-
-    if( strstr(s->content, "adhbinary")!=NULL)//  strcmp( s->content, "adhbinary" ) == 1 )
+    if( strstr(s->content, "adhbinary")!=NULL)
     {s->isBinary=1;}
     else
     {s->isBinary=0;}
     
-
-
     while( *p != '\0' )
     {
         while(isspace(*p))p++; /* Skip whitespace */
@@ -357,6 +377,30 @@ static void http_parse_content_header( char * p, HTTPContext *s )
             copy_value_to_field( value, &s->site_id);
         if( strcmp( name, "boundary" ) == 0 )
             copy_value_to_field( value, &s->boundry);
+    }
+}
+
+
+static void http_parse_transfer_encoding_header( char * p, HTTPContext *s )
+{
+    char *  value = NULL;
+
+    //strip the content-type from the headder
+    value = p;
+    while(*p != '\0')
+    { p++; }
+    *p = '\0';
+
+    p++;
+    
+    copy_value_to_field( value, &s->Transfer_Encoding); 
+    if( strstr(s->Transfer_Encoding, "chunked")!=NULL)
+    {
+        s->isChunked=1;
+    }
+    else
+    {
+        s->isChunked=0;
     }
 }
 
@@ -724,29 +768,168 @@ static int http_do_request( URLContext *h, const char *path, const char *hoststr
                 *q++ = ch;
         }
     }
-
     return (off == s->off) ? 0 : -1;
 }
 
 
+
+
+//static int http_read(URLContext *h, uint8_t *buf, int size)
+//{
+//    HTTPContext *s = h->priv_data;
+//    int len;
+//
+//    /* read bytes from input buffer first */
+//    len = (int)(s->buf_end - s->buf_ptr);
+//    if (len > 0) {
+//        if (len > size)
+//            len = size;
+//        memcpy(buf, s->buf_ptr, len);
+//        s->buf_ptr += len;
+//    } else {
+//        len = url_read(s->hd, buf, size);
+//    }
+//    return len;
+//}
+
+
 static int http_read(URLContext *h, uint8_t *buf, int size)
 {
-    HTTPContext *s = h->priv_data;
-    int len;
+    //uint8_t *mbuf = buf;
+    HTTPContext *HTTP = h->priv_data;
+    int DataInBufferLength = 0;
+    //int readsize;
+    //int i = 0,j=0;
+    //int totalread =0;
+    //int len;
+    static int started = 0;
 
-    /* read bytes from input buffer first */
-    len = s->buf_end - s->buf_ptr;
-    if (len > 0) {
-        if (len > size)
-            len = size;
-        memcpy(buf, s->buf_ptr, len);
-        s->buf_ptr += len;
-    } else {
-        len = url_read(s->hd, buf, size);
+    if(HTTP->isChunked==0)
+    {
+        DataInBufferLength = LocalHTTP_read(HTTP, buf, size);
     }
-    if (len > 0)
-        s->off += len;
-    return len;
+    else
+    {
+        /* read bytes from input buffer first */
+        DataInBufferLength = (int)(HTTP->buf_end - HTTP->buf_ptr);
+        printf("<<HTTP>>buffer sixe = %d\n",DataInBufferLength);
+        if (DataInBufferLength > 0 && DataInBufferLength!=5 /*started == 1*/) 
+        {
+            if (DataInBufferLength > size)
+                DataInBufferLength = size;
+
+            memcpy(buf, HTTP->buf_ptr, DataInBufferLength);
+            HTTP->buf_ptr += DataInBufferLength;
+        } 
+        else 
+        {
+            started=1;
+            
+            http_read_ChunkSize(HTTP);
+            DataInBufferLength = url_read(HTTP->hd, buf, HTTP->ChunkSize);
+    
+            if (DataInBufferLength > 0)
+            { HTTP->off += DataInBufferLength; }
+        }
+    }
+    return DataInBufferLength;
+}
+
+static int ParseHexToInt(uint8_t *buf, int size)
+{
+    uint8_t* mBuf = buf; 
+    int result = 0;
+    int i;
+
+    if(*mBuf == '\r')
+    {
+        size--;
+        mBuf++;
+    }
+
+    if(*mBuf == '\n')
+    {
+        size--;
+        mBuf++;
+    }
+
+    for(i = 0; i<size; i++)
+    {
+        if(*mBuf<48)
+        {
+            i = size; 
+        }
+        else
+        {
+            result *= 16;
+            if (*mBuf>=97 && *mBuf<=122)// A to Z
+            {
+                result+= (*mBuf - 97) + 10;
+            }
+            else if ( *mBuf >= 65 && *mBuf<=90)//a to z
+            {
+                result+=  (*mBuf - 65) + 10;
+            }
+            else if(*mBuf >= 48 && *mBuf<=57)//0 to 9
+            {
+                result += (*mBuf - 48);
+            }
+        }
+        mBuf++;
+    }
+
+    return result;
+}
+
+static void http_read_ChunkSize(HTTPContext* HTTP)
+{
+    uint8_t buffer[20];
+    uint8_t thisChar = ' ';
+    uint8_t lastChar = ' ';
+    int i,j;
+    int len = 0;
+
+    //printf("<<HTTP>>http_read_ChunkSize\n");
+    for(i=0; (i<sizeof(buffer) && (lastChar != '\r' && thisChar != '\n' || i<3) ); i++)
+    {
+        lastChar = thisChar;
+        len = LocalHTTP_read(HTTP,&thisChar,1);
+        
+        buffer[i] = thisChar;
+    }
+
+    for(j=0; j<i; j++)
+    {
+	    printf("<<HTTP>>%d,'%c'\n",j,buffer[j]);
+    }
+   
+    HTTP->ChunkSize =  ParseHexToInt(buffer, i-2);
+    if(HTTP->ChunkSize<0)
+    {
+	    printf("<<HTTP>> trap");
+	}
+    printf("<<HTTP>> Chunk Size = %d\n", HTTP->ChunkSize);    
+}
+
+static int LocalHTTP_read(HTTPContext *HTTP, uint8_t *buf, int size)
+{
+    int DataInBufferLength = (int)(HTTP->buf_end - HTTP->buf_ptr);
+
+    if (DataInBufferLength > 0) 
+    {
+        if (DataInBufferLength > size)
+        { DataInBufferLength = size; }
+
+        memcpy(buf, HTTP->buf_ptr, DataInBufferLength);
+        HTTP->buf_ptr += DataInBufferLength;
+    } 
+    else 
+    {
+        DataInBufferLength = url_read(HTTP->hd, buf, size);
+    }
+    if (DataInBufferLength > 0)
+        HTTP->off += DataInBufferLength;
+    return DataInBufferLength;
 }
 
 /* used only when posting data */
