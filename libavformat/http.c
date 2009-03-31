@@ -477,7 +477,7 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
     post = h->flags & URL_WRONLY;
 
     snprintf(s->buffer, sizeof(s->buffer),
-             "%s %s HTTP/1.1\r\n"
+             "%s %s HTTP/1.0\r\n"//"%s %s HTTP/1.1\r\n"
              "User-Agent: %s\r\n"
              "Accept: */*\r\n"
              "Range: bytes=%"PRId64"-\r\n"
@@ -697,7 +697,7 @@ static int http_respond_to_basic_challenge( URLContext *h, const char *auth, int
     auth_b64 = av_base64_encode((uint8_t *)auth, strlen(auth));
 
     snprintf(s->buffer, sizeof(s->buffer),
-             "%s %s HTTP/1.1\r\n"
+             "%s %s HTTP/1.0\r\n"//"%s %s HTTP/1.1\r\n"
              "User-Agent: %s\r\n"
              "Accept: */*\r\n"
              "Range: bytes=%"PRId64"-\r\n"
