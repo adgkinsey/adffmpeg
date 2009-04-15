@@ -1687,14 +1687,26 @@ static void adpic_release_packet( AVPacket *pkt )
 
 int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size)
 {
-    int AmountOfDataRead = 0;
-    clock_t TimeOut = clock () + (4.0 * CLOCKS_PER_SEC);
+    int TotalDataRead = 0;
+    int DataReadThisTime = 0;
+    int RetryBoundry = 200;
+    //clock_t TimeOut = clock () + (4.0 * CLOCKS_PER_SEC);
+    int retrys = 0;
 
     //get data while ther is no time out and we still need data
-    while(AmountOfDataRead < size && TimeOut > clock ())
+    while(TotalDataRead < size && retrys<RetryBoundry)
     {
-        AmountOfDataRead += get_buffer(s, buf, (size-AmountOfDataRead));
+        DataReadThisTime += get_buffer(s, buf, (size-TotalDataRead));
+
+        //if we retreave some data keep trying untill we get the required data or we have mutch longer time out 
+        if(DataReadThisTime>0 && RetryBoundry<1000)
+        {
+            RetryBoundry += 10;   
+        }
+
+        TotalDataRead += DataReadThisTime;
+        retrys++;
     }
 
-    return AmountOfDataRead;
+    return TotalDataRead;
 }
