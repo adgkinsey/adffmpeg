@@ -32,7 +32,14 @@ extern "C" {
 #endif
 
 #include "avutil.h"
+
+#ifdef WINCE
+#include <types.h> /* size_t */
+#elif WIN32 
 #include <sys/types.h> /* size_t */
+#else
+#include <sys/types.h> /* size_t */
+#endif
 
 #define AV_STRINGIFY(s)         AV_TOSTRING(s)
 #define AV_TOSTRING(s) #s
