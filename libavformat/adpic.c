@@ -982,7 +982,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 	    memcpy(&size, &adpkt[DATA_SIZE_BYTE_0], 4);
 	    network2host32(size);
 	    data_type = adpkt[DATA_TYPE];
-	    data_channel = adpkt[DATA_CHANNEL];
+	    data_channel = (adpkt[DATA_CHANNEL]+1);
     }
     else
     {
@@ -1334,6 +1334,14 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             network2host16(videoHeader.ms);
 
             /* Copy pertinent data into generic video data structure */
+            video_data->cam = data_channel;
+            video_data->title[0] = 'C';
+            video_data->title[1] = 'a';
+            video_data->title[2] = 'm';
+            video_data->title[3] = 'e';
+            video_data->title[4] = 'r';
+            video_data->title[5] = 'a';
+            video_data->title[6] = '\n';
             video_data->session_time = videoHeader.t;
             video_data->milliseconds = videoHeader.ms;
 			video_data->utc_offset = urlContext->utc_offset;
@@ -1507,7 +1515,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 	    // which codec stream to use
         if(!isMIME)
         {
-	        if (data_channel != (video_data->cam-1))
+	        if (data_channel != video_data->cam)
 	        {
 		        logger(LOG_DEBUG,"ADPIC: adpic_read_packet, data channel (%d) and camera (%d) do not match%d\n", data_channel, video_data->cam );
 	        }
