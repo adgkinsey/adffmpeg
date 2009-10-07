@@ -48,11 +48,11 @@ typedef struct {
     char location[URL_SIZE];
 
     /* CS - added to support authentication */
-    int         authentication_mode;
-    char *      realm;
-    char *      nonce;
-    char *      algorithm;
-    char *      qop;
+    int    authentication_mode;
+    char * realm;
+    char * nonce;
+    char * algorithm;
+    char * qop;
 
 	/* BMOJ - added to hold utc_offset from header */
     char* content;
@@ -175,7 +175,8 @@ static int http_open(URLContext *h, const char *uri, int flags)
     h->is_streamed = 1;
 
     s = av_mallocz(sizeof(HTTPContext));
-    if (!s) {
+    if (!s) 
+    {
         return AVERROR(ENOMEM);
     }
     h->priv_data = s;
@@ -476,6 +477,7 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
     /* send http header */
     post = h->flags & URL_WRONLY;
 
+    /* Try to make a simple get request */
     snprintf(s->buffer, sizeof(s->buffer),
              "%s %s HTTP/1.0\r\n"//"%s %s HTTP/1.1\r\n"
              "User-Agent: %s\r\n"
@@ -733,6 +735,7 @@ static int http_do_request( URLContext *h, const char *path, const char *hoststr
     s->buf_ptr = s->buffer;
     s->buf_end = s->buffer;
     s->line_count = 0;
+    s->location[0] = '\0';
     s->off = 0;
     if (post) {
         sleep(1);
@@ -956,6 +959,30 @@ static int http_close(URLContext *h)
 
     if( s->algorithm )
         av_free( s->algorithm );
+
+    if( s->content )
+        av_free( s->content );
+
+    if( s->resolution )
+        av_free( s->resolution );
+
+    if( s->compression )
+        av_free( s->compression );
+
+    if( s->rate )
+        av_free( s->rate );
+
+    if( s->pps )
+        av_free( s->pps );
+
+    if( s->site_id )
+        av_free( s->site_id );
+
+    if( s->boundry )
+        av_free( s->boundry );
+
+    if( s->Transfer_Encoding )
+        av_free( s->Transfer_Encoding );
 
     av_free(s);
     return 0;
