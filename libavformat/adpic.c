@@ -583,9 +583,9 @@ static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size,
                 q--;
             *q = '\0';
 
-            #ifdef DEBUG
-                printf("header='%s'\n", buffer);
-            #endif
+            //#ifdef DEBUG
+            //    printf("header='%s'\n", buffer);
+            //#endif
 
             err = process_line( buffer, &lineCount, dataType, size, extra );
             /* First line contains a \n */
@@ -644,9 +644,9 @@ static int process_line( char *line, int *line_count, int *dataType, int *size, 
         while (isspace(*p))
             p++;
         http_code = strtol(p, NULL, 10);
-        #ifdef DEBUG
-                printf("http_code=%d\n", http_code);
-        #endif
+        //#ifdef DEBUG
+        //        printf("http_code=%d\n", http_code);
+        //#endif
     } 
     else /* Any other line we are just looking for particular headers - if we find them, we fill in the appropriate output data */
     {
