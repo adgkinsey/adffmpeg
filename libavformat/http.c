@@ -226,9 +226,9 @@ static int process_line(URLContext *h, char *line, int line_count,
             p++;
         s->http_code = strtol(p, NULL, 10);
 
-        #ifdef DEBUG
-            printf("http_code=%d\n", s->http_code);
-        #endif
+        //#ifdef DEBUG
+        //    printf("http_code=%d\n", s->http_code);
+        //#endif
     } 
     else 
     {
@@ -754,9 +754,9 @@ static int http_do_request( URLContext *h, const char *path, const char *hoststr
                 q--;
             *q = '\0';
 
-#ifdef DEBUG
-            printf("header='%s'\n", line);
-#endif
+            //#ifdef DEBUG
+            //    printf("header='%s'\n", line);
+            //#endif
             err = process_line(h, line, s->line_count, new_location);
             if (err < 0)
                 return err;
@@ -815,7 +815,7 @@ static int http_read(URLContext *h, uint8_t *buf, int size)
     {
         /* read bytes from input buffer first */
         DataInBufferLength = (int)(HTTP->buf_end - HTTP->buf_ptr);
-        printf("<<HTTP>>buffer sixe = %d\n",DataInBufferLength);
+        //printf("<<HTTP>>buffer sixe = %d\n",DataInBufferLength);
         if (DataInBufferLength > 0 && DataInBufferLength!=5 /*started == 1*/) 
         {
             if (DataInBufferLength > size)
@@ -901,17 +901,17 @@ static void http_read_ChunkSize(HTTPContext* HTTP)
         buffer[i] = thisChar;
     }
 
-    for(j=0; j<i; j++)
-    {
-	    printf("<<HTTP>>%d,'%c'\n",j,buffer[j]);
-    }
+    //for(j=0; j<i; j++)
+    //{
+	//    printf("<<HTTP>>%d,'%c'\n",j,buffer[j]);
+    //}
    
     HTTP->ChunkSize =  ParseHexToInt(buffer, i-2);
-    if(HTTP->ChunkSize<0)
-    {
-	    printf("<<HTTP>> trap");
-	}
-    printf("<<HTTP>> Chunk Size = %d\n", HTTP->ChunkSize);    
+    //if(HTTP->ChunkSize<0)
+    //{
+	//    printf("<<HTTP>> trap");
+	//}
+    //printf("<<HTTP>> Chunk Size = %d\n", HTTP->ChunkSize);    
 }
 
 static int LocalHTTP_read(HTTPContext *HTTP, uint8_t *buf, int size)
