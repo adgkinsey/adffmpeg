@@ -59,7 +59,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     TCPContext *s = NULL;
     fd_set wfds;
     fd_set efds;    /* CS - Added to detect error condition on connect() */
-    int fd_max, ret;
+    int fd_max, ret, TimeOutCount = 0;
     struct timeval tv;
     socklen_t optlen;
     char proto[1024],path[1024],tmp[1024];  // PETR: protocol and path strings
@@ -114,8 +114,10 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
             goto fail;
 
         /* wait until we are connected or until abort */
-        for(;;) {
-            if (url_interrupt_cb()) {
+        for(;;) 
+        {
+            if (url_interrupt_cb()) 
+            {
                 ret = AVERROR(EINTR);
                 goto fail1;
             }
@@ -129,12 +131,30 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
             tv.tv_usec = 100 * 1000;
             ret = select(fd_max + 1, NULL, &wfds, &efds, &tv);
 
+            
             if (ret > 0 && FD_ISSET(fd, &wfds))
-                break; /* Connected ok, break out of the loop here */
+            { 
+                /* Connected ok, break out of the loop here */
+                break;  
+            }
             else if( ret > 0 && FD_ISSET(fd, &efds) )
             {
                 /* There was an error during connection */
                 ret = ADFFMPEG_ERROR_HOST_UNREACHABLE;
+                goto fail1;
+            }
+            else if (ret == 0)
+            {
+                TimeOutCount++;
+                if(TimeOutCount > 100)
+                {
+                     ret = ADFFMPEG_ERROR_CREAT_CONECTION_TIMEOUT;
+                     goto fail1; 
+                }
+            }
+            if(ret == SOCKET_ERROR)
+            {
+                ret = ADFFMPEG_ERROR_SOCKET;
                 goto fail1;
             }
         }
