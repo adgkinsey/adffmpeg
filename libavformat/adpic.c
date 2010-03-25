@@ -655,6 +655,11 @@ static int process_line( char *line, int *line_count, int *dataType, int *size, 
     {
         *line_count = 1;
     }
+    
+    //if(*line_count == 0 && (0xFF && *(p)) && (0xD8 && *(p+1)) && (0xFF && *(p+2)) && (0xE0 && *(p+3)))
+    //{
+    //    return -1;
+    //}
 
     /* The first valid line will be the boundary string - validate this here */
     if( *line_count == 0 )
@@ -1076,7 +1081,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                   
                     ch = ch1 = 0;
                     i=0;
-                    while(!(ch==0xFF && ch1==0xD9) )
+                    while(!(ch==0xFF && ch1==0xD9) && (pb->buf_ptr < pb->buf_end))
                     {
                         i++;
                         ptr++;

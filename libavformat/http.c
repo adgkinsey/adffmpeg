@@ -55,7 +55,8 @@ typedef struct {
     char * qop;
 
 	/* BMOJ - added to hold utc_offset from header */
-    char* content;
+    char* sever;
+	char* content;
 	char* resolution;
 	char* compression;
 	char* rate;
@@ -264,20 +265,19 @@ static int process_line(URLContext *h, char *line, int line_count,
             }
             h->is_streamed = 0; /* we _can_ in fact seek */
         }
-
-		/* Check for Content headers */
-		if(!strcmp(tag, "Content-type"))
+		else if(!strcmp(tag, "Content-type"))/* Check for Content headers */
 		{
             http_parse_content_type_header( p, s );
         }
-
-        if(!strcmp(tag, "Transfer-Encoding"))
+        else if(!strcmp(tag, "Transfer-Encoding"))
         { 
             http_parse_transfer_encoding_header( p, s );
         }
-
-        /* Check for authentication headers */
-        if( strcmp( tag, "WWW-Authenticate" ) == 0 )
+		else if(!strcmp(tag, "Server"))
+		{
+			copy_value_to_field( p, &s->sever);
+		}
+        else if( strcmp( tag, "WWW-Authenticate" ) == 0 )/* Check for authentication headers */
         {
             char * mode = p;
 
@@ -309,15 +309,20 @@ static int process_line(URLContext *h, char *line, int line_count,
 
 static void http_parse_content_type_header( char * p, HTTPContext *s )
 {
+	int finishedContentHeader = 0;
     char *  name  = NULL;
     char *  value = NULL;
 
     //strip the content-type from the headder
     value = p;
-    while( *p != ';' )
+    while((*p != ';') && (*p != '\0'))
     {
         p++;
     }
+
+	if(*p == '\0')
+	{ finishedContentHeader = 1; }
+
     *p = '\0';
     p++;
     copy_value_to_field( value, &s->content );
@@ -327,7 +332,7 @@ static void http_parse_content_type_header( char * p, HTTPContext *s )
     else
     {s->isBinary=0;}
     
-    while( *p != '\0' )
+    while( *p != '\0' && finishedContentHeader != 1)
     {
         while(isspace(*p))p++; /* Skip whitespace */
         name = p;
@@ -959,6 +964,9 @@ static int http_close(URLContext *h)
 
     if( s->algorithm )
         av_free( s->algorithm );
+
+    if( s->sever )
+		av_free( s->sever );
 
     if( s->content )
         av_free( s->content );
