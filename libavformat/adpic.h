@@ -211,6 +211,7 @@ enum pkt_offsets { DATA_TYPE, DATA_CHANNEL, DATA_SIZE_BYTE_0 , DATA_SIZE_BYTE_1 
 #define ADPIC_GET_INFO_LAYOUT_STREAM_ERROR          ADPIC_ERROR + -47
 
 #define ADPIC_END_OF_STREAM                         ADPIC_ERROR + -48
+#define ADPIC_FAILED_TO_PARSE_INFOLIST              ADPIC_ERROR + -49
 
 extern void fprint_pic(FILE *f, NetVuImageData *pic);
 

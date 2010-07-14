@@ -38,6 +38,10 @@
 enum data_type { DATA_JPEG, DATA_JFIF, DATA_MPEG4I, DATA_MPEG4P, DATA_AUDIO_ADPCM, DATA_AUDIO_RAW, DATA_MINIMAL_MPEG4, DATA_MINIMAL_AUDIO_ADPCM, DATA_LAYOUT, DATA_INFO, DATA_H264I, DATA_H264P, MAX_DATA_TYPE };
 #define DATA_PLAINTEXT              (MAX_DATA_TYPE + 1)   /* This value is only used internally within the library DATA_PLAINTEXT blocks should not be exposed to the client */
 
+static int adpicSkipInfoList(ByteIOContext * pb);
+static int adpicFindTag(char *Tag, ByteIOContext *pb, int MaxLookAhead);
+
+
 static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size, long *extra );
 static int process_line( char *line, int* line_count, int *dataType, int *size, long *extra );
 static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, NetVuImageData *video_data, char **additionalTextData );
@@ -445,16 +449,16 @@ static AVStream *get_stream(struct AVFormatContext *s, NetVuImageData *pic)
 
 	switch(pic->vid_format)
 	{
-	    case PIC_MODE_JPEG_422 :
-	    case PIC_MODE_JPEG_411 :
+	    case PIC_MODE_JPEG_422:
+	    case PIC_MODE_JPEG_411:
 		    codec_id = CODEC_ID_MJPEG;
 		    codec_type = 0;
 		break;
 
-	    case PIC_MODE_MPEG4_411 :
-	    case PIC_MODE_MPEG4_411_I :
-	    case PIC_MODE_MPEG4_411_GOV_P :
-	    case PIC_MODE_MPEG4_411_GOV_I :
+	    case PIC_MODE_MPEG4_411:
+	    case PIC_MODE_MPEG4_411_I:
+	    case PIC_MODE_MPEG4_411_GOV_P:
+	    case PIC_MODE_MPEG4_411_GOV_I:
             codec_id = CODEC_ID_MPEG4;
 		    codec_type = 1;
         break;
@@ -965,6 +969,99 @@ static int process_mp4data_line( char *line, int line_count, NetVuImageData *vid
     return 1;
 }
 
+static int adpicSkipInfoList(ByteIOContext * pb)
+{
+	int  ch;
+	char *restore;
+	restore = pb->buf_ptr;
+	
+	if(adpicFindTag("infolist", pb, 0))
+	{
+		if(adpicFindTag("/infolist", pb, (4*1024)))
+		{ 
+			ch = url_fgetc(pb);
+			if(ch==0x0D)//'/r'
+			{ 
+                ch = url_fgetc(pb);
+				if(ch==0x0A)//'/n'
+				{
+					ch = url_fgetc(pb);
+					return 1; 
+				}
+			}
+		}
+	}
+	else
+	{ 
+		pb->buf_ptr = restore; 
+		return 0;
+	}
+
+	return -1;
+}
+
+
+static int adpicFindTag(char *Tag, ByteIOContext *pb, int MaxLookAhead)
+{
+	//NOTE Looks for the folowing pattern "<infoList>" at the begining of the 
+	//     buffer return 1 if its found and 0 if not
+
+	#define TEMP_BUFFER_SIZE    1024
+    int                         LookAheadPos = 0;
+    unsigned char               buffer[TEMP_BUFFER_SIZE];
+    unsigned char               *q = buffer;
+    int                         temp, ch, err, lineCount = 0;
+	char                        *restore;
+	int                         result = 0;
+	int                         endOfTag = 0;
+    
+    if(MaxLookAhead<0)
+	{ MaxLookAhead = 0; }
+
+	for(LookAheadPos=0; LookAheadPos<=MaxLookAhead; LookAheadPos++) 
+    {
+		endOfTag = 0;
+        ch = url_fgetc( pb );
+
+        if (ch < 0)
+        { return 0; }
+
+        if (ch == '<' )
+		{			
+			while(endOfTag==0)
+			{
+				ch = url_fgetc( pb );
+
+                if (ch < 0)
+                { return 0; }
+
+				if(ch == '>')
+				{
+					endOfTag = 1;
+                    *q = '\0';
+	                q = buffer;
+
+					if(strcmp(av_strlwr(buffer), Tag)==0)
+					{ 
+						return 1;
+					}
+					else
+					{ 
+						endOfTag = 1; 
+					}
+				}
+				else
+				{
+					if ((q - buffer) < sizeof(buffer) - 1)
+			        { *q++ = ch; }
+				}
+			}
+		}
+    }
+ 
+	return 0;
+}
+
 int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
     ByteIOContext *         pb = &s->pb;
@@ -989,6 +1086,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     char *                  restore;
     char *                  ptr;
     int                     manual_size = FALSE;
+	int                     result = 0;
     //int loop = 0;
     
     // First read the 6 byte separator
@@ -1004,6 +1102,29 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             errorVal = ADPIC_READ_6_BYTE_SEPARATOR_ERROR;
         }
 		goto cleanup;
+	}
+
+	result = adpicSkipInfoList(pb);
+	if(result<0)
+	{
+		errorVal = ADPIC_FAILED_TO_PARSE_INFOLIST;
+		goto cleanup;
+	}
+	else if(result>0)
+	{
+		if ((n=get_buffer(pb, &adpkt[0], SEPARATOR_SIZE)) != SEPARATOR_SIZE)
+		{
+			if(pb->eof_reached)
+			{
+				errorVal = ADPIC_END_OF_STREAM;
+			}
+			else
+			{
+				//logger(LOG_DEBUG,"ADPIC: short of data reading seperator, expected %d, read %d\n", SEPARATOR_SIZE, n);
+				errorVal = ADPIC_READ_6_BYTE_SEPARATOR_ERROR;
+			}
+			goto cleanup;
+		}
 	}
 
     // BMOJ - yep not strong enough.
