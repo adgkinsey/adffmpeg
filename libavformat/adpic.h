@@ -234,7 +234,7 @@ uint8_t *bmp=NULL;
 
 	if (pic->status & PIC_HAS_BMP)
 	{
-	 	bmp = start_of_image(pic);
+	 	bmp = (uint8_t*)start_of_image(pic);
 		bmp += (pic->size + BMP_OFFSET) & ~((BMP_OFFSET>>1)-1);	// pRC 015
 		if (size)
 			memcpy(size, bmp, 4);
