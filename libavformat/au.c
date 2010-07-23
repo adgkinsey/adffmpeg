@@ -1,6 +1,6 @@
 /*
  * AU muxer and demuxer
- * Copyright (c) 2001 Fabrice Bellard.
+ * Copyright (c) 2001 Fabrice Bellard
  *
  * This file is part of FFmpeg.
  *
@@ -28,21 +28,26 @@
  */
 
 #include "avformat.h"
-#include "allformats.h"
+#include "raw.h"
 #include "riff.h"
 
 /* if we don't know the size in advance */
-#define AU_UNKOWN_SIZE ((uint32_t)(~0))
+#define AU_UNKNOWN_SIZE ((uint32_t)(~0))
 
 /* The ffmpeg codecs we support, and the IDs they have in the file */
 static const AVCodecTag codec_au_tags[] = {
     { CODEC_ID_PCM_MULAW, 1 },
+    { CODEC_ID_PCM_S8, 2 },
     { CODEC_ID_PCM_S16BE, 3 },
+    { CODEC_ID_PCM_S24BE, 4 },
+    { CODEC_ID_PCM_S32BE, 5 },
+    { CODEC_ID_PCM_F32BE, 6 },
+    { CODEC_ID_PCM_F64BE, 7 },
     { CODEC_ID_PCM_ALAW, 27 },
-    { 0, 0 },
+    { CODEC_ID_NONE, 0 },
 };
 
-#ifdef CONFIG_MUXERS
+#if CONFIG_AU_MUXER
 /* AUDIO_FILE header */
 static int put_au_header(ByteIOContext *pb, AVCodecContext *enc)
 {
@@ -50,7 +55,7 @@ static int put_au_header(ByteIOContext *pb, AVCodecContext *enc)
         return -1;
     put_tag(pb, ".snd");       /* magic number */
     put_be32(pb, 24);           /* header size */
-    put_be32(pb, AU_UNKOWN_SIZE); /* data size */
+    put_be32(pb, AU_UNKNOWN_SIZE); /* data size */
     put_be32(pb, (uint32_t)enc->codec_tag);     /* codec ID */
     put_be32(pb, enc->sample_rate);
     put_be32(pb, (uint32_t)enc->channels);
@@ -59,7 +64,7 @@ static int put_au_header(ByteIOContext *pb, AVCodecContext *enc)
 
 static int au_write_header(AVFormatContext *s)
 {
-    ByteIOContext *pb = &s->pb;
+    ByteIOContext *pb = s->pb;
 
     s->priv_data = NULL;
 
@@ -75,17 +80,17 @@ static int au_write_header(AVFormatContext *s)
 
 static int au_write_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    ByteIOContext *pb = &s->pb;
+    ByteIOContext *pb = s->pb;
     put_buffer(pb, pkt->data, pkt->size);
     return 0;
 }
 
 static int au_write_trailer(AVFormatContext *s)
 {
-    ByteIOContext *pb = &s->pb;
-    offset_t file_size;
+    ByteIOContext *pb = s->pb;
+    int64_t file_size;
 
-    if (!url_is_streamed(&s->pb)) {
+    if (!url_is_streamed(s->pb)) {
 
         /* update file size */
         file_size = url_ftell(pb);
@@ -98,13 +103,11 @@ static int au_write_trailer(AVFormatContext *s)
 
     return 0;
 }
-#endif //CONFIG_MUXERS
+#endif /* CONFIG_AU_MUXER */
 
 static int au_probe(AVProbeData *p)
 {
     /* check file header */
-    if (p->buf_size <= 24)
-        return 0;
     if (p->buf[0] == '.' && p->buf[1] == 's' &&
         p->buf[2] == 'n' && p->buf[3] == 'd')
         return AVPROBE_SCORE_MAX;
@@ -118,8 +121,9 @@ static int au_read_header(AVFormatContext *s,
 {
     int size;
     unsigned int tag;
-    ByteIOContext *pb = &s->pb;
-    unsigned int id, codec, channels, rate;
+    ByteIOContext *pb = s->pb;
+    unsigned int id, channels, rate;
+    enum CodecID codec;
     AVStream *st;
 
     /* check ".snd" header */
@@ -133,7 +137,7 @@ static int au_read_header(AVFormatContext *s,
     rate = get_be32(pb);
     channels = get_be32(pb);
 
-    codec = codec_get_id(codec_au_tags, id);
+    codec = ff_codec_get_id(codec_au_tags, id);
 
     if (size >= 24) {
         /* skip unused data */
@@ -144,7 +148,7 @@ static int au_read_header(AVFormatContext *s,
     st = av_new_stream(s, 0);
     if (!st)
         return -1;
-    st->codec->codec_type = CODEC_TYPE_AUDIO;
+    st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codec->codec_tag = id;
     st->codec->codec_id = codec;
     st->codec->channels = channels;
@@ -153,18 +157,18 @@ static int au_read_header(AVFormatContext *s,
     return 0;
 }
 
-#define MAX_SIZE 4096
+#define BLOCK_SIZE 1024
 
 static int au_read_packet(AVFormatContext *s,
                           AVPacket *pkt)
 {
     int ret;
 
-    if (url_feof(&s->pb))
-        return AVERROR_IO;
-    ret= av_get_packet(&s->pb, pkt, MAX_SIZE);
+    ret= av_get_packet(s->pb, pkt, BLOCK_SIZE *
+                       s->streams[0]->codec->channels *
+                       av_get_bits_per_sample(s->streams[0]->codec->codec_id) >> 3);
     if (ret < 0)
-        return AVERROR_IO;
+        return ret;
     pkt->stream_index = 0;
 
     /* note: we need to modify the packet size here to handle the last
@@ -173,29 +177,24 @@ static int au_read_packet(AVFormatContext *s,
     return 0;
 }
 
-static int au_read_close(AVFormatContext *s)
-{
-    return 0;
-}
-
-#ifdef CONFIG_AU_DEMUXER
+#if CONFIG_AU_DEMUXER
 AVInputFormat au_demuxer = {
     "au",
-    "SUN AU Format",
+    NULL_IF_CONFIG_SMALL("SUN AU format"),
     0,
     au_probe,
     au_read_header,
     au_read_packet,
-    au_read_close,
+    NULL,
     pcm_read_seek,
-    .codec_tag= (const AVCodecTag*[]){codec_au_tags, 0},
+    .codec_tag= (const AVCodecTag* const []){codec_au_tags, 0},
 };
 #endif
 
-#ifdef CONFIG_AU_MUXER
+#if CONFIG_AU_MUXER
 AVOutputFormat au_muxer = {
     "au",
-    "SUN AU Format",
+    NULL_IF_CONFIG_SMALL("SUN AU format"),
     "audio/basic",
     "au",
     0,
@@ -204,6 +203,6 @@ AVOutputFormat au_muxer = {
     au_write_header,
     au_write_packet,
     au_write_trailer,
-    .codec_tag= (const AVCodecTag*[]){codec_au_tags, 0},
+    .codec_tag= (const AVCodecTag* const []){codec_au_tags, 0},
 };
 #endif //CONFIG_AU_MUXER

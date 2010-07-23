@@ -3,6 +3,9 @@
 
 static AVStream *get_audio_stream( struct AVFormatContext *s );
 
+int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt);
+
+
 static int adaudio_probe(AVProbeData *p)
 {
     if( p->buf_size < 4 )
@@ -34,7 +37,7 @@ static int adaudio_read_header(AVFormatContext *s, AVFormatParameters *ap)
 
 int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
-    ByteIOContext *         ioContext = &s->pb;
+    ByteIOContext *         ioContext = s->pb;
     int                     retVal = AVERROR_IO;
     int                     packetSize = 0;
     int                     sampleSize = 0;
@@ -73,7 +76,7 @@ int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 					{
 						/* Set the frame info up */
 						frameData->frameType = RTPAudio;
-						frameData->frameData = (void*)(ioContext->buf_ptr[1]);
+						frameData->frameData = (void*)(&ioContext->buf_ptr[1]);
 						frameData->additionalData = NULL;
 
 						pkt->priv = (void*)frameData;

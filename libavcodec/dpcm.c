@@ -1,6 +1,6 @@
 /*
  * Assorted DPCM codecs
- * Copyright (c) 2003 The ffmpeg Project.
+ * Copyright (c) 2003 The ffmpeg Project
  *
  * This file is part of FFmpeg.
  *
@@ -37,6 +37,7 @@
  * the fourcc 'Axan' in the 'auds' chunk of the AVI header.
  */
 
+#include "libavutil/intreadwrite.h"
 #include "avcodec.h"
 
 typedef struct DPCMContext {
@@ -46,11 +47,9 @@ typedef struct DPCMContext {
     const int *sol_table;//for SOL_DPCM
 } DPCMContext;
 
-#define SATURATE_S16(x)  if (x < -32768) x = -32768; \
-  else if (x > 32767) x = 32767;
 #define SE_16BIT(x)  if (x & 0x8000) x -= 0x10000;
 
-static int interplay_delta_table[] = {
+static const int interplay_delta_table[] = {
          0,      1,      2,      3,      4,      5,      6,      7,
          8,      9,     10,     11,     12,     13,     14,     15,
         16,     17,     18,     19,     20,     21,     22,     23,
@@ -112,7 +111,7 @@ static const int sol_table_16[128] = {
 
 
 
-static int dpcm_decode_init(AVCodecContext *avctx)
+static av_cold int dpcm_decode_init(AVCodecContext *avctx)
 {
     DPCMContext *s = avctx->priv_data;
     int i;
@@ -156,13 +155,16 @@ static int dpcm_decode_init(AVCodecContext *avctx)
         break;
     }
 
+    avctx->sample_fmt = SAMPLE_FMT_S16;
     return 0;
 }
 
 static int dpcm_decode_frame(AVCodecContext *avctx,
                              void *data, int *data_size,
-                             uint8_t *buf, int buf_size)
+                             AVPacket *avpkt)
 {
+    const uint8_t *buf = avpkt->data;
+    int buf_size = avpkt->size;
     DPCMContext *s = avctx->priv_data;
     int in, out = 0;
     int predictor[2];
@@ -174,6 +176,10 @@ static int dpcm_decode_frame(AVCodecContext *avctx,
 
     if (!buf_size)
         return 0;
+
+    // almost every DPCM variant expands one byte of data into two
+    if(*data_size/2 < buf_size)
+        return -1;
 
     switch(avctx->codec->id) {
 
@@ -190,7 +196,7 @@ static int dpcm_decode_frame(AVCodecContext *avctx,
         /* decode the samples */
         for (in = 8, out = 0; in < buf_size; in++, out++) {
             predictor[channel_number] += s->roq_square_array[buf[in]];
-            SATURATE_S16(predictor[channel_number]);
+            predictor[channel_number] = av_clip_int16(predictor[channel_number]);
             output_samples[out] = predictor[channel_number];
 
             /* toggle channel */
@@ -213,7 +219,7 @@ static int dpcm_decode_frame(AVCodecContext *avctx,
 
         while (in < buf_size) {
             predictor[channel_number] += interplay_delta_table[buf[in++]];
-            SATURATE_S16(predictor[channel_number]);
+            predictor[channel_number] = av_clip_int16(predictor[channel_number]);
             output_samples[out++] = predictor[channel_number];
 
             /* toggle channel */
@@ -248,7 +254,7 @@ static int dpcm_decode_frame(AVCodecContext *avctx,
             diff >>= shift[channel_number];
             predictor[channel_number] += diff;
 
-            SATURATE_S16(predictor[channel_number]);
+            predictor[channel_number] = av_clip_int16(predictor[channel_number]);
             output_samples[out++] = predictor[channel_number];
 
             /* toggle channel */
@@ -258,12 +264,14 @@ static int dpcm_decode_frame(AVCodecContext *avctx,
     case CODEC_ID_SOL_DPCM:
         in = 0;
         if (avctx->codec_tag != 3) {
+            if(*data_size/4 < buf_size)
+                return -1;
             while (in < buf_size) {
                 int n1, n2;
                 n1 = (buf[in] >> 4) & 0xF;
                 n2 = buf[in++] & 0xF;
                 s->sample[0] += s->sol_table[n1];
-                 if (s->sample[0] < 0) s->sample[0] = 0;
+                if (s->sample[0] < 0) s->sample[0] = 0;
                 if (s->sample[0] > 255) s->sample[0] = 255;
                 output_samples[out++] = (s->sample[0] - 128) << 8;
                 s->sample[s->channels - 1] += s->sol_table[n2];
@@ -277,7 +285,7 @@ static int dpcm_decode_frame(AVCodecContext *avctx,
                 n = buf[in++];
                 if (n & 0x80) s->sample[channel_number] -= s->sol_table[n & 0x7F];
                 else s->sample[channel_number] += s->sol_table[n & 0x7F];
-                SATURATE_S16(s->sample[channel_number]);
+                s->sample[channel_number] = av_clip_int16(s->sample[channel_number]);
                 output_samples[out++] = s->sample[channel_number];
                 /* toggle channel */
                 channel_number ^= s->channels - 1;
@@ -290,46 +298,20 @@ static int dpcm_decode_frame(AVCodecContext *avctx,
     return buf_size;
 }
 
-AVCodec roq_dpcm_decoder = {
-    "roq_dpcm",
-    CODEC_TYPE_AUDIO,
-    CODEC_ID_ROQ_DPCM,
-    sizeof(DPCMContext),
-    dpcm_decode_init,
-    NULL,
-    NULL,
-    dpcm_decode_frame,
+#define DPCM_DECODER(id, name, long_name_)      \
+AVCodec name ## _decoder = {                    \
+    #name,                                      \
+    AVMEDIA_TYPE_AUDIO,                         \
+    id,                                         \
+    sizeof(DPCMContext),                        \
+    dpcm_decode_init,                           \
+    NULL,                                       \
+    NULL,                                       \
+    dpcm_decode_frame,                          \
+    .long_name = NULL_IF_CONFIG_SMALL(long_name_), \
 };
 
-AVCodec interplay_dpcm_decoder = {
-    "interplay_dpcm",
-    CODEC_TYPE_AUDIO,
-    CODEC_ID_INTERPLAY_DPCM,
-    sizeof(DPCMContext),
-    dpcm_decode_init,
-    NULL,
-    NULL,
-    dpcm_decode_frame,
-};
-
-AVCodec xan_dpcm_decoder = {
-    "xan_dpcm",
-    CODEC_TYPE_AUDIO,
-    CODEC_ID_XAN_DPCM,
-    sizeof(DPCMContext),
-    dpcm_decode_init,
-    NULL,
-    NULL,
-    dpcm_decode_frame,
-};
-
-AVCodec sol_dpcm_decoder = {
-    "sol_dpcm",
-    CODEC_TYPE_AUDIO,
-    CODEC_ID_SOL_DPCM,
-    sizeof(DPCMContext),
-    dpcm_decode_init,
-    NULL,
-    NULL,
-    dpcm_decode_frame,
-};
+DPCM_DECODER(CODEC_ID_INTERPLAY_DPCM, interplay_dpcm, "DPCM Interplay");
+DPCM_DECODER(CODEC_ID_ROQ_DPCM, roq_dpcm, "DPCM id RoQ");
+DPCM_DECODER(CODEC_ID_SOL_DPCM, sol_dpcm, "DPCM Sol");
+DPCM_DECODER(CODEC_ID_XAN_DPCM, xan_dpcm, "DPCM Xan");

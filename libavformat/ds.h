@@ -279,8 +279,6 @@ typedef struct _cliImgPlayRequestMsg
 #define VER_TCP_CLI_IMG_PLAY_REQUEST        0x00000001
 #define SIZEOF_TCP_CLI_IMG_PLAY_REQUEST_IO  28            /* Size in bytes of the MessageHeader structure. Can't use sizeof to read/write one of these to network as structure packing may differ based on platform */
 
-extern URLProtocol ds_protocol;
-
 #ifdef WORDS_BIGENDIAN
 #define NTOH64(x)               (x)
 #define HTON64(x)               (x)

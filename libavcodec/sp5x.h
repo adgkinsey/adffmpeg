@@ -19,8 +19,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef SP5X_H
-#define SP5X_H
+#ifndef AVCODEC_SP5X_H
+#define AVCODEC_SP5X_H
+
+#include <stdint.h>
 
 static const uint8_t sp5x_data_sof[] =
 {
@@ -329,4 +331,4 @@ static const uint8_t sp5x_quant_table_orig[18][64] =
 };
 #endif
 
-#endif /* SP5X_H */
+#endif /* AVCODEC_SP5X_H */

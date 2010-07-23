@@ -185,13 +185,13 @@ calc_q_tables()
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "jfif_img.h"
 
+#include "libavutil/bswap.h"
+
+#include "jfif_img.h"
 #include "adpic.h"
 #include "time.h"
 //#include "os.h"		/* byte-swapping routines */
-
-extern struct tm *localtime_r(const time_t *t, struct tm *tp);
 
 /* JCB 004 start */
 static const char comment_version[] = "Version: 00.02\r\n";
@@ -326,7 +326,6 @@ char *comment_header;
 char line[128];
 char sof_copy[sizeof(sof_422_header)];
 char *txt;
-struct tm tim_s;
 
 
 	if (!q_init)
@@ -439,7 +438,7 @@ struct tm tim_s;
 			strcpy(bufptr, image_date);
 			bufptr += strlen(image_date);
 		}
-		strftime (line, sizeof(line), "%d/%m/%Y\r\n", localtime_r(&pic->session_time, &tim_s));
+		strftime (line, sizeof(line), "%d/%m/%Y\r\n", localtime((const time_t*)&pic->session_time));
 		count += strlen(line);
 		if (count > max)
 			return 0;
@@ -457,7 +456,7 @@ struct tm tim_s;
 			strcpy(bufptr, image_time);
 			bufptr += strlen(image_time);
 		}
-		strftime (line, sizeof(line), "%H:%M:%S\r\n", localtime_r(&pic->session_time, &tim_s));
+		strftime (line, sizeof(line), "%H:%M:%S\r\n", localtime((const time_t*)&pic->session_time));
 		count += strlen(line);
 		if (count > max)
 			return 0;
@@ -617,7 +616,6 @@ char *comment_header;
 char line[128];
 //unsigned char sof_copy[sizeof(sof_422_header)];
 char *txt;
-struct tm tim_s;
 
 	image = image;		/*	Remove compiler warning  */
 
@@ -729,7 +727,7 @@ struct tm tim_s;
 		strcpy(bufptr, image_date);
 		bufptr += strlen(image_date);
 	}
-	strftime (line, sizeof(line), "%d/%m/%Y\r\n", localtime_r(&pic->session_time, &tim_s));
+	strftime (line, sizeof(line), "%d/%m/%Y\r\n", localtime((const time_t*)&pic->session_time));
 	count += strlen(line);
 	if (count > max)
 		return 0;
@@ -747,7 +745,7 @@ struct tm tim_s;
 		strcpy(bufptr, image_time);
 		bufptr += strlen(image_time);
 	}
-	strftime (line, sizeof(line), "%H:%M:%S\r\n", localtime_r(&pic->session_time, &tim_s));
+	strftime (line, sizeof(line), "%H:%M:%S\r\n", localtime((const time_t*)&pic->session_time));
 	count += strlen(line);
 	if (count > max)
 		return 0;
@@ -809,7 +807,7 @@ struct tm tim_s;
 
 			memset(cpy,0,80);
 			strncpy(cpy,txt,pic->start_offset);
-			fprintf(stderr, "JFIF_IMG: 1 adding text %s\n", cpy);
+			av_log(NULL, AV_LOG_DEBUG, "JFIF_IMG: 1 adding text %s\n", cpy);
 #endif
 			strncpy(bufptr, txt, pic->start_offset);
 			bufptr += pic->start_offset;
@@ -858,7 +856,6 @@ unsigned int add_jpeg_comment(void *j_in, void *j_out, int max, int camera, time
 {
 char *iptr, *optr, *comment_header;
 char line[128];
-struct tm tim_s;
 int count = 0, comment_length;
 
 	iptr = j_in;
@@ -918,7 +915,7 @@ int count = 0, comment_length;
 		strcpy(optr, image_date);
 		optr += strlen(image_date);
 	}
-	strftime (line, sizeof(line), "%d/%m/%Y\r\n", localtime_r(&pictime, &tim_s));
+	strftime (line, sizeof(line), "%d/%m/%Y\r\n", localtime(&pictime));
 	count += strlen(line);
 	if (count > max)
 		return 0;
@@ -936,7 +933,7 @@ int count = 0, comment_length;
 		strcpy(optr, image_time);
 		optr += strlen(image_time);
 	}
-	strftime (line, sizeof(line), "%H:%M:%S\r\n", localtime_r(&pictime, &tim_s));
+	strftime (line, sizeof(line), "%H:%M:%S\r\n", localtime(&pictime));
 	count += strlen(line);
 	if (count > max)
 		return 0;
@@ -1018,25 +1015,25 @@ unsigned char *qy, *qc;
 				}
 				else
 				{
-					fprintf(stderr,"VOUTPUT: failed to parse_jfif_header from %s\n", filename );
+					av_log(NULL, AV_LOG_ERROR, "VOUTPUT: failed to parse_jfif_header from %s\n", filename );
 				}
 			}
 			else
 			{
-				fprintf(stderr,"VOUTPUT: failed to read %ld bytes from %s\n", size, filename );
+				av_log(NULL, AV_LOG_ERROR, "VOUTPUT: failed to read %ld bytes from %s\n", size, filename );
 			}
 			free(jfif);
 		}
 		else
 		{
-			fprintf(stderr,"VOUTPUT: failed to allocate %ld bytes of memory for %s\n", size, filename );
+			av_log(NULL, AV_LOG_ERROR, "VOUTPUT: failed to allocate %ld bytes of memory for %s\n", size, filename );
 		}
 
 		close(h);
 	}
 	else
 	{
-		fprintf(stderr,"VOUTPUT: failed to open %s\n", filename );
+		av_log(NULL, AV_LOG_ERROR, "VOUTPUT: failed to open %s\n", filename );
 	}
 	return rv;
 }
@@ -1141,10 +1138,10 @@ int errs;
 	if (factor == 256)
 	{
 		factor = 128;
-		fprintf(stderr, "JFIF_IMG: Unable to match Q setting 128\n" );
+		av_log(NULL, AV_LOG_WARNING, "JFIF_IMG: Unable to match Q setting 128\n" );
 	}
 	else
-		fprintf(stderr, "JFIF_IMG: Matching Q = %d\n", factor );
+		av_log(NULL, AV_LOG_DEBUG, "JFIF_IMG: Matching Q = %d\n", factor );
 	return factor;
 }
 #else
@@ -1195,7 +1192,7 @@ int err_diff;
 	if (factor == 256)
 	{
 		factor = best_factor;
-		fprintf(stderr, "JFIF_IMG: Unable to match Q setting %d\n", best_factor );
+		av_log(NULL, AV_LOG_ERROR, "JFIF_IMG: Unable to match Q setting %d\n", best_factor );
 	}
 	else
 	{
@@ -1203,7 +1200,7 @@ int err_diff;
 		static time_t lastdisplay=0;
 		if (lastdisplay - time(NULL) > 10)
 		{
-			fprintf(stderr, "JFIF_IMG: Matching Q = %d\n", factor );
+			av_log(NULL, AV_LOG_DEBUG, "JFIF_IMG: Matching Q = %d\n", factor );
 			lastdisplay = time(NULL);
 		}
 #endif
@@ -1231,11 +1228,11 @@ int huf_cmp_offset=0, huf_tab_no=0;
 	while( ((unsigned char)data[i] != 0xff) && (i<imglength) )
 		i++;
 	if ( i > 0 )
-		fprintf(stderr, "JFIF_IMG: parse_jfif_header, %d leading bytes\n", i);
+		av_log(NULL, AV_LOG_DEBUG, "JFIF_IMG: parse_jfif_header, %d leading bytes\n", i);
 	i++;
 	if ( (unsigned char)data[i] != 0xd8)
 	{
-		fprintf(stderr, "JFIF_IMG: parse_jfif_header, incorrect SOI 0xff%02x\n", data[i]);
+		av_log(NULL, AV_LOG_ERROR, "JFIF_IMG: parse_jfif_header, incorrect SOI 0xff%02x\n", data[i]);
 		return -1;
 	}
 	i++;
@@ -1281,7 +1278,7 @@ int huf_cmp_offset=0, huf_tab_no=0;
 			}
 			else
 			{
-				fprintf(stderr, "JFIF_IMG: Unknown format byte 0x%02X\n", data[i+7]);
+				av_log(NULL, AV_LOG_WARNING, "JFIF_IMG: Unknown format byte 0x%02X\n", data[i+7]);
 			}
 //			fprintf(stderr, "JFIF_IMG: found SOF marker, length = %d, xres=%d, yres = %d, format = %s\n", length, pic->format.target_pixels, pic->format.target_lines, (pic->vid_format==PIC_MODE_JPEG_422) ? "422" : (pic->vid_format==PIC_MODE_JPEG_411) ? "411" : "Unknown" );
 			i += length-2;
@@ -1291,7 +1288,7 @@ int huf_cmp_offset=0, huf_tab_no=0;
 			huf_cmp_offset += 2; // skip past FFC4
 			if (memcmp(&data[i-2], &huf_header[huf_cmp_offset], length))
 			{
-				fprintf(stderr, "JFIF_IMG: found Non default Huffman table %d, length = %d, offset =%d\n", huf_tab_no, length, huf_cmp_offset );
+				av_log(NULL, AV_LOG_WARNING, "JFIF_IMG: found Non default Huffman table %d, length = %d, offset =%d\n", huf_tab_no, length, huf_cmp_offset );
 			}
 			else
 			{
@@ -1382,11 +1379,12 @@ int huf_cmp_offset=0, huf_tab_no=0;
         while( ((unsigned char)data[i] != 0xff) && (i<imglength) )
 		    i++;
 	    if ( i > 0 )
-		    fprintf(stderr, "JFIF_IMG: parse_jfif_header, %d leading bytes\n", i);
+			av_log(NULL, AV_LOG_DEBUG, "JFIF_IMG: parse_jfif_header, %d leading bytes\n", i);
+			
 	    i++;
 	    if ( (unsigned char) data[i] != 0xd8)
 	    {
-		    fprintf(stderr, "JFIF_IMG: parse_jfif_header, incorrect SOI 0xff%02x\n", data[i]);
+			av_log(NULL, AV_LOG_ERROR, "JFIF_IMG: parse_jfif_header, incorrect SOI 0xff%02x\n", data[i]);
 		    return -1;
 	    }
 	    i++;
@@ -1444,7 +1442,7 @@ int huf_cmp_offset=0, huf_tab_no=0;
 			}
 			else
 			{
-				fprintf(stderr, "JFIF_IMG: Unknown format byte 0x%02X\n", data[i+7]);
+				av_log(NULL, AV_LOG_INFO, "JFIF_IMG: Unknown format byte 0x%02X\n", data[i+7]);
 			}
 //			fprintf(stderr, "JFIF_IMG: found SOF marker, length = %d, xres=%d, yres = %d\n", length, pic->format.target_pixels, pic->format.target_lines );
 			i += length-2;
@@ -1454,7 +1452,7 @@ int huf_cmp_offset=0, huf_tab_no=0;
 			huf_cmp_offset += 2; // skip past FFC4
 			if (memcmp(&data[i-2], &huf_header[huf_cmp_offset], length))
 			{
-				fprintf(stderr, "JFIF_IMG: found Non default Huffman table %d, length = %d, offset =%d\n", huf_tab_no, length, huf_cmp_offset );
+				av_log(NULL, AV_LOG_INFO, "JFIF_IMG: found Non default Huffman table %d, length = %d, offset =%d\n", huf_tab_no, length, huf_cmp_offset );
 			}
 			else
 			{
@@ -1481,7 +1479,7 @@ int huf_cmp_offset=0, huf_tab_no=0;
 			i += length-2;
 			break;
 		default :
-			fprintf(stderr, "JFIF_IMG: Unknown marker 0x%04X, next byte = 0x%02X, length = %d\n", marker, data[i], length );
+			av_log(NULL, AV_LOG_INFO, "JFIF_IMG: Unknown marker 0x%04X, next byte = 0x%02X, length = %d\n", marker, data[i], length );
 //			return -1;
 			i += length-2;	// JCB 026 skip past the unknown field
 			break;
@@ -1491,22 +1489,6 @@ int huf_cmp_offset=0, huf_tab_no=0;
 	return i;
 }
 
-
-static char *find_comment_field(const char *field_name, char *text, char *result, int result_len)
-{
-char *field;
-int i;
-	field = strstr(text, field_name);
-	if ( field )
-	{
-		field += strlen(field_name);
-		i = 0;
-		while ( field[i] && (field[i] != '\n') && (field[i] != '\r') && (i<(result_len-1)) )
-			*result++ = field[i++];
-		*result = 0;
-	}
-	return field;
-}
 
 void parse_comment( char *text, int text_len, NetVuImageData *pic, char **additionalText )
 {
@@ -1641,7 +1623,6 @@ int build_comment_text(char *buffer, NetVuImageData *pic, int max)
 char *bufptr = buffer;
 char line[128];
 char *txt;
-struct tm tim_s;
 int count;
 
 	strcpy(bufptr, comment_version);
@@ -1731,7 +1712,7 @@ int count;
 		strcpy(bufptr, image_date);
 		bufptr += strlen(image_date);
 	}
-	strftime (line, sizeof(line), "%d/%m/%Y\r\n", localtime_r(&pic->session_time, &tim_s));
+	strftime (line, sizeof(line), "%d/%m/%Y\r\n", localtime((const time_t*)&pic->session_time));
 	count += strlen(line);
 	if (count > max)
 		return 0;
@@ -1749,7 +1730,7 @@ int count;
 		strcpy(bufptr, image_time);
 		bufptr += strlen(image_time);
 	}
-	strftime (line, sizeof(line), "%H:%M:%S\r\n", localtime_r(&pic->session_time, &tim_s));
+	strftime (line, sizeof(line), "%H:%M:%S\r\n", localtime((const time_t*)&pic->session_time));
 	count += strlen(line);
 	if (count > max)
 		return 0;
@@ -1808,7 +1789,7 @@ int count;
 		char cpy[80];
 			memset(cpy,0,80);
 			strncpy(cpy,txt,pic->start_offset);
-			fprintf(stderr, "JFIF_IMG: 1 adding text %s\n", cpy);
+			av_log(NULL, AV_LOG_INFO, "JFIF_IMG: 1 adding text %s\n", cpy);
 #endif
 			strncpy(bufptr, txt, pic->start_offset);
 			bufptr += pic->start_offset;

@@ -1,7 +1,6 @@
 /*
  * ALAC (Apple Lossless Audio Codec) decoder
  * Copyright (c) 2005 David Hammerton
- * All rights reserved.
  *
  * This file is part of FFmpeg.
  *
@@ -21,7 +20,7 @@
  */
 
 /**
- * @file alac.c
+ * @file
  * ALAC (Apple Lossless Audio Codec) decoder
  * @author 2005 David Hammerton
  *
@@ -54,9 +53,13 @@
 
 
 #include "avcodec.h"
-#include "bitstream.h"
+#include "get_bits.h"
+#include "bytestream.h"
+#include "unary.h"
+#include "mathops.h"
 
 #define ALAC_EXTRADATA_SIZE 36
+#define MAX_CHANNELS 2
 
 typedef struct {
 
@@ -66,45 +69,44 @@ typedef struct {
      * set this to 1 */
     int context_initialized;
 
-    int samplesize;
     int numchannels;
     int bytespersample;
 
     /* buffers */
-    int32_t *predicterror_buffer_a;
-    int32_t *predicterror_buffer_b;
+    int32_t *predicterror_buffer[MAX_CHANNELS];
 
-    int32_t *outputsamples_buffer_a;
-    int32_t *outputsamples_buffer_b;
+    int32_t *outputsamples_buffer[MAX_CHANNELS];
+
+    int32_t *wasted_bits_buffer[MAX_CHANNELS];
 
     /* stuff from setinfo */
     uint32_t setinfo_max_samples_per_frame; /* 0x1000 = 4096 */    /* max samples per frame? */
-    uint8_t setinfo_7a; /* 0x00 */
     uint8_t setinfo_sample_size; /* 0x10 */
     uint8_t setinfo_rice_historymult; /* 0x28 */
     uint8_t setinfo_rice_initialhistory; /* 0x0a */
     uint8_t setinfo_rice_kmodifier; /* 0x0e */
-    uint8_t setinfo_7f; /* 0x02 */
-    uint16_t setinfo_80; /* 0x00ff */
-    uint32_t setinfo_82; /* 0x000020e7 */
-    uint32_t setinfo_86; /* 0x00069fe4 */
-    uint32_t setinfo_8a_rate; /* 0x0000ac44 */
     /* end setinfo stuff */
 
+    int wasted_bits;
 } ALACContext;
 
 static void allocate_buffers(ALACContext *alac)
 {
-    alac->predicterror_buffer_a = av_malloc(alac->setinfo_max_samples_per_frame * 4);
-    alac->predicterror_buffer_b = av_malloc(alac->setinfo_max_samples_per_frame * 4);
+    int chan;
+    for (chan = 0; chan < MAX_CHANNELS; chan++) {
+        alac->predicterror_buffer[chan] =
+            av_malloc(alac->setinfo_max_samples_per_frame * 4);
 
-    alac->outputsamples_buffer_a = av_malloc(alac->setinfo_max_samples_per_frame * 4);
-    alac->outputsamples_buffer_b = av_malloc(alac->setinfo_max_samples_per_frame * 4);
+        alac->outputsamples_buffer[chan] =
+            av_malloc(alac->setinfo_max_samples_per_frame * 4);
+
+        alac->wasted_bits_buffer[chan] = av_malloc(alac->setinfo_max_samples_per_frame * 4);
+    }
 }
 
 static int alac_set_info(ALACContext *alac)
 {
-    unsigned char *ptr = alac->avctx->extradata;
+    const unsigned char *ptr = alac->avctx->extradata;
 
     ptr += 4; /* size */
     ptr += 4; /* alac */
@@ -114,39 +116,54 @@ static int alac_set_info(ALACContext *alac)
         av_log(alac->avctx, AV_LOG_ERROR, "setinfo_max_samples_per_frame too large\n");
         return -1;
     }
-    alac->setinfo_max_samples_per_frame = AV_RB32(ptr); /* buffer size / 2 ? */
-    ptr += 4;
-    alac->setinfo_7a = *ptr++;
-    alac->setinfo_sample_size = *ptr++;
-    alac->setinfo_rice_historymult = *ptr++;
-    alac->setinfo_rice_initialhistory = *ptr++;
-    alac->setinfo_rice_kmodifier = *ptr++;
-    alac->setinfo_7f = *ptr++; // channels?
-    alac->setinfo_80 = AV_RB16(ptr);
-    ptr += 2;
-    alac->setinfo_82 = AV_RB32(ptr); // max coded frame size
-    ptr += 4;
-    alac->setinfo_86 = AV_RB32(ptr); // bitrate ?
-    ptr += 4;
-    alac->setinfo_8a_rate = AV_RB32(ptr); // samplerate
-    ptr += 4;
+
+    /* buffer size / 2 ? */
+    alac->setinfo_max_samples_per_frame = bytestream_get_be32(&ptr);
+    ptr++;                          /* ??? */
+    alac->setinfo_sample_size           = *ptr++;
+    if (alac->setinfo_sample_size > 32) {
+        av_log(alac->avctx, AV_LOG_ERROR, "setinfo_sample_size too large\n");
+        return -1;
+    }
+    alac->setinfo_rice_historymult      = *ptr++;
+    alac->setinfo_rice_initialhistory   = *ptr++;
+    alac->setinfo_rice_kmodifier        = *ptr++;
+    ptr++;                         /* channels? */
+    bytestream_get_be16(&ptr);      /* ??? */
+    bytestream_get_be32(&ptr);      /* max coded frame size */
+    bytestream_get_be32(&ptr);      /* bitrate ? */
+    bytestream_get_be32(&ptr);      /* samplerate */
 
     allocate_buffers(alac);
 
     return 0;
 }
 
-/* hideously inefficient. could use a bitmask search,
- * alternatively bsr on x86,
- */
-static int count_leading_zeros(int32_t input)
-{
-    int i = 0;
-    while (!(0x80000000 & input) && i < 32) {
-        i++;
-        input = input << 1;
+static inline int decode_scalar(GetBitContext *gb, int k, int limit, int readsamplesize){
+    /* read x - number of 1s before 0 represent the rice */
+    int x = get_unary_0_9(gb);
+
+    if (x > 8) { /* RICE THRESHOLD */
+        /* use alternative encoding */
+        x = get_bits(gb, readsamplesize);
+    } else {
+        if (k >= limit)
+            k = limit;
+
+        if (k != 1) {
+            int extrabits = show_bits(gb, k);
+
+            /* multiply x by 2^k - 1, as part of their strange algorithm */
+            x = (x << k) - x;
+
+            if (extrabits > 1) {
+                x += extrabits - 1;
+                skip_bits(gb, k);
+            } else
+                skip_bits(gb, k - 1);
+        }
     }
-    return i;
+    return x;
 }
 
 static void bastardized_rice_decompress(ALACContext *alac,
@@ -164,54 +181,16 @@ static void bastardized_rice_decompress(ALACContext *alac,
     int sign_modifier = 0;
 
     for (output_count = 0; output_count < output_size; output_count++) {
-        int32_t x = 0;
+        int32_t x;
         int32_t x_modified;
         int32_t final_val;
 
-        /* read x - number of 1s before 0 represent the rice */
-        while (x <= 8 && get_bits1(&alac->gb)) {
-            x++;
-        }
+        /* standard rice encoding */
+        int k; /* size of extra bits */
 
-
-        if (x > 8) { /* RICE THRESHOLD */
-          /* use alternative encoding */
-            int32_t value;
-
-            value = get_bits(&alac->gb, readsamplesize);
-
-            /* mask value to readsamplesize size */
-            if (readsamplesize != 32)
-                value &= (0xffffffff >> (32 - readsamplesize));
-
-            x = value;
-        } else {
-          /* standard rice encoding */
-            int extrabits;
-            int k; /* size of extra bits */
-
-            /* read k, that is bits as is */
-            k = 31 - rice_kmodifier - count_leading_zeros((history >> 9) + 3);
-
-            if (k < 0)
-                k += rice_kmodifier;
-            else
-                k = rice_kmodifier;
-
-            if (k != 1) {
-                extrabits = show_bits(&alac->gb, k);
-
-                /* multiply x by 2^k - 1, as part of their strange algorithm */
-                x = (x << k) - x;
-
-                if (extrabits > 1) {
-                    x += extrabits - 1;
-                    get_bits(&alac->gb, k);
-                } else {
-                    get_bits(&alac->gb, k - 1);
-                }
-            }
-        }
+        /* read k, that is bits as is */
+        k = av_log2((history >> 9) + 3);
+        x= decode_scalar(&alac->gb, k, rice_kmodifier, readsamplesize);
 
         x_modified = sign_modifier + x;
         final_val = (x_modified + 1) / 2;
@@ -222,50 +201,30 @@ static void bastardized_rice_decompress(ALACContext *alac,
         sign_modifier = 0;
 
         /* now update the history */
-        history += (x_modified * rice_historymult)
-                 - ((history * rice_historymult) >> 9);
+        history += x_modified * rice_historymult
+                   - ((history * rice_historymult) >> 9);
 
         if (x_modified > 0xffff)
             history = 0xffff;
 
         /* special case: there may be compressed blocks of 0 */
         if ((history < 128) && (output_count+1 < output_size)) {
-            int block_size;
+            int k;
+            unsigned int block_size;
 
             sign_modifier = 1;
 
-            x = 0;
-            while (x <= 8 && get_bits1(&alac->gb)) {
-                x++;
-            }
+            k = 7 - av_log2(history) + ((history + 16) >> 6 /* / 64 */);
 
-            if (x > 8) {
-                block_size = get_bits(&alac->gb, 16);
-                block_size &= 0xffff;
-            } else {
-                int k;
-                int extrabits;
-
-                k = count_leading_zeros(history) + ((history + 16) >> 6 /* / 64 */) - 24;
-
-                extrabits = show_bits(&alac->gb, k);
-
-                block_size = (((1 << k) - 1) & rice_kmodifier_mask) * x
-                           + extrabits - 1;
-
-                if (extrabits < 2) {
-                    x = 1 - extrabits;
-                    block_size += x;
-                    get_bits(&alac->gb, k - 1);
-                } else {
-                    get_bits(&alac->gb, k);
-                }
-            }
+            block_size= decode_scalar(&alac->gb, k, rice_kmodifier, 16);
 
             if (block_size > 0) {
+                if(block_size >= output_size - output_count){
+                    av_log(alac->avctx, AV_LOG_ERROR, "invalid zero block size of %d %d %d\n", block_size, output_size, output_count);
+                    block_size= output_size - output_count - 1;
+                }
                 memset(&output_buffer[output_count+1], 0, block_size * 4);
                 output_count += block_size;
-
             }
 
             if (block_size > 0xffff)
@@ -276,12 +235,10 @@ static void bastardized_rice_decompress(ALACContext *alac,
     }
 }
 
-#define SIGN_EXTENDED32(val, bits) ((val << (32 - bits)) >> (32 - bits))
-
-#define SIGN_ONLY(v) \
-                     ((v < 0) ? (-1) : \
-                                ((v > 0) ? (1) : \
-                                           (0)))
+static inline int sign_only(int v)
+{
+    return v ? FFSIGN(v) : 0;
+}
 
 static void predictor_decompress_fir_adapt(int32_t *error_buffer,
                                            int32_t *buffer_out,
@@ -297,7 +254,9 @@ static void predictor_decompress_fir_adapt(int32_t *error_buffer,
     *buffer_out = *error_buffer;
 
     if (!predictor_coef_num) {
-        if (output_size <= 1) return;
+        if (output_size <= 1)
+            return;
+
         memcpy(buffer_out+1, error_buffer+1, (output_size-1) * 4);
         return;
     }
@@ -306,53 +265,48 @@ static void predictor_decompress_fir_adapt(int32_t *error_buffer,
       /* second-best case scenario for fir decompression,
        * error describes a small difference from the previous sample only
        */
-        if (output_size <= 1) return;
+        if (output_size <= 1)
+            return;
         for (i = 0; i < output_size - 1; i++) {
             int32_t prev_value;
             int32_t error_value;
 
             prev_value = buffer_out[i];
             error_value = error_buffer[i+1];
-            buffer_out[i+1] = SIGN_EXTENDED32((prev_value + error_value), readsamplesize);
+            buffer_out[i+1] =
+                sign_extend((prev_value + error_value), readsamplesize);
         }
         return;
     }
 
     /* read warm-up samples */
-    if (predictor_coef_num > 0) {
-        int i;
+    if (predictor_coef_num > 0)
         for (i = 0; i < predictor_coef_num; i++) {
             int32_t val;
 
             val = buffer_out[i] + error_buffer[i+1];
-
-            val = SIGN_EXTENDED32(val, readsamplesize);
-
+            val = sign_extend(val, readsamplesize);
             buffer_out[i+1] = val;
         }
-    }
 
 #if 0
     /* 4 and 8 are very common cases (the only ones i've seen). these
-     * should be unrolled and optimised
+     * should be unrolled and optimized
      */
     if (predictor_coef_num == 4) {
-        /* FIXME: optimised general case */
+        /* FIXME: optimized general case */
         return;
     }
 
     if (predictor_coef_table == 8) {
-        /* FIXME: optimised general case */
+        /* FIXME: optimized general case */
         return;
     }
 #endif
 
-
     /* general case */
     if (predictor_coef_num > 0) {
-        for (i = predictor_coef_num + 1;
-             i < output_size;
-             i++) {
+        for (i = predictor_coef_num + 1; i < output_size; i++) {
             int j;
             int sum = 0;
             int outval;
@@ -366,7 +320,7 @@ static void predictor_decompress_fir_adapt(int32_t *error_buffer,
             outval = (1 << (predictor_quantitization-1)) + sum;
             outval = outval >> predictor_quantitization;
             outval = outval + buffer_out[0] + error_val;
-            outval = SIGN_EXTENDED32(outval, readsamplesize);
+            outval = sign_extend(outval, readsamplesize);
 
             buffer_out[predictor_coef_num+1] = outval;
 
@@ -375,7 +329,7 @@ static void predictor_decompress_fir_adapt(int32_t *error_buffer,
 
                 while (predictor_num >= 0 && error_val > 0) {
                     int val = buffer_out[0] - buffer_out[predictor_coef_num - predictor_num];
-                    int sign = SIGN_ONLY(val);
+                    int sign = sign_only(val);
 
                     predictor_coef_table[predictor_num] -= sign;
 
@@ -391,7 +345,7 @@ static void predictor_decompress_fir_adapt(int32_t *error_buffer,
 
                 while (predictor_num >= 0 && error_val < 0) {
                     int val = buffer_out[0] - buffer_out[predictor_coef_num - predictor_num];
-                    int sign = - SIGN_ONLY(val);
+                    int sign = - sign_only(val);
 
                     predictor_coef_table[predictor_num] -= sign;
 
@@ -409,32 +363,29 @@ static void predictor_decompress_fir_adapt(int32_t *error_buffer,
     }
 }
 
-static void deinterlace_16(int32_t *buffer_a, int32_t *buffer_b,
-                    int16_t *buffer_out,
-                    int numchannels, int numsamples,
-                    uint8_t interlacing_shift,
-                    uint8_t interlacing_leftweight)
+static void reconstruct_stereo_16(int32_t *buffer[MAX_CHANNELS],
+                                  int16_t *buffer_out,
+                                  int numchannels, int numsamples,
+                                  uint8_t interlacing_shift,
+                                  uint8_t interlacing_leftweight)
 {
     int i;
-    if (numsamples <= 0) return;
+    if (numsamples <= 0)
+        return;
 
     /* weighted interlacing */
     if (interlacing_leftweight) {
         for (i = 0; i < numsamples; i++) {
-            int32_t difference, midright;
-            int16_t left;
-            int16_t right;
+            int32_t a, b;
 
-            midright = buffer_a[i];
-            difference = buffer_b[i];
+            a = buffer[0][i];
+            b = buffer[1][i];
 
+            a -= (b * interlacing_leftweight) >> interlacing_shift;
+            b += a;
 
-            right = midright - ((difference * interlacing_leftweight) >> interlacing_shift);
-            left = (midright - ((difference * interlacing_leftweight) >> interlacing_shift))
-                 + difference;
-
-            buffer_out[i*numchannels] = left;
-            buffer_out[i*numchannels + 1] = right;
+            buffer_out[i*numchannels] = b;
+            buffer_out[i*numchannels + 1] = a;
         }
 
         return;
@@ -444,22 +395,79 @@ static void deinterlace_16(int32_t *buffer_a, int32_t *buffer_b,
     for (i = 0; i < numsamples; i++) {
         int16_t left, right;
 
-        left = buffer_a[i];
-        right = buffer_b[i];
+        left = buffer[0][i];
+        right = buffer[1][i];
 
         buffer_out[i*numchannels] = left;
         buffer_out[i*numchannels + 1] = right;
     }
 }
 
+static void decorrelate_stereo_24(int32_t *buffer[MAX_CHANNELS],
+                                  int32_t *buffer_out,
+                                  int32_t *wasted_bits_buffer[MAX_CHANNELS],
+                                  int wasted_bits,
+                                  int numchannels, int numsamples,
+                                  uint8_t interlacing_shift,
+                                  uint8_t interlacing_leftweight)
+{
+    int i;
+
+    if (numsamples <= 0)
+        return;
+
+    /* weighted interlacing */
+    if (interlacing_leftweight) {
+        for (i = 0; i < numsamples; i++) {
+            int32_t a, b;
+
+            a = buffer[0][i];
+            b = buffer[1][i];
+
+            a -= (b * interlacing_leftweight) >> interlacing_shift;
+            b += a;
+
+            if (wasted_bits) {
+                b  = (b  << wasted_bits) | wasted_bits_buffer[0][i];
+                a  = (a  << wasted_bits) | wasted_bits_buffer[1][i];
+            }
+
+            buffer_out[i * numchannels]     = b << 8;
+            buffer_out[i * numchannels + 1] = a << 8;
+        }
+    } else {
+        for (i = 0; i < numsamples; i++) {
+            int32_t left, right;
+
+            left  = buffer[0][i];
+            right = buffer[1][i];
+
+            if (wasted_bits) {
+                left   = (left   << wasted_bits) | wasted_bits_buffer[0][i];
+                right  = (right  << wasted_bits) | wasted_bits_buffer[1][i];
+            }
+
+            buffer_out[i * numchannels]     = left  << 8;
+            buffer_out[i * numchannels + 1] = right << 8;
+        }
+    }
+}
+
 static int alac_decode_frame(AVCodecContext *avctx,
                              void *outbuffer, int *outputsize,
-                             uint8_t *inbuffer, int input_buffer_size)
+                             AVPacket *avpkt)
 {
+    const uint8_t *inbuffer = avpkt->data;
+    int input_buffer_size = avpkt->size;
     ALACContext *alac = avctx->priv_data;
 
     int channels;
-    int32_t outputsamples;
+    unsigned int outputsamples;
+    int hassize;
+    unsigned int readsamplesize;
+    int isnotcompressed;
+    uint8_t interlacing_shift;
+    uint8_t interlacing_leftweight;
 
     /* short-circuit null buffers */
     if (!inbuffer || !input_buffer_size)
@@ -479,381 +487,226 @@ static int alac_decode_frame(AVCodecContext *avctx,
         alac->context_initialized = 1;
     }
 
-    outputsamples = alac->setinfo_max_samples_per_frame;
-
     init_get_bits(&alac->gb, inbuffer, input_buffer_size * 8);
 
-    channels = get_bits(&alac->gb, 3);
+    channels = get_bits(&alac->gb, 3) + 1;
+    if (channels > MAX_CHANNELS) {
+        av_log(avctx, AV_LOG_ERROR, "channels > %d not supported\n",
+               MAX_CHANNELS);
+        return input_buffer_size;
+    }
+
+    /* 2^result = something to do with output waiting.
+     * perhaps matters if we read > 1 frame in a pass?
+     */
+    skip_bits(&alac->gb, 4);
+
+    skip_bits(&alac->gb, 12); /* unknown, skip 12 bits */
+
+    /* the output sample size is stored soon */
+    hassize = get_bits1(&alac->gb);
+
+    alac->wasted_bits = get_bits(&alac->gb, 2) << 3;
+
+    /* whether the frame is compressed */
+    isnotcompressed = get_bits1(&alac->gb);
+
+    if (hassize) {
+        /* now read the number of samples as a 32bit integer */
+        outputsamples = get_bits_long(&alac->gb, 32);
+        if(outputsamples > alac->setinfo_max_samples_per_frame){
+            av_log(avctx, AV_LOG_ERROR, "outputsamples %d > %d\n", outputsamples, alac->setinfo_max_samples_per_frame);
+            return -1;
+        }
+    } else
+        outputsamples = alac->setinfo_max_samples_per_frame;
+
+    switch (alac->setinfo_sample_size) {
+    case 16: avctx->sample_fmt    = SAMPLE_FMT_S16;
+             alac->bytespersample = channels << 1;
+             break;
+    case 24: avctx->sample_fmt    = SAMPLE_FMT_S32;
+             alac->bytespersample = channels << 2;
+             break;
+    default: av_log(avctx, AV_LOG_ERROR, "Sample depth %d is not supported.\n",
+                    alac->setinfo_sample_size);
+             return -1;
+    }
+
+    if(outputsamples > *outputsize / alac->bytespersample){
+        av_log(avctx, AV_LOG_ERROR, "sample buffer too small\n");
+        return -1;
+    }
 
     *outputsize = outputsamples * alac->bytespersample;
+    readsamplesize = alac->setinfo_sample_size - (alac->wasted_bits) + channels - 1;
+    if (readsamplesize > MIN_CACHE_BITS) {
+        av_log(avctx, AV_LOG_ERROR, "readsamplesize too big (%d)\n", readsamplesize);
+        return -1;
+    }
 
-    switch(channels) {
-    case 0: { /* 1 channel */
-        int hassize;
-        int isnotcompressed;
-        int readsamplesize;
+    if (!isnotcompressed) {
+        /* so it is compressed */
+        int16_t predictor_coef_table[channels][32];
+        int predictor_coef_num[channels];
+        int prediction_type[channels];
+        int prediction_quantitization[channels];
+        int ricemodifier[channels];
+        int i, chan;
 
-        int wasted_bytes;
-        int ricemodifier;
+        interlacing_shift = get_bits(&alac->gb, 8);
+        interlacing_leftweight = get_bits(&alac->gb, 8);
 
+        for (chan = 0; chan < channels; chan++) {
+            prediction_type[chan] = get_bits(&alac->gb, 4);
+            prediction_quantitization[chan] = get_bits(&alac->gb, 4);
 
-        /* 2^result = something to do with output waiting.
-         * perhaps matters if we read > 1 frame in a pass?
-         */
-        get_bits(&alac->gb, 4);
-
-        get_bits(&alac->gb, 12); /* unknown, skip 12 bits */
-
-        hassize = get_bits(&alac->gb, 1); /* the output sample size is stored soon */
-
-        wasted_bytes = get_bits(&alac->gb, 2); /* unknown ? */
-
-        isnotcompressed = get_bits(&alac->gb, 1); /* whether the frame is compressed */
-
-        if (hassize) {
-            /* now read the number of samples,
-             * as a 32bit integer */
-            outputsamples = get_bits(&alac->gb, 32);
-            *outputsize = outputsamples * alac->bytespersample;
-        }
-
-        readsamplesize = alac->setinfo_sample_size - (wasted_bytes * 8);
-
-        if (!isnotcompressed) {
-         /* so it is compressed */
-            int16_t predictor_coef_table[32];
-            int predictor_coef_num;
-            int prediction_type;
-            int prediction_quantitization;
-            int i;
-
-            /* FIXME: skip 16 bits, not sure what they are. seem to be used in
-             * two channel case */
-            get_bits(&alac->gb, 8);
-            get_bits(&alac->gb, 8);
-
-            prediction_type = get_bits(&alac->gb, 4);
-            prediction_quantitization = get_bits(&alac->gb, 4);
-
-            ricemodifier = get_bits(&alac->gb, 3);
-            predictor_coef_num = get_bits(&alac->gb, 5);
+            ricemodifier[chan] = get_bits(&alac->gb, 3);
+            predictor_coef_num[chan] = get_bits(&alac->gb, 5);
 
             /* read the predictor table */
-            for (i = 0; i < predictor_coef_num; i++) {
-                predictor_coef_table[i] = (int16_t)get_bits(&alac->gb, 16);
-            }
+            for (i = 0; i < predictor_coef_num[chan]; i++)
+                predictor_coef_table[chan][i] = (int16_t)get_bits(&alac->gb, 16);
+        }
 
-            if (wasted_bytes) {
-                /* these bytes seem to have something to do with
-                 * > 2 channel files.
-                 */
-                av_log(avctx, AV_LOG_ERROR, "FIXME: unimplemented, unhandling of wasted_bytes\n");
+        if (alac->wasted_bits) {
+            int i, ch;
+            for (i = 0; i < outputsamples; i++) {
+                for (ch = 0; ch < channels; ch++)
+                    alac->wasted_bits_buffer[ch][i] = get_bits(&alac->gb, alac->wasted_bits);
             }
-
+        }
+        for (chan = 0; chan < channels; chan++) {
             bastardized_rice_decompress(alac,
-                                        alac->predicterror_buffer_a,
+                                        alac->predicterror_buffer[chan],
                                         outputsamples,
                                         readsamplesize,
                                         alac->setinfo_rice_initialhistory,
                                         alac->setinfo_rice_kmodifier,
-                                        ricemodifier * alac->setinfo_rice_historymult / 4,
+                                        ricemodifier[chan] * alac->setinfo_rice_historymult / 4,
                                         (1 << alac->setinfo_rice_kmodifier) - 1);
 
-            if (prediction_type == 0) {
-              /* adaptive fir */
-                predictor_decompress_fir_adapt(alac->predicterror_buffer_a,
-                                               alac->outputsamples_buffer_a,
+            if (prediction_type[chan] == 0) {
+                /* adaptive fir */
+                predictor_decompress_fir_adapt(alac->predicterror_buffer[chan],
+                                               alac->outputsamples_buffer[chan],
                                                outputsamples,
                                                readsamplesize,
-                                               predictor_coef_table,
-                                               predictor_coef_num,
-                                               prediction_quantitization);
+                                               predictor_coef_table[chan],
+                                               predictor_coef_num[chan],
+                                               prediction_quantitization[chan]);
             } else {
-                av_log(avctx, AV_LOG_ERROR, "FIXME: unhandled prediction type: %i\n", prediction_type);
-                /* i think the only other prediction type (or perhaps this is just a
-                 * boolean?) runs adaptive fir twice.. like:
+                av_log(avctx, AV_LOG_ERROR, "FIXME: unhandled prediction type: %i\n", prediction_type[chan]);
+                /* I think the only other prediction type (or perhaps this is
+                 * just a boolean?) runs adaptive fir twice.. like:
                  * predictor_decompress_fir_adapt(predictor_error, tempout, ...)
                  * predictor_decompress_fir_adapt(predictor_error, outputsamples ...)
                  * little strange..
                  */
             }
+        }
+    } else {
+        /* not compressed, easy case */
+        int i, chan;
+        if (alac->setinfo_sample_size <= 16) {
+        for (i = 0; i < outputsamples; i++)
+            for (chan = 0; chan < channels; chan++) {
+                int32_t audiobits;
 
+                audiobits = get_sbits_long(&alac->gb, alac->setinfo_sample_size);
+
+                alac->outputsamples_buffer[chan][i] = audiobits;
+            }
         } else {
-          /* not compressed, easy case */
-            if (readsamplesize <= 16) {
-                int i;
-                for (i = 0; i < outputsamples; i++) {
-                    int32_t audiobits = get_bits(&alac->gb, readsamplesize);
-
-                    audiobits = SIGN_EXTENDED32(audiobits, readsamplesize);
-
-                    alac->outputsamples_buffer_a[i] = audiobits;
-                }
-            } else {
-                int i;
-                for (i = 0; i < outputsamples; i++) {
-                    int32_t audiobits;
-
-                    audiobits = get_bits(&alac->gb, 16);
-                    /* special case of sign extension..
-                     * as we'll be ORing the low 16bits into this */
-                    audiobits = audiobits << 16;
-                    audiobits = audiobits >> (32 - readsamplesize);
-
-                    audiobits |= get_bits(&alac->gb, readsamplesize - 16);
-
-                    alac->outputsamples_buffer_a[i] = audiobits;
+            for (i = 0; i < outputsamples; i++) {
+                for (chan = 0; chan < channels; chan++) {
+                    alac->outputsamples_buffer[chan][i] = get_bits(&alac->gb,
+                                                          alac->setinfo_sample_size);
+                    alac->outputsamples_buffer[chan][i] = sign_extend(alac->outputsamples_buffer[chan][i],
+                                                                      alac->setinfo_sample_size);
                 }
             }
-            /* wasted_bytes = 0; // unused */
         }
+        alac->wasted_bits = 0;
+        interlacing_shift = 0;
+        interlacing_leftweight = 0;
+    }
+    if (get_bits(&alac->gb, 3) != 7)
+        av_log(avctx, AV_LOG_ERROR, "Error : Wrong End Of Frame\n");
 
-        switch(alac->setinfo_sample_size) {
-        case 16: {
+    switch(alac->setinfo_sample_size) {
+    case 16:
+        if (channels == 2) {
+            reconstruct_stereo_16(alac->outputsamples_buffer,
+                                  (int16_t*)outbuffer,
+                                  alac->numchannels,
+                                  outputsamples,
+                                  interlacing_shift,
+                                  interlacing_leftweight);
+        } else {
             int i;
             for (i = 0; i < outputsamples; i++) {
-                int16_t sample = alac->outputsamples_buffer_a[i];
-                ((int16_t*)outbuffer)[i * alac->numchannels] = sample;
+                ((int16_t*)outbuffer)[i] = alac->outputsamples_buffer[0][i];
             }
-            break;
-        }
-        case 20:
-        case 24:
-        case 32:
-            av_log(avctx, AV_LOG_ERROR, "FIXME: unimplemented sample size %i\n", alac->setinfo_sample_size);
-            break;
-        default:
-            break;
         }
         break;
-    }
-    case 1: { /* 2 channels */
-        int hassize;
-        int isnotcompressed;
-        int readsamplesize;
-
-        int wasted_bytes;
-
-        uint8_t interlacing_shift;
-        uint8_t interlacing_leftweight;
-
-        /* 2^result = something to do with output waiting.
-         * perhaps matters if we read > 1 frame in a pass?
-         */
-        get_bits(&alac->gb, 4);
-
-        get_bits(&alac->gb, 12); /* unknown, skip 12 bits */
-
-        hassize = get_bits(&alac->gb, 1); /* the output sample size is stored soon */
-
-        wasted_bytes = get_bits(&alac->gb, 2); /* unknown ? */
-
-        isnotcompressed = get_bits(&alac->gb, 1); /* whether the frame is compressed */
-
-        if (hassize) {
-            /* now read the number of samples,
-             * as a 32bit integer */
-            outputsamples = get_bits(&alac->gb, 32);
-            *outputsize = outputsamples * alac->bytespersample;
-        }
-
-        readsamplesize = alac->setinfo_sample_size - (wasted_bytes * 8) + 1;
-
-        if (!isnotcompressed) {
-         /* compressed */
-            int16_t predictor_coef_table_a[32];
-            int predictor_coef_num_a;
-            int prediction_type_a;
-            int prediction_quantitization_a;
-            int ricemodifier_a;
-
-            int16_t predictor_coef_table_b[32];
-            int predictor_coef_num_b;
-            int prediction_type_b;
-            int prediction_quantitization_b;
-            int ricemodifier_b;
-
-            int i;
-
-            interlacing_shift = get_bits(&alac->gb, 8);
-            interlacing_leftweight = get_bits(&alac->gb, 8);
-
-            /******** channel 1 ***********/
-            prediction_type_a = get_bits(&alac->gb, 4);
-            prediction_quantitization_a = get_bits(&alac->gb, 4);
-
-            ricemodifier_a = get_bits(&alac->gb, 3);
-            predictor_coef_num_a = get_bits(&alac->gb, 5);
-
-            /* read the predictor table */
-            for (i = 0; i < predictor_coef_num_a; i++) {
-                predictor_coef_table_a[i] = (int16_t)get_bits(&alac->gb, 16);
-            }
-
-            /******** channel 2 *********/
-            prediction_type_b = get_bits(&alac->gb, 4);
-            prediction_quantitization_b = get_bits(&alac->gb, 4);
-
-            ricemodifier_b = get_bits(&alac->gb, 3);
-            predictor_coef_num_b = get_bits(&alac->gb, 5);
-
-            /* read the predictor table */
-            for (i = 0; i < predictor_coef_num_b; i++) {
-                predictor_coef_table_b[i] = (int16_t)get_bits(&alac->gb, 16);
-            }
-
-            /*********************/
-            if (wasted_bytes) {
-              /* see mono case */
-                av_log(avctx, AV_LOG_ERROR, "FIXME: unimplemented, unhandling of wasted_bytes\n");
-            }
-
-            /* channel 1 */
-            bastardized_rice_decompress(alac,
-                                        alac->predicterror_buffer_a,
-                                        outputsamples,
-                                        readsamplesize,
-                                        alac->setinfo_rice_initialhistory,
-                                        alac->setinfo_rice_kmodifier,
-                                        ricemodifier_a * alac->setinfo_rice_historymult / 4,
-                                        (1 << alac->setinfo_rice_kmodifier) - 1);
-
-            if (prediction_type_a == 0) {
-              /* adaptive fir */
-                predictor_decompress_fir_adapt(alac->predicterror_buffer_a,
-                                               alac->outputsamples_buffer_a,
-                                               outputsamples,
-                                               readsamplesize,
-                                               predictor_coef_table_a,
-                                               predictor_coef_num_a,
-                                               prediction_quantitization_a);
-            } else {
-              /* see mono case */
-                av_log(avctx, AV_LOG_ERROR, "FIXME: unhandled prediction type: %i\n", prediction_type_a);
-            }
-
-            /* channel 2 */
-            bastardized_rice_decompress(alac,
-                                        alac->predicterror_buffer_b,
-                                        outputsamples,
-                                        readsamplesize,
-                                        alac->setinfo_rice_initialhistory,
-                                        alac->setinfo_rice_kmodifier,
-                                        ricemodifier_b * alac->setinfo_rice_historymult / 4,
-                                        (1 << alac->setinfo_rice_kmodifier) - 1);
-
-            if (prediction_type_b == 0) {
-              /* adaptive fir */
-                predictor_decompress_fir_adapt(alac->predicterror_buffer_b,
-                                               alac->outputsamples_buffer_b,
-                                               outputsamples,
-                                               readsamplesize,
-                                               predictor_coef_table_b,
-                                               predictor_coef_num_b,
-                                               prediction_quantitization_b);
-            } else {
-                av_log(avctx, AV_LOG_ERROR, "FIXME: unhandled prediction type: %i\n", prediction_type_b);
-            }
+    case 24:
+        if (channels == 2) {
+            decorrelate_stereo_24(alac->outputsamples_buffer,
+                                  outbuffer,
+                                  alac->wasted_bits_buffer,
+                                  alac->wasted_bits,
+                                  alac->numchannels,
+                                  outputsamples,
+                                  interlacing_shift,
+                                  interlacing_leftweight);
         } else {
-         /* not compressed, easy case */
-            if (alac->setinfo_sample_size <= 16) {
-                int i;
-                for (i = 0; i < outputsamples; i++) {
-                    int32_t audiobits_a, audiobits_b;
-
-                    audiobits_a = get_bits(&alac->gb, alac->setinfo_sample_size);
-                    audiobits_b = get_bits(&alac->gb, alac->setinfo_sample_size);
-
-                    audiobits_a = SIGN_EXTENDED32(audiobits_a, alac->setinfo_sample_size);
-                    audiobits_b = SIGN_EXTENDED32(audiobits_b, alac->setinfo_sample_size);
-
-                    alac->outputsamples_buffer_a[i] = audiobits_a;
-                    alac->outputsamples_buffer_b[i] = audiobits_b;
-                }
-            } else {
-                int i;
-                for (i = 0; i < outputsamples; i++) {
-                    int32_t audiobits_a, audiobits_b;
-
-                    audiobits_a = get_bits(&alac->gb, 16);
-                    audiobits_a = audiobits_a << 16;
-                    audiobits_a = audiobits_a >> (32 - alac->setinfo_sample_size);
-                    audiobits_a |= get_bits(&alac->gb, alac->setinfo_sample_size - 16);
-
-                    audiobits_b = get_bits(&alac->gb, 16);
-                    audiobits_b = audiobits_b << 16;
-                    audiobits_b = audiobits_b >> (32 - alac->setinfo_sample_size);
-                    audiobits_b |= get_bits(&alac->gb, alac->setinfo_sample_size - 16);
-
-                    alac->outputsamples_buffer_a[i] = audiobits_a;
-                    alac->outputsamples_buffer_b[i] = audiobits_b;
-                }
-            }
-            /* wasted_bytes = 0; */
-            interlacing_shift = 0;
-            interlacing_leftweight = 0;
+            int i;
+            for (i = 0; i < outputsamples; i++)
+                ((int32_t *)outbuffer)[i] = alac->outputsamples_buffer[0][i] << 8;
         }
-
-        switch(alac->setinfo_sample_size) {
-        case 16: {
-            deinterlace_16(alac->outputsamples_buffer_a,
-                           alac->outputsamples_buffer_b,
-                           (int16_t*)outbuffer,
-                           alac->numchannels,
-                           outputsamples,
-                           interlacing_shift,
-                           interlacing_leftweight);
-            break;
-        }
-        case 20:
-        case 24:
-        case 32:
-            av_log(avctx, AV_LOG_ERROR, "FIXME: unimplemented sample size %i\n", alac->setinfo_sample_size);
-            break;
-        default:
-            break;
-        }
-
         break;
     }
-    }
+
+    if (input_buffer_size * 8 - get_bits_count(&alac->gb) > 8)
+        av_log(avctx, AV_LOG_ERROR, "Error : %d bits left\n", input_buffer_size * 8 - get_bits_count(&alac->gb));
 
     return input_buffer_size;
 }
 
-static int alac_decode_init(AVCodecContext * avctx)
+static av_cold int alac_decode_init(AVCodecContext * avctx)
 {
     ALACContext *alac = avctx->priv_data;
     alac->avctx = avctx;
     alac->context_initialized = 0;
 
-    alac->samplesize = alac->avctx->bits_per_sample;
     alac->numchannels = alac->avctx->channels;
-    alac->bytespersample = (alac->samplesize / 8) * alac->numchannels;
 
     return 0;
 }
 
-static int alac_decode_close(AVCodecContext *avctx)
+static av_cold int alac_decode_close(AVCodecContext *avctx)
 {
     ALACContext *alac = avctx->priv_data;
 
-    av_free(alac->predicterror_buffer_a);
-    av_free(alac->predicterror_buffer_b);
-
-    av_free(alac->outputsamples_buffer_a);
-    av_free(alac->outputsamples_buffer_b);
+    int chan;
+    for (chan = 0; chan < MAX_CHANNELS; chan++) {
+        av_freep(&alac->predicterror_buffer[chan]);
+        av_freep(&alac->outputsamples_buffer[chan]);
+        av_freep(&alac->wasted_bits_buffer[chan]);
+    }
 
     return 0;
 }
 
 AVCodec alac_decoder = {
     "alac",
-    CODEC_TYPE_AUDIO,
+    AVMEDIA_TYPE_AUDIO,
     CODEC_ID_ALAC,
     sizeof(ALACContext),
     alac_decode_init,
     NULL,
     alac_decode_close,
     alac_decode_frame,
+    .long_name = NULL_IF_CONFIG_SMALL("ALAC (Apple Lossless Audio Codec)"),
 };

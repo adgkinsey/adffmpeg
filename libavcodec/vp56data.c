@@ -1,5 +1,5 @@
 /**
- * @file vp56data.c
+ * @file
  * VP5 and VP6 compatible video decoder (common data)
  *
  * Copyright (C) 2006  Aurelien Jacobs <aurel@gnuage.org>
@@ -18,12 +18,12 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "vp56data.h"
 
-const uint8_t vp56_b6to3[] = { 0, 0, 0, 0, 1, 2 };
+const uint8_t vp56_b2p[]   = { 0, 0, 0, 0, 1, 2, 3, 3, 3, 3 };
 const uint8_t vp56_b6to4[] = { 0, 0, 1, 1, 2, 3 };
 
 const uint8_t vp56_coeff_parse_table[6][11] = {
@@ -44,7 +44,7 @@ const uint8_t vp56_def_mb_types_stats[3][10][2] = {
       {   1,  2 }, {   0,  1 }, {  0,   1 }, {   1,  1 }, {  0,  0 }, },
 };
 
-const vp56_tree_t vp56_pva_tree[] = {
+const VP56Tree vp56_pva_tree[] = {
     { 8, 0},
     { 4, 1},
     { 2, 2}, {-0}, {-1},
@@ -54,7 +54,7 @@ const vp56_tree_t vp56_pva_tree[] = {
     { 2, 6}, {-6}, {-7},
 };
 
-const vp56_tree_t vp56_pc_tree[] = {
+const VP56Tree vp56_pc_tree[] = {
     { 4, 6},
     { 2, 7}, {-0}, {-1},
     { 4, 8},
@@ -62,5 +62,5 @@ const vp56_tree_t vp56_pc_tree[] = {
     { 2,10}, {-4}, {-5},
 };
 
-const uint8_t vp56_coeff_bias[] = { 5, 7, 11, 19, 35, 67 };
+const uint8_t vp56_coeff_bias[] = { 0, 1, 2, 3, 4, 5, 7, 11, 19, 35, 67 };
 const uint8_t vp56_coeff_bit_length[] = { 0, 1, 2, 3, 4, 10 };

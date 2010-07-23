@@ -1,5 +1,7 @@
 /*
- * Copyright (c) 2000,2001 Fabrice Bellard.
+ * Copyright (c) 2000,2001 Fabrice Bellard
+ *
+ * MMI optimization by Leon van Stuivenberg
  *
  * This file is part of FFmpeg.
  *
@@ -16,13 +18,11 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- *
- * MMI optimization by Leon van Stuivenberg
  */
 
-#include "../dsputil.h"
-#include "../mpegvideo.h"
-#include "../avcodec.h"
+#include "libavcodec/avcodec.h"
+#include "libavcodec/dsputil.h"
+#include "libavcodec/mpegvideo.h"
 
 static void dct_unquantize_h263_mmi(MpegEncContext *s,
                                   DCTELEM *block, int n, int qscale)
@@ -45,12 +45,12 @@ static void dct_unquantize_h263_mmi(MpegEncContext *s,
             qadd = 0;
             level = block[0];
         }
-        nCoeffs= 63; //does not allways use zigzag table
+        nCoeffs= 63; //does not always use zigzag table
     } else {
         nCoeffs= s->intra_scantable.raster_end[ s->block_last_index[n] ];
     }
 
-    asm volatile(
+    __asm__ volatile(
         "add    $14, $0, %3     \n\t"
         "pcpyld $8, %0, %0      \n\t"
         "pcpyh  $8, $8          \n\t"   //r8 = qmul

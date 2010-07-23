@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "avformat.h"
+#include "libavutil/avstring.h"
 #include "dsenc.h"
 
 static void MD5Init(MD5_CTX * context, unsigned char *pub_key);
@@ -304,7 +305,7 @@ static void MD5Print(char* FingerPrint, int size, unsigned char * digest)
 	{
 		snprintf (temp, 20, "%02x", digest[i]);
 
-		pstrcat(FingerPrint, size, temp);
+		av_strlcat(FingerPrint, temp, size);
 	}
 
 }
@@ -324,7 +325,7 @@ static char *CreateUserPassword( const char *Username, const char *Password )
             userPassword[strlen(Username)] = '\0';
 
             /* Now add the password */
-            pstrcat( userPassword, strlen( Username ) + strlen( Password ) + 1, Password );
+            av_strlcat( userPassword, Password, strlen( Username ) + strlen( Password ) + 1 );
 
             /* NULL terminate */
             userPassword[strlen(Username) + strlen(Password)] = '\0';
@@ -370,7 +371,7 @@ char * EncryptPasswordString( char * Username, char * Password, long Timestamp, 
     if( canContinue )
     {
         snprintf(Source, 128, "%08X",(int)Timestamp);
-        pstrcat(Source, 128, av_strupr(EncPassword));
+        av_strlcat(Source, av_strupr(EncPassword), 128);
 
         GetFingerPrint( TransmittedData, Source, (unsigned int)strlen(Source), MacAddress );
         TransmittedData[32] = '\0';

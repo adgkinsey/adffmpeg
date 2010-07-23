@@ -21,17 +21,18 @@
  */
 
 /**
- * @file ratecontrol.c
+ * @file
  * Rate control for video encoders.
  */
 
+#include "libavutil/intmath.h"
 #include "avcodec.h"
 #include "dsputil.h"
 #include "ratecontrol.h"
 #include "mpegvideo.h"
 #include "eval.h"
 
-#undef NDEBUG // allways check asserts, the speed effect is far too small to disable them
+#undef NDEBUG // Always check asserts, the speed effect is far too small to disable them.
 #include <assert.h>
 
 #ifndef M_E
@@ -66,8 +67,7 @@ int ff_rate_control_init(MpegEncContext *s)
 {
     RateControlContext *rcc= &s->rc_context;
     int i;
-    char *error = NULL;
-    static const char *const_names[]={
+    static const char * const const_names[]={
         "PI",
         "E",
         "iTex",
@@ -94,21 +94,21 @@ int ff_rate_control_init(MpegEncContext *s)
         "avgTex",
         NULL
     };
-    static double (*func1[])(void *, double)={
+    static double (* const func1[])(void *, double)={
         (void *)bits2qp,
         (void *)qp2bits,
         NULL
     };
-    static const char *func1_names[]={
+    static const char * const func1_names[]={
         "bits2qp",
         "qp2bits",
         NULL
     };
     emms_c();
 
-    rcc->rc_eq_eval = ff_parse(s->avctx->rc_eq, const_names, func1, func1_names, NULL, NULL, &error);
+    rcc->rc_eq_eval = ff_parse_expr(s->avctx->rc_eq ? s->avctx->rc_eq : "tex^qComp", const_names, func1_names, func1, NULL, NULL, 0, s->avctx);
     if (!rcc->rc_eq_eval) {
-        av_log(s->avctx, AV_LOG_ERROR, "Error parsing rc_eq \"%s\": %s\n", s->avctx->rc_eq, error? error : "");
+        av_log(s->avctx, AV_LOG_ERROR, "Error parsing rc_eq \"%s\"\n", s->avctx->rc_eq);
         return -1;
     }
 
@@ -121,7 +121,7 @@ int ff_rate_control_init(MpegEncContext *s)
         rcc->p_cplx_sum [i]=
         rcc->mv_bits_sum[i]=
         rcc->qscale_sum [i]=
-        rcc->frame_count[i]= 1; // 1 is better cuz of 1/0 and such
+        rcc->frame_count[i]= 1; // 1 is better because of 1/0 and such
         rcc->last_qscale_for[i]=FF_QP2LAMBDA * 5;
     }
     rcc->buffer_index= s->avctx->rc_initial_buffer_occupancy;
@@ -138,13 +138,13 @@ int ff_rate_control_init(MpegEncContext *s)
         i+= s->max_b_frames;
         if(i<=0 || i>=INT_MAX / sizeof(RateControlEntry))
             return -1;
-        rcc->entry = (RateControlEntry*)av_mallocz(i*sizeof(RateControlEntry));
+        rcc->entry = av_mallocz(i*sizeof(RateControlEntry));
         rcc->num_entries= i;
 
         /* init all to skipped p frames (with b frames we might have a not encoded frame at the end FIXME) */
         for(i=0; i<rcc->num_entries; i++){
             RateControlEntry *rce= &rcc->entry[i];
-            rce->pict_type= rce->new_pict_type=P_TYPE;
+            rce->pict_type= rce->new_pict_type=FF_P_TYPE;
             rce->qscale= rce->new_qscale=FF_QP2LAMBDA * 2;
             rce->misc_bits= s->mb_num + 10;
             rce->mb_var_sum= s->mb_num*100;
@@ -160,7 +160,7 @@ int ff_rate_control_init(MpegEncContext *s)
 
             next= strchr(p, ';');
             if(next){
-                (*next)=0; //sscanf in unbelieavle slow on looong strings //FIXME copy / dont write
+                (*next)=0; //sscanf in unbelievably slow on looong strings //FIXME copy / do not write
                 next++;
             }
             e= sscanf(p, " in:%d ", &picture_number);
@@ -184,10 +184,10 @@ int ff_rate_control_init(MpegEncContext *s)
 
         //FIXME maybe move to end
         if((s->flags&CODEC_FLAG_PASS2) && s->avctx->rc_strategy == FF_RC_STRATEGY_XVID) {
-#ifdef CONFIG_XVID
+#if CONFIG_LIBXVID
             return ff_xvid_rate_control_init(s);
 #else
-            av_log(s->avctx, AV_LOG_ERROR, "XviD ratecontrol requires libavcodec compiled with XviD support\n");
+            av_log(s->avctx, AV_LOG_ERROR, "Xvid ratecontrol requires libavcodec compiled with Xvid support.\n");
             return -1;
 #endif
         }
@@ -201,16 +201,19 @@ int ff_rate_control_init(MpegEncContext *s)
         rcc->pass1_rc_eq_output_sum= 0.001;
         rcc->pass1_wanted_bits=0.001;
 
+        if(s->avctx->qblur > 1.0){
+            av_log(s->avctx, AV_LOG_ERROR, "qblur too large\n");
+            return -1;
+        }
         /* init stuff with the user specified complexity */
         if(s->avctx->rc_initial_cplx){
             for(i=0; i<60*30; i++){
                 double bits= s->avctx->rc_initial_cplx * (i/10000.0 + 1.0)*s->mb_num;
                 RateControlEntry rce;
-                double q;
 
-                if     (i%((s->gop_size+3)/4)==0) rce.pict_type= I_TYPE;
-                else if(i%(s->max_b_frames+1))    rce.pict_type= B_TYPE;
-                else                              rce.pict_type= P_TYPE;
+                if     (i%((s->gop_size+3)/4)==0) rce.pict_type= FF_I_TYPE;
+                else if(i%(s->max_b_frames+1))    rce.pict_type= FF_B_TYPE;
+                else                              rce.pict_type= FF_P_TYPE;
 
                 rce.new_pict_type= rce.pict_type;
                 rce.mc_mb_var_sum= bits*s->mb_num/100000;
@@ -220,7 +223,7 @@ int ff_rate_control_init(MpegEncContext *s)
                 rce.b_code   = 1;
                 rce.misc_bits= 1;
 
-                if(s->pict_type== I_TYPE){
+                if(s->pict_type== FF_I_TYPE){
                     rce.i_count   = s->mb_num;
                     rce.i_tex_bits= bits;
                     rce.p_tex_bits= 0;
@@ -236,10 +239,8 @@ int ff_rate_control_init(MpegEncContext *s)
                 rcc->mv_bits_sum[rce.pict_type] += rce.mv_bits;
                 rcc->frame_count[rce.pict_type] ++;
 
-                bits= rce.i_tex_bits + rce.p_tex_bits;
-
-                q= get_qscale(s, &rce, rcc->pass1_wanted_bits/rcc->pass1_rc_eq_output_sum, i);
-                rcc->pass1_wanted_bits+= s->bit_rate/(1/av_q2d(s->avctx->time_base)); //FIXME missbehaves a little for variable fps
+                get_qscale(s, &rce, rcc->pass1_wanted_bits/rcc->pass1_rc_eq_output_sum, i);
+                rcc->pass1_wanted_bits+= s->bit_rate/(1/av_q2d(s->avctx->time_base)); //FIXME misbehaves a little for variable fps
             }
         }
 
@@ -253,10 +254,10 @@ void ff_rate_control_uninit(MpegEncContext *s)
     RateControlContext *rcc= &s->rc_context;
     emms_c();
 
-    ff_eval_free(rcc->rc_eq_eval);
+    ff_free_expr(rcc->rc_eq_eval);
     av_freep(&rcc->entry);
 
-#ifdef CONFIG_XVID
+#if CONFIG_LIBXVID
     if((s->flags&CODEC_FLAG_PASS2) && s->avctx->rc_strategy == FF_RC_STRATEGY_XVID)
         ff_xvid_rate_control_uninit(s);
 #endif
@@ -280,7 +281,7 @@ int ff_vbv_update(MpegEncContext *s, int frame_size){
         }
 
         left= buffer_size - rcc->buffer_index - 1;
-        rcc->buffer_index += clip(left, min_rate, max_rate);
+        rcc->buffer_index += av_clip(left, min_rate, max_rate);
 
         if(rcc->buffer_index > buffer_size){
             int stuffing= ceil((rcc->buffer_index - buffer_size)/8);
@@ -316,28 +317,28 @@ static double get_qscale(MpegEncContext *s, RateControlEntry *rce, double rate_f
         rce->p_tex_bits*rce->qscale,
         (rce->i_tex_bits + rce->p_tex_bits)*(double)rce->qscale,
         rce->mv_bits/mb_num,
-        rce->pict_type == B_TYPE ? (rce->f_code + rce->b_code)*0.5 : rce->f_code,
+        rce->pict_type == FF_B_TYPE ? (rce->f_code + rce->b_code)*0.5 : rce->f_code,
         rce->i_count/mb_num,
         rce->mc_mb_var_sum/mb_num,
         rce->mb_var_sum/mb_num,
-        rce->pict_type == I_TYPE,
-        rce->pict_type == P_TYPE,
-        rce->pict_type == B_TYPE,
+        rce->pict_type == FF_I_TYPE,
+        rce->pict_type == FF_P_TYPE,
+        rce->pict_type == FF_B_TYPE,
         rcc->qscale_sum[pict_type] / (double)rcc->frame_count[pict_type],
         a->qcompress,
-/*        rcc->last_qscale_for[I_TYPE],
-        rcc->last_qscale_for[P_TYPE],
-        rcc->last_qscale_for[B_TYPE],
+/*        rcc->last_qscale_for[FF_I_TYPE],
+        rcc->last_qscale_for[FF_P_TYPE],
+        rcc->last_qscale_for[FF_B_TYPE],
         rcc->next_non_b_qscale,*/
-        rcc->i_cplx_sum[I_TYPE] / (double)rcc->frame_count[I_TYPE],
-        rcc->i_cplx_sum[P_TYPE] / (double)rcc->frame_count[P_TYPE],
-        rcc->p_cplx_sum[P_TYPE] / (double)rcc->frame_count[P_TYPE],
-        rcc->p_cplx_sum[B_TYPE] / (double)rcc->frame_count[B_TYPE],
+        rcc->i_cplx_sum[FF_I_TYPE] / (double)rcc->frame_count[FF_I_TYPE],
+        rcc->i_cplx_sum[FF_P_TYPE] / (double)rcc->frame_count[FF_P_TYPE],
+        rcc->p_cplx_sum[FF_P_TYPE] / (double)rcc->frame_count[FF_P_TYPE],
+        rcc->p_cplx_sum[FF_B_TYPE] / (double)rcc->frame_count[FF_B_TYPE],
         (rcc->i_cplx_sum[pict_type] + rcc->p_cplx_sum[pict_type]) / (double)rcc->frame_count[pict_type],
         0
     };
 
-    bits= ff_parse_eval(rcc->rc_eq_eval, const_values, rce);
+    bits= ff_eval_expr(rcc->rc_eq_eval, const_values, rce);
     if (isnan(bits)) {
         av_log(s->avctx, AV_LOG_ERROR, "Error evaluating rc_eq \"%s\"\n", s->avctx->rc_eq);
         return -1;
@@ -363,10 +364,11 @@ static double get_qscale(MpegEncContext *s, RateControlEntry *rce, double rate_f
     q= bits2qp(rce, bits);
 
     /* I/B difference */
-    if     (pict_type==I_TYPE && s->avctx->i_quant_factor<0.0)
+    if     (pict_type==FF_I_TYPE && s->avctx->i_quant_factor<0.0)
         q= -q*s->avctx->i_quant_factor + s->avctx->i_quant_offset;
-    else if(pict_type==B_TYPE && s->avctx->b_quant_factor<0.0)
+    else if(pict_type==FF_B_TYPE && s->avctx->b_quant_factor<0.0)
         q= -q*s->avctx->b_quant_factor + s->avctx->b_quant_offset;
+    if(q<1) q=1;
 
     return q;
 }
@@ -375,16 +377,17 @@ static double get_diff_limited_q(MpegEncContext *s, RateControlEntry *rce, doubl
     RateControlContext *rcc= &s->rc_context;
     AVCodecContext *a= s->avctx;
     const int pict_type= rce->new_pict_type;
-    const double last_p_q    = rcc->last_qscale_for[P_TYPE];
+    const double last_p_q    = rcc->last_qscale_for[FF_P_TYPE];
     const double last_non_b_q= rcc->last_qscale_for[rcc->last_non_b_pict_type];
 
-    if     (pict_type==I_TYPE && (a->i_quant_factor>0.0 || rcc->last_non_b_pict_type==P_TYPE))
+    if     (pict_type==FF_I_TYPE && (a->i_quant_factor>0.0 || rcc->last_non_b_pict_type==FF_P_TYPE))
         q= last_p_q    *FFABS(a->i_quant_factor) + a->i_quant_offset;
-    else if(pict_type==B_TYPE && a->b_quant_factor>0.0)
+    else if(pict_type==FF_B_TYPE && a->b_quant_factor>0.0)
         q= last_non_b_q*    a->b_quant_factor  + a->b_quant_offset;
+    if(q<1) q=1;
 
     /* last qscale / qdiff stuff */
-    if(rcc->last_non_b_pict_type==pict_type || pict_type!=I_TYPE){
+    if(rcc->last_non_b_pict_type==pict_type || pict_type!=FF_I_TYPE){
         double last_q= rcc->last_qscale_for[pict_type];
         const int maxdiff= FF_QP2LAMBDA * a->max_qdiff;
 
@@ -392,9 +395,9 @@ static double get_diff_limited_q(MpegEncContext *s, RateControlEntry *rce, doubl
         else if(q < last_q - maxdiff) q= last_q - maxdiff;
     }
 
-    rcc->last_qscale_for[pict_type]= q; //Note we cant do that after blurring
+    rcc->last_qscale_for[pict_type]= q; //Note we cannot do that after blurring
 
-    if(pict_type!=B_TYPE)
+    if(pict_type!=FF_B_TYPE)
         rcc->last_non_b_pict_type= pict_type;
 
     return q;
@@ -409,16 +412,16 @@ static void get_qminmax(int *qmin_ret, int *qmax_ret, MpegEncContext *s, int pic
 
     assert(qmin <= qmax);
 
-    if(pict_type==B_TYPE){
+    if(pict_type==FF_B_TYPE){
         qmin= (int)(qmin*FFABS(s->avctx->b_quant_factor)+s->avctx->b_quant_offset + 0.5);
         qmax= (int)(qmax*FFABS(s->avctx->b_quant_factor)+s->avctx->b_quant_offset + 0.5);
-    }else if(pict_type==I_TYPE){
+    }else if(pict_type==FF_I_TYPE){
         qmin= (int)(qmin*FFABS(s->avctx->i_quant_factor)+s->avctx->i_quant_offset + 0.5);
         qmax= (int)(qmax*FFABS(s->avctx->i_quant_factor)+s->avctx->i_quant_offset + 0.5);
     }
 
-    qmin= clip(qmin, 1, FF_LAMBDA_MAX);
-    qmax= clip(qmax, 1, FF_LAMBDA_MAX);
+    qmin= av_clip(qmin, 1, FF_LAMBDA_MAX);
+    qmax= av_clip(qmax, 1, FF_LAMBDA_MAX);
 
     if(qmax<qmin) qmax= qmin;
 
@@ -429,7 +432,6 @@ static void get_qminmax(int *qmin_ret, int *qmax_ret, MpegEncContext *s, int pic
 static double modify_qscale(MpegEncContext *s, RateControlEntry *rce, double q, int frame_num){
     RateControlContext *rcc= &s->rc_context;
     int qmin, qmax;
-    double bits;
     const int pict_type= rce->new_pict_type;
     const double buffer_size= s->avctx->rc_buffer_size;
     const double fps= 1/av_q2d(s->avctx->time_base);
@@ -439,10 +441,9 @@ static double modify_qscale(MpegEncContext *s, RateControlEntry *rce, double q, 
     get_qminmax(&qmin, &qmax, s, pict_type);
 
     /* modulation */
-    if(s->avctx->rc_qmod_freq && frame_num%s->avctx->rc_qmod_freq==0 && pict_type==P_TYPE)
+    if(s->avctx->rc_qmod_freq && frame_num%s->avctx->rc_qmod_freq==0 && pict_type==FF_P_TYPE)
         q*= s->avctx->rc_qmod_amp;
 
-    bits= qp2bits(rce, q);
 //printf("q:%f\n", q);
     /* buffer overflow/underflow protection */
     if(buffer_size){
@@ -455,7 +456,7 @@ static double modify_qscale(MpegEncContext *s, RateControlEntry *rce, double q, 
             else if(d<0.0001) d=0.0001;
             q*= pow(d, 1.0/s->avctx->rc_buffer_aggressivity);
 
-            q_limit= bits2qp(rce, FFMAX((min_rate - buffer_size + rcc->buffer_index)*3, 1));
+            q_limit= bits2qp(rce, FFMAX((min_rate - buffer_size + rcc->buffer_index) * s->avctx->rc_min_vbv_overflow_use, 1));
             if(q > q_limit){
                 if(s->avctx->debug&FF_DEBUG_RC){
                     av_log(s->avctx, AV_LOG_DEBUG, "limiting QP %f -> %f\n", q, q_limit);
@@ -470,7 +471,7 @@ static double modify_qscale(MpegEncContext *s, RateControlEntry *rce, double q, 
             else if(d<0.0001) d=0.0001;
             q/= pow(d, 1.0/s->avctx->rc_buffer_aggressivity);
 
-            q_limit= bits2qp(rce, FFMAX(rcc->buffer_index/3, 1));
+            q_limit= bits2qp(rce, FFMAX(rcc->buffer_index * s->avctx->rc_max_available_vbv_use, 1));
             if(q < q_limit){
                 if(s->avctx->debug&FF_DEBUG_RC){
                     av_log(s->avctx, AV_LOG_DEBUG, "limiting QP %f -> %f\n", q, q_limit);
@@ -601,7 +602,7 @@ static void adaptive_quantization(MpegEncContext *s, double q){
         bits_tab[i]= bits;
     }
 
-    /* handle qmin/qmax cliping */
+    /* handle qmin/qmax clipping */
     if(s->flags&CODEC_FLAG_NORMALIZE_AQP){
         float factor= bits_sum/cplx_sum;
         for(i=0; i<s->mb_num; i++){
@@ -672,7 +673,7 @@ float ff_rate_estimate_qscale(MpegEncContext *s, int dry_run)
     Picture * const pic= &s->current_picture;
     emms_c();
 
-#ifdef CONFIG_XVID
+#if CONFIG_LIBXVID
     if((s->flags&CODEC_FLAG_PASS2) && s->avctx->rc_strategy == FF_RC_STRATEGY_XVID)
         return ff_xvid_rate_estimate_qscale(s, dry_run);
 #endif
@@ -683,7 +684,7 @@ float ff_rate_estimate_qscale(MpegEncContext *s, int dry_run)
 //printf("input_pic_num:%d pic_num:%d frame_rate:%d\n", s->input_picture_number, s->picture_number, s->frame_rate);
         /* update predictors */
     if(picture_number>2 && !dry_run){
-        const int last_var= s->last_pict_type == I_TYPE ? rcc->last_mb_var_sum : rcc->last_mc_mb_var_sum;
+        const int last_var= s->last_pict_type == FF_I_TYPE ? rcc->last_mb_var_sum : rcc->last_mc_mb_var_sum;
         update_predictor(&rcc->pred[s->last_pict_type], rcc->last_qscale, sqrt(last_var), s->frame_bits);
     }
 
@@ -693,19 +694,34 @@ float ff_rate_estimate_qscale(MpegEncContext *s, int dry_run)
         rce= &rcc->entry[picture_number];
         wanted_bits= rce->expected_bits;
     }else{
+        Picture *dts_pic;
         rce= &local_rce;
-        wanted_bits= (uint64_t)(s->bit_rate*(double)picture_number/fps);
+
+        //FIXME add a dts field to AVFrame and ensure its set and use it here instead of reordering
+        //but the reordering is simpler for now until h.264 b pyramid must be handeld
+        if(s->pict_type == FF_B_TYPE || s->low_delay)
+            dts_pic= s->current_picture_ptr;
+        else
+            dts_pic= s->last_picture_ptr;
+
+//if(dts_pic)
+//            av_log(NULL, AV_LOG_ERROR, "%Ld %Ld %Ld %d\n", s->current_picture_ptr->pts, s->user_specified_pts, dts_pic->pts, picture_number);
+
+        if(!dts_pic || dts_pic->pts == AV_NOPTS_VALUE)
+            wanted_bits= (uint64_t)(s->bit_rate*(double)picture_number/fps);
+        else
+            wanted_bits= (uint64_t)(s->bit_rate*(double)dts_pic->pts/fps);
     }
 
     diff= s->total_bits - wanted_bits;
     br_compensation= (a->bit_rate_tolerance - diff)/a->bit_rate_tolerance;
     if(br_compensation<=0.0) br_compensation=0.001;
 
-    var= pict_type == I_TYPE ? pic->mb_var_sum : pic->mc_mb_var_sum;
+    var= pict_type == FF_I_TYPE ? pic->mb_var_sum : pic->mc_mb_var_sum;
 
     short_term_q = 0; /* avoid warning */
     if(s->flags&CODEC_FLAG_PASS2){
-        if(pict_type!=I_TYPE)
+        if(pict_type!=FF_I_TYPE)
             assert(pict_type == rce->new_pict_type);
 
         q= rce->new_qscale / br_compensation;
@@ -721,7 +737,7 @@ float ff_rate_estimate_qscale(MpegEncContext *s, int dry_run)
         rce->misc_bits= 1;
 
         bits= predict_size(&rcc->pred[pict_type], rce->qscale, sqrt(var));
-        if(pict_type== I_TYPE){
+        if(pict_type== FF_I_TYPE){
             rce->i_count   = s->mb_num;
             rce->i_tex_bits= bits;
             rce->p_tex_bits= 0;
@@ -751,7 +767,7 @@ float ff_rate_estimate_qscale(MpegEncContext *s, int dry_run)
 //printf("%f ", q);
         assert(q>0.0);
 
-        if(pict_type==P_TYPE || s->intra_only){ //FIXME type dependant blur like in 2-pass
+        if(pict_type==FF_P_TYPE || s->intra_only){ //FIXME type dependent blur like in 2-pass
             rcc->short_term_qsum*=a->qblur;
             rcc->short_term_qcount*=a->qblur;
 
@@ -811,7 +827,7 @@ static int init_pass2(MpegEncContext *s)
     int i, toobig;
     double fps= 1/av_q2d(s->avctx->time_base);
     double complexity[5]={0,0,0,0,0};   // aproximate bits at quant=1
-    uint64_t const_bits[5]={0,0,0,0,0}; // quantizer idependant bits
+    uint64_t const_bits[5]={0,0,0,0,0}; // quantizer independent bits
     uint64_t all_const_bits;
     uint64_t all_available_bits= (uint64_t)(s->bit_rate*(double)rcc->num_entries/fps);
     double rate_factor=0;
@@ -819,7 +835,7 @@ static int init_pass2(MpegEncContext *s)
     //int last_i_frame=-10000000;
     const int filter_size= (int)(a->qblur*4) | 1;
     double expected_bits;
-    double *qscale, *blured_qscale, qscale_sum;
+    double *qscale, *blurred_qscale, qscale_sum;
 
     /* find complexity & const_bits & decide the pict_types */
     for(i=0; i<rcc->num_entries; i++){
@@ -834,7 +850,7 @@ static int init_pass2(MpegEncContext *s)
         complexity[rce->new_pict_type]+= (rce->i_tex_bits+ rce->p_tex_bits)*(double)rce->qscale;
         const_bits[rce->new_pict_type]+= rce->mv_bits + rce->misc_bits;
     }
-    all_const_bits= const_bits[I_TYPE] + const_bits[P_TYPE] + const_bits[B_TYPE];
+    all_const_bits= const_bits[FF_I_TYPE] + const_bits[FF_P_TYPE] + const_bits[FF_B_TYPE];
 
     if(all_available_bits < all_const_bits){
         av_log(s->avctx, AV_LOG_ERROR, "requested bitrate is too low\n");
@@ -842,7 +858,7 @@ static int init_pass2(MpegEncContext *s)
     }
 
     qscale= av_malloc(sizeof(double)*rcc->num_entries);
-    blured_qscale= av_malloc(sizeof(double)*rcc->num_entries);
+    blurred_qscale= av_malloc(sizeof(double)*rcc->num_entries);
     toobig = 0;
 
     for(step=256*256; step>0.0000001; step*=0.5){
@@ -881,16 +897,16 @@ static int init_pass2(MpegEncContext *s)
                 q+= qscale[index] * coeff;
                 sum+= coeff;
             }
-            blured_qscale[i]= q/sum;
+            blurred_qscale[i]= q/sum;
         }
 
         /* find expected bits */
         for(i=0; i<rcc->num_entries; i++){
             RateControlEntry *rce= &rcc->entry[i];
             double bits;
-            rce->new_qscale= modify_qscale(s, rce, blured_qscale[i], i);
+            rce->new_qscale= modify_qscale(s, rce, blurred_qscale[i], i);
             bits= qp2bits(rce, rce->new_qscale) + rce->mv_bits + rce->misc_bits;
-//printf("%d %f\n", rce->new_bits, blured_qscale[i]);
+//printf("%d %f\n", rce->new_bits, blurred_qscale[i]);
             bits += 8*ff_vbv_update(s, bits);
 
             rce->expected_bits= expected_bits;
@@ -908,14 +924,14 @@ static int init_pass2(MpegEncContext *s)
         }
     }
     av_free(qscale);
-    av_free(blured_qscale);
+    av_free(blurred_qscale);
 
     /* check bitrate calculations and print info */
     qscale_sum = 0.0;
     for(i=0; i<rcc->num_entries; i++){
         /* av_log(s->avctx, AV_LOG_DEBUG, "[lavc rc] entry[%d].new_qscale = %.3f  qp = %.3f\n",
             i, rcc->entry[i].new_qscale, rcc->entry[i].new_qscale / FF_QP2LAMBDA); */
-        qscale_sum += clip(rcc->entry[i].new_qscale / FF_QP2LAMBDA, s->avctx->qmin, s->avctx->qmax);
+        qscale_sum += av_clip(rcc->entry[i].new_qscale / FF_QP2LAMBDA, s->avctx->qmin, s->avctx->qmax);
     }
     assert(toobig <= 40);
     av_log(s->avctx, AV_LOG_DEBUG,

@@ -17,11 +17,10 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- *
  */
 
 /**
- * @file msvideo1.c
+ * @file
  * Microsoft Video-1 Decoder by Mike Melanson (melanson@pcisys.net)
  * For more information about the MS Video-1 format, visit:
  *   http://www.pcisys.net/~melanson/codecs/
@@ -34,11 +33,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
-#include "common.h"
+#include "libavutil/intreadwrite.h"
 #include "avcodec.h"
-#include "dsputil.h"
 
 #define PALETTE_COUNT 256
 #define CHECK_STREAM_PTR(n) \
@@ -51,19 +48,18 @@
 typedef struct Msvideo1Context {
 
     AVCodecContext *avctx;
-    DSPContext dsp;
     AVFrame frame;
 
-    unsigned char *buf;
+    const unsigned char *buf;
     int size;
 
     int mode_8bit;  /* if it's not 8-bit, it's 16-bit */
 
 } Msvideo1Context;
 
-static int msvideo1_decode_init(AVCodecContext *avctx)
+static av_cold int msvideo1_decode_init(AVCodecContext *avctx)
 {
-    Msvideo1Context *s = (Msvideo1Context *)avctx->priv_data;
+    Msvideo1Context *s = avctx->priv_data;
 
     s->avctx = avctx;
 
@@ -75,9 +71,6 @@ static int msvideo1_decode_init(AVCodecContext *avctx)
         s->mode_8bit = 0;
         avctx->pix_fmt = PIX_FMT_RGB555;
     }
-
-    avctx->has_b_frames = 0;
-    dsputil_init(&s->dsp, avctx);
 
     s->frame.data[0] = NULL;
 
@@ -300,9 +293,11 @@ static void msvideo1_decode_16bit(Msvideo1Context *s)
 
 static int msvideo1_decode_frame(AVCodecContext *avctx,
                                 void *data, int *data_size,
-                                uint8_t *buf, int buf_size)
+                                AVPacket *avpkt)
 {
-    Msvideo1Context *s = (Msvideo1Context *)avctx->priv_data;
+    const uint8_t *buf = avpkt->data;
+    int buf_size = avpkt->size;
+    Msvideo1Context *s = avctx->priv_data;
 
     s->buf = buf;
     s->size = buf_size;
@@ -326,9 +321,9 @@ static int msvideo1_decode_frame(AVCodecContext *avctx,
     return buf_size;
 }
 
-static int msvideo1_decode_end(AVCodecContext *avctx)
+static av_cold int msvideo1_decode_end(AVCodecContext *avctx)
 {
-    Msvideo1Context *s = (Msvideo1Context *)avctx->priv_data;
+    Msvideo1Context *s = avctx->priv_data;
 
     if (s->frame.data[0])
         avctx->release_buffer(avctx, &s->frame);
@@ -338,7 +333,7 @@ static int msvideo1_decode_end(AVCodecContext *avctx)
 
 AVCodec msvideo1_decoder = {
     "msvideo1",
-    CODEC_TYPE_VIDEO,
+    AVMEDIA_TYPE_VIDEO,
     CODEC_ID_MSVIDEO1,
     sizeof(Msvideo1Context),
     msvideo1_decode_init,
@@ -346,4 +341,5 @@ AVCodec msvideo1_decoder = {
     msvideo1_decode_end,
     msvideo1_decode_frame,
     CODEC_CAP_DR1,
+    .long_name= NULL_IF_CONFIG_SMALL("Microsoft Video 1"),
 };

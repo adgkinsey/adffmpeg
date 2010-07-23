@@ -1,14 +1,33 @@
 /*
  * Generates a synthetic YUV video sequence suitable for codec testing.
- * NOTE: no floats are used to guaranty a bit exact output.
+ * NOTE: No floats are used to guarantee a bit exact output.
+ *
+ * Copyright (c) 2002 Fabrice Bellard
+ *
+ * This file is part of FFmpeg.
+ *
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * FFmpeg is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
+
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #define SCALEBITS 8
 #define ONE_HALF  (1 << (SCALEBITS - 1))
 #define FIX(x)    ((int) ((x) * (1L<<SCALEBITS) + 0.5))
-typedef unsigned char uint8_t;
 
 static void rgb24_to_yuv420p(uint8_t *lum, uint8_t *cb, uint8_t *cr,
                               uint8_t *src, int width, int height)
@@ -78,8 +97,8 @@ static void rgb24_to_yuv420p(uint8_t *lum, uint8_t *cb, uint8_t *cr,
 #define DEFAULT_HEIGHT  288
 #define DEFAULT_NB_PICT 50 /* 2 seconds */
 
-void pgmyuv_save(const char *filename, int w, int h,
-                 unsigned char *rgb_tab)
+static void pgmyuv_save(const char *filename, int w, int h,
+                        unsigned char *rgb_tab)
 {
     FILE *f;
     int i, h2, w2;
@@ -115,7 +134,7 @@ void pgmyuv_save(const char *filename, int w, int h,
 unsigned char *rgb_tab;
 int width, height, wrap;
 
-void put_pixel(int x, int y, int r, int g, int b)
+static void put_pixel(int x, int y, int r, int g, int b)
 {
     unsigned char *p;
 
@@ -152,7 +171,7 @@ static unsigned int myrnd(unsigned int *seed_ptr, int n)
 #define FRAC_ONE (1 << FRAC_BITS)
 
 /* cosine approximate with 1-x^2 */
-int int_cos(int a)
+static int int_cos(int a)
 {
     int v, neg;
     a = a & (FRAC_ONE - 1);
@@ -179,7 +198,7 @@ VObj objs[NB_OBJS];
 
 unsigned int seed = 1;
 
-void gen_image(int num, int w, int h)
+static void gen_image(int num, int w, int h)
 {
     int r, g, b, x, y, i, dx, dy, x1, y1;
     unsigned int seed1;
@@ -203,7 +222,7 @@ void gen_image(int num, int w, int h)
     for(y=0;y<h;y++) {
         for(x=0;x<w;x++) {
             x1 = (x << FRAC_BITS) + dx;
-            y1 = (y << FRAC_BITS) + dx;
+            y1 = (y << FRAC_BITS) + dy;
             r = ((y1 * 7) >> FRAC_BITS) & 0xff;
             g = (((x1 + y1) * 9) >> FRAC_BITS) & 0xff;
             b = ((x1 * 5) >> FRAC_BITS) & 0xff;
@@ -253,11 +272,6 @@ int main(int argc, char **argv)
                "generate a test video stream\n", argv[0]);
         exit(1);
     }
-
-#if 0
-    for(i=0;i<256;i++)
-        printf("cos(%d)=%d\n", i, int_cos(i));
-#endif
 
     w = DEFAULT_WIDTH;
     h = DEFAULT_HEIGHT;

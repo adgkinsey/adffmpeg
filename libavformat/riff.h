@@ -20,36 +20,31 @@
  */
 
 /**
- * @file riff.h
+ * @file
  * internal header for RIFF based (de)muxers
  * do NOT include this in end user applications
  */
 
-#ifndef FF_RIFF_H
-#define FF_RIFF_H
+#ifndef AVFORMAT_RIFF_H
+#define AVFORMAT_RIFF_H
 
-offset_t start_tag(ByteIOContext *pb, const char *tag);
-void end_tag(ByteIOContext *pb, offset_t start);
+#include "libavcodec/avcodec.h"
+#include "avio.h"
+#include "internal.h"
 
-typedef struct AVCodecTag {
-    int id;
-    unsigned int tag;
-} AVCodecTag;
+int64_t ff_start_tag(ByteIOContext *pb, const char *tag);
+void ff_end_tag(ByteIOContext *pb, int64_t start);
 
-void put_bmp_header(ByteIOContext *pb, AVCodecContext *enc, const AVCodecTag *tags, int for_asf);
-int put_wav_header(ByteIOContext *pb, AVCodecContext *enc);
-int wav_codec_get_id(unsigned int tag, int bps);
-void get_wav_header(ByteIOContext *pb, AVCodecContext *codec, int size);
+void ff_put_bmp_header(ByteIOContext *pb, AVCodecContext *enc, const AVCodecTag *tags, int for_asf);
+int ff_put_wav_header(ByteIOContext *pb, AVCodecContext *enc);
+enum CodecID ff_wav_codec_get_id(unsigned int tag, int bps);
+void ff_get_wav_header(ByteIOContext *pb, AVCodecContext *codec, int size);
 
-extern const AVCodecTag codec_bmp_tags[];
-extern const AVCodecTag codec_wav_tags[];
+extern const AVCodecTag ff_codec_bmp_tags[];
+extern const AVCodecTag ff_codec_wav_tags[];
 
-unsigned int codec_get_tag(const AVCodecTag *tags, int id);
-enum CodecID codec_get_id(const AVCodecTag *tags, unsigned int tag);
-unsigned int codec_get_bmp_tag(int id) attribute_deprecated; //use av_codec_get_tag
-unsigned int codec_get_wav_tag(int id) attribute_deprecated; //use av_codec_get_tag
-enum CodecID codec_get_bmp_id(unsigned int tag) attribute_deprecated; //use av_codec_get_id
-enum CodecID codec_get_wav_id(unsigned int tag) attribute_deprecated; //use av_codec_get_id
+unsigned int ff_codec_get_tag(const AVCodecTag *tags, enum CodecID id);
+enum CodecID ff_codec_get_id(const AVCodecTag *tags, unsigned int tag);
 void ff_parse_specific_params(AVCodecContext *stream, int *au_rate, int *au_ssize, int *au_scale);
 
-#endif
+#endif /* AVFORMAT_RIFF_H */

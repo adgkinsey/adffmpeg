@@ -27,7 +27,8 @@
 */
 
 #include <stdio.h>
-#include "avcodec.h"
+#include "libavcodec/avcodec.h"
+#include "libavutil/bswap.h"
 #include "adpic.h"
 #include "adaudio.h"    // RTP payload values. For inserting into MIME audio packets
 #include "jfif_img.h"
@@ -49,9 +50,10 @@ static int process_mp4data_line( char *line, int line_count, NetVuImageData *vid
 static void adpic_release_packet( AVPacket *pkt );
 static int adpic_is_valid_separator( unsigned char * buf, int bufLen );
 
+int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size);
+void audioheader_network2host( NetVuAudioData *hdr );
+int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt);
 
-#undef printf
-#undef fprintf
 
 /* CS - The following structure is used to extract 6 bytes from the incoming stream. It needs therefore to be aligned on a 
    2 byte boundary. Not sure whether this solution is portable though */
@@ -80,7 +82,7 @@ typedef struct _minimal_audio_header	// PRC 002
 typedef struct {
     int64_t  riff_end;
     int64_t  movi_end;
-    offset_t movi_list;
+    int64_t movi_list;
     int index_loaded;
 } ADPICDecContext;
 
@@ -248,11 +250,11 @@ void pic_host2be(NetVuImageData *pic)
 }
 
 static const char *     MIME_BOUNDARY_PREFIX1 = "--0plm(";
-static const char *     MIME_BOUNDARY_PREFIX2 = "Í-0plm(";
-static const char *     MIME_BOUNDARY_PREFIX3 = "ÍÍ0plm(";
-static const char *     MIME_BOUNDARY_PREFIX4 = "ÍÍÍplm(";
-static const char *     MIME_BOUNDARY_PREFIX5 = "ÍÍÍÍlm(";
-static const char *     MIME_BOUNDARY_PREFIX6 = "ÍÍÍÍÍm(";
+static const char *     MIME_BOUNDARY_PREFIX2 = "Ã-0plm(";
+static const char *     MIME_BOUNDARY_PREFIX3 = "ÃÃ0plm(";
+static const char *     MIME_BOUNDARY_PREFIX4 = "ÃÃÃplm(";
+static const char *     MIME_BOUNDARY_PREFIX5 = "ÃÃÃÃlm(";
+static const char *     MIME_BOUNDARY_PREFIX6 = "ÃÃÃÃÃm(";
 static const char *     MIME_BOUNDARY_PREFIX7 = "/r--0plm(";
 
 static const char *     MIME_BOUNDARY_SUFFIX = ":Server-Push:Boundary-String)1qaz";
@@ -281,7 +283,7 @@ static int adpic_probe(AVProbeData *p)
     // CS - There is no way this scheme of identification is strong enough. Probably should attempt
     // to parse a full frame out of the probedata buffer
     if ( ((p->buf[0] == 9) && (p->buf[2] == 0) && (p->buf[3] == 0)) || 
-         ((p->buf[0] >= 0 && p->buf[0] <= 7) && (p->buf[2] == 0) && (p->buf[3] == 0)) )
+         ((p->buf[0] <= 7) && (p->buf[2] == 0) && (p->buf[3] == 0)) )
     {
         isMIME = FALSE;
         return AVPROBE_SCORE_MAX;
@@ -386,7 +388,7 @@ static int adpic_read_close(AVFormatContext *s)
 static int adpic_read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
 #if 0
-ByteIOContext *pb = &s->pb;
+ByteIOContext *pb = s->pb;
 char header_str[256], *hptr, *h0;
 int i, found = FALSE;
 uint32_t header_word;
@@ -590,10 +592,9 @@ static AVStream * get_data_stream( struct AVFormatContext *s )
 static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size, long *extra )
 {
     #define TEMP_BUFFER_SIZE    1024
-    int i=0;
     unsigned char               buffer[TEMP_BUFFER_SIZE];
     unsigned char *             q = NULL;
-    int                         temp, ch, err, lineCount = 0;
+    int                         ch, err, lineCount = 0;
 
     q = buffer;
     /* Try and parse the header */
@@ -1064,7 +1065,7 @@ static int adpicFindTag(char *Tag, ByteIOContext *pb, int MaxLookAhead)
 
 int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
-    ByteIOContext *         pb = &s->pb;
+    ByteIOContext *         pb = s->pb;
 	URLContext*             urlContext = pb->opaque;
     AVStream *              st = NULL;
     FrameData *             frameData = NULL;

@@ -1,6 +1,6 @@
 /*
  * MP3 muxer and demuxer
- * Copyright (c) 2003 Fabrice Bellard.
+ * Copyright (c) 2003 Fabrice Bellard
  *
  * This file is part of FFmpeg.
  *
@@ -18,313 +18,144 @@
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
+
+#include <strings.h>
+#include "libavutil/avstring.h"
+#include "libavutil/intreadwrite.h"
 #include "avformat.h"
-#include "mpegaudio.h"
+#include "id3v2.h"
+#include "id3v1.h"
 
-#define ID3_HEADER_SIZE 10
-#define ID3_TAG_SIZE 128
+#if CONFIG_MP3_DEMUXER
 
-#define ID3_GENRE_MAX 125
-
-static const char *id3_genre_str[ID3_GENRE_MAX + 1] = {
-    [0] = "Blues",
-    [1] = "Classic Rock",
-    [2] = "Country",
-    [3] = "Dance",
-    [4] = "Disco",
-    [5] = "Funk",
-    [6] = "Grunge",
-    [7] = "Hip-Hop",
-    [8] = "Jazz",
-    [9] = "Metal",
-    [10] = "New Age",
-    [11] = "Oldies",
-    [12] = "Other",
-    [13] = "Pop",
-    [14] = "R&B",
-    [15] = "Rap",
-    [16] = "Reggae",
-    [17] = "Rock",
-    [18] = "Techno",
-    [19] = "Industrial",
-    [20] = "Alternative",
-    [21] = "Ska",
-    [22] = "Death Metal",
-    [23] = "Pranks",
-    [24] = "Soundtrack",
-    [25] = "Euro-Techno",
-    [26] = "Ambient",
-    [27] = "Trip-Hop",
-    [28] = "Vocal",
-    [29] = "Jazz+Funk",
-    [30] = "Fusion",
-    [31] = "Trance",
-    [32] = "Classical",
-    [33] = "Instrumental",
-    [34] = "Acid",
-    [35] = "House",
-    [36] = "Game",
-    [37] = "Sound Clip",
-    [38] = "Gospel",
-    [39] = "Noise",
-    [40] = "AlternRock",
-    [41] = "Bass",
-    [42] = "Soul",
-    [43] = "Punk",
-    [44] = "Space",
-    [45] = "Meditative",
-    [46] = "Instrumental Pop",
-    [47] = "Instrumental Rock",
-    [48] = "Ethnic",
-    [49] = "Gothic",
-    [50] = "Darkwave",
-    [51] = "Techno-Industrial",
-    [52] = "Electronic",
-    [53] = "Pop-Folk",
-    [54] = "Eurodance",
-    [55] = "Dream",
-    [56] = "Southern Rock",
-    [57] = "Comedy",
-    [58] = "Cult",
-    [59] = "Gangsta",
-    [60] = "Top 40",
-    [61] = "Christian Rap",
-    [62] = "Pop/Funk",
-    [63] = "Jungle",
-    [64] = "Native American",
-    [65] = "Cabaret",
-    [66] = "New Wave",
-    [67] = "Psychadelic",
-    [68] = "Rave",
-    [69] = "Showtunes",
-    [70] = "Trailer",
-    [71] = "Lo-Fi",
-    [72] = "Tribal",
-    [73] = "Acid Punk",
-    [74] = "Acid Jazz",
-    [75] = "Polka",
-    [76] = "Retro",
-    [77] = "Musical",
-    [78] = "Rock & Roll",
-    [79] = "Hard Rock",
-    [80] = "Folk",
-    [81] = "Folk-Rock",
-    [82] = "National Folk",
-    [83] = "Swing",
-    [84] = "Fast Fusion",
-    [85] = "Bebob",
-    [86] = "Latin",
-    [87] = "Revival",
-    [88] = "Celtic",
-    [89] = "Bluegrass",
-    [90] = "Avantgarde",
-    [91] = "Gothic Rock",
-    [92] = "Progressive Rock",
-    [93] = "Psychedelic Rock",
-    [94] = "Symphonic Rock",
-    [95] = "Slow Rock",
-    [96] = "Big Band",
-    [97] = "Chorus",
-    [98] = "Easy Listening",
-    [99] = "Acoustic",
-    [100] = "Humour",
-    [101] = "Speech",
-    [102] = "Chanson",
-    [103] = "Opera",
-    [104] = "Chamber Music",
-    [105] = "Sonata",
-    [106] = "Symphony",
-    [107] = "Booty Bass",
-    [108] = "Primus",
-    [109] = "Porn Groove",
-    [110] = "Satire",
-    [111] = "Slow Jam",
-    [112] = "Club",
-    [113] = "Tango",
-    [114] = "Samba",
-    [115] = "Folklore",
-    [116] = "Ballad",
-    [117] = "Power Ballad",
-    [118] = "Rhythmic Soul",
-    [119] = "Freestyle",
-    [120] = "Duet",
-    [121] = "Punk Rock",
-    [122] = "Drum Solo",
-    [123] = "A capella",
-    [124] = "Euro-House",
-    [125] = "Dance Hall",
-};
-
-/* buf must be ID3_HEADER_SIZE byte long */
-static int id3_match(const uint8_t *buf)
-{
-    return (buf[0] == 'I' &&
-            buf[1] == 'D' &&
-            buf[2] == '3' &&
-            buf[3] != 0xff &&
-            buf[4] != 0xff &&
-            (buf[6] & 0x80) == 0 &&
-            (buf[7] & 0x80) == 0 &&
-            (buf[8] & 0x80) == 0 &&
-            (buf[9] & 0x80) == 0);
-}
-
-static void id3_get_string(char *str, int str_size,
-                           const uint8_t *buf, int buf_size)
-{
-    int i, c;
-    char *q;
-
-    q = str;
-    for(i = 0; i < buf_size; i++) {
-        c = buf[i];
-        if (c == '\0')
-            break;
-        if ((q - str) >= str_size - 1)
-            break;
-        *q++ = c;
-    }
-    *q = '\0';
-}
-
-/* 'buf' must be ID3_TAG_SIZE byte long */
-static int id3_parse_tag(AVFormatContext *s, const uint8_t *buf)
-{
-    char str[5];
-    int genre;
-
-    if (!(buf[0] == 'T' &&
-          buf[1] == 'A' &&
-          buf[2] == 'G'))
-        return -1;
-    id3_get_string(s->title, sizeof(s->title), buf + 3, 30);
-    id3_get_string(s->author, sizeof(s->author), buf + 33, 30);
-    id3_get_string(s->album, sizeof(s->album), buf + 63, 30);
-    id3_get_string(str, sizeof(str), buf + 93, 4);
-    s->year = atoi(str);
-    id3_get_string(s->comment, sizeof(s->comment), buf + 97, 30);
-    if (buf[125] == 0 && buf[126] != 0)
-        s->track = buf[126];
-    genre = buf[127];
-    if (genre <= ID3_GENRE_MAX)
-        pstrcpy(s->genre, sizeof(s->genre), id3_genre_str[genre]);
-    return 0;
-}
-
-static void id3_create_tag(AVFormatContext *s, uint8_t *buf)
-{
-    int v, i;
-
-    memset(buf, 0, ID3_TAG_SIZE); /* fail safe */
-    buf[0] = 'T';
-    buf[1] = 'A';
-    buf[2] = 'G';
-    strncpy(buf + 3, s->title, 30);
-    strncpy(buf + 33, s->author, 30);
-    strncpy(buf + 63, s->album, 30);
-    v = s->year;
-    if (v > 0) {
-        for(i = 0;i < 4; i++) {
-            buf[96 - i] = '0' + (v % 10);
-            v = v / 10;
-        }
-    }
-    strncpy(buf + 97, s->comment, 30);
-    if (s->track != 0) {
-        buf[125] = 0;
-        buf[126] = s->track;
-    }
-    for(i = 0; i <= ID3_GENRE_MAX; i++) {
-        if (!strcasecmp(s->genre, id3_genre_str[i])) {
-            buf[127] = i;
-            break;
-        }
-    }
-}
+#include "libavcodec/mpegaudio.h"
+#include "libavcodec/mpegaudiodecheader.h"
 
 /* mp3 read */
 
 static int mp3_read_probe(AVProbeData *p)
 {
-    int max_frames, first_frames;
+    int max_frames, first_frames = 0;
     int fsize, frames, sample_rate;
     uint32_t header;
-    uint8_t *buf, *buf2, *end;
+    uint8_t *buf, *buf0, *buf2, *end;
     AVCodecContext avctx;
 
-    if(p->buf_size < ID3_HEADER_SIZE)
-        return 0;
-
-    if(id3_match(p->buf))
-        return AVPROBE_SCORE_MAX/2+1; // this must be less then mpeg-ps because some retards put id3 tage before mpeg-ps files
+    buf0 = p->buf;
+    if(ff_id3v2_match(buf0)) {
+        buf0 += ff_id3v2_tag_len(buf0);
+    }
+    end = p->buf + p->buf_size - sizeof(uint32_t);
+    while(buf0 < end && !*buf0)
+        buf0++;
 
     max_frames = 0;
-    buf = p->buf;
-    end = buf + FFMIN(4096, p->buf_size - sizeof(uint32_t));
+    buf = buf0;
 
-    for(; buf < end; buf++) {
+    for(; buf < end; buf= buf2+1) {
         buf2 = buf;
 
         for(frames = 0; buf2 < end; frames++) {
-            header = (buf2[0] << 24) | (buf2[1] << 16) | (buf2[2] << 8) | buf2[3];
-            fsize = mpa_decode_header(&avctx, header, &sample_rate);
+            header = AV_RB32(buf2);
+            fsize = ff_mpa_decode_header(&avctx, header, &sample_rate, &sample_rate, &sample_rate, &sample_rate);
             if(fsize < 0)
                 break;
             buf2 += fsize;
         }
         max_frames = FFMAX(max_frames, frames);
-        if(buf == p->buf)
+        if(buf == buf0)
             first_frames= frames;
     }
-    if   (first_frames>=3) return AVPROBE_SCORE_MAX/2+1;
-    else if(max_frames>=3) return AVPROBE_SCORE_MAX/4;
+    // keep this in sync with ac3 probe, both need to avoid
+    // issues with MPEG-files!
+    if   (first_frames>=4) return AVPROBE_SCORE_MAX/2+1;
+    else if(max_frames>500)return AVPROBE_SCORE_MAX/2;
+    else if(max_frames>=4) return AVPROBE_SCORE_MAX/4;
+    else if(buf0!=p->buf)  return AVPROBE_SCORE_MAX/4-1;
     else if(max_frames>=1) return 1;
     else                   return 0;
+//mpegps_mp3_unrecognized_format.mpg has max_frames=3
+}
+
+/**
+ * Try to find Xing/Info/VBRI tags and compute duration from info therein
+ */
+static int mp3_parse_vbr_tags(AVFormatContext *s, AVStream *st, int64_t base)
+{
+    uint32_t v, spf;
+    int frames = -1; /* Total number of frames in file */
+    const int64_t xing_offtbl[2][2] = {{32, 17}, {17,9}};
+    MPADecodeHeader c;
+    int vbrtag_size = 0;
+
+    v = get_be32(s->pb);
+    if(ff_mpa_check_header(v) < 0)
+      return -1;
+
+    if (ff_mpegaudio_decode_header(&c, v) == 0)
+        vbrtag_size = c.frame_size;
+    if(c.layer != 3)
+        return -1;
+
+    /* Check for Xing / Info tag */
+    url_fseek(s->pb, xing_offtbl[c.lsf == 1][c.nb_channels == 1], SEEK_CUR);
+    v = get_be32(s->pb);
+    if(v == MKBETAG('X', 'i', 'n', 'g') || v == MKBETAG('I', 'n', 'f', 'o')) {
+        v = get_be32(s->pb);
+        if(v & 0x1)
+            frames = get_be32(s->pb);
+    }
+
+    /* Check for VBRI tag (always 32 bytes after end of mpegaudio header) */
+    url_fseek(s->pb, base + 4 + 32, SEEK_SET);
+    v = get_be32(s->pb);
+    if(v == MKBETAG('V', 'B', 'R', 'I')) {
+        /* Check tag version */
+        if(get_be16(s->pb) == 1) {
+            /* skip delay, quality and total bytes */
+            url_fseek(s->pb, 8, SEEK_CUR);
+            frames = get_be32(s->pb);
+        }
+    }
+
+    if(frames < 0)
+        return -1;
+
+    /* Skip the vbr tag frame */
+    url_fseek(s->pb, base + vbrtag_size, SEEK_SET);
+
+    spf = c.lsf ? 576 : 1152; /* Samples per frame, layer 3 */
+    st->duration = av_rescale_q(frames, (AVRational){spf, c.sample_rate},
+                                st->time_base);
+    return 0;
 }
 
 static int mp3_read_header(AVFormatContext *s,
                            AVFormatParameters *ap)
 {
     AVStream *st;
-    uint8_t buf[ID3_TAG_SIZE];
-    int len, ret, filesize;
+    int64_t off;
 
     st = av_new_stream(s, 0);
     if (!st)
-        return AVERROR_NOMEM;
+        return AVERROR(ENOMEM);
 
-    st->codec->codec_type = CODEC_TYPE_AUDIO;
+    st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codec->codec_id = CODEC_ID_MP3;
-    st->need_parsing = 1;
+    st->need_parsing = AVSTREAM_PARSE_FULL;
+    st->start_time = 0;
 
-    /* try to get the TAG */
-    if (!url_is_streamed(&s->pb)) {
-        /* XXX: change that */
-        filesize = url_fsize(&s->pb);
-        if (filesize > 128) {
-            url_fseek(&s->pb, filesize - 128, SEEK_SET);
-            ret = get_buffer(&s->pb, buf, ID3_TAG_SIZE);
-            if (ret == ID3_TAG_SIZE) {
-                id3_parse_tag(s, buf);
-            }
-            url_fseek(&s->pb, 0, SEEK_SET);
-        }
-    }
+    // lcm of all mp3 sample rates
+    av_set_pts_info(st, 64, 1, 14112000);
 
-    /* if ID3 header found, skip it */
-    ret = get_buffer(&s->pb, buf, ID3_HEADER_SIZE);
-    if (ret != ID3_HEADER_SIZE)
-        return -1;
-    if (id3_match(buf)) {
-        /* skip ID3 header */
-        len = ((buf[6] & 0x7f) << 21) |
-            ((buf[7] & 0x7f) << 14) |
-            ((buf[8] & 0x7f) << 7) |
-            (buf[9] & 0x7f);
-        url_fskip(&s->pb, len);
-    } else {
-        url_fseek(&s->pb, 0, SEEK_SET);
-    }
+    ff_id3v2_read(s);
+    off = url_ftell(s->pb);
+
+    if (!av_metadata_get(s->metadata, "", NULL, AV_METADATA_IGNORE_SUFFIX))
+        ff_id3v1_read(s);
+
+    if (mp3_parse_vbr_tags(s, st, off) < 0)
+        url_fseek(s->pb, off, SEEK_SET);
 
     /* the parameters will be extracted from the compressed bitstream */
     return 0;
@@ -339,11 +170,11 @@ static int mp3_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     size= MP3_PACKET_SIZE;
 
-    ret= av_get_packet(&s->pb, pkt, size);
+    ret= av_get_packet(s->pb, pkt, size);
 
     pkt->stream_index = 0;
     if (ret <= 0) {
-        return AVERROR_IO;
+        return AVERROR(EIO);
     }
     /* note: we need to modify the packet size here to handle the last
        packet */
@@ -351,81 +182,185 @@ static int mp3_read_packet(AVFormatContext *s, AVPacket *pkt)
     return ret;
 }
 
-static int mp3_read_close(AVFormatContext *s)
+AVInputFormat mp3_demuxer = {
+    "mp3",
+    NULL_IF_CONFIG_SMALL("MPEG audio layer 2/3"),
+    0,
+    mp3_read_probe,
+    mp3_read_header,
+    mp3_read_packet,
+    .flags= AVFMT_GENERIC_INDEX,
+    .extensions = "mp2,mp3,m2a", /* XXX: use probe */
+    .metadata_conv = ff_id3v2_metadata_conv,
+};
+#endif
+
+#if CONFIG_MP2_MUXER || CONFIG_MP3_MUXER
+static int id3v1_set_string(AVFormatContext *s, const char *key,
+                            uint8_t *buf, int buf_size)
 {
-    return 0;
+    AVMetadataTag *tag;
+    if ((tag = av_metadata_get(s->metadata, key, NULL, 0)))
+        strncpy(buf, tag->value, buf_size);
+    return !!tag;
 }
 
-#ifdef CONFIG_MUXERS
-/* simple formats */
-static int mp3_write_header(struct AVFormatContext *s)
+static int id3v1_create_tag(AVFormatContext *s, uint8_t *buf)
 {
-    return 0;
+    AVMetadataTag *tag;
+    int i, count = 0;
+
+    memset(buf, 0, ID3v1_TAG_SIZE); /* fail safe */
+    buf[0] = 'T';
+    buf[1] = 'A';
+    buf[2] = 'G';
+    count += id3v1_set_string(s, "title",   buf +  3, 30);
+    count += id3v1_set_string(s, "author",  buf + 33, 30);
+    count += id3v1_set_string(s, "album",   buf + 63, 30);
+    count += id3v1_set_string(s, "date",    buf + 93,  4);
+    count += id3v1_set_string(s, "comment", buf + 97, 30);
+    if ((tag = av_metadata_get(s->metadata, "track", NULL, 0))) {
+        buf[125] = 0;
+        buf[126] = atoi(tag->value);
+        count++;
+    }
+    buf[127] = 0xFF; /* default to unknown genre */
+    if ((tag = av_metadata_get(s->metadata, "genre", NULL, 0))) {
+        for(i = 0; i <= ID3v1_GENRE_MAX; i++) {
+            if (!strcasecmp(tag->value, ff_id3v1_genre_str[i])) {
+                buf[127] = i;
+                count++;
+                break;
+            }
+        }
+    }
+    return count;
 }
+
+/* simple formats */
+
+static void id3v2_put_size(AVFormatContext *s, int size)
+{
+    put_byte(s->pb, size >> 21 & 0x7f);
+    put_byte(s->pb, size >> 14 & 0x7f);
+    put_byte(s->pb, size >> 7  & 0x7f);
+    put_byte(s->pb, size       & 0x7f);
+}
+
+static void id3v2_put_ttag(AVFormatContext *s, const char *buf, int len,
+                           uint32_t tag)
+{
+    put_be32(s->pb, tag);
+    id3v2_put_size(s, len + 1);
+    put_be16(s->pb, 0);
+    put_byte(s->pb, 3); /* UTF-8 */
+    put_buffer(s->pb, buf, len);
+}
+
 
 static int mp3_write_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
-    put_buffer(&s->pb, pkt->data, pkt->size);
-    put_flush_packet(&s->pb);
+    put_buffer(s->pb, pkt->data, pkt->size);
+    put_flush_packet(s->pb);
     return 0;
 }
 
 static int mp3_write_trailer(struct AVFormatContext *s)
 {
-    uint8_t buf[ID3_TAG_SIZE];
+    uint8_t buf[ID3v1_TAG_SIZE];
 
-    /* write the id3 header */
-    if (s->title[0] != '\0') {
-        id3_create_tag(s, buf);
-        put_buffer(&s->pb, buf, ID3_TAG_SIZE);
-        put_flush_packet(&s->pb);
+    /* write the id3v1 tag */
+    if (id3v1_create_tag(s, buf) > 0) {
+        put_buffer(s->pb, buf, ID3v1_TAG_SIZE);
+        put_flush_packet(s->pb);
     }
     return 0;
 }
-#endif //CONFIG_MUXERS
+#endif /* CONFIG_MP2_MUXER || CONFIG_MP3_MUXER */
 
-#ifdef CONFIG_MP3_DEMUXER
-AVInputFormat mp3_demuxer = {
-    "mp3",
-    "MPEG audio",
-    0,
-    mp3_read_probe,
-    mp3_read_header,
-    mp3_read_packet,
-    mp3_read_close,
-    .flags= AVFMT_GENERIC_INDEX,
-    .extensions = "mp2,mp3,m2a", /* XXX: use probe */
-};
-#endif
-#ifdef CONFIG_MP2_MUXER
+#if CONFIG_MP2_MUXER
 AVOutputFormat mp2_muxer = {
     "mp2",
-    "MPEG audio layer 2",
+    NULL_IF_CONFIG_SMALL("MPEG audio layer 2"),
     "audio/x-mpeg",
-#ifdef CONFIG_LIBMP3LAME
     "mp2,m2a",
-#else
-    "mp2,mp3,m2a",
-#endif
     0,
     CODEC_ID_MP2,
-    0,
-    mp3_write_header,
+    CODEC_ID_NONE,
+    NULL,
     mp3_write_packet,
     mp3_write_trailer,
 };
 #endif
-#ifdef CONFIG_MP3_MUXER
+
+#if CONFIG_MP3_MUXER
+/**
+ * Write an ID3v2.4 header at beginning of stream
+ */
+
+static int mp3_write_header(struct AVFormatContext *s)
+{
+    AVMetadataTag *t = NULL;
+    int totlen = 0;
+    int64_t size_pos, cur_pos;
+
+    put_be32(s->pb, MKBETAG('I', 'D', '3', 0x04)); /* ID3v2.4 */
+    put_byte(s->pb, 0);
+    put_byte(s->pb, 0); /* flags */
+
+    /* reserve space for size */
+    size_pos = url_ftell(s->pb);
+    put_be32(s->pb, 0);
+
+    while ((t = av_metadata_get(s->metadata, "", t, AV_METADATA_IGNORE_SUFFIX))) {
+        uint32_t tag = 0;
+
+        if (t->key[0] == 'T' && strlen(t->key) == 4) {
+            int i;
+            for (i = 0; *ff_id3v2_tags[i]; i++)
+                if (AV_RB32(t->key) == AV_RB32(ff_id3v2_tags[i])) {
+                    int len = strlen(t->value);
+                    tag = AV_RB32(t->key);
+                    totlen += len + ID3v2_HEADER_SIZE + 2;
+                    id3v2_put_ttag(s, t->value, len + 1, tag);
+                    break;
+                }
+        }
+
+        if (!tag) { /* unknown tag, write as TXXX frame */
+            int   len = strlen(t->key), len1 = strlen(t->value);
+            char *buf = av_malloc(len + len1 + 2);
+            if (!buf)
+                return AVERROR(ENOMEM);
+            tag = MKBETAG('T', 'X', 'X', 'X');
+            strcpy(buf,           t->key);
+            strcpy(buf + len + 1, t->value);
+            id3v2_put_ttag(s, buf, len + len1 + 2, tag);
+            totlen += len + len1 + ID3v2_HEADER_SIZE + 3;
+            av_free(buf);
+        }
+    }
+
+    cur_pos = url_ftell(s->pb);
+    url_fseek(s->pb, size_pos, SEEK_SET);
+    id3v2_put_size(s, totlen);
+    url_fseek(s->pb, cur_pos, SEEK_SET);
+
+    return 0;
+}
+
 AVOutputFormat mp3_muxer = {
     "mp3",
-    "MPEG audio layer 3",
+    NULL_IF_CONFIG_SMALL("MPEG audio layer 3"),
     "audio/x-mpeg",
     "mp3",
     0,
     CODEC_ID_MP3,
-    0,
+    CODEC_ID_NONE,
     mp3_write_header,
     mp3_write_packet,
     mp3_write_trailer,
+    AVFMT_NOTIMESTAMPS,
+    .metadata_conv = ff_id3v2_metadata_conv,
 };
 #endif

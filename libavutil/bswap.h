@@ -19,120 +19,54 @@
  */
 
 /**
- * @file bswap.h
- * byte swap.
+ * @file
+ * byte swapping routines
  */
 
-#ifndef __BSWAP_H__
-#define __BSWAP_H__
+#ifndef AVUTIL_BSWAP_H
+#define AVUTIL_BSWAP_H
 
-#ifdef HAVE_BYTESWAP_H
-#include <byteswap.h>
-#else
+#include <stdint.h>
+#include "config.h"
+#include "attributes.h"
 
-#ifdef ARCH_X86_64
-#  define LEGACY_REGS "=Q"
-#else
-#  define LEGACY_REGS "=q"
+#if   ARCH_ARM
+#   include "arm/bswap.h"
+#elif ARCH_AVR32
+#   include "avr32/bswap.h"
+#elif ARCH_BFIN
+#   include "bfin/bswap.h"
+#elif ARCH_SH4
+#   include "sh4/bswap.h"
+#elif ARCH_X86
+#   include "x86/bswap.h"
 #endif
 
-#if defined(ARCH_X86)
-static av_always_inline uint16_t bswap_16(uint16_t x)
+#define AV_BSWAP16C(x) (((x) << 8 & 0xff00)  | ((x) >> 8 & 0x00ff))
+#define AV_BSWAP32C(x) (AV_BSWAP16C(x) << 16 | AV_BSWAP16C((x) >> 16))
+#define AV_BSWAP64C(x) (AV_BSWAP32C(x) << 32 | AV_BSWAP32C((x) >> 32))
+
+#define AV_BSWAPC(s, x) AV_BSWAP##s##C(x)
+
+#ifndef bswap_16
+static av_always_inline av_const uint16_t bswap_16(uint16_t x)
 {
-  __asm("rorw $8, %0"   :
-        LEGACY_REGS (x) :
-        "0" (x));
+    x= (x>>8) | (x<<8);
     return x;
 }
-
-static av_always_inline uint32_t bswap_32(uint32_t x)
-{
-#if __CPU__ != 386
- __asm("bswap   %0":
-      "=r" (x)     :
-#else
- __asm("xchgb   %b0,%h0\n"
-      "         rorl    $16,%0\n"
-      "         xchgb   %b0,%h0":
-      LEGACY_REGS (x)                :
 #endif
-      "0" (x));
-  return x;
-}
 
-static inline uint64_t bswap_64(uint64_t x)
+#ifndef bswap_32
+static av_always_inline av_const uint32_t bswap_32(uint32_t x)
 {
-#ifdef ARCH_X86_64
-  __asm("bswap  %0":
-        "=r" (x)   :
-        "0" (x));
-  return x;
-#else
-    union {
-        uint64_t ll;
-        struct {
-           uint32_t l,h;
-        } l;
-    } r;
-    r.l.l = bswap_32 (x);
-    r.l.h = bswap_32 (x>>32);
-    return r.ll;
-#endif
-}
-
-#elif defined(ARCH_SH4)
-
-static av_always_inline uint16_t bswap_16(uint16_t x) {
-        __asm__("swap.b %0,%0":"=r"(x):"0"(x));
-        return x;
-}
-
-static av_always_inline uint32_t bswap_32(uint32_t x) {
-        __asm__(
-        "swap.b %0,%0\n"
-        "swap.w %0,%0\n"
-        "swap.b %0,%0\n"
-        :"=r"(x):"0"(x));
-        return x;
-}
-
-static inline uint64_t bswap_64(uint64_t x)
-{
-    union {
-        uint64_t ll;
-        struct {
-           uint32_t l,h;
-        } l;
-    } r;
-    r.l.l = bswap_32 (x);
-    r.l.h = bswap_32 (x>>32);
-    return r.ll;
-}
-#else
-
-static av_always_inline uint16_t bswap_16(uint16_t x){
-    return (x>>8) | (x<<8);
-}
-
-#ifdef ARCH_ARM
-static av_always_inline uint32_t bswap_32(uint32_t x){
-    uint32_t t;
-    __asm__ (
-      "eor %1, %0, %0, ror #16 \n\t"
-      "bic %1, %1, #0xFF0000   \n\t"
-      "mov %0, %0, ror #8      \n\t"
-      "eor %0, %0, %1, lsr #8  \n\t"
-      : "+r"(x), "+r"(t));
-    return x;
-}
-#else
-static av_always_inline uint32_t bswap_32(uint32_t x){
     x= ((x<<8)&0xFF00FF00) | ((x>>8)&0x00FF00FF);
-    return (x>>16) | (x<<16);
+    x= (x>>16) | (x<<16);
+    return x;
 }
 #endif
 
-static inline uint64_t bswap_64(uint64_t x)
+#ifndef bswap_64
+static inline uint64_t av_const bswap_64(uint64_t x)
 {
 #if 0
     x= ((x<< 8)&0xFF00FF00FF00FF00ULL) | ((x>> 8)&0x00FF00FF00FF00FFULL);
@@ -149,20 +83,20 @@ static inline uint64_t bswap_64(uint64_t x)
     return r.ll;
 #endif
 }
-#endif  /* defined(ARCH_X86) */
+#endif
 
-#endif  /* !HAVE_BYTESWAP_H */
+// be2me ... big-endian to machine-endian
+// le2me ... little-endian to machine-endian
 
-// be2me ... BigEndian to MachineEndian
-// le2me ... LittleEndian to MachineEndian
-
-#ifdef WORDS_BIGENDIAN
+#if HAVE_BIGENDIAN
 #define be2me_16(x) (x)
 #define be2me_32(x) (x)
 #define be2me_64(x) (x)
 #define le2me_16(x) bswap_16(x)
 #define le2me_32(x) bswap_32(x)
 #define le2me_64(x) bswap_64(x)
+#define AV_BE2MEC(s, x) (x)
+#define AV_LE2MEC(s, x) AV_BSWAPC(s, x)
 #else
 #define be2me_16(x) bswap_16(x)
 #define be2me_32(x) bswap_32(x)
@@ -170,6 +104,15 @@ static inline uint64_t bswap_64(uint64_t x)
 #define le2me_16(x) (x)
 #define le2me_32(x) (x)
 #define le2me_64(x) (x)
+#define AV_BE2MEC(s, x) AV_BSWAPC(s, x)
+#define AV_LE2MEC(s, x) (x)
 #endif
 
-#endif /* __BSWAP_H__ */
+#define AV_BE2ME16C(x) AV_BE2MEC(16, x)
+#define AV_BE2ME32C(x) AV_BE2MEC(32, x)
+#define AV_BE2ME64C(x) AV_BE2MEC(64, x)
+#define AV_LE2ME16C(x) AV_LE2MEC(16, x)
+#define AV_LE2ME32C(x) AV_LE2MEC(32, x)
+#define AV_LE2ME64C(x) AV_LE2MEC(64, x)
+
+#endif /* AVUTIL_BSWAP_H */

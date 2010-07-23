@@ -1,6 +1,9 @@
 /*
  * MMI optimized DSP utils
- * Copyright (c) 2000, 2001 Fabrice Bellard.
+ * Copyright (c) 2000, 2001 Fabrice Bellard
+ *
+ * MMI optimization by Leon van Stuivenberg
+ * clear_blocks_mmi() by BroadQ
  *
  * This file is part of FFmpeg.
  *
@@ -17,12 +20,9 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- *
- * MMI optimization by Leon van Stuivenberg
- * clear_blocks_mmi() by BroadQ
  */
 
-#include "../dsputil.h"
+#include "libavcodec/dsputil.h"
 #include "mmi.h"
 
 void ff_mmi_idct_put(uint8_t *dest, int line_size, DCTELEM *block);
@@ -31,7 +31,7 @@ void ff_mmi_idct(DCTELEM *block);
 
 static void clear_blocks_mmi(DCTELEM * blocks)
 {
-        asm volatile(
+        __asm__ volatile(
         ".set noreorder    \n"
         "addiu $9, %0, 768 \n"
         "nop               \n"
@@ -51,7 +51,7 @@ static void clear_blocks_mmi(DCTELEM * blocks)
 
 static void get_pixels_mmi(DCTELEM *block, const uint8_t *pixels, int line_size)
 {
-        asm volatile(
+        __asm__ volatile(
         ".set   push            \n\t"
         ".set   mips3           \n\t"
         "ld     $8, 0(%0)       \n\t"
@@ -92,7 +92,7 @@ static void get_pixels_mmi(DCTELEM *block, const uint8_t *pixels, int line_size)
 
 static void put_pixels8_mmi(uint8_t *block, const uint8_t *pixels, int line_size, int h)
 {
-        asm volatile(
+        __asm__ volatile(
         ".set   push            \n\t"
         ".set   mips3           \n\t"
         "1:                     \n\t"
@@ -111,7 +111,7 @@ static void put_pixels8_mmi(uint8_t *block, const uint8_t *pixels, int line_size
 
 static void put_pixels16_mmi(uint8_t *block, const uint8_t *pixels, int line_size, int h)
 {
-        asm volatile (
+        __asm__ volatile (
         ".set   push            \n\t"
         ".set   mips3           \n\t"
         "1:                     \n\t"

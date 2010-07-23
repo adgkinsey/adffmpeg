@@ -17,11 +17,11 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 /**
- * @file lls.c
+ * @file
  * linear least squares model
  */
 
@@ -29,10 +29,6 @@
 #include <string.h>
 
 #include "lls.h"
-
-#ifdef TEST
-#define av_log(a,b,...) printf(__VA_ARGS__)
-#endif
 
 void av_init_lls(LLSModel *m, int indep_count){
     memset(m, 0, sizeof(LLSModel));
@@ -53,8 +49,8 @@ void av_update_lls(LLSModel *m, double *var, double decay){
 
 void av_solve_lls(LLSModel *m, double threshold, int min_order){
     int i,j,k;
-    double (*factor)[MAX_VARS+1]= &m->covariance[1][0];
-    double (*covar )[MAX_VARS+1]= &m->covariance[1][1];
+    double (*factor)[MAX_VARS+1]= (void*)&m->covariance[1][0];
+    double (*covar )[MAX_VARS+1]= (void*)&m->covariance[1][1];
     double  *covar_y            =  m->covariance[0];
     int count= m->indep_count;
 
@@ -113,7 +109,7 @@ double av_evaluate_lls(LLSModel *m, double *param, int order){
 #include <stdlib.h>
 #include <stdio.h>
 
-int main(){
+int main(void){
     LLSModel m;
     int i, order;
 
@@ -121,26 +117,16 @@ int main(){
 
     for(i=0; i<100; i++){
         double var[4];
-        double eval, variance;
-#if 0
-        var[1] = rand() / (double)RAND_MAX;
-        var[2] = rand() / (double)RAND_MAX;
-        var[3] = rand() / (double)RAND_MAX;
-
-        var[2]= var[1] + var[3]/2;
-
-        var[0] = var[1] + var[2] + var[3] +  var[1]*var[2]/100;
-#else
+        double eval;
         var[0] = (rand() / (double)RAND_MAX - 0.5)*2;
         var[1] = var[0] + rand() / (double)RAND_MAX - 0.5;
         var[2] = var[1] + rand() / (double)RAND_MAX - 0.5;
         var[3] = var[2] + rand() / (double)RAND_MAX - 0.5;
-#endif
         av_update_lls(&m, var, 0.99);
         av_solve_lls(&m, 0.001, 0);
         for(order=0; order<3; order++){
             eval= av_evaluate_lls(&m, var+1, order);
-            av_log(NULL, AV_LOG_DEBUG, "real:%f order:%d pred:%f var:%f coeffs:%f %f %f\n",
+            printf("real:%9f order:%d pred:%9f var:%f coeffs:%f %9f %9f\n",
                 var[0], order, eval, sqrt(m.variance[order] / (i+1)),
                 m.coeff[order][0], m.coeff[order][1], m.coeff[order][2]);
         }

@@ -17,11 +17,10 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- *
  */
 
 /**
- * @file vmnc.c
+ * @file
  * VMware Screen Codec (VMnc) decoder
  * As Alex Beregszaszi discovered, this is effectively RFB data dump
  */
@@ -29,7 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "common.h"
+#include "libavutil/intreadwrite.h"
 #include "avcodec.h"
 
 enum EncTypes {
@@ -72,7 +71,7 @@ typedef struct VmncContext {
 } VmncContext;
 
 /* read pixel value from stream */
-static av_always_inline int vmnc_get_pixel(uint8_t* buf, int bpp, int be) {
+static av_always_inline int vmnc_get_pixel(const uint8_t* buf, int bpp, int be) {
     switch(bpp * 2 + be) {
     case 2:
     case 3: return *buf;
@@ -84,7 +83,7 @@ static av_always_inline int vmnc_get_pixel(uint8_t* buf, int bpp, int be) {
     }
 }
 
-static void load_cursor(VmncContext *c, uint8_t *src)
+static void load_cursor(VmncContext *c, const uint8_t *src)
 {
     int i, j, p;
     const int bpp = c->bpp2;
@@ -171,7 +170,7 @@ static void put_cursor(uint8_t *dst, int stride, VmncContext *c, int dx, int dy)
     }
 }
 
-/* fill rectangle with given colour */
+/* fill rectangle with given color */
 static av_always_inline void paint_rect(uint8_t *dst, int dx, int dy, int w, int h, int color, int bpp, int stride)
 {
     int i, j;
@@ -202,7 +201,7 @@ static av_always_inline void paint_rect(uint8_t *dst, int dx, int dy, int w, int
     }
 }
 
-static av_always_inline void paint_raw(uint8_t *dst, int w, int h, uint8_t* src, int bpp, int be, int stride)
+static av_always_inline void paint_raw(uint8_t *dst, int w, int h, const uint8_t* src, int bpp, int be, int stride)
 {
     int i, j, p;
     for(j = 0; j < h; j++) {
@@ -225,14 +224,14 @@ static av_always_inline void paint_raw(uint8_t *dst, int w, int h, uint8_t* src,
     }
 }
 
-static int decode_hextile(VmncContext *c, uint8_t* dst, uint8_t* src, int ssize, int w, int h, int stride)
+static int decode_hextile(VmncContext *c, uint8_t* dst, const uint8_t* src, int ssize, int w, int h, int stride)
 {
     int i, j, k;
     int bg = 0, fg = 0, rects, color, flags, xy, wh;
     const int bpp = c->bpp2;
     uint8_t *dst2;
     int bw = 16, bh = 16;
-    uint8_t *ssrc=src;
+    const uint8_t *ssrc=src;
 
     for(j = 0; j < h; j += 16) {
         dst2 = dst;
@@ -285,11 +284,13 @@ static int decode_hextile(VmncContext *c, uint8_t* dst, uint8_t* src, int ssize,
     return src - ssrc;
 }
 
-static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, uint8_t *buf, int buf_size)
+static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPacket *avpkt)
 {
-    VmncContext * const c = (VmncContext *)avctx->priv_data;
+    const uint8_t *buf = avpkt->data;
+    int buf_size = avpkt->size;
+    VmncContext * const c = avctx->priv_data;
     uint8_t *outptr;
-    uint8_t *src = buf;
+    const uint8_t *src = buf;
     int dx, dy, w, h, depth, enc, chunks, res, size_left;
 
     c->pic.reference = 1;
@@ -458,21 +459,16 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, uint8
  * Init VMnc decoder
  *
  */
-static int decode_init(AVCodecContext *avctx)
+static av_cold int decode_init(AVCodecContext *avctx)
 {
-    VmncContext * const c = (VmncContext *)avctx->priv_data;
+    VmncContext * const c = avctx->priv_data;
 
     c->avctx = avctx;
-    avctx->has_b_frames = 0;
 
-    c->pic.data[0] = NULL;
     c->width = avctx->width;
     c->height = avctx->height;
 
-    if (avcodec_check_dimensions(avctx, avctx->width, avctx->height) < 0) {
-        return 1;
-    }
-    c->bpp = avctx->bits_per_sample;
+    c->bpp = avctx->bits_per_coded_sample;
     c->bpp2 = c->bpp/8;
 
     switch(c->bpp){
@@ -499,9 +495,9 @@ static int decode_init(AVCodecContext *avctx)
  * Uninit VMnc decoder
  *
  */
-static int decode_end(AVCodecContext *avctx)
+static av_cold int decode_end(AVCodecContext *avctx)
 {
-    VmncContext * const c = (VmncContext *)avctx->priv_data;
+    VmncContext * const c = avctx->priv_data;
 
     if (c->pic.data[0])
         avctx->release_buffer(avctx, &c->pic);
@@ -513,13 +509,15 @@ static int decode_end(AVCodecContext *avctx)
 }
 
 AVCodec vmnc_decoder = {
-    "VMware video",
-    CODEC_TYPE_VIDEO,
+    "vmnc",
+    AVMEDIA_TYPE_VIDEO,
     CODEC_ID_VMNC,
     sizeof(VmncContext),
     decode_init,
     NULL,
     decode_end,
-    decode_frame
+    decode_frame,
+    CODEC_CAP_DR1,
+    .long_name = NULL_IF_CONFIG_SMALL("VMware Screen Codec / VMware Video"),
 };
 

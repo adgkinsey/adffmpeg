@@ -20,20 +20,19 @@
  */
 
 /**
- * @file wc3movie.c
+ * @file
  * Wing Commander III Movie file demuxer
  * by Mike Melanson (melanson@pcisys.net)
  * for more information on the WC3 .mve file format, visit:
  *   http://www.pcisys.net/~melanson/codecs/
  */
 
+#include "libavutil/intreadwrite.h"
 #include "avformat.h"
-
-#define WC3_PREAMBLE_SIZE 8
 
 #define FORM_TAG MKTAG('F', 'O', 'R', 'M')
 #define MOVE_TAG MKTAG('M', 'O', 'V', 'E')
-#define _PC__TAG MKTAG('_', 'P', 'C', '_')
+#define  PC__TAG MKTAG('_', 'P', 'C', '_')
 #define SOND_TAG MKTAG('S', 'O', 'N', 'D')
 #define BNAM_TAG MKTAG('B', 'N', 'A', 'M')
 #define SIZE_TAG MKTAG('S', 'I', 'Z', 'E')
@@ -55,7 +54,7 @@
 #define WC3_AUDIO_BITS 16
 
 /* nice, constant framerate */
-#define WC3_FRAME_PTS_INC (90000 / 15)
+#define WC3_FRAME_FPS 15
 
 #define PALETTE_SIZE (256 * 3)
 #define PALETTE_COUNT 256
@@ -73,7 +72,18 @@ typedef struct Wc3DemuxContext {
 
 } Wc3DemuxContext;
 
-/* bizarre palette lookup table */
+/**
+ * palette lookup table that does gamma correction
+ *
+ * can be calculated by this formula:
+ * for i between 0 and 251 inclusive:
+ * wc3_pal_lookup[i] = round(pow(i / 256.0, 0.8) * 256);
+ * values 252, 253, 254 and 255 are all 0xFD
+ * calculating this at runtime should not cause any
+ * rounding issues, the maximum difference between
+ * the table values and the calculated doubles is
+ * about 0.497527
+ */
 static const unsigned char wc3_pal_lookup[] = {
   0x00, 0x03, 0x05, 0x07, 0x09, 0x0B, 0x0D, 0x0E,
   0x10, 0x12, 0x13, 0x15, 0x16, 0x18, 0x19, 0x1A,
@@ -125,15 +135,14 @@ static int wc3_probe(AVProbeData *p)
 static int wc3_read_header(AVFormatContext *s,
                            AVFormatParameters *ap)
 {
-    Wc3DemuxContext *wc3 = (Wc3DemuxContext *)s->priv_data;
-    ByteIOContext *pb = &s->pb;
+    Wc3DemuxContext *wc3 = s->priv_data;
+    ByteIOContext *pb = s->pb;
     unsigned int fourcc_tag;
     unsigned int size;
     AVStream *st;
-    unsigned char preamble[WC3_PREAMBLE_SIZE];
     int ret = 0;
     int current_palette = 0;
-    int bytes_to_read;
+    char *buffer;
     int i;
     unsigned char rotate;
 
@@ -150,11 +159,8 @@ static int wc3_read_header(AVFormatContext *s,
 
     /* traverse through the chunks and load the header information before
      * the first BRCH tag */
-    if ((ret = get_buffer(pb, preamble, WC3_PREAMBLE_SIZE)) !=
-        WC3_PREAMBLE_SIZE)
-        return AVERROR_IO;
-    fourcc_tag = AV_RL32(&preamble[0]);
-    size = (AV_RB32(&preamble[4]) + 1) & (~1);
+    fourcc_tag = get_le32(pb);
+    size = (get_be32(pb) + 1) & (~1);
 
     do {
         switch (fourcc_tag) {
@@ -165,12 +171,10 @@ static int wc3_read_header(AVFormatContext *s,
             url_fseek(pb, size, SEEK_CUR);
             break;
 
-        case _PC__TAG:
+        case PC__TAG:
             /* need the number of palettes */
             url_fseek(pb, 8, SEEK_CUR);
-            if ((ret = get_buffer(pb, preamble, 4)) != 4)
-                return AVERROR_IO;
-            wc3->palette_count = AV_RL32(&preamble[0]);
+            wc3->palette_count = get_le32(pb);
             if((unsigned)wc3->palette_count >= UINT_MAX / PALETTE_SIZE){
                 wc3->palette_count= 0;
                 return -1;
@@ -180,21 +184,20 @@ static int wc3_read_header(AVFormatContext *s,
 
         case BNAM_TAG:
             /* load up the name */
-            if ((unsigned)size < 512)
-                bytes_to_read = size;
-            else
-                bytes_to_read = 512;
-            if ((ret = get_buffer(pb, s->title, bytes_to_read)) != bytes_to_read)
-                return AVERROR_IO;
+            buffer = av_malloc(size+1);
+            if (!buffer)
+                return AVERROR(ENOMEM);
+            if ((ret = get_buffer(pb, buffer, size)) != size)
+                return AVERROR(EIO);
+            buffer[size] = 0;
+            av_metadata_set2(&s->metadata, "title", buffer,
+                                   AV_METADATA_DONT_STRDUP_VAL);
             break;
 
         case SIZE_TAG:
             /* video resolution override */
-            if ((ret = get_buffer(pb, preamble, WC3_PREAMBLE_SIZE)) !=
-                WC3_PREAMBLE_SIZE)
-                return AVERROR_IO;
-            wc3->width = AV_RL32(&preamble[0]);
-            wc3->height = AV_RL32(&preamble[4]);
+            wc3->width  = get_le32(pb);
+            wc3->height = get_le32(pb);
             break;
 
         case PALT_TAG:
@@ -204,7 +207,7 @@ static int wc3_read_header(AVFormatContext *s,
             if ((ret = get_buffer(pb,
                 &wc3->palettes[current_palette * PALETTE_SIZE],
                 PALETTE_SIZE)) != PALETTE_SIZE)
-                return AVERROR_IO;
+                return AVERROR(EIO);
 
             /* transform the current palette in place */
             for (i = current_palette * PALETTE_SIZE;
@@ -220,28 +223,27 @@ static int wc3_read_header(AVFormatContext *s,
 
         default:
             av_log(s, AV_LOG_ERROR, "  unrecognized WC3 chunk: %c%c%c%c (0x%02X%02X%02X%02X)\n",
-                preamble[0], preamble[1], preamble[2], preamble[3],
-                preamble[0], preamble[1], preamble[2], preamble[3]);
+                (uint8_t)fourcc_tag, (uint8_t)(fourcc_tag >> 8), (uint8_t)(fourcc_tag >> 16), (uint8_t)(fourcc_tag >> 24),
+                (uint8_t)fourcc_tag, (uint8_t)(fourcc_tag >> 8), (uint8_t)(fourcc_tag >> 16), (uint8_t)(fourcc_tag >> 24));
             return AVERROR_INVALIDDATA;
             break;
         }
 
-        if ((ret = get_buffer(pb, preamble, WC3_PREAMBLE_SIZE)) !=
-            WC3_PREAMBLE_SIZE)
-            return AVERROR_IO;
-        fourcc_tag = AV_RL32(&preamble[0]);
+        fourcc_tag = get_le32(pb);
         /* chunk sizes are 16-bit aligned */
-        size = (AV_RB32(&preamble[4]) + 1) & (~1);
+        size = (get_be32(pb) + 1) & (~1);
+        if (url_feof(pb))
+            return AVERROR(EIO);
 
     } while (fourcc_tag != BRCH_TAG);
 
     /* initialize the decoder streams */
     st = av_new_stream(s, 0);
     if (!st)
-        return AVERROR_NOMEM;
-    av_set_pts_info(st, 33, 1, 90000);
+        return AVERROR(ENOMEM);
+    av_set_pts_info(st, 33, 1, WC3_FRAME_FPS);
     wc3->video_stream_index = st->index;
-    st->codec->codec_type = CODEC_TYPE_VIDEO;
+    st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
     st->codec->codec_id = CODEC_ID_XAN_WC3;
     st->codec->codec_tag = 0;  /* no fourcc */
     st->codec->width = wc3->width;
@@ -252,17 +254,17 @@ static int wc3_read_header(AVFormatContext *s,
 
     st = av_new_stream(s, 0);
     if (!st)
-        return AVERROR_NOMEM;
-    av_set_pts_info(st, 33, 1, 90000);
+        return AVERROR(ENOMEM);
+    av_set_pts_info(st, 33, 1, WC3_FRAME_FPS);
     wc3->audio_stream_index = st->index;
-    st->codec->codec_type = CODEC_TYPE_AUDIO;
+    st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codec->codec_id = CODEC_ID_PCM_S16LE;
     st->codec->codec_tag = 1;
     st->codec->channels = WC3_AUDIO_CHANNELS;
-    st->codec->bits_per_sample = WC3_AUDIO_BITS;
+    st->codec->bits_per_coded_sample = WC3_AUDIO_BITS;
     st->codec->sample_rate = WC3_SAMPLE_RATE;
     st->codec->bit_rate = st->codec->channels * st->codec->sample_rate *
-        st->codec->bits_per_sample;
+        st->codec->bits_per_coded_sample;
     st->codec->block_align = WC3_AUDIO_BITS * WC3_AUDIO_CHANNELS;
 
     return 0;
@@ -271,13 +273,12 @@ static int wc3_read_header(AVFormatContext *s,
 static int wc3_read_packet(AVFormatContext *s,
                            AVPacket *pkt)
 {
-    Wc3DemuxContext *wc3 = (Wc3DemuxContext *)s->priv_data;
-    ByteIOContext *pb = &s->pb;
+    Wc3DemuxContext *wc3 = s->priv_data;
+    ByteIOContext *pb = s->pb;
     unsigned int fourcc_tag;
     unsigned int size;
     int packet_read = 0;
     int ret = 0;
-    unsigned char preamble[WC3_PREAMBLE_SIZE];
     unsigned char text[1024];
     unsigned int palette_number;
     int i;
@@ -286,14 +287,11 @@ static int wc3_read_packet(AVFormatContext *s,
 
     while (!packet_read) {
 
-        /* get the next chunk preamble */
-        if ((ret = get_buffer(pb, preamble, WC3_PREAMBLE_SIZE)) !=
-            WC3_PREAMBLE_SIZE)
-            ret = AVERROR_IO;
-
-        fourcc_tag = AV_RL32(&preamble[0]);
+        fourcc_tag = get_le32(pb);
         /* chunk sizes are 16-bit aligned */
-        size = (AV_RB32(&preamble[4]) + 1) & (~1);
+        size = (get_be32(pb) + 1) & (~1);
+        if (url_feof(pb))
+            return AVERROR(EIO);
 
         switch (fourcc_tag) {
 
@@ -303,9 +301,7 @@ static int wc3_read_packet(AVFormatContext *s,
 
         case SHOT_TAG:
             /* load up new palette */
-            if ((ret = get_buffer(pb, preamble, 4)) != 4)
-                return AVERROR_IO;
-            palette_number = AV_RL32(&preamble[0]);
+            palette_number = get_le32(pb);
             if (palette_number >= wc3->palette_count)
                 return AVERROR_INVALIDDATA;
             base_palette_index = palette_number * PALETTE_COUNT * 3;
@@ -323,8 +319,6 @@ static int wc3_read_packet(AVFormatContext *s,
             ret= av_get_packet(pb, pkt, size);
             pkt->stream_index = wc3->video_stream_index;
             pkt->pts = wc3->pts;
-            if (ret != size)
-                ret = AVERROR_IO;
             packet_read = 1;
             break;
 
@@ -334,7 +328,7 @@ static int wc3_read_packet(AVFormatContext *s,
             url_fseek(pb, size, SEEK_CUR);
 #else
             if ((unsigned)size > sizeof(text) || (ret = get_buffer(pb, text, size)) != size)
-                ret = AVERROR_IO;
+                ret = AVERROR(EIO);
             else {
                 int i = 0;
                 av_log (s, AV_LOG_DEBUG, "Subtitle time!\n");
@@ -352,19 +346,17 @@ static int wc3_read_packet(AVFormatContext *s,
             ret= av_get_packet(pb, pkt, size);
             pkt->stream_index = wc3->audio_stream_index;
             pkt->pts = wc3->pts;
-            if (ret != size)
-                ret = AVERROR_IO;
 
             /* time to advance pts */
-            wc3->pts += WC3_FRAME_PTS_INC;
+            wc3->pts++;
 
             packet_read = 1;
             break;
 
         default:
             av_log (s, AV_LOG_ERROR, "  unrecognized WC3 chunk: %c%c%c%c (0x%02X%02X%02X%02X)\n",
-                preamble[0], preamble[1], preamble[2], preamble[3],
-                preamble[0], preamble[1], preamble[2], preamble[3]);
+                (uint8_t)fourcc_tag, (uint8_t)(fourcc_tag >> 8), (uint8_t)(fourcc_tag >> 16), (uint8_t)(fourcc_tag >> 24),
+                (uint8_t)fourcc_tag, (uint8_t)(fourcc_tag >> 8), (uint8_t)(fourcc_tag >> 16), (uint8_t)(fourcc_tag >> 24));
             ret = AVERROR_INVALIDDATA;
             packet_read = 1;
             break;
@@ -376,7 +368,7 @@ static int wc3_read_packet(AVFormatContext *s,
 
 static int wc3_read_close(AVFormatContext *s)
 {
-    Wc3DemuxContext *wc3 = (Wc3DemuxContext *)s->priv_data;
+    Wc3DemuxContext *wc3 = s->priv_data;
 
     av_free(wc3->palettes);
 
@@ -385,7 +377,7 @@ static int wc3_read_close(AVFormatContext *s)
 
 AVInputFormat wc3_demuxer = {
     "wc3movie",
-    "Wing Commander III movie format",
+    NULL_IF_CONFIG_SMALL("Wing Commander III movie format"),
     sizeof(Wc3DemuxContext),
     wc3_probe,
     wc3_read_header,

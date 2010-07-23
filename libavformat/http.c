@@ -1,6 +1,6 @@
 /*
  * HTTP protocol for ffmpeg client
- * Copyright (c) 2000, 2001 Fabrice Bellard.
+ * Copyright (c) 2000, 2001 Fabrice Bellard
  *
  * This file is part of FFmpeg.
  *
@@ -18,21 +18,18 @@
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
+
+#include "libavutil/avstring.h"
 #include "avformat.h"
 #include <unistd.h>
+#include <strings.h>
+#include "internal.h"
 #include "network.h"
-#include "dsenc.h"
+#include "os_support.h"
+#include "httpauth.h"
 
-#ifdef __MINGW32__
-#define sleep(x)                Sleep(x*1000)
-#endif /* __MINGW32__ */
-
-#include "base64.h"
-
-/* XXX: POST protocol is not completly implemented because ffmpeg use
-   only a subset of it */
-
-//#define DEBUG
+/* XXX: POST protocol is not completely implemented because ffmpeg uses
+   only a subset of it. */
 
 /* used for protocol handling */
 #define BUFFER_SIZE 1024
@@ -44,59 +41,32 @@ typedef struct {
     unsigned char buffer[BUFFER_SIZE], *buf_ptr, *buf_end;
     int line_count;
     int http_code;
-    offset_t off, filesize;
+    int64_t chunksize;      /**< Used if "Transfer-Encoding: chunked" otherwise -1. */
+    int64_t off, filesize;
     char location[URL_SIZE];
+    HTTPAuthState auth_state;
 
-    /* CS - added to support authentication */
-    int    authentication_mode;
-    char * realm;
-    char * nonce;
-    char * algorithm;
-    char * qop;
-
-	/* BMOJ - added to hold utc_offset from header */
-    char* sever;
-	char* content;
-	char* resolution;
-	char* compression;
-	char* rate;
-	char* pps;
-	char* site_id;
+    /* BMOJ - added to hold utc_offset from header */
+	char* sever;
+    char* content;
+    char* resolution;
+    char* compression;
+    char* rate;
+    char* pps;
+    char* site_id;
     char* boundry;
-    char* Transfer_Encoding;
 
-	int utc_offset;
+    int utc_offset;
     int isBinary;
-    int isChunked;
-    int ChunkSize;
 } HTTPContext;
 
 static int http_connect(URLContext *h, const char *path, const char *hoststr,
-                        const char *auth, int *new_location, const char *tcpConnStr);
+                        const char *auth, int *new_location);
 static int http_write(URLContext *h, uint8_t *buf, int size);
 
-static void http_parse_authentication_header( char * p, HTTPContext *s );
 static void http_parse_content_type_header( char * p, HTTPContext *s );
-static void http_parse_transfer_encoding_header( char * p, HTTPContext *s );
 static void copy_value_to_field( const char *value, char **dest );
-static int http_do_request( URLContext *h, const char *path, const char *hoststr, const char *auth, int post, int *new_location );
-static int http_respond_to_basic_challenge( URLContext *h, const char *auth, int post, const char *path, const char *hoststr, int *new_location );
-static int http_respond_to_digest_challenge( URLContext *h, const char *auth, int post, const char *path, const char *hoststr, int *new_location );
-static void value_to_string( const char *input, int size, char *output );
 
-
-static void http_read_ChunkSize(HTTPContext *h);
-static int LocalHTTP_read(HTTPContext *h, uint8_t *buf, int size);
-
-typedef int (*HTTPAuthenticationResponseFunc)( URLContext *h, const char *auth, int post, const char *path, const char *hoststr );
-
-static HTTPAuthenticationResponseFunc   http_auth_responses[2] = {
-    http_respond_to_basic_challenge,
-    http_respond_to_digest_challenge
-};
-/* Use these to index the array above */
-#define AUTHENTICATION_MODE_BASIC       0
-#define AUTHENTICATION_MODE_DIGEST      1
 
 /* return non zero if error */
 static int http_open_cnx(URLContext *h)
@@ -106,35 +76,30 @@ static int http_open_cnx(URLContext *h)
     char auth[1024];
     char path1[1024];
     char buf[1024];
-    int port, use_proxy, location_changed = 0, redirects = 0;
+    int port, use_proxy, err, location_changed = 0, redirects = 0;
+    HTTPAuthType cur_auth_type;
     HTTPContext *s = h->priv_data;
     URLContext *hd = NULL;
-    int retVal = AVERROR_IO;
 
     /* CS - I've omitted the following proxy resolution from WinCE builds as it doesn't support the concept of environment variables */
     /* A better solution will be available but as yet I don't know what that solution should be. Registry or config files probably... */
 #ifndef CONFIG_WINCE
     proxy_path = getenv("http_proxy");
     use_proxy = (proxy_path != NULL) && !getenv("no_proxy") &&
-        strstart(proxy_path, "http://", NULL);
+        av_strstart(proxy_path, "http://", NULL);
 #else
     use_proxy = 0;
 #endif /* ifndef CONFIG_WINCE */
 
     /* fill the dest addr */
- redo:
     /* needed in any case to build the host string */
-    url_split(NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port,
-              path1, sizeof(path1), s->location);
-    if (port > 0) {
-        snprintf(hoststr, sizeof(hoststr), "%s:%d", hostname, port);
-    } else {
-        pstrcpy(hoststr, sizeof(hoststr), hostname);
-    }
+    ff_url_split(NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port,
+                 path1, sizeof(path1), s->location);
+    ff_url_join(hoststr, sizeof(hoststr), NULL, NULL, hostname, port, NULL);
 
     if (use_proxy) {
-        url_split(NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port,
-                  NULL, 0, proxy_path);
+        ff_url_split(NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port,
+                     NULL, 0, proxy_path);
         path = s->location;
     } else {
         if (path1[0] == '\0')
@@ -145,19 +110,28 @@ static int http_open_cnx(URLContext *h)
     if (port < 0)
         port = 80;
 
-    snprintf(buf, sizeof(buf), "tcp://%s:%d", hostname, port);
-    if( (retVal = url_open( &hd, buf, URL_RDWR )) < 0 )
+    ff_url_join(buf, sizeof(buf), "tcp", NULL, hostname, port, NULL);
+ redo:
+    err = url_open(&hd, buf, URL_RDWR);
+    if (err < 0)
         goto fail;
 
     s->hd = hd;
-    if( (retVal = http_connect( h, path, hoststr, auth, &location_changed, buf )) < 0 )
+    cur_auth_type = s->auth_state.auth_type;
+    if (http_connect(h, path, hoststr, auth, &location_changed) < 0)
         goto fail;
-
-    if (s->http_code == 303 && location_changed == 1) {
+    if (s->http_code == 401) {
+        if (cur_auth_type == HTTP_AUTH_NONE && s->auth_state.auth_type != HTTP_AUTH_NONE) {
+            url_close(hd);
+            goto redo;
+        } else
+            goto fail;
+    }
+    if ((s->http_code == 302 || s->http_code == 303) && location_changed == 1) {
         /* url moved, get next */
         url_close(hd);
         if (redirects++ >= MAX_REDIRECTS)
-            return AVERROR_IO;
+            return AVERROR(EIO);
         location_changed = 0;
         goto redo;
     }
@@ -165,7 +139,7 @@ static int http_open_cnx(URLContext *h)
  fail:
     if (hd)
         url_close(hd);
-    return retVal;
+    return AVERROR(EIO);
 }
 
 static int http_open(URLContext *h, const char *uri, int flags)
@@ -176,14 +150,15 @@ static int http_open(URLContext *h, const char *uri, int flags)
     h->is_streamed = 1;
 
     s = av_mallocz(sizeof(HTTPContext));
-    if (!s) 
-    {
+    if (!s) {
         return AVERROR(ENOMEM);
     }
     h->priv_data = s;
     s->filesize = -1;
+    s->chunksize = -1;
     s->off = 0;
-    pstrcpy (s->location, URL_SIZE, uri);
+    memset(&s->auth_state, 0, sizeof(s->auth_state));
+    av_strlcpy(s->location, uri, URL_SIZE);
 
     ret = http_open_cnx(h);
     if (ret != 0)
@@ -196,7 +171,7 @@ static int http_getc(HTTPContext *s)
     if (s->buf_ptr >= s->buf_end) {
         len = url_read(s->hd, s->buffer, BUFFER_SIZE);
         if (len < 0) {
-            return AVERROR_IO;
+            return AVERROR(EIO);
         } else if (len == 0) {
             return -1;
         } else {
@@ -207,10 +182,33 @@ static int http_getc(HTTPContext *s)
     return *s->buf_ptr++;
 }
 
+static int http_get_line(HTTPContext *s, char *line, int line_size)
+{
+    int ch;
+    char *q;
+
+    q = line;
+    for(;;) {
+        ch = http_getc(s);
+        if (ch < 0)
+            return AVERROR(EIO);
+        if (ch == '\n') {
+            /* process line */
+            if (q > line && q[-1] == '\r')
+                q--;
+            *q = '\0';
+
+            return 0;
+        } else {
+            if ((q - line) < line_size - 1)
+                *q++ = ch;
+        }
+    }
+}
+
 static int process_line(URLContext *h, char *line, int line_count,
                         int *new_location)
 {
-    //int i =0;
     HTTPContext *s = h->priv_data;
     char *tag, *p;
 
@@ -219,20 +217,20 @@ static int process_line(URLContext *h, char *line, int line_count,
         return 0;
 
     p = line;
-    if (line_count == 0) 
-    {
+    if (line_count == 0) {
         while (!isspace(*p) && *p != '\0')
             p++;
         while (isspace(*p))
             p++;
         s->http_code = strtol(p, NULL, 10);
 
-        //#ifdef DEBUG
-        //    printf("http_code=%d\n", s->http_code);
-        //#endif
-    } 
-    else 
-    {
+        dprintf(NULL, "http_code=%d\n", s->http_code);
+
+        /* error codes are 4xx and 5xx, but regard 401 as a success, so we
+         * don't abort until all headers have been parsed. */
+        if (s->http_code >= 400 && s->http_code < 600 && s->http_code != 401)
+            return -1;
+    } else {
         while (*p != '\0' && *p != ':')
             p++;
         if (*p != ':')
@@ -243,18 +241,12 @@ static int process_line(URLContext *h, char *line, int line_count,
         p++;
         while (isspace(*p))
             p++;
-
-        if (!strcmp(tag, "Location")) 
-        {
+        if (!strcmp(tag, "Location")) {
             strcpy(s->location, p);
             *new_location = 1;
-        } 
-        else if (!strcmp (tag, "Content-Length") && s->filesize == -1) 
-        {
+        } else if (!strcmp (tag, "Content-Length") && s->filesize == -1) {
             s->filesize = atoll(p);
-        } 
-        else if (!strcmp (tag, "Content-Range"))
-        {
+        } else if (!strcmp (tag, "Content-Range")) {
             /* "bytes $from-$to/$document_size" */
             const char *slash;
             if (!strncmp (p, "bytes ", 6)) {
@@ -264,45 +256,18 @@ static int process_line(URLContext *h, char *line, int line_count,
                     s->filesize = atoll(slash+1);
             }
             h->is_streamed = 0; /* we _can_ in fact seek */
-        }
-		else if(!strcmp(tag, "Content-type"))/* Check for Content headers */
-		{
+        } else if (!strcmp (tag, "Transfer-Encoding") && !strncasecmp(p, "chunked", 7)) {
+            s->filesize = -1;
+            s->chunksize = 0;
+        } else if (!strcmp (tag, "WWW-Authenticate")) {
+            ff_http_auth_handle_header(&s->auth_state, tag, p);
+        } else if (!strcmp (tag, "Authentication-Info")) {
+            ff_http_auth_handle_header(&s->auth_state, tag, p);
+        } else if (!strcmp (tag, "Content-type")) {
             http_parse_content_type_header( p, s );
-        }
-        else if(!strcmp(tag, "Transfer-Encoding"))
-        { 
-            http_parse_transfer_encoding_header( p, s );
-        }
-		else if(!strcmp(tag, "Server"))
-		{
+        } else if(!strcmp(tag, "Server")) {
 			copy_value_to_field( p, &s->sever);
 		}
-        else if( strcmp( tag, "WWW-Authenticate" ) == 0 )/* Check for authentication headers */
-        {
-            char * mode = p;
-
-            while (!isspace(*p) && *p != '\0')
-                p++;
-
-            if( isspace(*p) )
-            {
-                *p = '\0';
-                p++;
-            }
-
-            /* Basic or digest requested? */
-            if( strncmp( av_strlwr(mode), "basic", 5 ) == 0 )
-            {
-                s->authentication_mode = AUTHENTICATION_MODE_BASIC;
-            }
-            else if( strncmp( av_strlwr(mode), "digest", 6 ) == 0 )
-            {
-                /* If it's digest that's been requested, we need to extract the nonce and store it in the context */
-                s->authentication_mode = AUTHENTICATION_MODE_DIGEST;
-            }
-
-            http_parse_authentication_header( p, s );
-        }
     }
     return 1;
 }
@@ -386,83 +351,6 @@ static void http_parse_content_type_header( char * p, HTTPContext *s )
     }
 }
 
-
-static void http_parse_transfer_encoding_header( char * p, HTTPContext *s )
-{
-    char *  value = NULL;
-
-    //strip the content-type from the headder
-    value = p;
-    while(*p != '\0')
-    { p++; }
-    *p = '\0';
-
-    p++;
-    
-    copy_value_to_field( value, &s->Transfer_Encoding); 
-    if( strstr(s->Transfer_Encoding, "chunked")!=NULL)
-    {
-        s->isChunked=1;
-    }
-    else
-    {
-        s->isChunked=0;
-    }
-}
-
-static void http_parse_authentication_header( char * p, HTTPContext *s )
-{
-    char *  name = NULL;
-    char *  value = NULL;
-
-    while( *p != '\0' )
-    {
-        while(isspace(*p))p++; /* Skip whitespace */
-        name = p;
-
-        /* Now we get attributes in <name>=<value> pairs */
-        while (*p != '\0' && *p != '=')
-            p++;
-
-        if (*p != '=')
-            return;
-
-        *p = '\0';
-        p++;
-
-        value = p;
-
-        while (*p != '\0' && *p != ',')
-            p++;
-
-        if (*p == ',')
-        {
-            *p = '\0';
-            p++;
-        }
-
-        /* Strip any "s off */
-        if( strlen(value) > 0 )
-        {
-            if( *value == '"' && *(value + strlen(value) - 1) == '"' )
-            {
-                *(value + strlen(value) - 1) = '\0';
-                value += 1;
-            }
-        }
-
-        /* Copy the attribute into the relevant field */
-        if( strcmp( name, "realm" ) == 0 )
-            copy_value_to_field( value, &s->realm );
-        else if( strcmp( name, "nonce" ) == 0 )
-            copy_value_to_field( value, &s->nonce );
-        else if( strcmp( name, "qop" ) == 0 )
-            copy_value_to_field( value, &s->qop );
-        else if( strcmp( name, "algorithm" ) == 0 )
-            copy_value_to_field( value, &s->algorithm );
-    }
-}
-
 static void copy_value_to_field( const char *value, char **dest )
 {
     if( *dest != NULL )
@@ -474,503 +362,166 @@ static void copy_value_to_field( const char *value, char **dest )
 }
 
 static int http_connect(URLContext *h, const char *path, const char *hoststr,
-                        const char *auth, int *new_location, const char *tcpConnStr )
+                        const char *auth, int *new_location)
 {
     HTTPContext *s = h->priv_data;
-    int post;
+    int post, err;
+    char line[1024];
+    char *authstr = NULL;
+    int64_t off = s->off;
+
 
     /* send http header */
     post = h->flags & URL_WRONLY;
-
-    /* Try to make a simple get request */
+    authstr = ff_http_auth_create_response(&s->auth_state, auth, path,
+                                        post ? "POST" : "GET");
     snprintf(s->buffer, sizeof(s->buffer),
-             "%s %s HTTP/1.0\r\n"//"%s %s HTTP/1.1\r\n"
+             "%s %s HTTP/1.1\r\n"
              "User-Agent: %s\r\n"
              "Accept: */*\r\n"
              "Range: bytes=%"PRId64"-\r\n"
              "Host: %s\r\n"
-             "\r\n",
-             post ? "POST" : "GET",
-             path,
-             LIBAVFORMAT_IDENT,
-             s->off,
-             hoststr);
-
-    if( http_do_request( h, path, hoststr, auth, post, new_location ) < 0 )
-        return AVERROR_IO;
-
-    /* If we got a 401 authentication challenge back, we need to respond to that challenge accordingly if we have the credentials */
-    if( s->http_code == 401 )
-    {
-        if( s->authentication_mode == AUTHENTICATION_MODE_BASIC || s->authentication_mode == AUTHENTICATION_MODE_DIGEST )
-        {
-            if( strcmp(auth, "" ) == 0 )
-                return ADFFMPEG_ERROR_AUTH_REQUIRED; /* We can't proceed without any supplied credentials */
-            else
-            {
-                int     err;
-
-                /* Close the underlying TCP connection and reopen it for the second request */
-                url_close(s->hd);
-                s->hd = NULL;
-                err = url_open( &s->hd, tcpConnStr, URL_RDWR );
-
-                if (err < 0)
-                {
-                    if( s->hd != NULL )
-                        url_close(s->hd);
-
-                    return AVERROR_IO;
-                }
-
-                return http_auth_responses[s->authentication_mode]( h, auth, post, path, hoststr );
-            }
-        }
-        else
-        {
-            return AVERROR_IO;
-        }
-    }
-
-    return 0;
-}
-
-static int http_respond_to_digest_challenge( URLContext *h, const char *auth, int post, const char *path, const char *hoststr, int *new_location )
-{
-    HTTPContext *       s = h->priv_data;
-    char                A1Hash[33];
-    char                A2Hash[33];
-    char                requestDigest[33];
-    char                buffer[2048];
-    const char *        p = NULL;
-    int                 i = 0;
-    int                 cnonce = 0xdecade11;
-    unsigned int        nc = 1;
-    char                cnonceStr[9];
-    char                ncStr[9];
-    char *              userName = NULL;
-    int                 retVal = 0;
-
-    /* Validate that the server supports the QOP=auth method (which is all we support) */
-    av_strlwr( s->qop );
-    if( strstr( s->qop, "auth" ) == NULL )
-        return AVERROR_IO;
-
-    /* Prepare a request using digest authentication */
-    p = auth;
-
-    /* Copy the username into the buffer */
-    while( *p != ':' )
-        buffer[i++] = *p++;
-
-    /* Take a temporary copy of the username */
-    if( i > 0 )
-    {
-        if( (userName = av_mallocz( i + 1 )) != NULL ) /* i will be length of the username string here */
-        {
-            memcpy( userName, buffer, i );
-        }
-    }
-
-    /* Now copy the realm */
-    buffer[i++] = ':';
-    p++;
-
-    strcpy( &buffer[i], s->realm );
-    i += (int)strlen(s->realm);
-
-    buffer[i++] = ':';
-
-    /* Now the password */
-    while( *p != '\0' )
-        buffer[i++] = *p++;
-
-    buffer[i] = '\0';
-
-    /* MD5 this */
-    GetFingerPrint( A1Hash, buffer, i, NULL );
-    A1Hash[32] = '\0';
-
-    /* Now create the A2 hash */
-    i = 0;
-    strcpy( &buffer[i], post ? "POST" : "GET" );
-    i+= post ? (int)strlen("POST") : (int)strlen("GET");
-
-    buffer[i++] = ':';
-
-    strcpy( &buffer[i], path );
-    i += (int)strlen(path);
-
-    buffer[i] = '\0';
-
-    GetFingerPrint( A2Hash, buffer, i, NULL );
-    A2Hash[32] = '\0';
-
-    /* CS - New QOP=auth implementation */
-    /* Now concatenate the 2 hashes and md5 them */
-    i = 0;
-    strncpy( &buffer[i], A1Hash, 32 );
-    i += 32;
-
-    buffer[i++] = ':';
-
-    strcpy( &buffer[i], s->nonce );
-    i += (int)strlen(s->nonce);
-
-    buffer[i++] = ':';
-
-    /* Add the nc counter in hex here */
-#ifndef WORDS_BIGENDIAN
-    /* We need the integer in big endian before we do the conversion to hex... */
-    nc = bswap_32(nc);
-#endif
-    value_to_string( (char *)&nc, 4, ncStr );
-    ncStr[8] = '\0';
-    strncpy( &buffer[i], ncStr, 8 );
-    i += 8;
-    buffer[i++] = ':';
-
-    /* Add the cnonce in hex here */
-    value_to_string( (char *)&cnonce, 4, cnonceStr );
-    cnonceStr[8] = '\0';
-    strncpy( &buffer[i], cnonceStr, 8 );
-    i += 8;
-    buffer[i++] = ':';
-
-    /* Add the QOP method in here */
-    strncpy( &buffer[i], "auth", 4 );
-    i += 4;
-    buffer[i++] = ':';
-
-    strncpy( &buffer[i], A2Hash, 32 );
-    i += 32;
-
-    buffer[i] = '\0';
-
-    GetFingerPrint( requestDigest, buffer, i, NULL );
-    requestDigest[32] = '\0';
-
-    snprintf(s->buffer, sizeof(s->buffer),
-        "%s %s HTTP/1.0\r\n"
-        "User-Agent: %s\r\n"
-        "Accept: */*\r\n"
-        "Range: bytes=%"PRId64"-\r\n"
-        "Host: %s\r\n"
-        "Authorization: Digest username=\"%s\",realm=\"%s\",nonce=\"%s\",uri=\"%s\",cnonce=\"%s\",nc=%s,algorithm=%s,response=\"%s\",qop=\"%s\"\r\n"
-        "\r\n",
-        post ? "POST" : "GET",
-        path,
-        LIBAVFORMAT_IDENT,
-        s->off,
-        hoststr,
-        userName,
-        s->realm,
-        s->nonce,
-        path,
-        cnonceStr,
-        ncStr,
-        s->algorithm,
-        requestDigest,
-        "auth");
-
-    if( http_do_request( h, path, hoststr, auth, post, new_location ) < 0 )
-        retVal = AVERROR_IO;
-
-    if( userName != NULL )
-    {
-        av_free( userName );
-    }
-
-    return retVal;
-}
-
-static void value_to_string( const char *input, int size, char *output )
-{
-    int j = 0;
-    char hexval[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
-
-    for( j = 0; j < size; j++ )
-    {
-        output[j*2] = hexval[((input[j] >> 4) & 0xF)];
-        output[(j*2) + 1] = hexval[(input[j]) & 0x0F];
-    }
-}
-
-static int http_respond_to_basic_challenge( URLContext *h, const char *auth, int post, const char *path, const char *hoststr, int *new_location )
-{
-    HTTPContext *       s = h->priv_data;
-    char *              auth_b64 = NULL;
-
-    auth_b64 = av_base64_encode((uint8_t *)auth, strlen(auth));
-
-    snprintf(s->buffer, sizeof(s->buffer),
-             "%s %s HTTP/1.0\r\n"//"%s %s HTTP/1.1\r\n"
-             "User-Agent: %s\r\n"
-             "Accept: */*\r\n"
-             "Range: bytes=%"PRId64"-\r\n"
-             "Host: %s\r\n"
-             "Authorization: Basic %s\r\n"
+             "%s"
+             "Connection: close\r\n"
+             "%s"
              "\r\n",
              post ? "POST" : "GET",
              path,
              LIBAVFORMAT_IDENT,
              s->off,
              hoststr,
-             auth_b64);
+             authstr ? authstr : "",
+             post ? "Transfer-Encoding: chunked\r\n" : "");
 
-    av_freep(&auth_b64);
-
-    if( http_do_request( h, path, hoststr, auth, post, new_location ) < 0 )
-        return AVERROR_IO;
-
-    return 0;
-}
-
-static int http_do_request( URLContext *h, const char *path, const char *hoststr, const char *auth, int post, int *new_location )
-{
-    HTTPContext *s = h->priv_data;
-    char line[1024], *q;
-    int err, ch;
-    offset_t off = s->off;
-
-    if (http_write(h, s->buffer, (int)strlen(s->buffer)) < 0)
-        return AVERROR_IO;
+    av_freep(&authstr);
+    if (http_write(h, s->buffer, strlen(s->buffer)) < 0)
+        return AVERROR(EIO);
 
     /* init input buffer */
     s->buf_ptr = s->buffer;
     s->buf_end = s->buffer;
     s->line_count = 0;
-    s->location[0] = '\0';
     s->off = 0;
+    s->filesize = -1;
     if (post) {
-        sleep(1);
+        /* always use chunked encoding for upload data */
+        s->chunksize = 0;
         return 0;
     }
 
     /* wait for header */
-    q = line;
     for(;;) {
-        ch = http_getc(s);
-        if (ch < 0)
-            return AVERROR_IO;
-        if (ch == '\n') {
-            /* process line */
-            if (q > line && q[-1] == '\r')
-                q--;
-            *q = '\0';
+        if (http_get_line(s, line, sizeof(line)) < 0)
+            return AVERROR(EIO);
 
-            //#ifdef DEBUG
-            //    printf("header='%s'\n", line);
-            //#endif
-            err = process_line(h, line, s->line_count, new_location);
-            if (err < 0)
-                return err;
-            if (err == 0)
-                return 0;
-			h->utc_offset = s->utc_offset;
-            h->isBinary = s->isBinary;
-            s->line_count++;
-            q = line;
-        } else {
-            if ((q - line) < sizeof(line) - 1)
-                *q++ = ch;
-        }
+        dprintf(NULL, "header='%s'\n", line);
+
+        err = process_line(h, line, s->line_count, new_location);
+        if (err < 0)
+            return err;
+        if (err == 0)
+            break;
+        h->utc_offset = s->utc_offset;
+        h->isBinary = s->isBinary;
+        s->line_count++;
     }
+
     return (off == s->off) ? 0 : -1;
 }
 
 
-
-
-//static int http_read(URLContext *h, uint8_t *buf, int size)
-//{
-//    HTTPContext *s = h->priv_data;
-//    int len;
-//
-//    /* read bytes from input buffer first */
-//    len = (int)(s->buf_end - s->buf_ptr);
-//    if (len > 0) {
-//        if (len > size)
-//            len = size;
-//        memcpy(buf, s->buf_ptr, len);
-//        s->buf_ptr += len;
-//    } else {
-//        len = url_read(s->hd, buf, size);
-//    }
-//    return len;
-//}
-
-
 static int http_read(URLContext *h, uint8_t *buf, int size)
 {
-    //uint8_t *mbuf = buf;
-    HTTPContext *HTTP = h->priv_data;
-    int DataInBufferLength = 0;
-    //int readsize;
-    //int i = 0,j=0;
-    //int totalread =0;
-    //int len;
-    static int started = 0;
+    HTTPContext *s = h->priv_data;
+    int len;
 
-    if(HTTP->isChunked==0)
-    {
-        DataInBufferLength = LocalHTTP_read(HTTP, buf, size);
-    }
-    else
-    {
-        /* read bytes from input buffer first */
-        DataInBufferLength = (int)(HTTP->buf_end - HTTP->buf_ptr);
-        //printf("<<HTTP>>buffer sixe = %d\n",DataInBufferLength);
-        if (DataInBufferLength > 0 && DataInBufferLength!=5 /*started == 1*/) 
-        {
-            if (DataInBufferLength > size)
-                DataInBufferLength = size;
+    if (s->chunksize >= 0) {
+        if (!s->chunksize) {
+            char line[32];
 
-            memcpy(buf, HTTP->buf_ptr, DataInBufferLength);
-            HTTP->buf_ptr += DataInBufferLength;
-        } 
-        else 
-        {
-            started=1;
-            
-            http_read_ChunkSize(HTTP);
-            DataInBufferLength = url_read(HTTP->hd, buf, HTTP->ChunkSize);
-    
-            if (DataInBufferLength > 0)
-            { HTTP->off += DataInBufferLength; }
-        }
-    }
-    return DataInBufferLength;
-}
+            for(;;) {
+                do {
+                    if (http_get_line(s, line, sizeof(line)) < 0)
+                        return AVERROR(EIO);
+                } while (!*line);    /* skip CR LF from last chunk */
 
-static int ParseHexToInt(uint8_t *buf, int size)
-{
-    uint8_t* mBuf = buf; 
-    int result = 0;
-    int i;
+                s->chunksize = strtoll(line, NULL, 16);
 
-    if(*mBuf == '\r')
-    {
-        size--;
-        mBuf++;
-    }
+                dprintf(NULL, "Chunked encoding data size: %"PRId64"'\n", s->chunksize);
 
-    if(*mBuf == '\n')
-    {
-        size--;
-        mBuf++;
-    }
-
-    for(i = 0; i<size; i++)
-    {
-        if(*mBuf<48)
-        {
-            i = size; 
-        }
-        else
-        {
-            result *= 16;
-            if (*mBuf>=97 && *mBuf<=122)// A to Z
-            {
-                result+= (*mBuf - 97) + 10;
-            }
-            else if ( *mBuf >= 65 && *mBuf<=90)//a to z
-            {
-                result+=  (*mBuf - 65) + 10;
-            }
-            else if(*mBuf >= 48 && *mBuf<=57)//0 to 9
-            {
-                result += (*mBuf - 48);
+                if (!s->chunksize)
+                    return 0;
+                break;
             }
         }
-        mBuf++;
+        size = FFMIN(size, s->chunksize);
     }
-
-    return result;
-}
-
-static void http_read_ChunkSize(HTTPContext* HTTP)
-{
-    uint8_t buffer[20];
-    uint8_t thisChar = ' ';
-    uint8_t lastChar = ' ';
-    int i,j;
-    int len = 0;
-
-    //printf("<<HTTP>>http_read_ChunkSize\n");
-    for(i=0; (i<sizeof(buffer) && (lastChar != '\r' && thisChar != '\n' || i<3) ); i++)
-    {
-        lastChar = thisChar;
-        len = LocalHTTP_read(HTTP,&thisChar,1);
-        
-        buffer[i] = thisChar;
+    /* read bytes from input buffer first */
+    len = s->buf_end - s->buf_ptr;
+    if (len > 0) {
+        if (len > size)
+            len = size;
+        memcpy(buf, s->buf_ptr, len);
+        s->buf_ptr += len;
+    } else {
+        len = url_read(s->hd, buf, size);
     }
-
-    //for(j=0; j<i; j++)
-    //{
-	//    printf("<<HTTP>>%d,'%c'\n",j,buffer[j]);
-    //}
-   
-    HTTP->ChunkSize =  ParseHexToInt(buffer, i-2);
-    //if(HTTP->ChunkSize<0)
-    //{
-	//    printf("<<HTTP>> trap");
-	//}
-    //printf("<<HTTP>> Chunk Size = %d\n", HTTP->ChunkSize);    
-}
-
-static int LocalHTTP_read(HTTPContext *HTTP, uint8_t *buf, int size)
-{
-    int DataInBufferLength = (int)(HTTP->buf_end - HTTP->buf_ptr);
-
-    if (DataInBufferLength > 0) 
-    {
-        if (DataInBufferLength > size)
-        { DataInBufferLength = size; }
-
-        memcpy(buf, HTTP->buf_ptr, DataInBufferLength);
-        HTTP->buf_ptr += DataInBufferLength;
-    } 
-    else 
-    {
-        DataInBufferLength = url_read(HTTP->hd, buf, size);
+    if (len > 0) {
+        s->off += len;
+        if (s->chunksize > 0)
+            s->chunksize -= len;
     }
-    if (DataInBufferLength > 0)
-        HTTP->off += DataInBufferLength;
-    return DataInBufferLength;
+    return len;
 }
 
 /* used only when posting data */
 static int http_write(URLContext *h, uint8_t *buf, int size)
 {
+    char temp[11];  /* 32-bit hex + CRLF + nul */
+    int ret;
+    char crlf[] = "\r\n";
     HTTPContext *s = h->priv_data;
-    return url_write(s->hd, buf, size);
+
+    if (s->chunksize == -1) {
+        /* headers are sent without any special encoding */
+        return url_write(s->hd, buf, size);
+    }
+
+    /* silently ignore zero-size data since chunk encoding that would
+     * signal EOF */
+    if (size > 0) {
+        /* upload data using chunked encoding */
+        snprintf(temp, sizeof(temp), "%x\r\n", size);
+
+        if ((ret = url_write(s->hd, temp, strlen(temp))) < 0 ||
+            (ret = url_write(s->hd, buf, size)) < 0 ||
+            (ret = url_write(s->hd, crlf, sizeof(crlf) - 1)) < 0)
+            return ret;
+    }
+    return size;
 }
 
 static int http_close(URLContext *h)
 {
+    int ret = 0;
+    char footer[] = "0\r\n\r\n";
     HTTPContext *s = h->priv_data;
+
+    /* signal end of chunked encoding if used */
+    if ((h->flags & URL_WRONLY) && s->chunksize != -1) {
+        ret = url_write(s->hd, footer, sizeof(footer) - 1);
+        ret = ret > 0 ? 0 : ret;
+    }
+
     url_close(s->hd);
-
-    /* Make sure we release any memory that may have been allocated to store authentication info */
-    if( s->realm )
-        av_free( s->realm );
-
-    if( s->nonce )
-        av_free( s->nonce );
-
-    if( s->qop )
-        av_free( s->qop );
-
-    if( s->algorithm )
-        av_free( s->algorithm );
-
+	
     if( s->sever )
 		av_free( s->sever );
 
     if( s->content )
         av_free( s->content );
 
+    /* Make sure we release any memory that may have been allocated to store authentication info */
     if( s->resolution )
         av_free( s->resolution );
 
@@ -989,18 +540,17 @@ static int http_close(URLContext *h)
     if( s->boundry )
         av_free( s->boundry );
 
-    if( s->Transfer_Encoding )
-        av_free( s->Transfer_Encoding );
-
     av_free(s);
-    return 0;
+    return ret;
 }
 
-static offset_t http_seek(URLContext *h, offset_t off, int whence)
+static int64_t http_seek(URLContext *h, int64_t off, int whence)
 {
     HTTPContext *s = h->priv_data;
     URLContext *old_hd = s->hd;
-    offset_t old_off = s->off;
+    int64_t old_off = s->off;
+    uint8_t old_buf[BUFFER_SIZE];
+    int old_buf_size;
 
     if (whence == AVSEEK_SIZE)
         return s->filesize;
@@ -1008,6 +558,8 @@ static offset_t http_seek(URLContext *h, offset_t off, int whence)
         return -1;
 
     /* we save the old context in case the seek fails */
+    old_buf_size = s->buf_end - s->buf_ptr;
+    memcpy(old_buf, s->buf_ptr, old_buf_size);
     s->hd = NULL;
     if (whence == SEEK_CUR)
         off += s->off;
@@ -1017,12 +569,22 @@ static offset_t http_seek(URLContext *h, offset_t off, int whence)
 
     /* if it fails, continue on old connection */
     if (http_open_cnx(h) < 0) {
+        memcpy(s->buffer, old_buf, old_buf_size);
+        s->buf_ptr = s->buffer;
+        s->buf_end = s->buffer + old_buf_size;
         s->hd = old_hd;
         s->off = old_off;
         return -1;
     }
     url_close(old_hd);
     return off;
+}
+
+static int
+http_get_file_handle(URLContext *h)
+{
+    HTTPContext *s = h->priv_data;
+    return url_get_file_handle(s->hd);
 }
 
 URLProtocol http_protocol = {
@@ -1032,9 +594,10 @@ URLProtocol http_protocol = {
     http_write,
     http_seek,
     http_close,
+    .url_get_file_handle = http_get_file_handle,
 };
 
-URLProtocol netvuProtocol = {
+URLProtocol netvu_protocol = {
     "netvu",
     http_open,
     http_read,

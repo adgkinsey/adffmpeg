@@ -1,6 +1,6 @@
 /**
  * FLAC audio encoder
- * Copyright (c) 2006  Justin Ruggles <jruggle@earthlink.net>
+ * Copyright (c) 2006  Justin Ruggles <justin.ruggles@gmail.com>
  *
  * This file is part of FFmpeg.
  *
@@ -19,38 +19,21 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/crc.h"
+#include "libavutil/md5.h"
 #include "avcodec.h"
-#include "bitstream.h"
-#include "crc.h"
+#include "get_bits.h"
+#include "dsputil.h"
 #include "golomb.h"
-#include "lls.h"
-
-#define FLAC_MAX_CH  8
-#define FLAC_MIN_BLOCKSIZE  16
-#define FLAC_MAX_BLOCKSIZE  65535
+#include "lpc.h"
+#include "flac.h"
+#include "flacdata.h"
 
 #define FLAC_SUBFRAME_CONSTANT  0
 #define FLAC_SUBFRAME_VERBATIM  1
 #define FLAC_SUBFRAME_FIXED     8
 #define FLAC_SUBFRAME_LPC      32
 
-#define FLAC_CHMODE_NOT_STEREO      0
-#define FLAC_CHMODE_LEFT_RIGHT      1
-#define FLAC_CHMODE_LEFT_SIDE       8
-#define FLAC_CHMODE_RIGHT_SIDE      9
-#define FLAC_CHMODE_MID_SIDE       10
-
-#define ORDER_METHOD_EST     0
-#define ORDER_METHOD_2LEVEL  1
-#define ORDER_METHOD_4LEVEL  2
-#define ORDER_METHOD_8LEVEL  3
-#define ORDER_METHOD_SEARCH  4
-#define ORDER_METHOD_LOG     5
-
-#define FLAC_STREAMINFO_SIZE  34
-
-#define MIN_LPC_ORDER       1
-#define MAX_LPC_ORDER      32
 #define MAX_FIXED_ORDER     4
 #define MAX_PARTITION_ORDER 8
 #define MAX_PARTITIONS     (1 << MAX_PARTITION_ORDER)
@@ -84,11 +67,11 @@ typedef struct FlacSubframe {
     int shift;
     RiceContext rc;
     int32_t samples[FLAC_MAX_BLOCKSIZE];
-    int32_t residual[FLAC_MAX_BLOCKSIZE];
+    int32_t residual[FLAC_MAX_BLOCKSIZE+1];
 } FlacSubframe;
 
 typedef struct FlacFrame {
-    FlacSubframe subframes[FLAC_MAX_CH];
+    FlacSubframe subframes[FLAC_MAX_CHANNELS];
     int blocksize;
     int bs_code[2];
     uint8_t crc8;
@@ -98,30 +81,21 @@ typedef struct FlacFrame {
 typedef struct FlacEncodeContext {
     PutBitContext pb;
     int channels;
-    int ch_code;
     int samplerate;
     int sr_code[2];
-    int blocksize;
+    int max_blocksize;
+    int min_framesize;
     int max_framesize;
+    int max_encoded_framesize;
     uint32_t frame_count;
+    uint64_t sample_count;
+    uint8_t md5sum[16];
     FlacFrame frame;
     CompressionOptions options;
     AVCodecContext *avctx;
+    DSPContext dsp;
+    struct AVMD5 *md5ctx;
 } FlacEncodeContext;
-
-static const int flac_samplerates[16] = {
-    0, 0, 0, 0,
-    8000, 16000, 22050, 24000, 32000, 44100, 48000, 96000,
-    0, 0, 0, 0
-};
-
-static const int flac_blocksizes[16] = {
-    0,
-    192,
-    576, 1152, 2304, 4608,
-    0, 0,
-    256, 512, 1024, 2048, 4096, 8192, 16384, 32768
-};
 
 /**
  * Writes streaminfo metadata block to byte array
@@ -134,16 +108,18 @@ static void write_streaminfo(FlacEncodeContext *s, uint8_t *header)
     init_put_bits(&pb, header, FLAC_STREAMINFO_SIZE);
 
     /* streaminfo metadata block */
-    put_bits(&pb, 16, s->blocksize);
-    put_bits(&pb, 16, s->blocksize);
-    put_bits(&pb, 24, 0);
+    put_bits(&pb, 16, s->max_blocksize);
+    put_bits(&pb, 16, s->max_blocksize);
+    put_bits(&pb, 24, s->min_framesize);
     put_bits(&pb, 24, s->max_framesize);
     put_bits(&pb, 20, s->samplerate);
     put_bits(&pb, 3, s->channels-1);
     put_bits(&pb, 5, 15);       /* bits per sample - 1 */
+    /* write 36-bit sample count in 2 put_bits() calls */
+    put_bits(&pb, 24, (s->sample_count & 0xFFFFFF000LL) >> 12);
+    put_bits(&pb, 12,  s->sample_count & 0x000000FFFLL);
     flush_put_bits(&pb);
-    /* total samples = 0 */
-    /* MD5 signature = 0 */
+    memcpy(&header[18], s->md5sum, 16);
 }
 
 /**
@@ -157,17 +133,17 @@ static int select_blocksize(int samplerate, int block_time_ms)
     int blocksize;
 
     assert(samplerate > 0);
-    blocksize = flac_blocksizes[1];
+    blocksize = ff_flac_blocksize_table[1];
     target = (samplerate * block_time_ms) / 1000;
     for(i=0; i<16; i++) {
-        if(target >= flac_blocksizes[i] && flac_blocksizes[i] > blocksize) {
-            blocksize = flac_blocksizes[i];
+        if(target >= ff_flac_blocksize_table[i] && ff_flac_blocksize_table[i] > blocksize) {
+            blocksize = ff_flac_blocksize_table[i];
         }
     }
     return blocksize;
 }
 
-static int flac_encode_init(AVCodecContext *avctx)
+static av_cold int flac_encode_init(AVCodecContext *avctx)
 {
     int freq = avctx->sample_rate;
     int channels = avctx->channels;
@@ -177,22 +153,23 @@ static int flac_encode_init(AVCodecContext *avctx)
 
     s->avctx = avctx;
 
+    dsputil_init(&s->dsp, avctx);
+
     if(avctx->sample_fmt != SAMPLE_FMT_S16) {
         return -1;
     }
 
-    if(channels < 1 || channels > FLAC_MAX_CH) {
+    if(channels < 1 || channels > FLAC_MAX_CHANNELS) {
         return -1;
     }
     s->channels = channels;
-    s->ch_code = s->channels-1;
 
     /* find samplerate in table */
     if(freq < 1)
         return -1;
     for(i=4; i<12; i++) {
-        if(freq == flac_samplerates[i]) {
-            s->samplerate = flac_samplerates[i];
+        if(freq == ff_flac_sample_rate_table[i]) {
+            s->samplerate = ff_flac_sample_rate_table[i];
             s->sr_code[0] = i;
             s->sr_code[1] = 0;
             break;
@@ -244,7 +221,7 @@ static int flac_encode_init(AVCodecContext *avctx)
 
     /* set compression option overrides from AVCodecContext */
     if(avctx->use_lpc >= 0) {
-        s->options.use_lpc = clip(avctx->use_lpc, 0, 11);
+        s->options.use_lpc = av_clip(avctx->use_lpc, 0, 11);
     }
     if(s->options.use_lpc == 1)
         av_log(avctx, AV_LOG_DEBUG, " use lpc: Levinson-Durbin recursion with Welch window\n");
@@ -347,12 +324,11 @@ static int flac_encode_init(AVCodecContext *avctx)
                    avctx->frame_size);
             return -1;
         }
-        s->blocksize = avctx->frame_size;
     } else {
-        s->blocksize = select_blocksize(s->samplerate, s->options.block_time_ms);
-        avctx->frame_size = s->blocksize;
+        s->avctx->frame_size = select_blocksize(s->samplerate, s->options.block_time_ms);
     }
-    av_log(avctx, AV_LOG_DEBUG, " block size: %d\n", s->blocksize);
+    s->max_blocksize = s->avctx->frame_size;
+    av_log(avctx, AV_LOG_DEBUG, " block size: %d\n", s->avctx->frame_size);
 
     /* set LPC precision */
     if(avctx->lpc_coeff_precision > 0) {
@@ -363,26 +339,21 @@ static int flac_encode_init(AVCodecContext *avctx)
         }
         s->options.lpc_coeff_precision = avctx->lpc_coeff_precision;
     } else {
-        /* select LPC precision based on block size */
-        if(     s->blocksize <=   192) s->options.lpc_coeff_precision =  7;
-        else if(s->blocksize <=   384) s->options.lpc_coeff_precision =  8;
-        else if(s->blocksize <=   576) s->options.lpc_coeff_precision =  9;
-        else if(s->blocksize <=  1152) s->options.lpc_coeff_precision = 10;
-        else if(s->blocksize <=  2304) s->options.lpc_coeff_precision = 11;
-        else if(s->blocksize <=  4608) s->options.lpc_coeff_precision = 12;
-        else if(s->blocksize <=  8192) s->options.lpc_coeff_precision = 13;
-        else if(s->blocksize <= 16384) s->options.lpc_coeff_precision = 14;
-        else                           s->options.lpc_coeff_precision = 15;
+        /* default LPC precision */
+        s->options.lpc_coeff_precision = 15;
     }
     av_log(avctx, AV_LOG_DEBUG, " lpc precision: %d\n",
            s->options.lpc_coeff_precision);
 
     /* set maximum encoded frame size in verbatim mode */
-    if(s->channels == 2) {
-        s->max_framesize = 14 + ((s->blocksize * 33 + 7) >> 3);
-    } else {
-        s->max_framesize = 14 + (s->blocksize * s->channels * 2);
-    }
+    s->max_framesize = ff_flac_get_max_frame_size(s->avctx->frame_size,
+                                                  s->channels, 16);
+
+    /* initialize MD5 context */
+    s->md5ctx = av_malloc(av_md5_size);
+    if(!s->md5ctx)
+        return AVERROR(ENOMEM);
+    av_md5_init(s->md5ctx);
 
     streaminfo = av_malloc(FLAC_STREAMINFO_SIZE);
     write_streaminfo(s, streaminfo);
@@ -390,6 +361,7 @@ static int flac_encode_init(AVCodecContext *avctx)
     avctx->extradata_size = FLAC_STREAMINFO_SIZE;
 
     s->frame_count = 0;
+    s->min_framesize = s->max_framesize;
 
     avctx->coded_frame = avcodec_alloc_frame();
     avctx->coded_frame->key_frame = 1;
@@ -405,15 +377,15 @@ static void init_frame(FlacEncodeContext *s)
     frame = &s->frame;
 
     for(i=0; i<16; i++) {
-        if(s->blocksize == flac_blocksizes[i]) {
-            frame->blocksize = flac_blocksizes[i];
+        if(s->avctx->frame_size == ff_flac_blocksize_table[i]) {
+            frame->blocksize = ff_flac_blocksize_table[i];
             frame->bs_code[0] = i;
             frame->bs_code[1] = 0;
             break;
         }
     }
     if(i == 16) {
-        frame->blocksize = s->blocksize;
+        frame->blocksize = s->avctx->frame_size;
         if(frame->blocksize <= 256) {
             frame->bs_code[0] = 6;
             frame->bs_code[1] = frame->blocksize-1;
@@ -447,20 +419,19 @@ static void copy_samples(FlacEncodeContext *s, int16_t *samples)
 
 #define rice_encode_count(sum, n, k) (((n)*((k)+1))+((sum-(n>>1))>>(k)))
 
+/**
+ * Solve for d/dk(rice_encode_count) = n-((sum-(n>>1))>>(k+1)) = 0
+ */
 static int find_optimal_param(uint32_t sum, int n)
 {
-    int k, k_opt;
-    uint32_t nbits[MAX_RICE_PARAM+1];
+    int k;
+    uint32_t sum2;
 
-    k_opt = 0;
-    nbits[0] = UINT32_MAX;
-    for(k=0; k<=MAX_RICE_PARAM; k++) {
-        nbits[k] = rice_encode_count(sum, n, k);
-        if(nbits[k] < nbits[k_opt]) {
-            k_opt = k;
-        }
-    }
-    return k_opt;
+    if(sum <= n>>1)
+        return 0;
+    sum2 = sum-(n>>1);
+    k = av_log2(n<256 ? FASTDIV(sum2,n) : sum2/n);
+    return FFMIN(k, MAX_RICE_PARAM);
 }
 
 static uint32_t calc_optimal_rice_params(RiceContext *rc, int porder,
@@ -471,16 +442,15 @@ static uint32_t calc_optimal_rice_params(RiceContext *rc, int porder,
     uint32_t all_bits;
 
     part = (1 << porder);
-    all_bits = 0;
+    all_bits = 4 * part;
 
     cnt = (n >> porder) - pred_order;
     for(i=0; i<part; i++) {
-        if(i == 1) cnt = (n >> porder);
         k = find_optimal_param(sums[i], cnt);
         rc->params[i] = k;
         all_bits += rice_encode_count(sums[i], cnt, k);
+        cnt = n >> porder;
     }
-    all_bits += (4 * part);
 
     rc->porder = porder;
 
@@ -499,10 +469,11 @@ static void calc_sums(int pmin, int pmax, uint32_t *data, int n, int pred_order,
     res = &data[pred_order];
     res_end = &data[n >> pmax];
     for(i=0; i<parts; i++) {
-        sums[pmax][i] = 0;
+        uint32_t sum = 0;
         while(res < res_end){
-            sums[pmax][i] += *(res++);
+            sum += *(res++);
         }
+        sums[pmax][i] = sum;
         res_end+= n >> pmax;
     }
     /* sums for lower levels */
@@ -581,226 +552,6 @@ static uint32_t calc_rice_params_lpc(RiceContext *rc, int pmin, int pmax,
     return bits;
 }
 
-/**
- * Apply Welch window function to audio block
- */
-static void apply_welch_window(const int32_t *data, int len, double *w_data)
-{
-    int i, n2;
-    double w;
-    double c;
-
-    n2 = (len >> 1);
-    c = 2.0 / (len - 1.0);
-    for(i=0; i<n2; i++) {
-        w = c - i - 1.0;
-        w = 1.0 - (w * w);
-        w_data[i] = data[i] * w;
-        w_data[len-1-i] = data[len-1-i] * w;
-    }
-}
-
-/**
- * Calculates autocorrelation data from audio samples
- * A Welch window function is applied before calculation.
- */
-static void compute_autocorr(const int32_t *data, int len, int lag,
-                             double *autoc)
-{
-    int i, lag_ptr;
-    double tmp[len + lag];
-    double *data1= tmp + lag;
-
-    apply_welch_window(data, len, data1);
-
-    for(i=0; i<lag; i++){
-        autoc[i] = 1.0;
-        data1[i-lag]= 0.0;
-    }
-
-    for(i=0; i<len; i++){
-        for(lag_ptr= i-lag; lag_ptr<=i; lag_ptr++){
-            autoc[i-lag_ptr] += data1[i] * data1[lag_ptr];
-        }
-    }
-}
-
-/**
- * Levinson-Durbin recursion.
- * Produces LPC coefficients from autocorrelation data.
- */
-static void compute_lpc_coefs(const double *autoc, int max_order,
-                              double lpc[][MAX_LPC_ORDER], double *ref)
-{
-   int i, j, i2;
-   double r, err, tmp;
-   double lpc_tmp[MAX_LPC_ORDER];
-
-   for(i=0; i<max_order; i++) lpc_tmp[i] = 0;
-   err = autoc[0];
-
-   for(i=0; i<max_order; i++) {
-      r = -autoc[i+1];
-      for(j=0; j<i; j++) {
-          r -= lpc_tmp[j] * autoc[i-j];
-      }
-      r /= err;
-      ref[i] = fabs(r);
-
-      err *= 1.0 - (r * r);
-
-      i2 = (i >> 1);
-      lpc_tmp[i] = r;
-      for(j=0; j<i2; j++) {
-         tmp = lpc_tmp[j];
-         lpc_tmp[j] += r * lpc_tmp[i-1-j];
-         lpc_tmp[i-1-j] += r * tmp;
-      }
-      if(i & 1) {
-          lpc_tmp[j] += lpc_tmp[j] * r;
-      }
-
-      for(j=0; j<=i; j++) {
-          lpc[i][j] = -lpc_tmp[j];
-      }
-   }
-}
-
-/**
- * Quantize LPC coefficients
- */
-static void quantize_lpc_coefs(double *lpc_in, int order, int precision,
-                               int32_t *lpc_out, int *shift)
-{
-    int i;
-    double cmax, error;
-    int32_t qmax;
-    int sh;
-
-    /* define maximum levels */
-    qmax = (1 << (precision - 1)) - 1;
-
-    /* find maximum coefficient value */
-    cmax = 0.0;
-    for(i=0; i<order; i++) {
-        cmax= FFMAX(cmax, fabs(lpc_in[i]));
-    }
-
-    /* if maximum value quantizes to zero, return all zeros */
-    if(cmax * (1 << MAX_LPC_SHIFT) < 1.0) {
-        *shift = 0;
-        memset(lpc_out, 0, sizeof(int32_t) * order);
-        return;
-    }
-
-    /* calculate level shift which scales max coeff to available bits */
-    sh = MAX_LPC_SHIFT;
-    while((cmax * (1 << sh) > qmax) && (sh > 0)) {
-        sh--;
-    }
-
-    /* since negative shift values are unsupported in decoder, scale down
-       coefficients instead */
-    if(sh == 0 && cmax > qmax) {
-        double scale = ((double)qmax) / cmax;
-        for(i=0; i<order; i++) {
-            lpc_in[i] *= scale;
-        }
-    }
-
-    /* output quantized coefficients and level shift */
-    error=0;
-    for(i=0; i<order; i++) {
-        error += lpc_in[i] * (1 << sh);
-        lpc_out[i] = clip(lrintf(error), -qmax, qmax);
-        error -= lpc_out[i];
-    }
-    *shift = sh;
-}
-
-static int estimate_best_order(double *ref, int max_order)
-{
-    int i, est;
-
-    est = 1;
-    for(i=max_order-1; i>=0; i--) {
-        if(ref[i] > 0.10) {
-            est = i+1;
-            break;
-        }
-    }
-    return est;
-}
-
-/**
- * Calculate LPC coefficients for multiple orders
- */
-static int lpc_calc_coefs(const int32_t *samples, int blocksize, int max_order,
-                          int precision, int32_t coefs[][MAX_LPC_ORDER],
-                          int *shift, int use_lpc, int omethod)
-{
-    double autoc[MAX_LPC_ORDER+1];
-    double ref[MAX_LPC_ORDER];
-    double lpc[MAX_LPC_ORDER][MAX_LPC_ORDER];
-    int i, j, pass;
-    int opt_order;
-
-    assert(max_order >= MIN_LPC_ORDER && max_order <= MAX_LPC_ORDER);
-
-    if(use_lpc == 1){
-        compute_autocorr(samples, blocksize, max_order+1, autoc);
-
-        compute_lpc_coefs(autoc, max_order, lpc, ref);
-    }else{
-        LLSModel m[2];
-        double var[MAX_LPC_ORDER+1], eval, weight;
-
-        for(pass=0; pass<use_lpc-1; pass++){
-            av_init_lls(&m[pass&1], max_order);
-
-            weight=0;
-            for(i=max_order; i<blocksize; i++){
-                for(j=0; j<=max_order; j++)
-                    var[j]= samples[i-j];
-
-                if(pass){
-                    eval= av_evaluate_lls(&m[(pass-1)&1], var+1, max_order-1);
-                    eval= (512>>pass) + fabs(eval - var[0]);
-                    for(j=0; j<=max_order; j++)
-                        var[j]/= sqrt(eval);
-                    weight += 1/eval;
-                }else
-                    weight++;
-
-                av_update_lls(&m[pass&1], var, 1.0);
-            }
-            av_solve_lls(&m[pass&1], 0.001, 0);
-        }
-
-        for(i=0; i<max_order; i++){
-            for(j=0; j<max_order; j++)
-                lpc[i][j]= m[(pass-1)&1].coeff[i][j];
-            ref[i]= sqrt(m[(pass-1)&1].variance[i] / weight) * (blocksize - max_order) / 4000;
-        }
-        for(i=max_order-1; i>0; i--)
-            ref[i] = ref[i-1] - ref[i];
-    }
-    opt_order = max_order;
-
-    if(omethod == ORDER_METHOD_EST) {
-        opt_order = estimate_best_order(ref, max_order);
-        i = opt_order-1;
-        quantize_lpc_coefs(lpc[i], i+1, precision, coefs[i], &shift[i]);
-    } else {
-        for(i=0; i<max_order; i++) {
-            quantize_lpc_coefs(lpc[i], i+1, precision, coefs[i], &shift[i]);
-        }
-    }
-
-    return opt_order;
-}
-
-
 static void encode_residual_verbatim(int32_t *res, int32_t *smp, int n)
 {
     assert(n > 0);
@@ -823,33 +574,142 @@ static void encode_residual_fixed(int32_t *res, const int32_t *smp, int n,
         for(i=order; i<n; i++)
             res[i]= smp[i] - smp[i-1];
     }else if(order==2){
-        for(i=order; i<n; i++)
-            res[i]= smp[i] - 2*smp[i-1] + smp[i-2];
+        int a = smp[order-1] - smp[order-2];
+        for(i=order; i<n; i+=2) {
+            int b = smp[i] - smp[i-1];
+            res[i]= b - a;
+            a = smp[i+1] - smp[i];
+            res[i+1]= a - b;
+        }
     }else if(order==3){
-        for(i=order; i<n; i++)
-            res[i]= smp[i] - 3*smp[i-1] + 3*smp[i-2] - smp[i-3];
+        int a = smp[order-1] - smp[order-2];
+        int c = smp[order-1] - 2*smp[order-2] + smp[order-3];
+        for(i=order; i<n; i+=2) {
+            int b = smp[i] - smp[i-1];
+            int d = b - a;
+            res[i]= d - c;
+            a = smp[i+1] - smp[i];
+            c = a - b;
+            res[i+1]= c - d;
+        }
     }else{
-        for(i=order; i<n; i++)
-            res[i]= smp[i] - 4*smp[i-1] + 6*smp[i-2] - 4*smp[i-3] + smp[i-4];
+        int a = smp[order-1] - smp[order-2];
+        int c = smp[order-1] - 2*smp[order-2] + smp[order-3];
+        int e = smp[order-1] - 3*smp[order-2] + 3*smp[order-3] - smp[order-4];
+        for(i=order; i<n; i+=2) {
+            int b = smp[i] - smp[i-1];
+            int d = b - a;
+            int f = d - c;
+            res[i]= f - e;
+            a = smp[i+1] - smp[i];
+            c = a - b;
+            e = c - d;
+            res[i+1]= e - f;
+        }
+    }
+}
+
+#define LPC1(x) {\
+    int c = coefs[(x)-1];\
+    p0 += c*s;\
+    s = smp[i-(x)+1];\
+    p1 += c*s;\
+}
+
+static av_always_inline void encode_residual_lpc_unrolled(
+    int32_t *res, const int32_t *smp, int n,
+    int order, const int32_t *coefs, int shift, int big)
+{
+    int i;
+    for(i=order; i<n; i+=2) {
+        int s = smp[i-order];
+        int p0 = 0, p1 = 0;
+        if(big) {
+            switch(order) {
+                case 32: LPC1(32)
+                case 31: LPC1(31)
+                case 30: LPC1(30)
+                case 29: LPC1(29)
+                case 28: LPC1(28)
+                case 27: LPC1(27)
+                case 26: LPC1(26)
+                case 25: LPC1(25)
+                case 24: LPC1(24)
+                case 23: LPC1(23)
+                case 22: LPC1(22)
+                case 21: LPC1(21)
+                case 20: LPC1(20)
+                case 19: LPC1(19)
+                case 18: LPC1(18)
+                case 17: LPC1(17)
+                case 16: LPC1(16)
+                case 15: LPC1(15)
+                case 14: LPC1(14)
+                case 13: LPC1(13)
+                case 12: LPC1(12)
+                case 11: LPC1(11)
+                case 10: LPC1(10)
+                case  9: LPC1( 9)
+                         LPC1( 8)
+                         LPC1( 7)
+                         LPC1( 6)
+                         LPC1( 5)
+                         LPC1( 4)
+                         LPC1( 3)
+                         LPC1( 2)
+                         LPC1( 1)
+            }
+        } else {
+            switch(order) {
+                case  8: LPC1( 8)
+                case  7: LPC1( 7)
+                case  6: LPC1( 6)
+                case  5: LPC1( 5)
+                case  4: LPC1( 4)
+                case  3: LPC1( 3)
+                case  2: LPC1( 2)
+                case  1: LPC1( 1)
+            }
+        }
+        res[i  ] = smp[i  ] - (p0 >> shift);
+        res[i+1] = smp[i+1] - (p1 >> shift);
     }
 }
 
 static void encode_residual_lpc(int32_t *res, const int32_t *smp, int n,
                                 int order, const int32_t *coefs, int shift)
 {
-    int i, j;
-    int32_t pred;
-
+    int i;
     for(i=0; i<order; i++) {
         res[i] = smp[i];
     }
-    for(i=order; i<n; i++) {
-        pred = 0;
+#if CONFIG_SMALL
+    for(i=order; i<n; i+=2) {
+        int j;
+        int s = smp[i];
+        int p0 = 0, p1 = 0;
         for(j=0; j<order; j++) {
-            pred += coefs[j] * smp[i-j-1];
+            int c = coefs[j];
+            p1 += c*s;
+            s = smp[i-j-1];
+            p0 += c*s;
         }
-        res[i] = smp[i] - (pred >> shift);
+        res[i  ] = smp[i  ] - (p0 >> shift);
+        res[i+1] = smp[i+1] - (p1 >> shift);
     }
+#else
+    switch(order) {
+        case  1: encode_residual_lpc_unrolled(res, smp, n, 1, coefs, shift, 0); break;
+        case  2: encode_residual_lpc_unrolled(res, smp, n, 2, coefs, shift, 0); break;
+        case  3: encode_residual_lpc_unrolled(res, smp, n, 3, coefs, shift, 0); break;
+        case  4: encode_residual_lpc_unrolled(res, smp, n, 4, coefs, shift, 0); break;
+        case  5: encode_residual_lpc_unrolled(res, smp, n, 5, coefs, shift, 0); break;
+        case  6: encode_residual_lpc_unrolled(res, smp, n, 6, coefs, shift, 0); break;
+        case  7: encode_residual_lpc_unrolled(res, smp, n, 7, coefs, shift, 0); break;
+        case  8: encode_residual_lpc_unrolled(res, smp, n, 8, coefs, shift, 0); break;
+        default: encode_residual_lpc_unrolled(res, smp, n, order, coefs, shift, 1); break;
+    }
+#endif
 }
 
 static int encode_residual(FlacEncodeContext *ctx, int ch)
@@ -919,7 +779,9 @@ static int encode_residual(FlacEncodeContext *ctx, int ch)
     }
 
     /* LPC */
-    opt_order = lpc_calc_coefs(smp, n, max_order, precision, coefs, shift, ctx->options.use_lpc, omethod);
+    opt_order = ff_lpc_calc_coefs(&ctx->dsp, smp, n, min_order, max_order,
+                                  precision, coefs, shift, ctx->options.use_lpc,
+                                  omethod, MAX_LPC_SHIFT, 0);
 
     if(omethod == ORDER_METHOD_2LEVEL ||
        omethod == ORDER_METHOD_4LEVEL ||
@@ -1057,7 +919,7 @@ static int estimate_stereo_mode(int32_t *left_ch, int32_t *right_ch, int n)
         }
     }
     if(best == 0) {
-        return FLAC_CHMODE_LEFT_RIGHT;
+        return FLAC_CHMODE_INDEPENDENT;
     } else if(best == 1) {
         return FLAC_CHMODE_LEFT_SIDE;
     } else if(best == 2) {
@@ -1082,14 +944,14 @@ static void channel_decorrelation(FlacEncodeContext *ctx)
     right = frame->subframes[1].samples;
 
     if(ctx->channels != 2) {
-        frame->ch_mode = FLAC_CHMODE_NOT_STEREO;
+        frame->ch_mode = FLAC_CHMODE_INDEPENDENT;
         return;
     }
 
     frame->ch_mode = estimate_stereo_mode(left, right, n);
 
     /* perform decorrelation and adjust bits-per-sample */
-    if(frame->ch_mode == FLAC_CHMODE_LEFT_RIGHT) {
+    if(frame->ch_mode == FLAC_CHMODE_INDEPENDENT) {
         return;
     }
     if(frame->ch_mode == FLAC_CHMODE_MID_SIDE) {
@@ -1113,13 +975,6 @@ static void channel_decorrelation(FlacEncodeContext *ctx)
     }
 }
 
-static void put_sbits(PutBitContext *pb, int bits, int32_t val)
-{
-    assert(bits >= 0 && bits <= 31);
-
-    put_bits(pb, bits, val & ((1<<bits)-1));
-}
-
 static void write_utf8(PutBitContext *pb, uint32_t val)
 {
     uint8_t tmp;
@@ -1136,8 +991,8 @@ static void output_frame_header(FlacEncodeContext *s)
     put_bits(&s->pb, 16, 0xFFF8);
     put_bits(&s->pb, 4, frame->bs_code[0]);
     put_bits(&s->pb, 4, s->sr_code[0]);
-    if(frame->ch_mode == FLAC_CHMODE_NOT_STEREO) {
-        put_bits(&s->pb, 4, s->ch_code);
+    if(frame->ch_mode == FLAC_CHMODE_INDEPENDENT) {
+        put_bits(&s->pb, 4, s->channels-1);
     } else {
         put_bits(&s->pb, 4, frame->ch_mode);
     }
@@ -1155,7 +1010,8 @@ static void output_frame_header(FlacEncodeContext *s)
         put_bits(&s->pb, 16, s->sr_code[1]);
     }
     flush_put_bits(&s->pb);
-    crc = av_crc(av_crc07, 0, s->pb.buf, put_bits_count(&s->pb)>>3);
+    crc = av_crc(av_crc_get_table(AV_CRC_8_ATM), 0,
+                 s->pb.buf, put_bits_count(&s->pb)>>3);
     put_bits(&s->pb, 8, crc);
 }
 
@@ -1297,9 +1153,23 @@ static void output_frame_footer(FlacEncodeContext *s)
 {
     int crc;
     flush_put_bits(&s->pb);
-    crc = bswap_16(av_crc(av_crc8005, 0, s->pb.buf, put_bits_count(&s->pb)>>3));
+    crc = bswap_16(av_crc(av_crc_get_table(AV_CRC_16_ANSI), 0,
+                          s->pb.buf, put_bits_count(&s->pb)>>3));
     put_bits(&s->pb, 16, crc);
     flush_put_bits(&s->pb);
+}
+
+static void update_md5_sum(FlacEncodeContext *s, int16_t *samples)
+{
+#if HAVE_BIGENDIAN
+    int i;
+    for(i = 0; i < s->frame.blocksize*s->channels; i++) {
+        int16_t smp = le2me_16(samples[i]);
+        av_md5_update(s->md5ctx, (uint8_t *)&smp, 2);
+    }
+#else
+    av_md5_update(s->md5ctx, (uint8_t *)samples, s->frame.blocksize*s->channels*2);
+#endif
 }
 
 static int flac_encode_frame(AVCodecContext *avctx, uint8_t *frame,
@@ -1309,10 +1179,23 @@ static int flac_encode_frame(AVCodecContext *avctx, uint8_t *frame,
     FlacEncodeContext *s;
     int16_t *samples = data;
     int out_bytes;
+    int reencoded=0;
 
     s = avctx->priv_data;
 
-    s->blocksize = avctx->frame_size;
+    if(buf_size < s->max_framesize*2) {
+        av_log(avctx, AV_LOG_ERROR, "output buffer too small\n");
+        return 0;
+    }
+
+    /* when the last block is reached, update the header in extradata */
+    if (!data) {
+        s->max_framesize = s->max_encoded_framesize;
+        av_md5_final(s->md5ctx, s->md5sum);
+        write_streaminfo(s, avctx->extradata);
+        return 0;
+    }
+
     init_frame(s);
 
     copy_samples(s, samples);
@@ -1322,36 +1205,46 @@ static int flac_encode_frame(AVCodecContext *avctx, uint8_t *frame,
     for(ch=0; ch<s->channels; ch++) {
         encode_residual(s, ch);
     }
+
+write_frame:
     init_put_bits(&s->pb, frame, buf_size);
     output_frame_header(s);
     output_subframes(s);
     output_frame_footer(s);
     out_bytes = put_bits_count(&s->pb) >> 3;
 
-    if(out_bytes > s->max_framesize || out_bytes >= buf_size) {
-        /* frame too large. use verbatim mode */
-        for(ch=0; ch<s->channels; ch++) {
-            encode_residual_v(s, ch);
-        }
-        init_put_bits(&s->pb, frame, buf_size);
-        output_frame_header(s);
-        output_subframes(s);
-        output_frame_footer(s);
-        out_bytes = put_bits_count(&s->pb) >> 3;
-
-        if(out_bytes > s->max_framesize || out_bytes >= buf_size) {
+    if(out_bytes > s->max_framesize) {
+        if(reencoded) {
             /* still too large. must be an error. */
             av_log(avctx, AV_LOG_ERROR, "error encoding frame\n");
             return -1;
         }
+
+        /* frame too large. use verbatim mode */
+        for(ch=0; ch<s->channels; ch++) {
+            encode_residual_v(s, ch);
+        }
+        reencoded = 1;
+        goto write_frame;
     }
 
     s->frame_count++;
+    s->sample_count += avctx->frame_size;
+    update_md5_sum(s, samples);
+    if (out_bytes > s->max_encoded_framesize)
+        s->max_encoded_framesize = out_bytes;
+    if (out_bytes < s->min_framesize)
+        s->min_framesize = out_bytes;
+
     return out_bytes;
 }
 
-static int flac_encode_close(AVCodecContext *avctx)
+static av_cold int flac_encode_close(AVCodecContext *avctx)
 {
+    if (avctx->priv_data) {
+        FlacEncodeContext *s = avctx->priv_data;
+        av_freep(&s->md5ctx);
+    }
     av_freep(&avctx->extradata);
     avctx->extradata_size = 0;
     av_freep(&avctx->coded_frame);
@@ -1360,12 +1253,14 @@ static int flac_encode_close(AVCodecContext *avctx)
 
 AVCodec flac_encoder = {
     "flac",
-    CODEC_TYPE_AUDIO,
+    AVMEDIA_TYPE_AUDIO,
     CODEC_ID_FLAC,
     sizeof(FlacEncodeContext),
     flac_encode_init,
     flac_encode_frame,
     flac_encode_close,
     NULL,
-    .capabilities = CODEC_CAP_SMALL_LAST_FRAME,
+    .capabilities = CODEC_CAP_SMALL_LAST_FRAME | CODEC_CAP_DELAY,
+    .sample_fmts = (const enum SampleFormat[]){SAMPLE_FMT_S16,SAMPLE_FMT_NONE},
+    .long_name = NULL_IF_CONFIG_SMALL("FLAC (Free Lossless Audio Codec)"),
 };

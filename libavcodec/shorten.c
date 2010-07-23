@@ -20,7 +20,7 @@
  */
 
 /**
- * @file shorten.c
+ * @file
  * Shorten decoder
  * @author Jeff Muizelaar
  *
@@ -29,7 +29,7 @@
 #define DEBUG
 #include <limits.h>
 #include "avcodec.h"
-#include "bitstream.h"
+#include "get_bits.h"
 #include "golomb.h"
 
 #define MAX_CHANNELS 8
@@ -100,10 +100,11 @@ typedef struct ShortenContext {
     int32_t lpcqoffset;
 } ShortenContext;
 
-static int shorten_decode_init(AVCodecContext * avctx)
+static av_cold int shorten_decode_init(AVCodecContext * avctx)
 {
     ShortenContext *s = avctx->priv_data;
     s->avctx = avctx;
+    avctx->sample_fmt = SAMPLE_FMT_S16;
 
     return 0;
 }
@@ -172,12 +173,12 @@ static void init_offset(ShortenContext *s)
             s->offset[chan][i] = mean;
 }
 
-static int inline get_le32(GetBitContext *gb)
+static inline int get_le32(GetBitContext *gb)
 {
     return bswap_32(get_bits_long(gb, 32));
 }
 
-static short inline get_le16(GetBitContext *gb)
+static inline short get_le16(GetBitContext *gb)
 {
     return bswap_16(get_bits_long(gb, 16));
 }
@@ -227,9 +228,9 @@ static int decode_wave_header(AVCodecContext *avctx, uint8_t *header, int header
     avctx->sample_rate = get_le32(&hb);
     avctx->bit_rate = get_le32(&hb) * 8;
     avctx->block_align = get_le16(&hb);
-    avctx->bits_per_sample = get_le16(&hb);
+    avctx->bits_per_coded_sample = get_le16(&hb);
 
-    if (avctx->bits_per_sample != 16) {
+    if (avctx->bits_per_coded_sample != 16) {
         av_log(avctx, AV_LOG_ERROR, "unsupported number of bits per sample\n");
         return -1;
     }
@@ -268,8 +269,10 @@ static void decode_subframe_lpc(ShortenContext *s, int channel, int residual_siz
 
 static int shorten_decode_frame(AVCodecContext *avctx,
         void *data, int *data_size,
-        uint8_t *buf, int buf_size)
+        AVPacket *avpkt)
 {
+    const uint8_t *buf = avpkt->data;
+    int buf_size = avpkt->size;
     ShortenContext *s = avctx->priv_data;
     int i, input_buf_size = 0;
     int16_t *samples = data;
@@ -293,17 +296,18 @@ static int shorten_decode_frame(AVCodecContext *avctx,
         s->bitstream_size= buf_size;
 
         if(buf_size < s->max_framesize){
-            //dprintf("wanna more data ... %d\n", buf_size);
+            //dprintf(avctx, "wanna more data ... %d\n", buf_size);
+            *data_size = 0;
             return input_buf_size;
         }
     }
     init_get_bits(&s->gb, buf, buf_size*8);
-    get_bits(&s->gb, s->bitindex);
+    skip_bits(&s->gb, s->bitindex);
     if (!s->blocksize)
     {
         int maxnlpc = 0;
         /* shorten signature */
-        if (get_bits_long(&s->gb, 32) != bswap_32(ff_get_fourcc("ajkg"))) {
+        if (get_bits_long(&s->gb, 32) != AV_RB32("ajkg")) {
             av_log(s->avctx, AV_LOG_ERROR, "missing shorten magic 'ajkg'\n");
             return -1;
         }
@@ -344,7 +348,7 @@ static int shorten_decode_frame(AVCodecContext *avctx,
             s->lpcqoffset = V2LPCQOFFSET;
 
         if (get_ur_golomb_shorten(&s->gb, FNSIZE) != FN_VERBATIM) {
-            av_log(s->avctx, AV_LOG_ERROR, "missing verbatim section at begining of stream\n");
+            av_log(s->avctx, AV_LOG_ERROR, "missing verbatim section at beginning of stream\n");
             return -1;
         }
 
@@ -471,6 +475,7 @@ static int shorten_decode_frame(AVCodecContext *avctx,
                 s->blocksize = get_uint(s, av_log2(s->blocksize));
                 break;
             case FN_QUIT:
+                *data_size = 0;
                 return buf_size;
                 break;
             default:
@@ -499,7 +504,7 @@ frame_done:
         return i;
 }
 
-static int shorten_decode_close(AVCodecContext *avctx)
+static av_cold int shorten_decode_close(AVCodecContext *avctx)
 {
     ShortenContext *s = avctx->priv_data;
     int i;
@@ -522,7 +527,7 @@ static void shorten_flush(AVCodecContext *avctx){
 
 AVCodec shorten_decoder = {
     "shorten",
-    CODEC_TYPE_AUDIO,
+    AVMEDIA_TYPE_AUDIO,
     CODEC_ID_SHORTEN,
     sizeof(ShortenContext),
     shorten_decode_init,
@@ -530,4 +535,5 @@ AVCodec shorten_decoder = {
     shorten_decode_close,
     shorten_decode_frame,
     .flush= shorten_flush,
+    .long_name= NULL_IF_CONFIG_SMALL("Shorten"),
 };

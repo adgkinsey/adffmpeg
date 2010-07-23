@@ -1,6 +1,6 @@
 /*
  * DVD subtitle encoding for ffmpeg
- * Copyright (c) 2005 Wolfram Gloger.
+ * Copyright (c) 2005 Wolfram Gloger
  *
  * This file is part of FFmpeg.
  *
@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 #include "avcodec.h"
+#include "bytestream.h"
 
 #undef NDEBUG
 #include <assert.h>
@@ -85,14 +86,6 @@ static void dvd_encode_rle(uint8_t **pq,
     *pq = q;
 }
 
-static inline void putbe16(uint8_t **pq, uint16_t v)
-{
-    uint8_t *q = *pq;
-    *q++ = v >> 8;
-    *q++ = v;
-    *pq = q;
-}
-
 static int encode_dvd_subtitles(uint8_t *outbuf, int outbuf_size,
                                 const AVSubtitle *h)
 {
@@ -115,10 +108,10 @@ static int encode_dvd_subtitles(uint8_t *outbuf, int outbuf_size,
         cmap[i] = 0;
     }
     for (object_id = 0; object_id < rects; object_id++)
-        for (i=0; i<h->rects[object_id].w*h->rects[object_id].h; ++i) {
-            color = h->rects[object_id].bitmap[i];
+        for (i=0; i<h->rects[object_id]->w*h->rects[object_id]->h; ++i) {
+            color = h->rects[object_id]->pict.data[0][i];
             // only count non-transparent pixels
-            alpha = h->rects[object_id].rgba_palette[color] >> 24;
+            alpha = ((uint32_t*)h->rects[object_id]->pict.data[1])[color] >> 24;
             hist[color] += alpha;
         }
     for (color=3;; --color) {
@@ -145,29 +138,29 @@ static int encode_dvd_subtitles(uint8_t *outbuf, int outbuf_size,
     for (object_id = 0; object_id < rects; object_id++) {
         offset1[object_id] = q - outbuf;
         // worst case memory requirement: 1 nibble per pixel..
-        if ((q - outbuf) + h->rects[object_id].w*h->rects[object_id].h/2
+        if ((q - outbuf) + h->rects[object_id]->w*h->rects[object_id]->h/2
             + 17*rects + 21 > outbuf_size) {
             av_log(NULL, AV_LOG_ERROR, "dvd_subtitle too big\n");
             return -1;
         }
-        dvd_encode_rle(&q, h->rects[object_id].bitmap,
-                       h->rects[object_id].w*2,
-                       h->rects[object_id].w, h->rects[object_id].h >> 1,
+        dvd_encode_rle(&q, h->rects[object_id]->pict.data[0],
+                       h->rects[object_id]->w*2,
+                       h->rects[object_id]->w, h->rects[object_id]->h >> 1,
                        cmap);
         offset2[object_id] = q - outbuf;
-        dvd_encode_rle(&q, h->rects[object_id].bitmap + h->rects[object_id].w,
-                       h->rects[object_id].w*2,
-                       h->rects[object_id].w, h->rects[object_id].h >> 1,
+        dvd_encode_rle(&q, h->rects[object_id]->pict.data[0] + h->rects[object_id]->w,
+                       h->rects[object_id]->w*2,
+                       h->rects[object_id]->w, h->rects[object_id]->h >> 1,
                        cmap);
     }
 
     // set data packet size
     qq = outbuf + 2;
-    putbe16(&qq, q - outbuf);
+    bytestream_put_be16(&qq, q - outbuf);
 
     // send start display command
-    putbe16(&q, (h->start_display_time*90) >> 10);
-    putbe16(&q, (q - outbuf) /*- 2 */ + 8 + 12*rects + 2);
+    bytestream_put_be16(&q, (h->start_display_time*90) >> 10);
+    bytestream_put_be16(&q, (q - outbuf) /*- 2 */ + 8 + 12*rects + 2);
     *q++ = 0x03; // palette - 4 nibbles
     *q++ = 0x03; *q++ = 0x7f;
     *q++ = 0x04; // alpha - 4 nibbles
@@ -177,48 +170,38 @@ static int encode_dvd_subtitles(uint8_t *outbuf, int outbuf_size,
     // XXX not sure if more than one rect can really be encoded..
     // 12 bytes per rect
     for (object_id = 0; object_id < rects; object_id++) {
-        int x2 = h->rects[object_id].x + h->rects[object_id].w - 1;
-        int y2 = h->rects[object_id].y + h->rects[object_id].h - 1;
+        int x2 = h->rects[object_id]->x + h->rects[object_id]->w - 1;
+        int y2 = h->rects[object_id]->y + h->rects[object_id]->h - 1;
 
         *q++ = 0x05;
         // x1 x2 -> 6 nibbles
-        *q++ = h->rects[object_id].x >> 4;
-        *q++ = (h->rects[object_id].x << 4) | ((x2 >> 8) & 0xf);
+        *q++ = h->rects[object_id]->x >> 4;
+        *q++ = (h->rects[object_id]->x << 4) | ((x2 >> 8) & 0xf);
         *q++ = x2;
         // y1 y2 -> 6 nibbles
-        *q++ = h->rects[object_id].y >> 4;
-        *q++ = (h->rects[object_id].y << 4) | ((y2 >> 8) & 0xf);
+        *q++ = h->rects[object_id]->y >> 4;
+        *q++ = (h->rects[object_id]->y << 4) | ((y2 >> 8) & 0xf);
         *q++ = y2;
 
         *q++ = 0x06;
         // offset1, offset2
-        putbe16(&q, offset1[object_id]);
-        putbe16(&q, offset2[object_id]);
+        bytestream_put_be16(&q, offset1[object_id]);
+        bytestream_put_be16(&q, offset2[object_id]);
     }
     *q++ = 0x01; // start command
     *q++ = 0xff; // terminating command
 
     // send stop display command last
-    putbe16(&q, (h->end_display_time*90) >> 10);
-    putbe16(&q, (q - outbuf) - 2 /*+ 4*/);
+    bytestream_put_be16(&q, (h->end_display_time*90) >> 10);
+    bytestream_put_be16(&q, (q - outbuf) - 2 /*+ 4*/);
     *q++ = 0x02; // set end
     *q++ = 0xff; // terminating command
 
     qq = outbuf;
-    putbe16(&qq, q - outbuf);
+    bytestream_put_be16(&qq, q - outbuf);
 
     av_log(NULL, AV_LOG_DEBUG, "subtitle_packet size=%td\n", q - outbuf);
     return q - outbuf;
-}
-
-static int dvdsub_init_encoder(AVCodecContext *avctx)
-{
-    return 0;
-}
-
-static int dvdsub_close_encoder(AVCodecContext *avctx)
-{
-    return 0;
 }
 
 static int dvdsub_encode(AVCodecContext *avctx,
@@ -234,14 +217,10 @@ static int dvdsub_encode(AVCodecContext *avctx,
 
 AVCodec dvdsub_encoder = {
     "dvdsub",
-    CODEC_TYPE_SUBTITLE,
+    AVMEDIA_TYPE_SUBTITLE,
     CODEC_ID_DVD_SUBTITLE,
     0,
-    dvdsub_init_encoder,
+    NULL,
     dvdsub_encode,
-    dvdsub_close_encoder,
+    .long_name = NULL_IF_CONFIG_SMALL("DVD subtitles"),
 };
-
-/* Local Variables: */
-/* c-basic-offset:4 */
-/* End: */

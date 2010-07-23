@@ -17,32 +17,34 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- *
  */
 
 /**
- * @file qdrw.c
+ * @file
  * Apple QuickDraw codec.
  */
 
+#include "libavutil/intreadwrite.h"
 #include "avcodec.h"
-#include "mpegvideo.h"
 
 typedef struct QdrawContext{
     AVCodecContext *avctx;
     AVFrame pic;
-    uint8_t palette[256*3];
 } QdrawContext;
 
 static int decode_frame(AVCodecContext *avctx,
                         void *data, int *data_size,
-                        uint8_t *buf, int buf_size)
+                        AVPacket *avpkt)
 {
+    const uint8_t *buf = avpkt->data;
+    int buf_size = avpkt->size;
     QdrawContext * const a = avctx->priv_data;
     AVFrame * const p= (AVFrame*)&a->pic;
     uint8_t* outdata;
     int colors;
     int i;
+    uint32_t *pal;
+    int r, g, b;
 
     if(p->data[0])
         avctx->release_buffer(avctx, p);
@@ -52,7 +54,7 @@ static int decode_frame(AVCodecContext *avctx,
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return -1;
     }
-    p->pict_type= I_TYPE;
+    p->pict_type= FF_I_TYPE;
     p->key_frame= 1;
 
     outdata = a->pic.data[0];
@@ -66,6 +68,7 @@ static int decode_frame(AVCodecContext *avctx,
         return -1;
     }
 
+    pal = (uint32_t*)p->data[1];
     for (i = 0; i <= colors; i++) {
         unsigned int idx;
         idx = AV_RB16(buf); /* color index */
@@ -76,18 +79,20 @@ static int decode_frame(AVCodecContext *avctx,
             buf += 6;
             continue;
         }
-        a->palette[idx * 3 + 0] = *buf++;
+        r = *buf++;
         buf++;
-        a->palette[idx * 3 + 1] = *buf++;
+        g = *buf++;
         buf++;
-        a->palette[idx * 3 + 2] = *buf++;
+        b = *buf++;
         buf++;
+        pal[idx] = (r << 16) | (g << 8) | b;
     }
+    p->palette_has_changed = 1;
 
     buf += 18; /* skip unneeded data */
     for (i = 0; i < avctx->height; i++) {
         int size, left, code, pix;
-        uint8_t *next;
+        const uint8_t *next;
         uint8_t *out;
         int tsize = 0;
 
@@ -100,27 +105,19 @@ static int decode_frame(AVCodecContext *avctx,
         while (left > 0) {
             code = *buf++;
             if (code & 0x80 ) { /* run */
-                int i;
                 pix = *buf++;
-                if ((out + (257 - code) * 3) > (outdata +  a->pic.linesize[0]))
+                if ((out + (257 - code)) > (outdata +  a->pic.linesize[0]))
                     break;
-                for (i = 0; i < 257 - code; i++) {
-                    *out++ = a->palette[pix * 3 + 0];
-                    *out++ = a->palette[pix * 3 + 1];
-                    *out++ = a->palette[pix * 3 + 2];
-                }
+                memset(out, pix, 257 - code);
+                out += 257 - code;
                 tsize += 257 - code;
                 left -= 2;
             } else { /* copy */
-                int i, pix;
-                if ((out + code * 3) > (outdata +  a->pic.linesize[0]))
+                if ((out + code) > (outdata +  a->pic.linesize[0]))
                     break;
-                for (i = 0; i <= code; i++) {
-                    pix = *buf++;
-                    *out++ = a->palette[pix * 3 + 0];
-                    *out++ = a->palette[pix * 3 + 1];
-                    *out++ = a->palette[pix * 3 + 2];
-                }
+                memcpy(out, buf, code + 1);
+                out += code + 1;
+                buf += code + 1;
                 left -= 2 + code;
                 tsize += code + 1;
             }
@@ -135,26 +132,33 @@ static int decode_frame(AVCodecContext *avctx,
     return buf_size;
 }
 
-static int decode_init(AVCodecContext *avctx){
+static av_cold int decode_init(AVCodecContext *avctx){
 //    QdrawContext * const a = avctx->priv_data;
 
-    if (avcodec_check_dimensions(avctx, avctx->width, avctx->height) < 0) {
-        return 1;
-    }
+    avctx->pix_fmt= PIX_FMT_PAL8;
 
-    avctx->pix_fmt= PIX_FMT_RGB24;
+    return 0;
+}
+
+static av_cold int decode_end(AVCodecContext *avctx){
+    QdrawContext * const a = avctx->priv_data;
+    AVFrame *pic = &a->pic;
+
+    if (pic->data[0])
+        avctx->release_buffer(avctx, pic);
 
     return 0;
 }
 
 AVCodec qdraw_decoder = {
     "qdraw",
-    CODEC_TYPE_VIDEO,
+    AVMEDIA_TYPE_VIDEO,
     CODEC_ID_QDRAW,
     sizeof(QdrawContext),
     decode_init,
     NULL,
-    NULL,
+    decode_end,
     decode_frame,
     CODEC_CAP_DR1,
+    .long_name = NULL_IF_CONFIG_SMALL("Apple QuickDraw"),
 };

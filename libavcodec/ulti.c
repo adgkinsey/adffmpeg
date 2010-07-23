@@ -17,21 +17,19 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- *
  */
 
 /**
- * @file ulti.c
+ * @file
  * IBM Ultimotion Video Decoder.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
-#include "common.h"
 #include "avcodec.h"
+#include "bytestream.h"
 
 #include "ulti_cb.h"
 
@@ -42,7 +40,7 @@ typedef struct UltimotionDecodeContext {
     const uint8_t *ulti_codebook;
 } UltimotionDecodeContext;
 
-static int ulti_decode_init(AVCodecContext *avctx)
+static av_cold int ulti_decode_init(AVCodecContext *avctx)
 {
     UltimotionDecodeContext *s = avctx->priv_data;
 
@@ -51,20 +49,29 @@ static int ulti_decode_init(AVCodecContext *avctx)
     s->height = avctx->height;
     s->blocks = (s->width / 8) * (s->height / 8);
     avctx->pix_fmt = PIX_FMT_YUV410P;
-    avctx->has_b_frames = 0;
     avctx->coded_frame = (AVFrame*) &s->frame;
     s->ulti_codebook = ulti_codebook;
 
     return 0;
 }
 
-static int block_coords[8] = // 4x4 block coords in 8x8 superblock
+static av_cold int ulti_decode_end(AVCodecContext *avctx){
+    UltimotionDecodeContext *s = avctx->priv_data;
+    AVFrame *pic = &s->frame;
+
+    if (pic->data[0])
+        avctx->release_buffer(avctx, pic);
+
+    return 0;
+}
+
+static const int block_coords[8] = // 4x4 block coords in 8x8 superblock
     { 0, 0, 0, 4, 4, 4, 4, 0};
 
-static int angle_by_index[4] = { 0, 2, 6, 12};
+static const int angle_by_index[4] = { 0, 2, 6, 12};
 
 /* Lookup tables for luma and chroma - used by ulti_convert_yuv() */
-static uint8_t ulti_lumas[64] =
+static const uint8_t ulti_lumas[64] =
     { 0x10, 0x13, 0x17, 0x1A, 0x1E, 0x21, 0x25, 0x28,
       0x2C, 0x2F, 0x33, 0x36, 0x3A, 0x3D, 0x41, 0x44,
       0x48, 0x4B, 0x4F, 0x52, 0x56, 0x59, 0x5C, 0x60,
@@ -74,7 +81,7 @@ static uint8_t ulti_lumas[64] =
       0xB7, 0xBA, 0xBE, 0xC1, 0xC5, 0xC8, 0xCC, 0xCF,
       0xD3, 0xD6, 0xDA, 0xDD, 0xE1, 0xE4, 0xE8, 0xEB};
 
-static uint8_t ulti_chromas[16] =
+static const uint8_t ulti_chromas[16] =
     { 0x60, 0x67, 0x6D, 0x73, 0x7A, 0x80, 0x86, 0x8D,
       0x93, 0x99, 0xA0, 0xA6, 0xAC, 0xB3, 0xB9, 0xC0};
 
@@ -202,8 +209,10 @@ static void ulti_grad(AVFrame *frame, int x, int y, uint8_t *Y, int chroma, int 
 
 static int ulti_decode_frame(AVCodecContext *avctx,
                              void *data, int *data_size,
-                             uint8_t *buf, int buf_size)
+                             AVPacket *avpkt)
 {
+    const uint8_t *buf = avpkt->data;
+    int buf_size = avpkt->size;
     UltimotionDecodeContext *s=avctx->priv_data;
     int modifier = 0;
     int uniq = 0;
@@ -307,9 +316,7 @@ static int ulti_decode_frame(AVCodecContext *avctx,
 
                 case 2:
                     if (modifier) { // unpack four luma samples
-                        tmp = (*buf++) << 16;
-                        tmp += (*buf++) << 8;
-                        tmp += *buf++;
+                        tmp = bytestream_get_be24(&buf);
 
                         Y[0] = (tmp >> 18) & 0x3F;
                         Y[1] = (tmp >> 12) & 0x3F;
@@ -317,8 +324,7 @@ static int ulti_decode_frame(AVCodecContext *avctx,
                         Y[3] = tmp & 0x3F;
                         angle = 16;
                     } else { // retrieve luma samples from codebook
-                        tmp = (*buf++) << 8;
-                        tmp += (*buf++);
+                        tmp = bytestream_get_be16(&buf);
 
                         angle = (tmp >> 12) & 0xF;
                         tmp &= 0xFFF;
@@ -334,33 +340,25 @@ static int ulti_decode_frame(AVCodecContext *avctx,
                     if (modifier) { // all 16 luma samples
                         uint8_t Luma[16];
 
-                        tmp = (*buf++) << 16;
-                        tmp += (*buf++) << 8;
-                        tmp += *buf++;
+                        tmp = bytestream_get_be24(&buf);
                         Luma[0] = (tmp >> 18) & 0x3F;
                         Luma[1] = (tmp >> 12) & 0x3F;
                         Luma[2] = (tmp >> 6) & 0x3F;
                         Luma[3] = tmp & 0x3F;
 
-                        tmp = (*buf++) << 16;
-                        tmp += (*buf++) << 8;
-                        tmp += *buf++;
+                        tmp = bytestream_get_be24(&buf);
                         Luma[4] = (tmp >> 18) & 0x3F;
                         Luma[5] = (tmp >> 12) & 0x3F;
                         Luma[6] = (tmp >> 6) & 0x3F;
                         Luma[7] = tmp & 0x3F;
 
-                        tmp = (*buf++) << 16;
-                        tmp += (*buf++) << 8;
-                        tmp += *buf++;
+                        tmp = bytestream_get_be24(&buf);
                         Luma[8] = (tmp >> 18) & 0x3F;
                         Luma[9] = (tmp >> 12) & 0x3F;
                         Luma[10] = (tmp >> 6) & 0x3F;
                         Luma[11] = tmp & 0x3F;
 
-                        tmp = (*buf++) << 16;
-                        tmp += (*buf++) << 8;
-                        tmp += *buf++;
+                        tmp = bytestream_get_be24(&buf);
                         Luma[12] = (tmp >> 18) & 0x3F;
                         Luma[13] = (tmp >> 12) & 0x3F;
                         Luma[14] = (tmp >> 6) & 0x3F;
@@ -406,16 +404,9 @@ static int ulti_decode_frame(AVCodecContext *avctx,
     return buf_size;
 }
 
-static int ulti_decode_end(AVCodecContext *avctx)
-{
-/*    UltimotionDecodeContext *s = avctx->priv_data;*/
-
-    return 0;
-}
-
 AVCodec ulti_decoder = {
     "ultimotion",
-    CODEC_TYPE_VIDEO,
+    AVMEDIA_TYPE_VIDEO,
     CODEC_ID_ULTI,
     sizeof(UltimotionDecodeContext),
     ulti_decode_init,
@@ -423,6 +414,7 @@ AVCodec ulti_decoder = {
     ulti_decode_end,
     ulti_decode_frame,
     CODEC_CAP_DR1,
-    NULL
+    NULL,
+    .long_name = NULL_IF_CONFIG_SMALL("IBM UltiMotion"),
 };
 

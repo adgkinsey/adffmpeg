@@ -17,12 +17,11 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- *
  */
 
 /**
- * @file rpza.c
- * QT RPZA Video Decoder by Roberto Togni <rtogni@bresciaonline.it>
+ * @file
+ * QT RPZA Video Decoder by Roberto Togni
  * For more information about the RPZA format, visit:
  *   http://www.pcisys.net/~melanson/codecs/
  *
@@ -38,19 +37,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
-#include "common.h"
+#include "libavutil/intreadwrite.h"
 #include "avcodec.h"
-#include "dsputil.h"
 
 typedef struct RpzaContext {
 
     AVCodecContext *avctx;
-    DSPContext dsp;
     AVFrame frame;
 
-    unsigned char *buf;
+    const unsigned char *buf;
     int size;
 
 } RpzaContext;
@@ -230,14 +226,12 @@ static void rpza_decode_stream(RpzaContext *s)
     }
 }
 
-static int rpza_decode_init(AVCodecContext *avctx)
+static av_cold int rpza_decode_init(AVCodecContext *avctx)
 {
-    RpzaContext *s = (RpzaContext *)avctx->priv_data;
+    RpzaContext *s = avctx->priv_data;
 
     s->avctx = avctx;
     avctx->pix_fmt = PIX_FMT_RGB555;
-    avctx->has_b_frames = 0;
-    dsputil_init(&s->dsp, avctx);
 
     s->frame.data[0] = NULL;
 
@@ -246,9 +240,11 @@ static int rpza_decode_init(AVCodecContext *avctx)
 
 static int rpza_decode_frame(AVCodecContext *avctx,
                              void *data, int *data_size,
-                             uint8_t *buf, int buf_size)
+                             AVPacket *avpkt)
 {
-    RpzaContext *s = (RpzaContext *)avctx->priv_data;
+    const uint8_t *buf = avpkt->data;
+    int buf_size = avpkt->size;
+    RpzaContext *s = avctx->priv_data;
 
     s->buf = buf;
     s->size = buf_size;
@@ -269,9 +265,9 @@ static int rpza_decode_frame(AVCodecContext *avctx,
     return buf_size;
 }
 
-static int rpza_decode_end(AVCodecContext *avctx)
+static av_cold int rpza_decode_end(AVCodecContext *avctx)
 {
-    RpzaContext *s = (RpzaContext *)avctx->priv_data;
+    RpzaContext *s = avctx->priv_data;
 
     if (s->frame.data[0])
         avctx->release_buffer(avctx, &s->frame);
@@ -281,7 +277,7 @@ static int rpza_decode_end(AVCodecContext *avctx)
 
 AVCodec rpza_decoder = {
     "rpza",
-    CODEC_TYPE_VIDEO,
+    AVMEDIA_TYPE_VIDEO,
     CODEC_ID_RPZA,
     sizeof(RpzaContext),
     rpza_decode_init,
@@ -289,4 +285,5 @@ AVCodec rpza_decoder = {
     rpza_decode_end,
     rpza_decode_frame,
     CODEC_CAP_DR1,
+    .long_name = NULL_IF_CONFIG_SMALL("QuickTime video (RPZA)"),
 };

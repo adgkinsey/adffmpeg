@@ -18,10 +18,18 @@
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
+
+#include "libavutil/avstring.h"
 #include "avformat.h"
 #include <fcntl.h>
+#if HAVE_SETMODE
+#include <io.h>
+#endif
 #include <unistd.h>
+#include <sys/stat.h>
 #include <sys/time.h>
+#include <stdlib.h>
+#include "os_support.h"
 
 #ifdef CONFIG_WINCE
 # ifdef lseek
@@ -38,7 +46,7 @@ static int file_open(URLContext *h, const char *filename, int flags)
     int access;
     int fd;
 
-    strstart(filename, "file:", &filename);
+    av_strstart(filename, "file:", &filename);
 
     if (flags & URL_RDWR) {
         access = O_CREAT | O_TRUNC | O_RDWR;
@@ -47,39 +55,49 @@ static int file_open(URLContext *h, const char *filename, int flags)
     } else {
         access = O_RDONLY;
     }
-#if defined(__MINGW32__) || defined(CONFIG_OS2) || defined(__CYGWIN__)
+#ifdef O_BINARY
     access |= O_BINARY;
 #endif
     fd = open(filename, access, 0666);
-    if (fd < 0)
-        return AVERROR(ENOENT);
-    h->priv_data = (void *)(size_t)fd;
+    if (fd == -1)
+        return AVERROR(errno);
+    h->priv_data = (void *) (intptr_t) fd;
     return 0;
 }
 
 static int file_read(URLContext *h, unsigned char *buf, int size)
 {
-    int fd = (size_t)h->priv_data;
+    int fd = (intptr_t) h->priv_data;
     return read(fd, buf, size);
 }
 
 static int file_write(URLContext *h, unsigned char *buf, int size)
 {
-    int fd = (size_t)h->priv_data;
+    int fd = (intptr_t) h->priv_data;
     return write(fd, buf, size);
 }
 
 /* XXX: use llseek */
-static offset_t file_seek(URLContext *h, offset_t pos, int whence)
+static int64_t file_seek(URLContext *h, int64_t pos, int whence)
 {
-    int fd = (size_t)h->priv_data;
+    int fd = (intptr_t) h->priv_data;
+    if (whence == AVSEEK_SIZE) {
+        struct stat st;
+        int ret = fstat(fd, &st);
+        return ret < 0 ? AVERROR(errno) : st.st_size;
+    }
     return lseek(fd, pos, whence);
 }
 
 static int file_close(URLContext *h)
 {
-    int fd = (size_t)h->priv_data;
+    int fd = (intptr_t) h->priv_data;
     return close(fd);
+}
+
+static int file_get_handle(URLContext *h)
+{
+    return (intptr_t) h->priv_data;
 }
 
 URLProtocol file_protocol = {
@@ -89,6 +107,7 @@ URLProtocol file_protocol = {
     file_write,
     file_seek,
     file_close,
+    .url_get_file_handle = file_get_handle,
 };
 
 /* pipe protocol */
@@ -96,42 +115,29 @@ URLProtocol file_protocol = {
 static int pipe_open(URLContext *h, const char *filename, int flags)
 {
     int fd;
+    char *final;
+    av_strstart(filename, "pipe:", &filename);
 
-    if (flags & URL_WRONLY) {
-        fd = 1;
-    } else {
-        fd = 0;
+    fd = strtol(filename, &final, 10);
+    if((filename == final) || *final ) {/* No digits found, or something like 10ab */
+        if (flags & URL_WRONLY) {
+            fd = 1;
+        } else {
+            fd = 0;
+        }
     }
-#if defined(__MINGW32__) || defined(CONFIG_OS2) || defined(__CYGWIN__)
+#if HAVE_SETMODE
     setmode(fd, O_BINARY);
 #endif
-    h->priv_data = (void *)(size_t)fd;
+    h->priv_data = (void *) (intptr_t) fd;
     h->is_streamed = 1;
-    return 0;
-}
-
-static int pipe_read(URLContext *h, unsigned char *buf, int size)
-{
-    int fd = (size_t)h->priv_data;
-    return read(fd, buf, size);
-}
-
-static int pipe_write(URLContext *h, unsigned char *buf, int size)
-{
-    int fd = (size_t)h->priv_data;
-    return write(fd, buf, size);
-}
-
-static int pipe_close(URLContext *h)
-{
     return 0;
 }
 
 URLProtocol pipe_protocol = {
     "pipe",
     pipe_open,
-    pipe_read,
-    pipe_write,
-    NULL,
-    pipe_close,
+    file_read,
+    file_write,
+    .url_get_file_handle = file_get_handle,
 };

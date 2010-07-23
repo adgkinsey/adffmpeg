@@ -19,7 +19,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include <stdio.h>
@@ -63,16 +63,16 @@ static inline void loop_filter_l1(uint8_t *p0_p, int stride, int alpha, int beta
     int q0 = Q0;
 
     if(abs(p0-q0)<alpha && abs(P1-p0)<beta && abs(Q1-q0)<beta) {
-        int delta = clip(((q0-p0)*3+P1-Q1+4)>>3,-tc, tc);
-        P0 = clip_uint8(p0+delta);
-        Q0 = clip_uint8(q0-delta);
+        int delta = av_clip(((q0-p0)*3+P1-Q1+4)>>3,-tc, tc);
+        P0 = av_clip_uint8(p0+delta);
+        Q0 = av_clip_uint8(q0-delta);
         if(abs(P2-p0)<beta) {
-            delta = clip(((P0-P1)*3+P2-Q0+4)>>3, -tc, tc);
-            P1 = clip_uint8(P1+delta);
+            delta = av_clip(((P0-P1)*3+P2-Q0+4)>>3, -tc, tc);
+            P1 = av_clip_uint8(P1+delta);
         }
         if(abs(Q2-q0)<beta) {
-            delta = clip(((Q1-Q0)*3+P0-Q2+4)>>3, -tc, tc);
-            Q1 = clip_uint8(Q1-delta);
+            delta = av_clip(((Q1-Q0)*3+P0-Q2+4)>>3, -tc, tc);
+            Q1 = av_clip_uint8(Q1-delta);
         }
     }
 }
@@ -98,9 +98,9 @@ static inline void loop_filter_c2(uint8_t *p0_p,int stride,int alpha, int beta) 
 static inline void loop_filter_c1(uint8_t *p0_p,int stride,int alpha, int beta,
                                   int tc) {
     if(abs(P0-Q0)<alpha && abs(P1-P0)<beta && abs(Q1-Q0)<beta) {
-        int delta = clip(((Q0-P0)*3+P1-Q1+4)>>3, -tc, tc);
-        P0 = clip_uint8(P0+delta);
-        Q0 = clip_uint8(Q0-delta);
+        int delta = av_clip(((Q0-P0)*3+P1-Q1+4)>>3, -tc, tc);
+        P0 = av_clip_uint8(P0+delta);
+        Q0 = av_clip_uint8(Q0-delta);
     }
 }
 
@@ -248,7 +248,6 @@ static void cavs_idct8_add_c(uint8_t *dst, DCTELEM *block, int stride) {
         dst[i + 6*stride] = cm[ dst[i + 6*stride] + ((b1 - b5) >> 7)];
         dst[i + 7*stride] = cm[ dst[i + 7*stride] + ((b0 - b4) >> 7)];
     }
-    memset(block,0,64*sizeof(DCTELEM));
 }
 
 /*****************************************************************************
@@ -511,12 +510,7 @@ CAVS_MC(put_, 16)
 CAVS_MC(avg_, 8)
 CAVS_MC(avg_, 16)
 
-void ff_put_cavs_qpel8_mc00_c(uint8_t *dst, uint8_t *src, int stride);
-void ff_avg_cavs_qpel8_mc00_c(uint8_t *dst, uint8_t *src, int stride);
-void ff_put_cavs_qpel16_mc00_c(uint8_t *dst, uint8_t *src, int stride);
-void ff_avg_cavs_qpel16_mc00_c(uint8_t *dst, uint8_t *src, int stride);
-
-void ff_cavsdsp_init(DSPContext* c, AVCodecContext *avctx) {
+av_cold void ff_cavsdsp_init(DSPContext* c, AVCodecContext *avctx) {
 #define dspfunc(PFX, IDX, NUM) \
     c->PFX ## _pixels_tab[IDX][ 0] = ff_ ## PFX ## NUM ## _mc00_c; \
     c->PFX ## _pixels_tab[IDX][ 1] = ff_ ## PFX ## NUM ## _mc10_c; \

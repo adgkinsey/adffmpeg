@@ -17,18 +17,17 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- *
  */
 
 /**
- * @file cabac.c
+ * @file
  * Context Adaptive Binary Arithmetic Coder.
  */
 
 #include <string.h>
 
-#include "common.h"
-#include "bitstream.h"
+#include "libavutil/common.h"
+#include "get_bits.h"
 #include "cabac.h"
 
 static const uint8_t lps_range[64][4]= {
@@ -179,23 +178,27 @@ void ff_init_cabac_states(CABACContext *c){
     }
 }
 
-#if 0 //selftest
+#ifdef TEST
 #define SIZE 10240
 
+#include "libavutil/lfg.h"
 #include "avcodec.h"
+#include "cabac.h"
 
-int main(){
+int main(void){
     CABACContext c;
     uint8_t b[9*SIZE];
     uint8_t r[9*SIZE];
     int i;
     uint8_t state[10]= {0};
+    AVLFG prng;
 
+    av_lfg_init(&prng, 1);
     ff_init_cabac_encoder(&c, b, SIZE);
-    ff_init_cabac_states(&c, ff_h264_lps_range, ff_h264_mps_state, ff_h264_lps_state, 64);
+    ff_init_cabac_states(&c);
 
     for(i=0; i<SIZE; i++){
-        r[i]= random()%7;
+        r[i] = av_lfg_get(&prng) % 7;
     }
 
     for(i=0; i<SIZE; i++){
@@ -262,4 +265,4 @@ STOP_TIMER("get_cabac_ueg")
     return 0;
 }
 
-#endif
+#endif /* TEST */

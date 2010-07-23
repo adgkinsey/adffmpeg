@@ -19,159 +19,228 @@
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
+
+/* needed by inet_aton() */
+#define _SVID_SOURCE
+#define _DARWIN_C_SOURCE
+
 #include "config.h"
 #include "avformat.h"
-#if defined(CONFIG_WINCE)
-/* Skip includes on WinCE. */
-#elif defined(__MINGW32__)
-#include <sys/types.h>
-#include <sys/timeb.h>
-#elif defined(CONFIG_OS2)
-#include <string.h>
-#include <sys/time.h>
-#else
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/time.h>
-#endif
-#include <time.h>
+#include "os_support.h"
 
-#ifndef HAVE_SYS_POLL_H
-#if defined(__MINGW32__)
+#if CONFIG_NETWORK
+#if !HAVE_POLL_H
+#if HAVE_WINSOCK2_H
 #include <winsock2.h>
-#else
+#elif HAVE_SYS_SELECT_H
 #include <sys/select.h>
 #endif
 #endif
 
-/**
- * gets the current time in micro seconds.
- */
-int64_t av_gettime(void)
-{
-#if defined(CONFIG_WINCE)
-     SYSTEMTIME sysTimeStruct; 
-     FILETIME fTime; 
-     ULARGE_INTEGER int64time; 
-
-     GetSystemTime( &sysTimeStruct ); 
-     SystemTimeToFileTime( &sysTimeStruct, &fTime ); 
-     memcpy( &int64time, &fTime, sizeof( FILETIME ) ); 
-     /* Subtract the value for 1970-01-01 00:00 (UTC) */ 
-     int64time.QuadPart -= 0x19db1ded53e8000; 
-     /* Convert to microseconds. */ 
-     int64time.QuadPart /= 10; 
-     return int64time.QuadPart;
-#elif defined(__MINGW32__)
-    struct timeb tb;
-    _ftime(&tb);
-    return ((int64_t)tb.time * INT64_C(1000) + (int64_t)tb.millitm) * INT64_C(1000);
-#else
-    struct timeval tv;
-    gettimeofday(&tv,NULL);
-    return (int64_t)tv.tv_sec * 1000000 + tv.tv_usec;
-#endif
-}
-
-#if !defined(CONFIG_WINCE) && !defined(HAVE_LOCALTIME_R)
-struct tm *localtime_r(const time_t *t, struct tm *tp)
-{
-    struct tm *l;
-
-    l = localtime(t);
-    if (!l)
-        return 0;
-    *tp = *l;
-    return tp;
-}
-#elif defined(CONFIG_WINCE)
-struct tm * wce_localtime( const time_t *timer ) 
-{
-    static struct   tm s_tm; 
-    FILETIME        uf, lf; 
-    SYSTEMTIME      ls; 
-
-    /* Convert time_t to FILETIME  */
-    unsigned __int64 i64 = Int32x32To64(timer, 10000000) + 116444736000000000; 
-    uf.dwLowDateTime = (DWORD) i64; 
-    uf.dwHighDateTime = (DWORD) (i64 >> 32); 
-    /* Convert UTC(GMT) FILETIME to local FILETIME */
-    FileTimeToLocalFileTime( &uf, &lf ); 
-    /* Convert FILETIME to SYSTEMTIME */
-    FileTimeToSystemTime( &lf, &ls ); 
-    /* Convert SYSTEMTIME to tm */
-    s_tm.tm_sec  = ls.wSecond; 
-    s_tm.tm_min  = ls.wMinute; 
-    s_tm.tm_hour = ls.wHour; 
-    s_tm.tm_mday = ls.wDay; 
-    s_tm.tm_mon  = ls.wMonth -1; 
-    s_tm.tm_year = ls.wYear - 1900; 
-    s_tm.tm_wday = ls.wDayOfWeek; 
-    /* Return pointer to static data */
-    return &s_tm; 
-}
-
-struct tm *localtime_r(const time_t *t, struct tm *tp)
-{
-    struct tm *l;
-
-    l = wce_localtime(t);
-    if (!l)
-        return 0;
-    *tp = *l;
-    return tp;
-}
-
-#endif /* !defined(CONFIG_WINCE) && !defined(HAVE_LOCALTIME_R) */
-
-#if !defined(HAVE_INET_ATON) && defined(CONFIG_NETWORK)
-
-#ifdef __MINGW32__
-
 #include "network.h"
 
-int inet_aton( const char *hostname, struct in_addr *sin_addr )
-{
-    sin_addr->s_addr = inet_addr(hostname);
-
-    if( sin_addr->s_addr == INADDR_NONE )
-        return 0;
-
-    return -1;
-}
-
-#else
+#if !HAVE_INET_ATON
 #include <stdlib.h>
 #include <strings.h>
-#include "barpainet.h"
 
-int inet_aton (const char * str, struct in_addr * add)
+int ff_inet_aton (const char * str, struct in_addr * add)
 {
-    const char * pch = str;
     unsigned int add1 = 0, add2 = 0, add3 = 0, add4 = 0;
 
-    add1 = atoi(pch);
-    pch = strpbrk(pch,".");
-    if (pch == 0 || ++pch == 0) goto done;
-    add2 = atoi(pch);
-    pch = strpbrk(pch,".");
-    if (pch == 0 || ++pch == 0) goto done;
-    add3 = atoi(pch);
-    pch = strpbrk(pch,".");
-    if (pch == 0 || ++pch == 0) goto done;
-    add4 = atoi(pch);
+    if (sscanf(str, "%d.%d.%d.%d", &add1, &add2, &add3, &add4) != 4)
+        return 0;
 
-done:
-    add->s_addr=(add4<<24)+(add3<<16)+(add2<<8)+add1;
+    if (!add1 || (add1|add2|add3|add4) > 255) return 0;
+
+    add->s_addr = htonl((add1 << 24) + (add2 << 16) + (add3 << 8) + add4);
+    
+    if( add->s_addr == INADDR_NONE )
+        return 0;
 
     return 1;
 }
-#endif /* __MINGW32__ */
+#else
+int ff_inet_aton (const char * str, struct in_addr * add)
+{
+    return inet_aton(str, add);
+}
+#endif /* !HAVE_INET_ATON */
 
-#endif /* !defined(HAVE_INET_ATON) && defined(CONFIG_NETWORK) */
+#if !HAVE_GETADDRINFO
+int ff_getaddrinfo(const char *node, const char *service,
+                const struct addrinfo *hints, struct addrinfo **res)
+{
+    struct hostent *h = NULL;
+    struct addrinfo *ai;
+    struct sockaddr_in *sin;
 
-#ifdef CONFIG_FFSERVER
-#ifndef HAVE_SYS_POLL_H
+#if HAVE_WINSOCK2_H
+    int (WSAAPI *win_getaddrinfo)(const char *node, const char *service,
+                                  const struct addrinfo *hints,
+                                  struct addrinfo **res);
+    HMODULE ws2mod = GetModuleHandle("ws2_32.dll");
+    win_getaddrinfo = GetProcAddress(ws2mod, "getaddrinfo");
+    if (win_getaddrinfo)
+        return win_getaddrinfo(node, service, hints, res);
+#endif
+
+    *res = NULL;
+    sin = av_mallocz(sizeof(struct sockaddr_in));
+    if (!sin)
+        return EAI_FAIL;
+    sin->sin_family = AF_INET;
+
+    if (node) {
+        if (!ff_inet_aton(node, &sin->sin_addr)) {
+            if (hints && (hints->ai_flags & AI_NUMERICHOST)) {
+                av_free(sin);
+                return EAI_FAIL;
+            }
+            h = gethostbyname(node);
+            if (!h) {
+                av_free(sin);
+                return EAI_FAIL;
+            }
+            memcpy(&sin->sin_addr, h->h_addr_list[0], sizeof(struct in_addr));
+        }
+    } else {
+        if (hints && (hints->ai_flags & AI_PASSIVE)) {
+            sin->sin_addr.s_addr = INADDR_ANY;
+        } else
+            sin->sin_addr.s_addr = INADDR_LOOPBACK;
+    }
+
+    /* Note: getaddrinfo allows service to be a string, which
+     * should be looked up using getservbyname. */
+    if (service)
+        sin->sin_port = htons(atoi(service));
+
+    ai = av_mallocz(sizeof(struct addrinfo));
+    if (!ai) {
+        av_free(sin);
+        return EAI_FAIL;
+    }
+
+    *res = ai;
+    ai->ai_family = AF_INET;
+    ai->ai_socktype = hints ? hints->ai_socktype : 0;
+    switch (ai->ai_socktype) {
+    case SOCK_STREAM: ai->ai_protocol = IPPROTO_TCP; break;
+    case SOCK_DGRAM:  ai->ai_protocol = IPPROTO_UDP; break;
+    default:          ai->ai_protocol = 0;           break;
+    }
+
+    ai->ai_addr = (struct sockaddr *)sin;
+    ai->ai_addrlen = sizeof(struct sockaddr_in);
+    if (hints && (hints->ai_flags & AI_CANONNAME))
+        ai->ai_canonname = h ? av_strdup(h->h_name) : NULL;
+
+    ai->ai_next = NULL;
+    return 0;
+}
+
+void ff_freeaddrinfo(struct addrinfo *res)
+{
+#if HAVE_WINSOCK2_H
+    void (WSAAPI *win_freeaddrinfo)(struct addrinfo *res);
+    HMODULE ws2mod = GetModuleHandle("ws2_32.dll");
+    win_freeaddrinfo = (void (WSAAPI *)(struct addrinfo *res))
+                       GetProcAddress(ws2mod, "freeaddrinfo");
+    if (win_freeaddrinfo) {
+        win_freeaddrinfo(res);
+        return;
+    }
+#endif
+
+    av_free(res->ai_canonname);
+    av_free(res->ai_addr);
+    av_free(res);
+}
+
+int ff_getnameinfo(const struct sockaddr *sa, int salen,
+                   char *host, int hostlen,
+                   char *serv, int servlen, int flags)
+{
+    const struct sockaddr_in *sin = (const struct sockaddr_in *)sa;
+
+#if HAVE_WINSOCK2_H
+    int (WSAAPI *win_getnameinfo)(const struct sockaddr *sa, socklen_t salen,
+                                  char *host, DWORD hostlen,
+                                  char *serv, DWORD servlen, int flags);
+    HMODULE ws2mod = GetModuleHandle("ws2_32.dll");
+    win_getnameinfo = GetProcAddress(ws2mod, "getnameinfo");
+    if (win_getnameinfo)
+        return win_getnameinfo(sa, salen, host, hostlen, serv, servlen, flags);
+#endif
+
+    if (sa->sa_family != AF_INET)
+        return EAI_FAMILY;
+    if (!host && !serv)
+        return EAI_NONAME;
+
+    if (host && hostlen > 0) {
+        struct hostent *ent = NULL;
+        uint32_t a;
+        if (!(flags & NI_NUMERICHOST))
+            ent = gethostbyaddr((const char *)&sin->sin_addr,
+                                sizeof(sin->sin_addr), AF_INET);
+
+        if (ent) {
+            snprintf(host, hostlen, "%s", ent->h_name);
+        } else if (flags & NI_NAMERQD) {
+            return EAI_NONAME;
+        } else {
+            a = ntohl(sin->sin_addr.s_addr);
+            snprintf(host, hostlen, "%d.%d.%d.%d",
+                     ((a >> 24) & 0xff), ((a >> 16) & 0xff),
+                     ((a >>  8) & 0xff), ( a        & 0xff));
+        }
+    }
+
+    if (serv && servlen > 0) {
+        struct servent *ent = NULL;
+        if (!(flags & NI_NUMERICSERV))
+            ent = getservbyport(sin->sin_port, flags & NI_DGRAM ? "udp" : "tcp");
+
+        if (ent) {
+            snprintf(serv, servlen, "%s", ent->s_name);
+        } else
+            snprintf(serv, servlen, "%d", ntohs(sin->sin_port));
+    }
+
+    return 0;
+}
+
+const char *ff_gai_strerror(int ecode)
+{
+    switch(ecode) {
+    case EAI_FAIL   : return "A non-recoverable error occurred";
+    case EAI_FAMILY : return "The address family was not recognized or the address length was invalid for the specified family";
+    case EAI_NONAME : return "The name does not resolve for the supplied parameters";
+    }
+
+    return "Unknown error";
+}
+#endif
+
+int ff_socket_nonblock(int socket, int enable)
+{
+#if HAVE_WINSOCK2_H
+   return ioctlsocket(socket, FIONBIO, &enable);
+#else
+   if (enable)
+      return fcntl(socket, F_SETFL, fcntl(socket, F_GETFL) | O_NONBLOCK);
+   else
+      return fcntl(socket, F_SETFL, fcntl(socket, F_GETFL) & ~O_NONBLOCK);
+#endif
+}
+#endif /* CONFIG_NETWORK */
+
+#if CONFIG_FFSERVER
+#if !HAVE_POLL_H
 int poll(struct pollfd *fds, nfds_t numfds, int timeout)
 {
     fd_set read_set;
@@ -181,6 +250,13 @@ int poll(struct pollfd *fds, nfds_t numfds, int timeout)
     int n;
     int rc;
 
+#if HAVE_WINSOCK2_H
+    if (numfds >= FD_SETSIZE) {
+        errno = EINVAL;
+        return -1;
+    }
+#endif
+
     FD_ZERO(&read_set);
     FD_ZERO(&write_set);
     FD_ZERO(&exception_set);
@@ -189,10 +265,12 @@ int poll(struct pollfd *fds, nfds_t numfds, int timeout)
     for(i = 0; i < numfds; i++) {
         if (fds[i].fd < 0)
             continue;
+#if !HAVE_WINSOCK2_H
         if (fds[i].fd >= FD_SETSIZE) {
             errno = EINVAL;
             return -1;
         }
+#endif
 
         if (fds[i].events & POLLIN)  FD_SET(fds[i].fd, &read_set);
         if (fds[i].events & POLLOUT) FD_SET(fds[i].fd, &write_set);
@@ -229,6 +307,6 @@ int poll(struct pollfd *fds, nfds_t numfds, int timeout)
 
     return rc;
 }
-#endif /* HAVE_SYS_POLL_H */
+#endif /* HAVE_POLL_H */
 #endif /* CONFIG_FFSERVER */
 

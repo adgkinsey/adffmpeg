@@ -1,4 +1,8 @@
 #include "avformat.h"
+#include "internal.h"
+#include "libavutil/avstring.h"
+#include "libavutil/bswap.h"
+
 #include "dsenc.h"
 #include "ds.h"
 
@@ -177,7 +181,7 @@ static int DSOpen( URLContext *h, const char *uri, int flags )
     h->priv_data = s;
 
     /* Crack the URL */
-    url_split( NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port, path1, sizeof(path1), uri );
+    ff_url_split( NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port, path1, sizeof(path1), uri );
 
     if (port > 0) 
     {
@@ -185,7 +189,7 @@ static int DSOpen( URLContext *h, const char *uri, int flags )
     } 
     else 
     {
-        pstrcpy( hoststr, sizeof(hoststr), hostname );
+        av_strlcpy( hoststr, hostname, sizeof(hoststr) );
     }
 
     /* Add the URL parameters (if any) */

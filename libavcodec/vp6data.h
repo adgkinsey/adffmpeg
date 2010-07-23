@@ -1,5 +1,5 @@
 /**
- * @file vp6data.h
+ * @file
  * VP6 compatible video decoder
  *
  * Copyright (C) 2006  Aurelien Jacobs <aurel@gnuage.org>
@@ -18,11 +18,11 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef VP6DATA_H
-#define VP6DATA_H
+#ifndef AVCODEC_VP6DATA_H
+#define AVCODEC_VP6DATA_H
 
 #include "vp56data.h"
 
@@ -283,7 +283,7 @@ static const int16_t vp6_block_copy_filter[17][8][4] = {
     {  -2,  16, 118,  -4  } },
 };
 
-static const vp56_tree_t vp6_pcr_tree[] = {
+static const VP56Tree vp6_pcr_tree[] = {
     { 8, 0},
     { 4, 1},
     { 2, 2}, {-1}, {-2},
@@ -297,4 +297,12 @@ static const vp56_tree_t vp6_pcr_tree[] = {
 
 static const uint8_t vp6_coord_div[] = { 4, 4, 4, 4, 8, 8 };
 
-#endif /* VP6DATA_H */
+static const uint8_t vp6_huff_coeff_map[] = {
+    13, 14, 11, 0, 1, 15, 16, 18, 2, 17, 3, 4, 19, 20, 5, 6, 21, 22, 7, 8, 9, 10
+};
+
+static const uint8_t vp6_huff_run_map[] = {
+    10, 13, 11, 12, 0, 1, 2, 3, 14, 8, 15, 16, 4, 5, 6, 7
+};
+
+#endif /* AVCODEC_VP6DATA_H */

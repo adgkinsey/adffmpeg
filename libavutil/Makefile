@@ -1,34 +1,61 @@
-#
-# libavutil Makefile
-#
-include ../config.mak
+include $(SUBDIR)../config.mak
 
-CFLAGS+=-DBUILD_AVUTIL
+NAME = avutil
 
-OBJS= mathematics.o \
-      rational.o \
-      intfloat_readwrite.o \
-      crc.o \
-      md5.o \
-      lls.o \
-      adler32.o \
-      log.o \
-      mem.o \
-      fifo.o \
-      tree.o \
-      lzo.o \
-      random.o \
-      aes.o \
-      base64.o \
+HEADERS = adler32.h                                                     \
+          attributes.h                                                  \
+          avstring.h                                                    \
+          avutil.h                                                      \
+          base64.h                                                      \
+          common.h                                                      \
+          crc.h                                                         \
+          error.h                                                       \
+          fifo.h                                                        \
+          intfloat_readwrite.h                                          \
+          log.h                                                         \
+          lzo.h                                                         \
+          mathematics.h                                                 \
+          md5.h                                                         \
+          mem.h                                                         \
+          pixdesc.h                                                     \
+          pixfmt.h                                                      \
+          random_seed.h                                                 \
+          rational.h                                                    \
+          sha1.h                                                        \
 
-HEADERS = avutil.h common.h mathematics.h integer.h rational.h \
-          intfloat_readwrite.h md5.h adler32.h log.h fifo.h lzo.h \
-          random.h
+BUILT_HEADERS = avconfig.h
 
-NAME=avutil
-ifeq ($(BUILD_SHARED),yes)
-LIBVERSION=$(LAVUVERSION)
-LIBMAJOR=$(LAVUMAJOR)
-endif
+OBJS = adler32.o                                                        \
+       aes.o                                                            \
+       avstring.o                                                       \
+       base64.o                                                         \
+       crc.o                                                            \
+       des.o                                                            \
+       error.o                                                          \
+       fifo.o                                                           \
+       intfloat_readwrite.o                                             \
+       lfg.o                                                            \
+       lls.o                                                            \
+       log.o                                                            \
+       lzo.o                                                            \
+       mathematics.o                                                    \
+       md5.o                                                            \
+       mem.o                                                            \
+       pixdesc.o                                                        \
+       random_seed.o                                                    \
+       rational.o                                                       \
+       rc4.o                                                            \
+       sha.o                                                            \
+       tree.o                                                           \
+       utils.o                                                          \
 
-include ../common.mak
+TESTPROGS = adler32 aes base64 crc des lls md5 pca sha softfloat tree
+TESTPROGS-$(HAVE_LZO1X_999_COMPRESS) += lzo
+
+DIRS = arm bfin sh4 x86
+
+ARCH_HEADERS = bswap.h intmath.h intreadwrite.h timer.h
+
+include $(SUBDIR)../subdir.mak
+
+$(SUBDIR)lzo-test$(EXESUF): ELIBS = -llzo2

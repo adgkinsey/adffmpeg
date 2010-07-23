@@ -23,7 +23,7 @@
 /* Encoding development sponsored by http://fh-campuswien.ac.at */
 
 /**
- * @file flashsvenc.c
+ * @file
  * Flash Screen Video encoder
  * @author Alex Beregszaszi
  * @author Benjamin Larsson
@@ -58,9 +58,8 @@
 #include <stdlib.h>
 #include <zlib.h>
 
-#include "common.h"
 #include "avcodec.h"
-#include "bitstream.h"
+#include "put_bits.h"
 #include "bytestream.h"
 
 
@@ -68,13 +67,13 @@ typedef struct FlashSVContext {
     AVCodecContext *avctx;
     uint8_t *previous_frame;
     AVFrame frame;
-    int first_frame;
     int image_width, image_height;
     int block_width, block_height;
     uint8_t* tmpblock;
     uint8_t* encbuffer;
     int block_size;
     z_stream zstream;
+    int last_key_frame;
 } FlashSVContext;
 
 static int copy_region_enc(uint8_t *sptr, uint8_t *dptr,
@@ -98,9 +97,9 @@ static int copy_region_enc(uint8_t *sptr, uint8_t *dptr,
     return 0;
 }
 
-static int flashsv_encode_init(AVCodecContext *avctx)
+static av_cold int flashsv_encode_init(AVCodecContext *avctx)
 {
-    FlashSVContext *s = (FlashSVContext *)avctx->priv_data;
+    FlashSVContext *s = avctx->priv_data;
 
     s->avctx = avctx;
 
@@ -109,24 +108,10 @@ static int flashsv_encode_init(AVCodecContext *avctx)
         return -1;
     }
 
-    if (avcodec_check_dimensions(avctx, avctx->width, avctx->height) < 0) {
-        return -1;
-    }
-
-    s->first_frame = 1;
-
     // Needed if zlib unused or init aborted before deflateInit
     memset(&(s->zstream), 0, sizeof(z_stream));
-/*
-    s->zstream.zalloc = NULL; //av_malloc;
-    s->zstream.zfree = NULL; //av_free;
-    s->zstream.opaque = NULL;
-    zret = deflateInit(&(s->zstream), 9);
-    if (zret != Z_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Inflate init error: %d\n", zret);
-        return -1;
-    }
-*/
+
+    s->last_key_frame=0;
 
     s->image_width = avctx->width;
     s->image_height = avctx->height;
@@ -194,22 +179,7 @@ static int encode_bitstream(FlashSVContext *s, AVFrame *p, uint8_t *buf, int buf
                 //ret = deflateReset(&(s->zstream));
                 if (ret != Z_OK)
                     av_log(s->avctx, AV_LOG_ERROR, "error while compressing block %dx%d\n", i, j);
-                /*
-                s->zstream.next_in = s->tmpblock;
-                s->zstream.avail_in = 3*ws*hs;
-                s->zstream.total_in = 0;
 
-                s->zstream.next_out = ptr+2;
-                s->zstream.avail_out = buf_size-buf_pos-2;
-                s->zstream.total_out = 0;
-
-                ret = deflate(&(s->zstream), Z_FINISH);
-                if ((ret != Z_OK) && (ret != Z_STREAM_END))
-                    av_log(s->avctx, AV_LOG_ERROR, "error while compressing block %dx%d\n", i, j);
-
-                size = s->zstream.total_out;
-                //av_log(avctx, AV_LOG_INFO, "compressed blocks: %d\n", size);
-                */
                 bytestream_put_be16(&ptr,(unsigned int)zsize);
                 buf_pos += zsize+2;
                 //av_log(avctx, AV_LOG_ERROR, "buf_pos = %d\n", buf_pos);
@@ -232,59 +202,40 @@ static int encode_bitstream(FlashSVContext *s, AVFrame *p, uint8_t *buf, int buf
 
 static int flashsv_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size, void *data)
 {
-    FlashSVContext * const s = (FlashSVContext *)avctx->priv_data;
+    FlashSVContext * const s = avctx->priv_data;
     AVFrame *pict = data;
     AVFrame * const p = &s->frame;
+    uint8_t *pfptr;
     int res;
     int I_frame = 0;
     int opt_w, opt_h;
 
     *p = *pict;
 
-    if (s->first_frame) {
-        s->previous_frame = av_mallocz(p->linesize[0]*s->image_height);
+    /* First frame needs to be a keyframe */
+    if (avctx->frame_number == 0) {
+        s->previous_frame = av_mallocz(FFABS(p->linesize[0])*s->image_height);
         if (!s->previous_frame) {
             av_log(avctx, AV_LOG_ERROR, "Memory allocation failed.\n");
             return -1;
         }
         I_frame = 1;
-        s->first_frame = 0;
     }
 
-#if 0
-    int w, h;
-    int optim_sizes[16][16];
-    int smallest_size;
-    //Try all possible combinations and store the encoded frame sizes
-    for (w=1 ; w<17 ; w++) {
-        for (h=1 ; h<17 ; h++) {
-            optim_sizes[w-1][h-1] = encode_bitstream(s, p, s->encbuffer, s->image_width*s->image_height*4, w*16, h*16, s->previous_frame);
-            //av_log(avctx, AV_LOG_ERROR, "[%d][%d]size = %d\n",w,h,optim_sizes[w-1][h-1]);
+    if (p->linesize[0] < 0)
+        pfptr = s->previous_frame - ((s->image_height-1) * p->linesize[0]);
+    else
+        pfptr = s->previous_frame;
+
+    /* Check the placement of keyframes */
+    if (avctx->gop_size > 0) {
+        if (avctx->frame_number >= s->last_key_frame + avctx->gop_size) {
+            I_frame = 1;
         }
     }
 
-    //Search for the smallest framesize and encode the frame with those parameters
-    smallest_size=optim_sizes[0][0];
-    opt_w = 0;
-    opt_h = 0;
-    for (w=0 ; w<16 ; w++) {
-        for (h=0 ; h<16 ; h++) {
-            if (optim_sizes[w][h] < smallest_size) {
-                smallest_size = optim_sizes[w][h];
-                opt_w = w;
-                opt_h = h;
-            }
-        }
-    }
-    res = encode_bitstream(s, p, buf, buf_size, (opt_w+1)*16, (opt_h+1)*16, s->previous_frame);
-    av_log(avctx, AV_LOG_ERROR, "[%d][%d]optimal size = %d, res = %d|\n", opt_w, opt_h, smallest_size, res);
-
-    if (buf_size < res)
-        av_log(avctx, AV_LOG_ERROR, "buf_size %d < res %d\n", buf_size, res);
-
-#else
-    opt_w=1;
-    opt_h=1;
+    opt_w=4;
+    opt_h=4;
 
     if (buf_size < s->image_width*s->image_height*3) {
         //Conservative upper bound check for compressed data
@@ -292,15 +243,20 @@ static int flashsv_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_siz
         return -1;
     }
 
-    res = encode_bitstream(s, p, buf, buf_size, opt_w*16, opt_h*16, s->previous_frame, &I_frame);
-#endif
+    res = encode_bitstream(s, p, buf, buf_size, opt_w*16, opt_h*16, pfptr, &I_frame);
+
     //save the current frame
-    memcpy(s->previous_frame, p->data[0], s->image_height*p->linesize[0]);
+    if(p->linesize[0] > 0)
+        memcpy(s->previous_frame, p->data[0], s->image_height*p->linesize[0]);
+    else
+        memcpy(s->previous_frame, p->data[0] + p->linesize[0] * (s->image_height-1), s->image_height*FFABS(p->linesize[0]));
 
     //mark the frame type so the muxer can mux it correctly
     if (I_frame) {
         p->pict_type = FF_I_TYPE;
         p->key_frame = 1;
+        s->last_key_frame = avctx->frame_number;
+        av_log(avctx, AV_LOG_DEBUG, "Inserting key frame at frame %d\n",avctx->frame_number);
     } else {
         p->pict_type = FF_P_TYPE;
         p->key_frame = 0;
@@ -311,9 +267,9 @@ static int flashsv_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_siz
     return res;
 }
 
-static int flashsv_encode_end(AVCodecContext *avctx)
+static av_cold int flashsv_encode_end(AVCodecContext *avctx)
 {
-    FlashSVContext *s = (FlashSVContext *)avctx->priv_data;
+    FlashSVContext *s = avctx->priv_data;
 
     deflateEnd(&(s->zstream));
 
@@ -326,12 +282,13 @@ static int flashsv_encode_end(AVCodecContext *avctx)
 
 AVCodec flashsv_encoder = {
     "flashsv",
-    CODEC_TYPE_VIDEO,
+    AVMEDIA_TYPE_VIDEO,
     CODEC_ID_FLASHSV,
     sizeof(FlashSVContext),
     flashsv_encode_init,
     flashsv_encode_frame,
     flashsv_encode_end,
-    .pix_fmts = (enum PixelFormat[]){PIX_FMT_BGR24, -1},
+    .pix_fmts = (const enum PixelFormat[]){PIX_FMT_BGR24, PIX_FMT_NONE},
+    .long_name = NULL_IF_CONFIG_SMALL("Flash Screen Video"),
 };
 

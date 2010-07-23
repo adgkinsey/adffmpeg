@@ -18,11 +18,13 @@
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
+
+#include "libavutil/intreadwrite.h"
 #include "avcodec.h"
 
 #include "truespeech_data.h"
 /**
- * @file truespeech.c
+ * @file
  * TrueSpeech decoder.
  */
 
@@ -50,14 +52,15 @@ typedef struct {
     int16_t filters[32]; // filters for every subframe
 } TSContext;
 
-static int truespeech_decode_init(AVCodecContext * avctx)
+static av_cold int truespeech_decode_init(AVCodecContext * avctx)
 {
 //    TSContext *c = avctx->priv_data;
 
+    avctx->sample_fmt = SAMPLE_FMT_S16;
     return 0;
 }
 
-static void truespeech_read_frame(TSContext *dec, uint8_t *input)
+static void truespeech_read_frame(TSContext *dec, const uint8_t *input)
 {
     uint32_t t;
 
@@ -281,7 +284,7 @@ static void truespeech_synth(TSContext *dec, int16_t *out, int quart)
         for(k = 0; k < 8; k++)
             sum += ptr0[k] * ptr1[k];
         sum = (sum + (out[i] << 12) + 0x800) >> 12;
-        out[i] = clip(sum, -0x7FFE, 0x7FFE);
+        out[i] = av_clip(sum, -0x7FFE, 0x7FFE);
         for(k = 7; k > 0; k--)
             ptr0[k] = ptr0[k - 1];
         ptr0[0] = out[i];
@@ -311,11 +314,11 @@ static void truespeech_synth(TSContext *dec, int16_t *out, int quart)
             sum += ptr0[k] * t[k];
         for(k = 7; k > 0; k--)
             ptr0[k] = ptr0[k - 1];
-        ptr0[0] = clip((sum + 0x800) >> 12, -0x7FFE, 0x7FFE);
+        ptr0[0] = av_clip((sum + 0x800) >> 12, -0x7FFE, 0x7FFE);
 
         sum = ((ptr0[1] * (dec->filtval - (dec->filtval >> 2))) >> 4) + sum;
         sum = sum - (sum >> 3);
-        out[i] = clip((sum + 0x800) >> 12, -0x7FFE, 0x7FFE);
+        out[i] = av_clip((sum + 0x800) >> 12, -0x7FFE, 0x7FFE);
     }
 }
 
@@ -329,19 +332,23 @@ static void truespeech_save_prevvec(TSContext *c)
 
 static int truespeech_decode_frame(AVCodecContext *avctx,
                 void *data, int *data_size,
-                uint8_t *buf, int buf_size)
+                AVPacket *avpkt)
 {
+    const uint8_t *buf = avpkt->data;
+    int buf_size = avpkt->size;
     TSContext *c = avctx->priv_data;
 
-    int i;
+    int i, j;
     short *samples = data;
     int consumed = 0;
     int16_t out_buf[240];
+    int iterations;
 
     if (!buf_size)
         return 0;
 
-    while (consumed < buf_size) {
+    iterations = FFMIN(buf_size / 32, *data_size / 480);
+    for(j = 0; j < iterations; j++) {
         truespeech_read_frame(c, buf + consumed);
         consumed += 32;
 
@@ -366,16 +373,17 @@ static int truespeech_decode_frame(AVCodecContext *avctx,
 
     *data_size = consumed * 15;
 
-    return buf_size;
+    return consumed;
 }
 
 AVCodec truespeech_decoder = {
     "truespeech",
-    CODEC_TYPE_AUDIO,
+    AVMEDIA_TYPE_AUDIO,
     CODEC_ID_TRUESPEECH,
     sizeof(TSContext),
     truespeech_decode_init,
     NULL,
     NULL,
     truespeech_decode_frame,
+    .long_name = NULL_IF_CONFIG_SMALL("DSP Group TrueSpeech"),
 };

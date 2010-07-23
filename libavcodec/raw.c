@@ -1,6 +1,6 @@
 /*
  * Raw Video Codec
- * Copyright (c) 2001 Fabrice Bellard.
+ * Copyright (c) 2001 Fabrice Bellard
  *
  * This file is part of FFmpeg.
  *
@@ -20,63 +20,101 @@
  */
 
 /**
- * @file raw.c
+ * @file
  * Raw Video Codec
  */
 
 #include "avcodec.h"
+#include "raw.h"
 
-typedef struct RawVideoContext {
-    unsigned char * buffer;  /* block of memory for holding one frame */
-    int             length;  /* number of bytes in buffer */
-    AVFrame pic;             ///< AVCodecContext.coded_frame
-} RawVideoContext;
-
-typedef struct PixelFormatTag {
-    int pix_fmt;
-    unsigned int fourcc;
-} PixelFormatTag;
-
-static const PixelFormatTag pixelFormatTags[] = {
+const PixelFormatTag ff_raw_pix_fmt_tags[] = {
     { PIX_FMT_YUV420P, MKTAG('I', '4', '2', '0') }, /* Planar formats */
     { PIX_FMT_YUV420P, MKTAG('I', 'Y', 'U', 'V') },
     { PIX_FMT_YUV420P, MKTAG('Y', 'V', '1', '2') },
     { PIX_FMT_YUV410P, MKTAG('Y', 'U', 'V', '9') },
+    { PIX_FMT_YUV410P, MKTAG('Y', 'V', 'U', '9') },
     { PIX_FMT_YUV411P, MKTAG('Y', '4', '1', 'B') },
     { PIX_FMT_YUV422P, MKTAG('Y', '4', '2', 'B') },
+    { PIX_FMT_YUV422P, MKTAG('P', '4', '2', '2') },
+    /* yuvjXXX formats are deprecated hacks specific to libav*,
+       they are identical to yuvXXX  */
+    { PIX_FMT_YUVJ420P, MKTAG('I', '4', '2', '0') }, /* Planar formats */
+    { PIX_FMT_YUVJ420P, MKTAG('I', 'Y', 'U', 'V') },
+    { PIX_FMT_YUVJ420P, MKTAG('Y', 'V', '1', '2') },
+    { PIX_FMT_YUVJ422P, MKTAG('Y', '4', '2', 'B') },
+    { PIX_FMT_YUVJ422P, MKTAG('P', '4', '2', '2') },
     { PIX_FMT_GRAY8,   MKTAG('Y', '8', '0', '0') },
     { PIX_FMT_GRAY8,   MKTAG(' ', ' ', 'Y', '8') },
 
 
     { PIX_FMT_YUYV422, MKTAG('Y', 'U', 'Y', '2') }, /* Packed formats */
     { PIX_FMT_YUYV422, MKTAG('Y', '4', '2', '2') },
+    { PIX_FMT_YUYV422, MKTAG('V', '4', '2', '2') },
+    { PIX_FMT_YUYV422, MKTAG('V', 'Y', 'U', 'Y') },
+    { PIX_FMT_YUYV422, MKTAG('Y', 'U', 'N', 'V') },
     { PIX_FMT_UYVY422, MKTAG('U', 'Y', 'V', 'Y') },
+    { PIX_FMT_UYVY422, MKTAG('H', 'D', 'Y', 'C') },
+    { PIX_FMT_UYVY422, MKTAG('U', 'Y', 'N', 'V') },
+    { PIX_FMT_UYVY422, MKTAG('U', 'Y', 'N', 'Y') },
+    { PIX_FMT_UYVY422, MKTAG('u', 'y', 'v', '1') },
+    { PIX_FMT_UYVY422, MKTAG('2', 'V', 'u', '1') },
+    { PIX_FMT_UYVY422, MKTAG('A', 'V', 'R', 'n') }, /* Avid AVI Codec 1:1 */
+    { PIX_FMT_UYVY422, MKTAG('A', 'V', '1', 'x') }, /* Avid 1:1x */
+    { PIX_FMT_UYVY422, MKTAG('A', 'V', 'u', 'p') },
+    { PIX_FMT_UYVY422, MKTAG('V', 'D', 'T', 'Z') }, /* SoftLab-NSK VideoTizer */
+    { PIX_FMT_UYYVYY411, MKTAG('Y', '4', '1', '1') },
     { PIX_FMT_GRAY8,   MKTAG('G', 'R', 'E', 'Y') },
-    { PIX_FMT_RGB555,  MKTAG('R', 'G', 'B', 15) },
-    { PIX_FMT_BGR555,  MKTAG('B', 'G', 'R', 15) },
-    { PIX_FMT_RGB565,  MKTAG('R', 'G', 'B', 16) },
-    { PIX_FMT_BGR565,  MKTAG('B', 'G', 'R', 16) },
+    { PIX_FMT_NV12,    MKTAG('N', 'V', '1', '2') },
+    { PIX_FMT_NV21,    MKTAG('N', 'V', '2', '1') },
+
+    /* nut */
+    { PIX_FMT_RGB555LE, MKTAG('R', 'G', 'B', 15) },
+    { PIX_FMT_BGR555LE, MKTAG('B', 'G', 'R', 15) },
+    { PIX_FMT_RGB565LE, MKTAG('R', 'G', 'B', 16) },
+    { PIX_FMT_BGR565LE, MKTAG('B', 'G', 'R', 16) },
+    { PIX_FMT_RGB555BE, MKTAG(15 , 'B', 'G', 'R') },
+    { PIX_FMT_BGR555BE, MKTAG(15 , 'R', 'G', 'B') },
+    { PIX_FMT_RGB565BE, MKTAG(16 , 'B', 'G', 'R') },
+    { PIX_FMT_BGR565BE, MKTAG(16 , 'R', 'G', 'B') },
+    { PIX_FMT_RGBA,     MKTAG('R', 'G', 'B', 'A') },
+    { PIX_FMT_BGRA,     MKTAG('B', 'G', 'R', 'A') },
+    { PIX_FMT_ABGR,     MKTAG('A', 'B', 'G', 'R') },
+    { PIX_FMT_ARGB,     MKTAG('A', 'R', 'G', 'B') },
+    { PIX_FMT_RGB24,    MKTAG('R', 'G', 'B', 24 ) },
+    { PIX_FMT_BGR24,    MKTAG('B', 'G', 'R', 24 ) },
+    { PIX_FMT_YUV411P,  MKTAG('4', '1', '1', 'P') },
+    { PIX_FMT_YUV422P,  MKTAG('4', '2', '2', 'P') },
+    { PIX_FMT_YUVJ422P, MKTAG('4', '2', '2', 'P') },
+    { PIX_FMT_YUV440P,  MKTAG('4', '4', '0', 'P') },
+    { PIX_FMT_YUVJ440P, MKTAG('4', '4', '0', 'P') },
+    { PIX_FMT_YUV444P,  MKTAG('4', '4', '4', 'P') },
+    { PIX_FMT_YUVJ444P, MKTAG('4', '4', '4', 'P') },
+    { PIX_FMT_MONOWHITE,MKTAG('B', '1', 'W', '0') },
+    { PIX_FMT_MONOBLACK,MKTAG('B', '0', 'W', '1') },
+    { PIX_FMT_BGR8,     MKTAG('B', 'G', 'R',  8 ) },
+    { PIX_FMT_RGB8,     MKTAG('R', 'G', 'B',  8 ) },
+    { PIX_FMT_BGR4,     MKTAG('B', 'G', 'R',  4 ) },
+    { PIX_FMT_RGB4,     MKTAG('R', 'G', 'B',  4 ) },
+    { PIX_FMT_RGB48LE,  MKTAG('R', 'G', 'B', 48 ) },
+    { PIX_FMT_RGB48BE,  MKTAG( 48, 'R', 'G', 'B') },
 
     /* quicktime */
     { PIX_FMT_UYVY422, MKTAG('2', 'v', 'u', 'y') },
+    { PIX_FMT_UYVY422, MKTAG('2', 'V', 'u', 'y') },
+    { PIX_FMT_UYVY422, MKTAG('A', 'V', 'U', 'I') }, /* FIXME merge both fields */
+    { PIX_FMT_YUYV422, MKTAG('y', 'u', 'v', '2') },
+    { PIX_FMT_YUYV422, MKTAG('y', 'u', 'v', 's') },
+    { PIX_FMT_PAL8,    MKTAG('W', 'R', 'A', 'W') },
 
-    { -1, 0 },
+    /* special */
+    { PIX_FMT_RGB565LE,MKTAG( 3 ,  0 ,  0 ,  0 ) }, /* flipped RGB565LE */
+
+    { PIX_FMT_NONE, 0 },
 };
-
-static int findPixelFormat(unsigned int fourcc)
-{
-    const PixelFormatTag * tags = pixelFormatTags;
-    while (tags->pix_fmt >= 0) {
-        if (tags->fourcc == fourcc)
-            return tags->pix_fmt;
-        tags++;
-    }
-    return PIX_FMT_YUV420P;
-}
 
 unsigned int avcodec_pix_fmt_to_codec_tag(enum PixelFormat fmt)
 {
-    const PixelFormatTag * tags = pixelFormatTags;
+    const PixelFormatTag *tags = ff_raw_pix_fmt_tags;
     while (tags->pix_fmt >= 0) {
         if (tags->pix_fmt == fmt)
             return tags->fourcc;
@@ -84,127 +122,3 @@ unsigned int avcodec_pix_fmt_to_codec_tag(enum PixelFormat fmt)
     }
     return 0;
 }
-
-/* RAW Decoder Implementation */
-
-static int raw_init_decoder(AVCodecContext *avctx)
-{
-    RawVideoContext *context = avctx->priv_data;
-
-    if (avctx->codec_tag)
-        avctx->pix_fmt = findPixelFormat(avctx->codec_tag);
-    else if (avctx->bits_per_sample){
-        switch(avctx->bits_per_sample){
-        case  8: avctx->pix_fmt= PIX_FMT_PAL8  ; break;
-        case 15: avctx->pix_fmt= PIX_FMT_RGB555; break;
-        case 16: avctx->pix_fmt= PIX_FMT_RGB555; break;
-        case 24: avctx->pix_fmt= PIX_FMT_BGR24 ; break;
-        case 32: avctx->pix_fmt= PIX_FMT_RGB32; break;
-        }
-    }
-
-    context->length = avpicture_get_size(avctx->pix_fmt, avctx->width, avctx->height);
-    context->buffer = av_malloc(context->length);
-    context->pic.pict_type = FF_I_TYPE;
-    context->pic.key_frame = 1;
-
-    avctx->coded_frame= &context->pic;
-
-    if (!context->buffer)
-        return -1;
-
-    return 0;
-}
-
-static void flip(AVCodecContext *avctx, AVPicture * picture){
-    if(!avctx->codec_tag && avctx->bits_per_sample && picture->linesize[2]==0){
-        picture->data[0] += picture->linesize[0] * (avctx->height-1);
-        picture->linesize[0] *= -1;
-    }
-}
-
-static int raw_decode(AVCodecContext *avctx,
-                            void *data, int *data_size,
-                            uint8_t *buf, int buf_size)
-{
-    RawVideoContext *context = avctx->priv_data;
-
-    AVFrame * frame = (AVFrame *) data;
-    AVPicture * picture = (AVPicture *) data;
-
-    frame->interlaced_frame = avctx->coded_frame->interlaced_frame;
-    frame->top_field_first = avctx->coded_frame->top_field_first;
-
-    if(buf_size < context->length - (avctx->pix_fmt==PIX_FMT_PAL8 ? 256*4 : 0))
-        return -1;
-
-    avpicture_fill(picture, buf, avctx->pix_fmt, avctx->width, avctx->height);
-    if(avctx->pix_fmt==PIX_FMT_PAL8 && buf_size < context->length){
-        frame->data[1]= context->buffer;
-    }
-    if (avctx->palctrl && avctx->palctrl->palette_changed) {
-        memcpy(frame->data[1], avctx->palctrl->palette, AVPALETTE_SIZE);
-        avctx->palctrl->palette_changed = 0;
-    }
-
-    flip(avctx, picture);
-
-    if (avctx->codec_tag == MKTAG('Y', 'V', '1', '2'))
-    {
-        // swap fields
-        unsigned char *tmp = picture->data[1];
-        picture->data[1] = picture->data[2];
-        picture->data[2] = tmp;
-    }
-
-    *data_size = sizeof(AVPicture);
-    return buf_size;
-}
-
-static int raw_close_decoder(AVCodecContext *avctx)
-{
-    RawVideoContext *context = avctx->priv_data;
-
-    av_freep(&context->buffer);
-    return 0;
-}
-
-/* RAW Encoder Implementation */
-#ifdef CONFIG_RAWVIDEO_ENCODER
-static int raw_init_encoder(AVCodecContext *avctx)
-{
-    avctx->coded_frame = (AVFrame *)avctx->priv_data;
-    avctx->coded_frame->pict_type = FF_I_TYPE;
-    avctx->coded_frame->key_frame = 1;
-    if(!avctx->codec_tag)
-        avctx->codec_tag = avcodec_pix_fmt_to_codec_tag(avctx->pix_fmt);
-    return 0;
-}
-
-static int raw_encode(AVCodecContext *avctx,
-                            unsigned char *frame, int buf_size, void *data)
-{
-    return avpicture_layout((AVPicture *)data, avctx->pix_fmt, avctx->width,
-                                               avctx->height, frame, buf_size);
-}
-
-AVCodec rawvideo_encoder = {
-    "rawvideo",
-    CODEC_TYPE_VIDEO,
-    CODEC_ID_RAWVIDEO,
-    sizeof(AVFrame),
-    raw_init_encoder,
-    raw_encode,
-};
-#endif // CONFIG_RAWVIDEO_ENCODER
-
-AVCodec rawvideo_decoder = {
-    "rawvideo",
-    CODEC_TYPE_VIDEO,
-    CODEC_ID_RAWVIDEO,
-    sizeof(RawVideoContext),
-    raw_init_decoder,
-    NULL,
-    raw_close_decoder,
-    raw_decode,
-};

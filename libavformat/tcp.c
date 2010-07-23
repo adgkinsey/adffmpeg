@@ -1,6 +1,6 @@
 /*
  * TCP protocol
- * Copyright (c) 2002 Fabrice Bellard.
+ * Copyright (c) 2002 Fabrice Bellard
  *
  * This file is part of FFmpeg.
  *
@@ -20,41 +20,24 @@
  */
 #include "avformat.h"
 #include <unistd.h>
+#include "internal.h"
 #include "network.h"
+#include "os_support.h"
+#if HAVE_SYS_SELECT_H
+#include <sys/select.h>
+#endif
 #include <sys/time.h>
-#include <fcntl.h>
 
 #define TCP_RECV_BUFFER_SIZE        32768
-
-#ifdef __MINGW32__
-#define LastSocketError         WSAGetLastError()
-#else
-#define LastSocketError         errno
-#endif
 
 typedef struct TCPContext {
     int fd;
 } TCPContext;
 
-/* resolve host with also IP address parsing */
-int resolve_host(struct in_addr *sin_addr, const char *hostname)
-{
-    struct hostent *hp;
-
-    if ((inet_aton(hostname, sin_addr)) == 0) {
-        hp = gethostbyname(hostname);
-        if (!hp)
-            return ADFFMPEG_ERROR_DNS_HOST_RESOLUTION_FAILURE;
-        memcpy (sin_addr, hp->h_addr, sizeof(struct in_addr));
-    }
-    return 0;
-}
-
 /* return non zero if error */
 static int tcp_open(URLContext *h, const char *uri, int flags)
 {
-    struct sockaddr_in dest_addr;
-    char hostname[1024], *q;
+    struct addrinfo hints, *ai, *cur_ai;
     int port, fd = -1;
     TCPContext *s = NULL;
     fd_set wfds;
@@ -62,62 +45,49 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     int fd_max, ret, TimeOutCount = 0;
     struct timeval tv;
     socklen_t optlen;
-    char proto[1024],path[1024],tmp[1024];  // PETR: protocol and path strings
+    char hostname[1024],proto[1024],path[1024];
+    char portstr[10];
     int recvBufSize = TCP_RECV_BUFFER_SIZE;
 
-#ifdef __MINGW32__
-    // Initialise winsock
-    init_winsock();
-#endif /* __MINGW32__ */
+    ff_url_split(proto, sizeof(proto), NULL, 0, hostname, sizeof(hostname),
+        &port, path, sizeof(path), uri);
+    if (strcmp(proto,"tcp") || port <= 0 || port >= 65536)
+        return AVERROR(EINVAL);
 
-    url_split(proto, sizeof(proto), NULL, 0, hostname, sizeof(hostname),
-      &port, path, sizeof(path), uri);  // PETR: use url_split
-    if (strcmp(proto,"tcp")) goto fail; // PETR: check protocol
-    if ((q = strchr(hostname,'@'))) { strcpy(tmp,q+1); strcpy(hostname,tmp); } // PETR: take only the part after '@' for tcp protocol
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    snprintf(portstr, sizeof(portstr), "%d", port);
+    if (getaddrinfo(hostname, portstr, &hints, &ai))
+        return AVERROR(EIO);
 
-    s = av_malloc(sizeof(TCPContext));
-    if (!s)
-        return AVERROR(ENOMEM);
-    h->priv_data = s;
+    cur_ai = ai;
 
-    if (port <= 0 || port >= 65536)
-        goto fail;
-
-    dest_addr.sin_family = AF_INET;
-    dest_addr.sin_port = htons(port);
-    if( (ret = resolve_host( &dest_addr.sin_addr, hostname )) < 0 )
-        goto fail1;
-
-    fd = socket(AF_INET, SOCK_STREAM, 0);
+ restart:
+    fd = socket(cur_ai->ai_family, cur_ai->ai_socktype, cur_ai->ai_protocol);
     if (fd < 0)
-    {
         goto fail;
-    }
 
 #ifndef CONFIG_WINCE
     /* CS - NOTE: WinCE only supports this socket option for UDP sockets. Default buffer size in CE in 8192 */
     /* CS - Added this section to size the buffers to a reasonable size */
-    if (setsockopt( fd, SOL_SOCKET, SO_RCVBUF, (char*)&recvBufSize, sizeof(recvBufSize)) < 0) {
+    if (setsockopt( fd, SOL_SOCKET, SO_RCVBUF, (char*)&recvBufSize, sizeof(recvBufSize)) < 0)
         goto fail;
-    }
-#endif /* ifndef CONFIG_WINCE */
-
-    fcntl(fd, F_SETFL, O_NONBLOCK);
+#endif
+    ff_socket_nonblock(fd, 1);
 
  redo:
-    ret = connect(fd, (struct sockaddr *)&dest_addr,
-                  sizeof(dest_addr));
+    ret = connect(fd, cur_ai->ai_addr, cur_ai->ai_addrlen);
     if (ret < 0) {
-        if (LastSocketError == EINTR)
+        if (ff_neterrno() == FF_NETERROR(EINTR))
             goto redo;
-        if (LastSocketError != EINPROGRESS)
+        if (ff_neterrno() != FF_NETERROR(EINPROGRESS) &&
+            ff_neterrno() != FF_NETERROR(EAGAIN))
             goto fail;
 
         /* wait until we are connected or until abort */
-        for(;;) 
-        {
-            if (url_interrupt_cb()) 
-            {
+        for(;;) {
+            if (url_interrupt_cb()) {
                 ret = AVERROR(EINTR);
                 goto fail1;
             }
@@ -131,12 +101,8 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
             tv.tv_usec = 100 * 1000;
             ret = select(fd_max + 1, NULL, &wfds, &efds, &tv);
 
-            
             if (ret > 0 && FD_ISSET(fd, &wfds))
-            { 
-                /* Connected ok, break out of the loop here */
-                break;  
-            }
+                break; /* Connected ok, break out of the loop here */
             else if( ret > 0 && FD_ISSET(fd, &efds) )
             {
                 /* There was an error during connection */
@@ -161,19 +127,34 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
 
         /* test error */
         optlen = sizeof(ret);
-        getsockopt (fd, SOL_SOCKET, SO_ERROR, (char*)&ret, &optlen);
+        getsockopt (fd, SOL_SOCKET, SO_ERROR, &ret, &optlen);
         if (ret != 0)
             goto fail;
     }
+    s = av_malloc(sizeof(TCPContext));
+    if (!s) {
+        freeaddrinfo(ai);
+        return AVERROR(ENOMEM);
+    }
+    h->priv_data = s;
+    h->is_streamed = 1;
     s->fd = fd;
+    freeaddrinfo(ai);
     return 0;
 
  fail:
-    ret = AVERROR_IO;
+    if (cur_ai->ai_next) {
+        /* Retry with the next sockaddr */
+        cur_ai = cur_ai->ai_next;
+        if (fd >= 0)
+            closesocket(fd);
+        goto restart;
+    }
+    ret = AVERROR(EIO);
  fail1:
     if (fd >= 0)
         closesocket(fd);
-    av_free(s);
+    freeaddrinfo(ai);
     return ret;
 }
 
@@ -199,19 +180,13 @@ static int tcp_read(URLContext *h, uint8_t *buf, int size)
             len = recv(s->fd, buf, size, 0);
 
             if (len < 0) {
-
-#ifdef __MINGW32__
-                if (LastSocketError != EINTR && LastSocketError != WSAEWOULDBLOCK)
-                    return AVERROR(LastSocketError);
-#else
-
-                if (LastSocketError != EINTR && LastSocketError != EAGAIN)
-                    return AVERROR(LastSocketError);
-#endif  /* __MINGW32__ */
-
-
+                if (ff_neterrno() != FF_NETERROR(EINTR) &&
+                    ff_neterrno() != FF_NETERROR(EAGAIN))
+                    return AVERROR(ff_neterrno());
             } else return len;
         } else if (ret < 0) {
+            if (ff_neterrno() == FF_NETERROR(EINTR))
+                continue;
             return -1;
         }
         else if(TimeOut<clock())
@@ -242,19 +217,16 @@ static int tcp_write(URLContext *h, uint8_t *buf, int size)
             len = send(s->fd, buf, size, 0);
 
             if (len < 0) {
-
-#ifdef __MINGW32__
-                if (LastSocketError != EINTR && LastSocketError != WSAEWOULDBLOCK)
-                    return AVERROR(LastSocketError);
-#else
-                if (LastSocketError != EINTR && LastSocketError != EAGAIN)
-                    return AVERROR(LastSocketError);
-#endif
+                if (ff_neterrno() != FF_NETERROR(EINTR) &&
+                    ff_neterrno() != FF_NETERROR(EAGAIN))
+                    return AVERROR(ff_neterrno());
                 continue;
             }
             size -= len;
             buf += len;
         } else if (ret < 0) {
+            if (ff_neterrno() == FF_NETERROR(EINTR))
+                continue;
             return -1;
         }
     }
@@ -267,11 +239,13 @@ static int tcp_close(URLContext *h)
     closesocket(s->fd);
     av_free(s);
 
-#ifdef __MINGW32__
-    close_winsock();
-#endif /* __MINGW32__ */
-
     return 0;
+}
+
+static int tcp_get_file_handle(URLContext *h)
+{
+    TCPContext *s = h->priv_data;
+    return s->fd;
 }
 
 URLProtocol tcp_protocol = {
@@ -281,4 +255,5 @@ URLProtocol tcp_protocol = {
     tcp_write,
     NULL, /* seek */
     tcp_close,
+    .url_get_file_handle = tcp_get_file_handle,
 };

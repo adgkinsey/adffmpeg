@@ -1,4 +1,5 @@
-#include "avcodec.h"
+#include "libavcodec/avcodec.h"
+#include "libavutil/bswap.h"
 #include "dspic.h"
 #include "jfif_img.h"
 
@@ -59,7 +60,7 @@ static int dspicReadHeader( AVFormatContext *s, AVFormatParameters *ap )
 
 static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
 {
-    ByteIOContext *         ioContext = &s->pb;
+    ByteIOContext *         ioContext = s->pb;
     int                     retVal = 0;
     MessageHeader           header;
     int                     dataSize = 0;
@@ -379,7 +380,7 @@ static AVStream * GetStream( struct AVFormatContext *s, int camera, int width, i
 int long64ToTimeValues( const long64 *timeValue, time_t * time, unsigned short *ms, unsigned short *flags )
 {
     int         retVal = AVERROR_IO;
-    uint8_t *   bufPtr = NULL;
+    const uint8_t *   bufPtr = NULL;
 
     /* Format of the input 64 bit block is as follows:
        Bits               |             value
@@ -393,7 +394,7 @@ int long64ToTimeValues( const long64 *timeValue, time_t * time, unsigned short *
 
     if( time != NULL && ms != NULL && flags != NULL )
     {
-        bufPtr = (uint8_t*)timeValue;
+        bufPtr = (const uint8_t*)timeValue;
 
         memcpy( time, bufPtr, sizeof(time_t) );
         bufPtr += sizeof(time_t);

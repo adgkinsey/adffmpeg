@@ -17,8 +17,9 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- *
  */
+
+#include "libavutil/intreadwrite.h"
 #include "avcodec.h"
 
 enum TargaCompr{
@@ -38,7 +39,7 @@ typedef struct TargaContext {
     int compression_type;
 } TargaContext;
 
-static void targa_decode_rle(AVCodecContext *avctx, TargaContext *s, uint8_t *src, uint8_t *dst, int w, int h, int stride, int bpp)
+static void targa_decode_rle(AVCodecContext *avctx, TargaContext *s, const uint8_t *src, uint8_t *dst, int w, int h, int stride, int bpp)
 {
     int i, x, y;
     int depth = (bpp + 1) >> 3;
@@ -90,8 +91,10 @@ static void targa_decode_rle(AVCodecContext *avctx, TargaContext *s, uint8_t *sr
 
 static int decode_frame(AVCodecContext *avctx,
                         void *data, int *data_size,
-                        uint8_t *buf, int buf_size)
+                        AVPacket *avpkt)
 {
+    const uint8_t *buf = avpkt->data;
+    int buf_size = avpkt->size;
     TargaContext * const s = avctx->priv_data;
     AVFrame *picture = data;
     AVFrame * const p= (AVFrame*)&s->picture;
@@ -186,7 +189,6 @@ static int decode_frame(AVCodecContext *avctx,
                 *pal++ = (b << 16) | (g << 8) | r;
             }
             p->palette_has_changed = 1;
-            avctx->palctrl->palette_changed = 0;
         }
     }
     if((compr & (~TGA_RLE)) == TGA_NODATA)
@@ -196,7 +198,7 @@ static int decode_frame(AVCodecContext *avctx,
             targa_decode_rle(avctx, s, buf, dst, avctx->width, avctx->height, stride, bpp);
         else{
             for(y = 0; y < s->height; y++){
-#ifdef WORDS_BIGENDIAN
+#if HAVE_BIGENDIAN
                 if((s->bpp + 1) >> 3 == 2){
                     uint16_t *dst16 = (uint16_t*)dst;
                     for(x = 0; x < s->width; x++)
@@ -221,17 +223,16 @@ static int decode_frame(AVCodecContext *avctx,
     return buf_size;
 }
 
-static int targa_init(AVCodecContext *avctx){
+static av_cold int targa_init(AVCodecContext *avctx){
     TargaContext *s = avctx->priv_data;
 
     avcodec_get_frame_defaults((AVFrame*)&s->picture);
     avctx->coded_frame= (AVFrame*)&s->picture;
-    s->picture.data[0] = NULL;
 
     return 0;
 }
 
-static int targa_end(AVCodecContext *avctx){
+static av_cold int targa_end(AVCodecContext *avctx){
     TargaContext *s = avctx->priv_data;
 
     if(s->picture.data[0])
@@ -242,13 +243,14 @@ static int targa_end(AVCodecContext *avctx){
 
 AVCodec targa_decoder = {
     "targa",
-    CODEC_TYPE_VIDEO,
+    AVMEDIA_TYPE_VIDEO,
     CODEC_ID_TARGA,
     sizeof(TargaContext),
     targa_init,
     NULL,
     targa_end,
     decode_frame,
-    0,
-    NULL
+    CODEC_CAP_DR1,
+    NULL,
+    .long_name = NULL_IF_CONFIG_SMALL("Truevision Targa image"),
 };

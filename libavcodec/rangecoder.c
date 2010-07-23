@@ -17,11 +17,10 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- *
  */
 
 /**
- * @file rangecoder.c
+ * @file
  * Range coder.
  * based upon
  *    "Range encoding: an algorithm for removing redundancy from a digitised
@@ -35,8 +34,8 @@
 #include <string.h>
 
 #include "avcodec.h"
-#include "common.h"
 #include "rangecoder.h"
+#include "bytestream.h"
 
 
 void ff_init_range_encoder(RangeCoder *c, uint8_t *buf, int buf_size){
@@ -54,8 +53,7 @@ void ff_init_range_decoder(RangeCoder *c, const uint8_t *buf, int buf_size){
     /* cast to avoid compiler warning */
     ff_init_range_encoder(c, (uint8_t *) buf, buf_size);
 
-    c->low =(*c->bytestream++)<<8;
-    c->low+= *c->bytestream++;
+    c->low = bytestream_get_be16(&c->bytestream);
 }
 
 void ff_build_rac_states(RangeCoder *c, int factor, int max_p){
@@ -111,14 +109,20 @@ int ff_rac_terminate(RangeCoder *c){
     return c->bytestream - c->bytestream_start;
 }
 
-#if 0 //selftest
+#ifdef TEST
 #define SIZE 10240
-int main(){
+
+#include "libavutil/lfg.h"
+
+int main(void){
     RangeCoder c;
     uint8_t b[9*SIZE];
     uint8_t r[9*SIZE];
     int i;
     uint8_t state[10]= {0};
+    AVLFG prng;
+
+    av_lfg_init(&prng, 1);
 
     ff_init_range_encoder(&c, b, SIZE);
     ff_build_rac_states(&c, 0.05*(1LL<<32), 128+64+32+16);
@@ -126,7 +130,7 @@ int main(){
     memset(state, 128, sizeof(state));
 
     for(i=0; i<SIZE; i++){
-        r[i]= random()%7;
+        r[i] = av_lfg_get(&prng) % 7;
     }
 
     for(i=0; i<SIZE; i++){
@@ -135,7 +139,7 @@ START_TIMER
 STOP_TIMER("put_rac")
     }
 
-    ff_put_rac_terminate(&c);
+    ff_rac_terminate(&c);
 
     ff_init_range_decoder(&c, b, SIZE);
 
@@ -150,4 +154,4 @@ STOP_TIMER("get_rac")
 
     return 0;
 }
-#endif
+#endif /* TEST */

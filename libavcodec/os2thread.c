@@ -15,15 +15,13 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
- *
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 //#define DEBUG
 
 // Ported by Vlad Stelmahovsky
 
 #include "avcodec.h"
-#include "common.h"
 
 #define INCL_DOS
 #define INCL_DOSERRORS
@@ -41,7 +39,7 @@ typedef struct ThreadContext{
 }ThreadContext;
 
 
-void thread_func(void *v){
+static void attribute_align_arg thread_func(void *v){
     ThreadContext *c= v;
 
     for(;;){
@@ -63,7 +61,7 @@ void thread_func(void *v){
 
 /**
  * free what has been allocated by avcodec_thread_init().
- * must be called after decoding has finished, especially dont call while avcodec_thread_execute() is running
+ * must be called after decoding has finished, especially do not call while avcodec_thread_execute() is running
  */
 void avcodec_thread_free(AVCodecContext *s){
     ThreadContext *c= s->thread_opaque;
@@ -83,7 +81,7 @@ void avcodec_thread_free(AVCodecContext *s){
     av_freep(&s->thread_opaque);
 }
 
-int avcodec_thread_execute(AVCodecContext *s, int (*func)(AVCodecContext *c2, void *arg2),void **arg, int *ret, int count){
+static int avcodec_thread_execute(AVCodecContext *s, int (*func)(AVCodecContext *c2, void *arg2),void *arg, int *ret, int count, int size){
     ThreadContext *c= s->thread_opaque;
     int i;
 
@@ -94,7 +92,7 @@ int avcodec_thread_execute(AVCodecContext *s, int (*func)(AVCodecContext *c2, vo
 
     for(i=0; i<count; i++){
 
-        c[i].arg= arg[i];
+        c[i].arg= (char*)arg + i*size;
         c[i].func= func;
         c[i].ret= 12345;
 
@@ -117,6 +115,9 @@ int avcodec_thread_init(AVCodecContext *s, int thread_count){
     uint32_t threadid;
 
     s->thread_count= thread_count;
+
+    if (thread_count <= 1)
+        return 0;
 
     assert(!s->thread_opaque);
     c= av_mallocz(sizeof(ThreadContext)*thread_count);
