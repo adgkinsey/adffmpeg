@@ -177,6 +177,7 @@ External library support:
   --enable-libnut          enable NUT (de)muxing via libnut,
                            native (de)muxer exists [no]
   --enable-libopenjpeg     enable JPEG 2000 decoding via OpenJPEG [no]
+  --enable-libparreader    enable PAR (de)muxing via libparreader [no]
   --enable-librtmp         enable RTMP[E] support via librtmp [no]
   --enable-libschroedinger enable Dirac support via libschroedinger [no]
   --enable-libspeex        enable Speex decoding via libspeex [no]
@@ -922,6 +923,7 @@ CONFIG_LIST="
     libopencore_amrnb
     libopencore_amrwb
     libopenjpeg
+	libparreader
     librtmp
     libschroedinger
     libspeex
@@ -1369,6 +1371,8 @@ mp4_muxer_select="mov_muxer"
 mpegtsraw_demuxer_select="mpegts_demuxer"
 mxf_d10_muxer_select="mxf_muxer"
 ogg_demuxer_select="golomb"
+par_demuxer_deps="libparreader"
+par_muxer_deps="libparreader"
 psp_muxer_select="mov_muxer"
 rtsp_demuxer_deps="sdp_demuxer"
 rtsp_muxer_deps="sdp_demuxer"
@@ -2613,6 +2617,7 @@ enabled libnut     && require  libnut libnut.h nut_demuxer_init -lnut
 enabled libopencore_amrnb  && require libopencore_amrnb opencore-amrnb/interf_dec.h Decoder_Interface_init -lopencore-amrnb -lm
 enabled libopencore_amrwb  && require libopencore_amrwb opencore-amrwb/dec_if.h D_IF_init -lopencore-amrwb -lm
 enabled libopenjpeg && require libopenjpeg openjpeg.h opj_version -lopenjpeg
+enabled libparreader && require2 libparreader "parreader.h parreader_types.h" parReader_getPicStructSize -lparreader
 enabled librtmp    && require  librtmp librtmp/rtmp.h RTMP_Init -lrtmp
 enabled libschroedinger && add_cflags $(pkg-config --cflags schroedinger-1.0) &&
                            require libschroedinger schroedinger/schro.h schro_init $(pkg-config --libs schroedinger-1.0)
@@ -2883,6 +2888,7 @@ echo "libnut enabled            ${libnut-no}"
 echo "libopencore-amrnb support ${libopencore_amrnb-no}"
 echo "libopencore-amrwb support ${libopencore_amrwb-no}"
 echo "libopenjpeg enabled       ${libopenjpeg-no}"
+echo "libparreader enabled      ${libparreader-no}"
 echo "librtmp enabled           ${librtmp-no}"
 echo "libschroedinger enabled   ${libschroedinger-no}"
 echo "libspeex enabled          ${libspeex-no}"
