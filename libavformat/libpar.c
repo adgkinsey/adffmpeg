@@ -116,11 +116,15 @@ static int createStream(AVFormatContext * avf,
 	//st->codec->height = format.src_pixels;
 	parReader_getFrameSize(frameInfo, &st->codec->width, &st->codec->height);
 	
-	st->codec->time_base = (AVRational){1,1000};
-	st->r_frame_rate = (AVRational){1,1};
-	st->avg_frame_rate = (AVRational){100,1};
+	//st->codec->time_base = (AVRational){1,1000};
+	//st->r_frame_rate = (AVRational){1,1};
+	//st->avg_frame_rate = (AVRational){100,1};
 	
-	st->first_dts = 1;
+	//st->first_dts = 1;
+	
+	av_set_pts_info(st, 64, 1, 1000);
+	
+	st->sample_aspect_ratio = (AVRational){2,1};
 	
 	return st->index;
 }
@@ -154,7 +158,7 @@ static int par_read_packet(AVFormatContext * avf, AVPacket * pkt)
 {
 	PARContext *priv = avf->priv_data;
 	const FrameInfo *fInfo = &priv->frameInfo;
-	static int dts = 1;
+	//static int pts = 1;
 	
 	int fileChang = 0;
 	int siz = parReader_loadFrame(&priv->frameInfo, &priv->dispSet, &fileChang);
@@ -176,7 +180,9 @@ static int par_read_packet(AVFormatContext * avf, AVPacket * pkt)
 		pkt->stream_index = streamIndex;
 		memcpy(pkt->data, fInfo->frameData, siz);
 		
-		pkt->dts = dts++;
+		pkt->pts = fInfo->imageTime;
+		pkt->pts *= 1000ULL;
+		pkt->pts += fInfo->imageMS;
 		
 		extraData = av_malloc(sizeof(PARFrameExtra));
 		extraData->dsFrameData = av_malloc(sizeof(FrameData));
