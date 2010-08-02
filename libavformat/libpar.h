@@ -26,6 +26,7 @@
 
 typedef struct {
 	FrameData *dsFrameData;
+	int indexInfoCount;
 	KeyValuePair *indexInfo;
 } PARFrameExtra;
 
