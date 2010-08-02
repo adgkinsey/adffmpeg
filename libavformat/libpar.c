@@ -74,6 +74,13 @@ void libpar_packet_destroy(struct AVPacket *packet)
 		av_free(fed->dsFrameData);
 		fed->dsFrameData = NULL;
 		
+		av_free(fed->frameInfo->frameBuffer);
+		fed->frameInfo->frameBufferSize = 0;
+		fed->frameInfo->frameData = NULL;
+		fed->frameInfo->frameBuffer = NULL;
+		av_free(fed->frameInfo);
+		fed->frameInfo = NULL;
+		
 		parReader_freeIndexInfo(fed->indexInfo);
 		fed->indexInfo = NULL;
 		av_free(fed);
@@ -186,11 +193,11 @@ int createStream(AVFormatContext * avf,
 
 void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
 {
-	PARContext *p = avf->priv_data;
-	const FrameInfo *fInfo = &p->frameInfo;
-	PARFrameExtra *extraData = NULL;
+	PARContext *avfp = avf->priv_data;
+	PARFrameExtra *pktExt = NULL;
+
 	int streamIndex = -1;
-	int id = fInfo->channel;
+	int id = avfp->frameInfo.channel;
 	for(int ii = 0; ii < avf->nb_streams; ii++)  {
 		if ( (NULL != avf->streams[ii]) && (avf->streams[ii]->id == id) )  {
 			streamIndex = ii;
@@ -198,19 +205,31 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
 		}
 	}
 	if (-1 == streamIndex)  {
-		streamIndex = createStream(avf, &p->frameInfo, &p->dispSet);
+		streamIndex = createStream(avf, &avfp->frameInfo, &avfp->dispSet);
 	}
 	av_new_packet(pkt, siz);
 	pkt->stream_index = streamIndex;
-	memcpy(pkt->data, fInfo->frameData, siz);
 	
-	pkt->pts = fInfo->imageTime;
-	pkt->pts *= 1000ULL;
-	pkt->pts += fInfo->imageMS;
+	/// \todo Detect frame type and do the right thing
+	pktExt = av_malloc(sizeof(PARFrameExtra));
+	pktExt->dsFrameData = av_malloc(sizeof(FrameData));
+	pktExt->dsFrameData->frameType = NetVuVideo;
+	pktExt->dsFrameData->frameData = av_malloc(sizeof(NetVuImageData));
+	memcpy(pktExt->dsFrameData->frameData, avfp->frameInfo.frameBuffer, 
+			sizeof(NetVuImageData));
+	pktExt->dsFrameData->additionalData = NULL;
+	pktExt->indexInfoCount = parReader_getIndexInfo(&pktExt->indexInfo);
 	
-	if (parReader_frameIsVideo(&p->frameInfo))  {
+	memcpy(pkt->data, avfp->frameInfo.frameData, siz);
+	
+	pktExt->frameInfo = av_malloc(sizeof(FrameInfo));	
+	
+	if (parReader_frameIsVideo(&avfp->frameInfo))  {
 		/// \todo Move this into parreader.dll
-		const NetVuImageData *pic = p->frameInfo.frameBuffer;
+		const NetVuImageData *pic = avfp->frameInfo.frameBuffer;
+		
+		pktExt->frameInfo->frameBufferSize = sizeof(NetVuImageData);
+		
 		switch(pic->vid_format)  {
 			case(FRAME_FORMAT_JPEG_422):
 			case(FRAME_FORMAT_JPEG_411):
@@ -224,22 +243,26 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
 				break;
 		}
 	}
+	else
+		pktExt->frameInfo->frameBufferSize = 0;
 	
-	/// \todo Detect frame type and do the right thing
-	extraData = av_malloc(sizeof(PARFrameExtra));
-	extraData->dsFrameData = av_malloc(sizeof(FrameData));
-	extraData->dsFrameData->frameType = NetVuVideo;
-	extraData->dsFrameData->frameData = av_malloc(sizeof(NetVuImageData));
-	memcpy(extraData->dsFrameData->frameData, fInfo->frameBuffer, 
-			sizeof(NetVuImageData));
-	extraData->dsFrameData->additionalData = NULL;
-	extraData->indexInfoCount = parReader_getIndexInfo(&extraData->indexInfo);
+	if (pktExt->frameInfo->frameBufferSize > 0)  {
+		int fbs = pktExt->frameInfo->frameBufferSize;
+		memcpy(pktExt->frameInfo, &(avfp->frameInfo), sizeof(FrameInfo));
+		pktExt->frameInfo->frameBufferSize = fbs;
+		pktExt->frameInfo->frameBuffer = av_malloc(fbs);
+		memcpy(pktExt->frameInfo->frameBuffer,avfp->frameInfo.frameBuffer, fbs);
+		pktExt->frameInfo->frameData = pkt->data;
+	}
+
+	pkt->pts = avfp->frameInfo.imageTime;
+	pkt->pts *= 1000ULL;
+	pkt->pts += avfp->frameInfo.imageMS;
 	
-	pkt->priv = extraData;
-	
+	pkt->priv = pktExt;	
 	pkt->destruct = libpar_packet_destroy;
 	
-	p->frameCached = 0;
+	avfp->frameCached = 0;
 }
 
 static int par_probe(AVProbeData *p)
