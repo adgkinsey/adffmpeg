@@ -176,12 +176,16 @@ int createStream(AVFormatContext * avf,
 		st->r_frame_rate = (AVRational){1,1000};	
 		av_set_pts_info(st, 32, 1, 1000);
 	
-		//if( (w > 360) && (h <= 480) )  {
-		//  // Need to double the height for aspect ratio calculations
-		//  h *= 2;
-		//}
-		//st->sample_aspect_ratio = (AVRational){w,h};
-		//st->codec->sample_aspect_ratio = (AVRational){w,h};
+		// Set pixel aspect ratio, display aspect is (sar * width / height)
+		// May get overridden by codec
+		if( (w > 360) && (h <= 480) )  {
+			st->sample_aspect_ratio = (AVRational){1, 2};
+			st->codec->sample_aspect_ratio = (AVRational){1, 2};
+		}
+		else  {
+			st->sample_aspect_ratio = (AVRational){1, 1};
+			st->codec->sample_aspect_ratio = (AVRational){1, 1};
+		}
 		
 		/// \todo Generate from index
 		//st->duration = 0;
@@ -317,6 +321,7 @@ static int par_read_packet(AVFormatContext * avf, AVPacket * pkt)
 			return 0;
 		}
 		else  {
+			p->frameCached = 0;
 			return AVERROR(EAGAIN);
 		}
 	}
@@ -332,6 +337,9 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 {
 	PARContext *p = avf->priv_data;
 	int siz = 0;
+	AVStream *st = avf->streams[stream];
+	int streamId = st->id;
+	int isKeyFrame = 0;
 	
 	// Don't seek beyond the file
 	p->dispSet.fileLock = 1;
@@ -339,24 +347,33 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 	if (flags & AVSEEK_FLAG_BACKWARD)
 		p->dispSet.playMode = RWND;
 	
-	if ( ! (flags & AVSEEK_FLAG_ANY) )
-		p->dispSet.iFramesOnly = 1;
-	
 	if (flags & AVSEEK_FLAG_FRAME)
 		p->dispSet.frameNumber = target;
 	else
-		p->dispSet.timestamp = target / 1000;
+		p->dispSet.timestamp = target / 1000LL;
 	
-	p->dispSet.cameraNum = avf->streams[stream]->id;
-	siz = parReader_loadFrame(&p->frameInfo, &p->dispSet, &p->fileChanged);
-	p->dispSet.playMode = PLAY;
-	p->dispSet.iFramesOnly = 0;
-	while ((stream>=0) && (avf->streams[stream]->id != p->frameInfo.channel))  {
+	p->dispSet.cameraNum = streamId;
+	do  {
 		siz = parReader_loadFrame(&p->frameInfo, &p->dispSet, &p->fileChanged);
-	}
-	p->frameCached = siz;
+		if (0 == siz)
+			break;
+		
+		if (parReader_frameIsVideo(&p->frameInfo))  {
+			if (flags & AVSEEK_FLAG_ANY)
+				isKeyFrame = 1;
+			else
+				isKeyFrame = parReader_isIFrame(&p->frameInfo);
+		}
+		else  {
+			// Always seek to a video frame
+			isKeyFrame = 0;
+		}
+	} while ( (streamId != p->frameInfo.channel) || (0 == isKeyFrame) );
+	p->frameCached = siz;	
+	st->codec->frame_number = p->frameInfo.frameNumber;
 	
-	p->dispSet.fileLock = 0;		
+	p->dispSet.fileLock = 0;
+	p->dispSet.playMode = PLAY;
 	return p->frameInfo.imageTime;
 }
 
