@@ -369,8 +369,18 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 			isKeyFrame = 0;
 		}
 	} while ( (streamId != p->frameInfo.channel) || (0 == isKeyFrame) );
-	p->frameCached = siz;	
-	st->codec->frame_number = p->frameInfo.frameNumber;
+	
+	if (0 == siz)  {
+		// If we have failed to load a frame then try again with (target - 1)
+		if (RWND == p->dispSet.playMode)
+			par_read_seek(avf, stream, target + 1, flags);
+		else
+			par_read_seek(avf, stream, target - 1, flags);
+	}
+	else  {
+		p->frameCached = siz;
+		st->codec->frame_number = p->frameInfo.frameNumber;
+	}
 	
 	p->dispSet.fileLock = 0;
 	p->dispSet.playMode = PLAY;
