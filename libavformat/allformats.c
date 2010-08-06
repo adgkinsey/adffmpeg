@@ -22,11 +22,6 @@
 #include "rtp.h"
 #include "rdt.h"
 
-#include "ds.h"
-#include "dspic.h"
-#include "adaudio.h"
-extern int adpic_init(void);
-
 #define REGISTER_MUXER(X,x) { \
     extern AVOutputFormat x##_muxer; \
     if(CONFIG_##X##_MUXER) av_register_output_format(&x##_muxer); }
@@ -50,10 +45,6 @@ void av_register_all(void)
     initialized = 1;
 
     avcodec_register_all();
-
-    adpic_init();
-    adaudio_init();
-    dspicInit();
 
     /* (de)muxers */
     REGISTER_DEMUXER  (AAC, aac);
@@ -225,6 +216,10 @@ void av_register_all(void)
     REGISTER_DEMUXER  (XA, xa);
     REGISTER_DEMUXER  (YOP, yop);
     REGISTER_MUXDEMUX (YUV4MPEGPIPE, yuv4mpegpipe);
+	
+	REGISTER_DEMUXER  (ADAUDIO, adaudio);
+	REGISTER_DEMUXER  (ADPIC, adpic);
+	REGISTER_DEMUXER  (DSPIC, dspic);
 
     /* external libraries */
     REGISTER_MUXDEMUX (LIBNUT, libnut);

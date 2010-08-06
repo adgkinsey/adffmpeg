@@ -112,7 +112,7 @@ static int64_t adaudio_read_pts(AVFormatContext *s, int stream_index, int64_t *p
 	return -1;
 }
 
-static AVInputFormat adaudio_iformat = {
+AVInputFormat adaudio_demuxer = {
     "adaudio",
     "adaudio format",
     sizeof(ADAudioContext),
@@ -123,13 +123,6 @@ static AVInputFormat adaudio_iformat = {
     adaudio_read_seek,
     adaudio_read_pts,
 };
-
-
-int adaudio_init(void)
-{
-    av_register_input_format( &adaudio_iformat );
-    return 0;
-}
 
 static AVStream *get_audio_stream( struct AVFormatContext *s )
 {

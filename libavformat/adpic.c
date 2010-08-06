@@ -1791,7 +1791,7 @@ static int adpic_read_seek(AVFormatContext *s, int stream_index, int64_t timesta
 }
 
 
-static AVInputFormat adpic_iformat = {
+AVInputFormat adpic_demuxer = {
     "adpic",
     "adpic format",
     sizeof(ADPICContext),
@@ -1803,12 +1803,6 @@ static AVInputFormat adpic_iformat = {
     adpic_read_pts,
 };
 
-
-int adpic_init(void)
-{
-    av_register_input_format(&adpic_iformat);
-    return 0;
-}
 
 int logger (int log_level, const char *fmt, ...)
 {
