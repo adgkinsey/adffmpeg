@@ -56,7 +56,6 @@ const char *avformat_license(void);
 #include "libavcodec/avcodec.h"
 
 #include "avio.h"
-#include "adffmpeg_errors.h"
 
 struct AVFormatContext;
 

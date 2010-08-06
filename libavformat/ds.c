@@ -3,6 +3,7 @@
 #include "libavutil/avstring.h"
 #include "libavutil/bswap.h"
 
+#include "adffmpeg_errors.h"
 #include "dsenc.h"
 #include "ds.h"
 
