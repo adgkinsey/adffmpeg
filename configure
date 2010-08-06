@@ -2624,7 +2624,6 @@ enabled libopencore_amrnb  && require libopencore_amrnb opencore-amrnb/interf_de
 enabled libopencore_amrwb  && require libopencore_amrwb opencore-amrwb/dec_if.h D_IF_init -lopencore-amrwb -lm
 enabled libopenjpeg && require libopenjpeg openjpeg.h opj_version -lopenjpeg
 enabled libparreader && require2 libparreader "parreader.h parreader_types.h" parReader_getPicStructSize -lparreader
-enabled librtmp    && require  librtmp librtmp/rtmp.h RTMP_Init -lrtmp
 enabled librtmp    && require  librtmp librtmp/rtmp.h RTMP_Init $(pkg-config --libs librtmp)
 enabled libschroedinger && add_cflags $(pkg-config --cflags schroedinger-1.0) &&
                            require libschroedinger schroedinger/schro.h schro_init $(pkg-config --libs schroedinger-1.0)

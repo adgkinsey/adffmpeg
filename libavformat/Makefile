@@ -106,7 +106,6 @@ OBJS-$(CONFIG_MATROSKA_DEMUXER)          += matroskadec.o matroska.o \
 OBJS-$(CONFIG_MATROSKA_MUXER)            += matroskaenc.o matroska.o \
                                             riff.o isom.o avc.o \
                                             flacenc_header.o
-OBJS-$(CONFIG_MD5_MUXER)                 += md5enc.o
 OBJS-$(CONFIG_MJPEG_DEMUXER)             += raw.o
 OBJS-$(CONFIG_MJPEG_MUXER)               += raw.o
 OBJS-$(CONFIG_MLP_DEMUXER)               += raw.o id3v2.o

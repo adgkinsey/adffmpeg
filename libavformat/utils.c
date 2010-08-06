@@ -20,7 +20,6 @@
  */
 #include "avformat.h"
 #include "internal.h"
-#include "libavcodec/internal.h"
 #include "libavcodec/opt.h"
 #include "metadata.h"
 #include "libavutil/avstring.h"
@@ -374,31 +373,36 @@ AVInputFormat *av_probe_input_format(AVProbeData *pd, int is_opened){
 
 static int set_codec_from_probe_data(AVFormatContext *s, AVStream *st, AVProbeData *pd, int score)
 {
-    static const struct {
-        const char *name; enum CodecID id; enum AVMediaType type;
-    } fmt_id_type[] = {
-        { "aac"      , CODEC_ID_AAC       , AVMEDIA_TYPE_AUDIO },
-        { "ac3"      , CODEC_ID_AC3       , AVMEDIA_TYPE_AUDIO },
-        { "dts"      , CODEC_ID_DTS       , AVMEDIA_TYPE_AUDIO },
-        { "eac3"     , CODEC_ID_EAC3      , AVMEDIA_TYPE_AUDIO },
-        { "h264"     , CODEC_ID_H264      , AVMEDIA_TYPE_VIDEO },
-        { "m4v"      , CODEC_ID_MPEG4     , AVMEDIA_TYPE_VIDEO },
-        { "mp3"      , CODEC_ID_MP3       , AVMEDIA_TYPE_AUDIO },
-        { "mpegvideo", CODEC_ID_MPEG2VIDEO, AVMEDIA_TYPE_VIDEO },
-        { 0 }
-    };
-    AVInputFormat *fmt = av_probe_input_format2(pd, 1, &score);
+    AVInputFormat *fmt;
+    fmt = av_probe_input_format2(pd, 1, &score);
 
     if (fmt) {
-        int i;
         av_log(s, AV_LOG_DEBUG, "Probe with size=%d, packets=%d detected %s with score=%d\n",
                pd->buf_size, MAX_PROBE_PACKETS - st->probe_packets, fmt->name, score);
-        for (i = 0; fmt_id_type[i].name; i++) {
-            if (!strcmp(fmt->name, fmt_id_type[i].name)) {
-                st->codec->codec_id   = fmt_id_type[i].id;
-                st->codec->codec_type = fmt_id_type[i].type;
-                break;
-            }
+        if (!strcmp(fmt->name, "mp3")) {
+            st->codec->codec_id = CODEC_ID_MP3;
+            st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
+        } else if (!strcmp(fmt->name, "ac3")) {
+            st->codec->codec_id = CODEC_ID_AC3;
+            st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
+        } else if (!strcmp(fmt->name, "eac3")) {
+            st->codec->codec_id = CODEC_ID_EAC3;
+            st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
+        } else if (!strcmp(fmt->name, "mpegvideo")) {
+            st->codec->codec_id = CODEC_ID_MPEG2VIDEO;
+            st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
+        } else if (!strcmp(fmt->name, "m4v")) {
+            st->codec->codec_id = CODEC_ID_MPEG4;
+            st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
+        } else if (!strcmp(fmt->name, "h264")) {
+            st->codec->codec_id = CODEC_ID_H264;
+            st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
+        } else if (!strcmp(fmt->name, "dts")) {
+            st->codec->codec_id = CODEC_ID_DTS;
+            st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
+        } else if (!strcmp(fmt->name, "aac")) {
+            st->codec->codec_id = CODEC_ID_AAC;
+            st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
         }
     }
     return !!fmt;
@@ -2049,7 +2053,7 @@ static int try_decode_frame(AVStream *st, AVPacket *avpkt)
     return ret;
 }
 
-unsigned int ff_codec_get_tag(const AVCodecTag *tags, enum CodecID id)
+unsigned int ff_codec_get_tag(const AVCodecTag *tags, int id)
 {
     while (tags->id != CODEC_ID_NONE) {
         if (tags->id == id)
@@ -2067,7 +2071,10 @@ enum CodecID ff_codec_get_id(const AVCodecTag *tags, unsigned int tag)
             return tags[i].id;
     }
     for(i=0; tags[i].id != CODEC_ID_NONE; i++) {
-        if (ff_toupper4(tag) == ff_toupper4(tags[i].tag))
+        if(   toupper((tag >> 0)&0xFF) == toupper((tags[i].tag >> 0)&0xFF)
+           && toupper((tag >> 8)&0xFF) == toupper((tags[i].tag >> 8)&0xFF)
+           && toupper((tag >>16)&0xFF) == toupper((tags[i].tag >>16)&0xFF)
+           && toupper((tag >>24)&0xFF) == toupper((tags[i].tag >>24)&0xFF))
             return tags[i].id;
     }
     return CODEC_ID_NONE;
@@ -2598,39 +2605,6 @@ int av_set_parameters(AVFormatContext *s, AVFormatParameters *ap)
     return 0;
 }
 
-static int validate_codec_tag(AVFormatContext *s, AVStream *st)
-{
-    const AVCodecTag *avctag;
-    int n;
-    enum CodecID id = CODEC_ID_NONE;
-    unsigned int tag = 0;
-
-    /**
-     * Check that tag + id is in the table
-     * If neither is in the table -> OK
-     * If tag is in the table with another id -> FAIL
-     * If id is in the table with another tag -> FAIL unless strict < normal
-     */
-    for (n = 0; s->oformat->codec_tag[n]; n++) {
-        avctag = s->oformat->codec_tag[n];
-        while (avctag->id != CODEC_ID_NONE) {
-            if (ff_toupper4(avctag->tag) == ff_toupper4(st->codec->codec_tag)) {
-                id = avctag->id;
-                if (id == st->codec->codec_id)
-                    return 1;
-            }
-            if (avctag->id == st->codec->codec_id)
-                tag = avctag->tag;
-            avctag++;
-        }
-    }
-    if (id != CODEC_ID_NONE)
-        return 0;
-    if (tag && (st->codec->strict_std_compliance >= FF_COMPLIANCE_NORMAL))
-        return 0;
-    return 1;
-}
-
 int av_write_header(AVFormatContext *s)
 {
     int ret, i;
@@ -2639,7 +2613,7 @@ int av_write_header(AVFormatContext *s)
     // some sanity checks
     if (s->nb_streams == 0) {
         av_log(s, AV_LOG_ERROR, "no streams\n");
-        return AVERROR(EINVAL);
+        return -1;
     }
 
     for(i=0;i<s->nb_streams;i++) {
@@ -2649,7 +2623,7 @@ int av_write_header(AVFormatContext *s)
         case AVMEDIA_TYPE_AUDIO:
             if(st->codec->sample_rate<=0){
                 av_log(s, AV_LOG_ERROR, "sample rate not set\n");
-                return AVERROR(EINVAL);
+                return -1;
             }
             if(!st->codec->block_align)
                 st->codec->block_align = st->codec->channels *
@@ -2658,27 +2632,26 @@ int av_write_header(AVFormatContext *s)
         case AVMEDIA_TYPE_VIDEO:
             if(st->codec->time_base.num<=0 || st->codec->time_base.den<=0){ //FIXME audio too?
                 av_log(s, AV_LOG_ERROR, "time base not set\n");
-                return AVERROR(EINVAL);
+                return -1;
             }
             if((st->codec->width<=0 || st->codec->height<=0) && !(s->oformat->flags & AVFMT_NODIMENSIONS)){
                 av_log(s, AV_LOG_ERROR, "dimensions not set\n");
-                return AVERROR(EINVAL);
+                return -1;
             }
             if(av_cmp_q(st->sample_aspect_ratio, st->codec->sample_aspect_ratio)){
                 av_log(s, AV_LOG_ERROR, "Aspect ratio mismatch between encoder and muxer layer\n");
-                return AVERROR(EINVAL);
+                return -1;
             }
             break;
         }
 
         if(s->oformat->codec_tag){
             if(st->codec->codec_tag){
-                if (!validate_codec_tag(s, st)) {
-                    av_log(s, AV_LOG_ERROR,
-                           "Tag 0x%08x incompatible with output codec\n",
-                           st->codec->codec_tag);
-                    return AVERROR_INVALIDDATA;
-                }
+                //FIXME
+                //check that tag + id is in the table
+                //if neither is in the table -> OK
+                //if tag is in the table with another id -> FAIL
+                //if id is in the table with another tag -> FAIL unless strict < ?
             }else
                 st->codec->codec_tag= av_codec_get_tag(s->oformat->codec_tag, st->codec->codec_id);
         }
@@ -3616,25 +3589,6 @@ int ff_url_join(char *str, int size, const char *proto,
     }
     return strlen(str);
 }
-
-int ff_write_chained(AVFormatContext *dst, int dst_stream, AVPacket *pkt,
-                     AVFormatContext *src)
-{
-    AVPacket local_pkt;
-
-    local_pkt = *pkt;
-    local_pkt.stream_index = dst_stream;
-    if (pkt->pts != AV_NOPTS_VALUE)
-        local_pkt.pts = av_rescale_q(pkt->pts,
-                                     src->streams[pkt->stream_index]->time_base,
-                                     dst->streams[dst_stream]->time_base);
-    if (pkt->dts != AV_NOPTS_VALUE)
-        local_pkt.dts = av_rescale_q(pkt->dts,
-                                     src->streams[pkt->stream_index]->time_base,
-                                     dst->streams[dst_stream]->time_base);
-    return av_write_frame(dst, &local_pkt);
-}
-
 
 char * av_strlwr( char *str )
 {

@@ -37,7 +37,6 @@
 #include "avcodec.h"
 #include "libdirac_libschro.h"
 #include "libschroedinger.h"
-#include "bytestream.h"
 
 
 /** libschroedinger encoder private data */
@@ -128,24 +127,6 @@ static int libschroedinger_encode_init(AVCodecContext *avccontext)
     if (SetSchroChromaFormat(avccontext) == -1)
         return -1;
 
-    if (avccontext->color_primaries == AVCOL_PRI_BT709) {
-        p_schro_params->format->colour_primaries = SCHRO_COLOUR_PRIMARY_HDTV;
-    } else if (avccontext->color_primaries == AVCOL_PRI_BT470BG) {
-        p_schro_params->format->colour_primaries = SCHRO_COLOUR_PRIMARY_SDTV_625;
-    } else if (avccontext->color_primaries == AVCOL_PRI_SMPTE170M) {
-        p_schro_params->format->colour_primaries = SCHRO_COLOUR_PRIMARY_SDTV_525;
-    }
-
-    if (avccontext->colorspace == AVCOL_SPC_BT709) {
-        p_schro_params->format->colour_matrix = SCHRO_COLOUR_MATRIX_HDTV;
-    } else if (avccontext->colorspace == AVCOL_SPC_BT470BG) {
-        p_schro_params->format->colour_matrix = SCHRO_COLOUR_MATRIX_SDTV;
-    }
-
-    if (avccontext->color_trc == AVCOL_TRC_BT709) {
-        p_schro_params->format->transfer_function = SCHRO_TRANSFER_CHAR_TV_GAMMA;
-    }
-
     if (ff_get_schro_frame_format(p_schro_params->format->chroma_format,
                                   &p_schro_params->frame_format) == -1) {
         av_log(avccontext, AV_LOG_ERROR,
@@ -173,7 +154,8 @@ static int libschroedinger_encode_init(AVCodecContext *avccontext)
                                              "enable_noarith", 1);
     } else {
         schro_encoder_setting_set_double(p_schro_params->encoder,
-                                         "au_distance", avccontext->gop_size);
+                                         "gop_structure",
+                                         SCHRO_ENCODER_GOP_BIREF);
         avccontext->has_b_frames = 1;
     }
 
@@ -185,16 +167,17 @@ static int libschroedinger_encode_init(AVCodecContext *avccontext)
                                              "rate_control",
                                              SCHRO_ENCODER_RATE_CONTROL_LOSSLESS);
         } else {
-            int quality;
+            int noise_threshold;
             schro_encoder_setting_set_double(p_schro_params->encoder,
                                              "rate_control",
-                                             SCHRO_ENCODER_RATE_CONTROL_CONSTANT_QUALITY);
+                                             SCHRO_ENCODER_RATE_CONTROL_CONSTANT_NOISE_THRESHOLD);
 
-            quality = avccontext->global_quality / FF_QP2LAMBDA;
-            if (quality > 10)
-                quality = 10;
+            noise_threshold = avccontext->global_quality / FF_QP2LAMBDA;
+            if (noise_threshold > 100)
+                noise_threshold = 100;
             schro_encoder_setting_set_double(p_schro_params->encoder,
-                                             "quality", quality);
+                                             "noise_threshold",
+                                             noise_threshold);
         }
     } else {
         schro_encoder_setting_set_double(p_schro_params->encoder,
@@ -212,9 +195,6 @@ static int libschroedinger_encode_init(AVCodecContext *avccontext)
            irrespective of the type of source material. */
         schro_encoder_setting_set_double(p_schro_params->encoder,
                                          "interlaced_coding", 1);
-
-    schro_encoder_setting_set_double(p_schro_params->encoder, "open_gop",
-                                     !(avccontext->flags & CODEC_FLAG_CLOSED_GOP));
 
     /* FIXME: Signal range hardcoded to 8-bit data until both libschroedinger
      * and libdirac support other bit-depth data. */
@@ -338,7 +318,10 @@ static int libschroedinger_encode_frame(AVCodecContext *avccontext,
 
             /* Parse the coded frame number from the bitstream. Bytes 14
              * through 17 represesent the frame number. */
-            p_frame_output->frame_num = AV_RB32(enc_buf->data + 13);
+                p_frame_output->frame_num = (enc_buf->data[13] << 24) +
+                                            (enc_buf->data[14] << 16) +
+                                            (enc_buf->data[15] <<  8) +
+                                             enc_buf->data[16];
 
             ff_dirac_schro_queue_push_back(&p_schro_params->enc_frame_queue,
                                            p_frame_output);
