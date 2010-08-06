@@ -215,7 +215,6 @@ static int tcp_write(URLContext *h, uint8_t *buf, int size)
         ret = select(fd_max + 1, NULL, &wfds, NULL, &tv);
         if (ret > 0 && FD_ISSET(s->fd, &wfds)) {
             len = send(s->fd, buf, size, 0);
-
             if (len < 0) {
                 if (ff_neterrno() != FF_NETERROR(EINTR) &&
                     ff_neterrno() != FF_NETERROR(EAGAIN))
@@ -238,7 +237,6 @@ static int tcp_close(URLContext *h)
     TCPContext *s = h->priv_data;
     closesocket(s->fd);
     av_free(s);
-
     return 0;
 }
 

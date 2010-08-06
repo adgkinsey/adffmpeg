@@ -67,7 +67,6 @@ static int http_write(URLContext *h, uint8_t *buf, int size);
 static void http_parse_content_type_header( char * p, HTTPContext *s );
 static void copy_value_to_field( const char *value, char **dest );
 
-
 /* return non zero if error */
 static int http_open_cnx(URLContext *h)
 {
@@ -92,6 +91,7 @@ static int http_open_cnx(URLContext *h)
 #endif /* ifndef CONFIG_WINCE */
 
     /* fill the dest addr */
+ redo:
     /* needed in any case to build the host string */
     ff_url_split(NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port,
                  path1, sizeof(path1), s->location);
@@ -111,7 +111,6 @@ static int http_open_cnx(URLContext *h)
         port = 80;
 
     ff_url_join(buf, sizeof(buf), "tcp", NULL, hostname, port, NULL);
- redo:
     err = url_open(&hd, buf, URL_RDWR);
     if (err < 0)
         goto fail;
