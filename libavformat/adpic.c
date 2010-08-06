@@ -40,7 +40,7 @@ enum data_type { DATA_JPEG, DATA_JFIF, DATA_MPEG4I, DATA_MPEG4P, DATA_AUDIO_ADPC
 #define DATA_PLAINTEXT              (MAX_DATA_TYPE + 1)   /* This value is only used internally within the library DATA_PLAINTEXT blocks should not be exposed to the client */
 
 static int adpicSkipInfoList(ByteIOContext * pb);
-static int adpicFindTag(char *Tag, ByteIOContext *pb, int MaxLookAhead);
+static int adpicFindTag(const char *Tag, ByteIOContext *pb, int MaxLookAhead);
 
 
 static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size, long *extra );
@@ -1002,7 +1002,7 @@ static int adpicSkipInfoList(ByteIOContext * pb)
 }
 
 
-static int adpicFindTag(char *Tag, ByteIOContext *pb, int MaxLookAhead)
+static int adpicFindTag(const char *Tag, ByteIOContext *pb, int MaxLookAhead)
 {
 	//NOTE Looks for the folowing pattern "<infoList>" at the begining of the 
 	//     buffer return 1 if its found and 0 if not
@@ -1011,9 +1011,7 @@ static int adpicFindTag(char *Tag, ByteIOContext *pb, int MaxLookAhead)
     int                         LookAheadPos = 0;
     unsigned char               buffer[TEMP_BUFFER_SIZE];
     unsigned char               *q = buffer;
-    int                         temp, ch, err, lineCount = 0;
-	char                        *restore;
-	int                         result = 0;
+    int                         ch;
 	int                         endOfTag = 0;
     
     if(MaxLookAhead<0)
