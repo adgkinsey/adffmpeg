@@ -133,24 +133,24 @@ int createStream(AVFormatContext * avf,
 		/// \todo Move this into parreader.dll
 		const NetVuAudioData *aud = frameInfo->frameBuffer;
 		switch(aud->mode)  {
-			case(FRAME_FORMAT_RAW):
-			case(FRAME_FORMAT_ADPCM):
-			case(FRAME_FORMAT_ADPCM_8000):
-			case(FRAME_FORMAT_ADPCM_16000):
-			case(FRAME_FORMAT_L16_44100):
-			case(FRAME_FORMAT_ADPCM_11025):
-			case(FRAME_FORMAT_ADPCM_22050):
-			case(FRAME_FORMAT_ADPCM_32000):
-			case(FRAME_FORMAT_ADPCM_44100):
-			case(FRAME_FORMAT_ADPCM_48000):
-			case(FRAME_FORMAT_L16_8000):
-			case(FRAME_FORMAT_L16_11025):
-			case(FRAME_FORMAT_L16_16000):
-			case(FRAME_FORMAT_L16_22050):
-			case(FRAME_FORMAT_L16_32000):
-			case(FRAME_FORMAT_L16_48000):
-			case(FRAME_FORMAT_L16_12000):
-			case(FRAME_FORMAT_L16_24000):
+			case(FRAME_FORMAT_AUD_RAW):
+			case(FRAME_FORMAT_AUD_ADPCM):
+			case(FRAME_FORMAT_AUD_ADPCM_8000):
+			case(FRAME_FORMAT_AUD_ADPCM_16000):
+			case(FRAME_FORMAT_AUD_L16_44100):
+			case(FRAME_FORMAT_AUD_ADPCM_11025):
+			case(FRAME_FORMAT_AUD_ADPCM_22050):
+			case(FRAME_FORMAT_AUD_ADPCM_32000):
+			case(FRAME_FORMAT_AUD_ADPCM_44100):
+			case(FRAME_FORMAT_AUD_ADPCM_48000):
+			case(FRAME_FORMAT_AUD_L16_8000):
+			case(FRAME_FORMAT_AUD_L16_11025):
+			case(FRAME_FORMAT_AUD_L16_16000):
+			case(FRAME_FORMAT_AUD_L16_22050):
+			case(FRAME_FORMAT_AUD_L16_32000):
+			case(FRAME_FORMAT_AUD_L16_48000):
+			case(FRAME_FORMAT_AUD_L16_12000):
+			case(FRAME_FORMAT_AUD_L16_24000):
 				st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
 				st->codec->codec_id = CODEC_ID_ADPCM_ADH;
 				st->codec->channels = 1;
@@ -190,6 +190,9 @@ int createStream(AVFormatContext * avf,
 		/// \todo Generate from index
 		//st->duration = 0;
 		//st->start_time
+	}
+	else if (AVMEDIA_TYPE_AUDIO == st->codec->codec_type)  {
+		/// \todo Initialise AVStream with audio parameters
 	}
 	
 	return st->index;
@@ -247,10 +250,13 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
 				break;
 		}
 	}
-	else
-		pktExt->frameInfo->frameBufferSize = 0;
+	else if (parReader_frameIsAudio(&avfp->frameInfo))  {
+		//const NetVuAudioData *aud = avfp->frameInfo.frameBuffer;
+		pktExt->frameInfo->frameBufferSize = sizeof(NetVuAudioData);
+	}
 	
 	if (pktExt->frameInfo->frameBufferSize > 0)  {
+		// Save frameBufferSize as it's about to be overwritten by memcpy
 		int fbs = pktExt->frameInfo->frameBufferSize;
 		memcpy(pktExt->frameInfo, &(avfp->frameInfo), sizeof(FrameInfo));
 		pktExt->frameInfo->frameBufferSize = fbs;
