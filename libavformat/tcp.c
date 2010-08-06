@@ -106,7 +106,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
             else if( ret > 0 && FD_ISSET(fd, &efds) )
             {
                 /* There was an error during connection */
-                ret = ADFFMPEG_ERROR_HOST_UNREACHABLE;
+                ret = AVERROR(EIO);
                 goto fail1;
             }
             else if (ret == 0)
@@ -114,13 +114,13 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
                 TimeOutCount++;
                 if(TimeOutCount > 100)
                 {
-                     ret = ADFFMPEG_ERROR_CREAT_CONECTION_TIMEOUT;
+                     ret = AVERROR(EIO);
                      goto fail1; 
                 }
             }
             if(ret == SOCKET_ERROR)
             {
-                ret = ADFFMPEG_ERROR_SOCKET;
+                ret = AVERROR(EIO);
                 goto fail1;
             }
         }
