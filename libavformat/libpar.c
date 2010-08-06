@@ -38,7 +38,7 @@ typedef struct {
 void libpar_packet_destroy(struct AVPacket *packet);
 int createStream(AVFormatContext * avf, 
 				 const FrameInfo *frameInfo, const DisplaySettings *dispSet);
-void createPacket(AVFormatContext * avf, AVPacket *packet, int siz);
+void createPacket(AVFormatContext * avf, AVPacket *packet, int siz, int fChang);
 
 
 const unsigned int MAX_FRAMEBUFFER_SIZE = 256 * 1024;
@@ -198,7 +198,7 @@ int createStream(AVFormatContext * avf,
 	return st->index;
 }
 
-void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
+void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 {
 	PARContext *avfp = avf->priv_data;
 	PARFrameExtra *pktExt = NULL;
@@ -217,8 +217,8 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
 	av_new_packet(pkt, siz);
 	pkt->stream_index = streamIndex;
 	
-	/// \todo Detect frame type and do the right thing
 	pktExt = av_malloc(sizeof(PARFrameExtra));
+	pktExt->fileChanged = fChang;
 	pktExt->dsFrameData = av_malloc(sizeof(FrameData));
 	pktExt->indexInfoCount = parReader_getIndexInfo(&pktExt->indexInfo);
 	
@@ -309,6 +309,9 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
 	siz = parReader_loadFrame(&p->frameInfo, &p->dispSet, &p->fileChanged);
 	p->frameCached = siz;
 	
+	// Reading the header opens the file, so ignore this file change notifier
+	p->fileChanged = 0;
+	
 	createStream(avf, &p->frameInfo, &p->dispSet);
 	
 	avf->ctx_flags |= AVFMTCTX_NOHEADER;
@@ -321,14 +324,17 @@ static int par_read_packet(AVFormatContext * avf, AVPacket * pkt)
 	PARContext *p = avf->priv_data;
 	
 	int siz = 0;
-	if (p->frameCached)
+	int fileChanged = 0;
+	if (p->frameCached)  {
 		siz = p->frameCached;
+		fileChanged = p->fileChanged;
+	}
 	else
-		siz = parReader_loadFrame(&p->frameInfo, &p->dispSet, &p->fileChanged);
+		siz = parReader_loadFrame(&p->frameInfo, &p->dispSet, &fileChanged);
 	
 	if (siz > 0)  {
 		if (NULL != p->frameInfo.frameData)  {
-			createPacket(avf, pkt, siz);
+			createPacket(avf, pkt, siz, fileChanged);
 			return 0;
 		}
 		else  {
@@ -338,6 +344,7 @@ static int par_read_packet(AVFormatContext * avf, AVPacket * pkt)
 	}
 	else  {
 		p->frameCached = 0;
+		p->fileChanged = 0;
 		pkt->size = 0;
 		return AVERROR_EOF;
 	}
@@ -352,16 +359,22 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 	int streamId = st->id;
 	int isKeyFrame = 0;
 	
-	// Don't seek beyond the file
-	p->dispSet.fileLock = 1;
+	if ( (flags & AVSEEK_FLAG_FRAME) && (target < 0) )   {
+		p->dispSet.fileSeqNo = -target;
+		p->dispSet.frameNumber = 0;
+	}
+	else  {
+		// Don't seek beyond the file
+		p->dispSet.fileLock = 1;
+		
+		if (flags & AVSEEK_FLAG_FRAME)
+			p->dispSet.frameNumber = target;
+		else
+			p->dispSet.timestamp = target / 1000LL;
+	}
 	
 	if (flags & AVSEEK_FLAG_BACKWARD)
 		p->dispSet.playMode = RWND;
-	
-	if (flags & AVSEEK_FLAG_FRAME)
-		p->dispSet.frameNumber = target;
-	else
-		p->dispSet.timestamp = target / 1000LL;
 	
 	p->dispSet.cameraNum = streamId;
 	do  {
