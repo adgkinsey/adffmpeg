@@ -32,6 +32,7 @@ const char program_name[] = "FFprobe";
 const int program_birth_year = 2007;
 
 static int do_show_format  = 0;
+static int do_show_packets = 0;
 static int do_show_streams = 0;
 
 static int convert_tags                 = 0;
@@ -101,6 +102,17 @@ static char *time_value_string(char *buf, int buf_size, int64_t val, const AVRat
     return buf;
 }
 
+static char *ts_value_string (char *buf, int buf_size, int64_t ts)
+{
+    if (ts == AV_NOPTS_VALUE) {
+        snprintf(buf, buf_size, "N/A");
+    } else {
+        snprintf(buf, buf_size, "%"PRId64, ts);
+    }
+
+    return buf;
+}
+
 static const char *media_type_string(enum AVMediaType media_type)
 {
     switch (media_type) {
@@ -113,6 +125,36 @@ static const char *media_type_string(enum AVMediaType media_type)
     }
 }
 
+static void show_packet(AVFormatContext *fmt_ctx, AVPacket *pkt)
+{
+    char val_str[128];
+    AVStream *st = fmt_ctx->streams[pkt->stream_index];
+
+    printf("[PACKET]\n");
+    printf("codec_type=%s\n"   , media_type_string(st->codec->codec_type));
+    printf("stream_index=%d\n" , pkt->stream_index);
+    printf("pts=%s\n"          , ts_value_string  (val_str, sizeof(val_str), pkt->pts));
+    printf("pts_time=%s\n"     , time_value_string(val_str, sizeof(val_str), pkt->pts, &st->time_base));
+    printf("dts=%s\n"          , ts_value_string  (val_str, sizeof(val_str), pkt->dts));
+    printf("dts_time=%s\n"     , time_value_string(val_str, sizeof(val_str), pkt->dts, &st->time_base));
+    printf("duration=%s\n"     , ts_value_string  (val_str, sizeof(val_str), pkt->duration));
+    printf("duration_time=%s\n", time_value_string(val_str, sizeof(val_str), pkt->duration, &st->time_base));
+    printf("size=%s\n"         , value_string     (val_str, sizeof(val_str), pkt->size, unit_byte_str));
+    printf("pos=%"PRId64"\n"   , pkt->pos);
+    printf("flags=%c\n"        , pkt->flags & AV_PKT_FLAG_KEY ? 'K' : '_');
+    printf("[/PACKET]\n");
+}
+
+static void show_packets(AVFormatContext *fmt_ctx)
+{
+    AVPacket pkt;
+
+    av_init_packet(&pkt);
+
+    while (!av_read_frame(fmt_ctx, &pkt))
+        show_packet(fmt_ctx, &pkt);
+}
+
 static void show_stream(AVFormatContext *fmt_ctx, int stream_idx)
 {
     AVStream *stream = fmt_ctx->streams[stream_idx];
@@ -120,7 +162,6 @@ static void show_stream(AVFormatContext *fmt_ctx, int stream_idx)
     AVCodec *dec;
     char val_str[128];
     AVMetadataTag *tag = NULL;
-    char a, b, c, d;
     AVRational display_aspect_ratio;
 
     printf("[STREAM]\n");
@@ -139,16 +180,9 @@ static void show_stream(AVFormatContext *fmt_ctx, int stream_idx)
         printf("codec_time_base=%d/%d\n", dec_ctx->time_base.num, dec_ctx->time_base.den);
 
         /* print AVI/FourCC tag */
-        a = dec_ctx->codec_tag     & 0xff;
-        b = dec_ctx->codec_tag>>8  & 0xff;
-        c = dec_ctx->codec_tag>>16 & 0xff;
-        d = dec_ctx->codec_tag>>24 & 0xff;
-        printf("codec_tag_string=");
-        if (isprint(a)) printf("%c", a); else printf("[%d]", a);
-        if (isprint(b)) printf("%c", b); else printf("[%d]", b);
-        if (isprint(c)) printf("%c", c); else printf("[%d]", c);
-        if (isprint(d)) printf("%c", d); else printf("[%d]", d);
-        printf("\ncodec_tag=0x%04x\n", dec_ctx->codec_tag);
+        av_get_codec_tag_string(val_str, sizeof(val_str), dec_ctx->codec_tag);
+        printf("codec_tag_string=%s\n", val_str);
+        printf("codec_tag=0x%04x\n", dec_ctx->codec_tag);
 
         switch (dec_ctx->codec_type) {
         case AVMEDIA_TYPE_VIDEO:
@@ -275,6 +309,9 @@ static int probe_file(const char *filename)
     if ((ret = open_input_file(&fmt_ctx, filename)))
         return ret;
 
+    if (do_show_packets)
+        show_packets(fmt_ctx);
+
     if (do_show_streams)
         for (i = 0; i < fmt_ctx->nb_streams; i++)
             show_stream(fmt_ctx, i);
@@ -342,6 +379,7 @@ static const OptionDef options[] = {
     { "pretty", 0, {(void*)&opt_pretty},
       "prettify the format of displayed values, make it more human readable" },
     { "show_format",  OPT_BOOL, {(void*)&do_show_format} , "show format/container info" },
+    { "show_packets", OPT_BOOL, {(void*)&do_show_packets}, "show packets info" },
     { "show_streams", OPT_BOOL, {(void*)&do_show_streams}, "show streams info" },
     { NULL, },
 };

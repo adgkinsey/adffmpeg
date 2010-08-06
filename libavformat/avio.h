@@ -31,6 +31,7 @@
 #include <stdint.h>
 
 #include "libavutil/common.h"
+#include "libavutil/log.h"
 
 /* unbuffered I/O */
 
@@ -51,6 +52,8 @@ typedef struct URLContext {
     int max_packet_size;  /**< if non zero, the stream is packetized with this max packet size */
     void *priv_data;
     char *filename; /**< specified URL */
+    int is_connected;
+	
     int utc_offset;
     int isBinary;
 } URLContext;
@@ -68,8 +71,8 @@ typedef struct URLPollEntry {
 typedef int URLInterruptCB(void);
 
 /**
- * Creates an URLContext for accessing to the resource indicated by
- * url, and opens it using the URLProtocol up.
+ * Create a URLContext for accessing to the resource indicated by
+ * url, and open it using the URLProtocol up.
  *
  * @param puc pointer to the location where, in case of success, the
  * function puts the pointer to the created URLContext
@@ -82,8 +85,26 @@ int url_open_protocol (URLContext **puc, struct URLProtocol *up,
                        const char *url, int flags);
 
 /**
- * Creates an URLContext for accessing to the resource indicated by
- * url, and opens it.
+ * Create a URLContext for accessing to the resource indicated by
+ * url, but do not initiate the connection yet.
+ *
+ * @param puc pointer to the location where, in case of success, the
+ * function puts the pointer to the created URLContext
+ * @param flags flags which control how the resource indicated by url
+ * is to be opened
+ * @return 0 in case of success, a negative value corresponding to an
+ * AVERROR code in case of failure
+ */
+int url_alloc(URLContext **h, const char *url, int flags);
+
+/**
+ * Connect an URLContext that has been allocated by url_alloc
+ */
+int url_connect(URLContext *h);
+
+/**
+ * Create an URLContext for accessing to the resource indicated by
+ * url, and open it.
  *
  * @param puc pointer to the location where, in case of success, the
  * function puts the pointer to the created URLContext
@@ -95,7 +116,7 @@ int url_open_protocol (URLContext **puc, struct URLProtocol *up,
 int url_open(URLContext **h, const char *url, int flags);
 
 /**
- * Reads up to size bytes from the resource accessed by h, and stores
+ * Read up to size bytes from the resource accessed by h, and store
  * the read bytes in buf.
  *
  * @return The number of bytes actually read, or a negative value
@@ -114,10 +135,10 @@ int url_read(URLContext *h, unsigned char *buf, int size);
  * certain there was either an error or the end of file was reached.
  */
 int url_read_complete(URLContext *h, unsigned char *buf, int size);
-int url_write(URLContext *h, unsigned char *buf, int size);
+int url_write(URLContext *h, const unsigned char *buf, int size);
 
 /**
- * Changes the position that will be used by the next read/write
+ * Change the position that will be used by the next read/write
  * operation on the resource accessed by h.
  *
  * @param pos specifies the new position to set
@@ -133,7 +154,7 @@ int url_write(URLContext *h, unsigned char *buf, int size);
 int64_t url_seek(URLContext *h, int64_t pos, int whence);
 
 /**
- * Closes the resource accessed by the URLContext h, and frees the
+ * Close the resource accessed by the URLContext h, and free the
  * memory used by it.
  *
  * @return a negative value if an error condition occurred, 0
@@ -142,7 +163,7 @@ int64_t url_seek(URLContext *h, int64_t pos, int whence);
 int url_close(URLContext *h);
 
 /**
- * Returns a non-zero value if the resource indicated by url
+ * Return a non-zero value if the resource indicated by url
  * exists, 0 otherwise.
  */
 int url_exist(const char *url);
@@ -226,7 +247,7 @@ typedef struct URLProtocol {
     const char *name;
     int (*url_open)(URLContext *h, const char *url, int flags);
     int (*url_read)(URLContext *h, unsigned char *buf, int size);
-    int (*url_write)(URLContext *h, unsigned char *buf, int size);
+    int (*url_write)(URLContext *h, const unsigned char *buf, int size);
     int64_t (*url_seek)(URLContext *h, int64_t pos, int whence);
     int (*url_close)(URLContext *h);
     struct URLProtocol *next;
@@ -234,6 +255,8 @@ typedef struct URLProtocol {
     int64_t (*url_read_seek)(URLContext *h, int stream_index,
                              int64_t timestamp, int flags);
     int (*url_get_file_handle)(URLContext *h);
+    int priv_data_size;
+    const AVClass *priv_data_class;
 } URLProtocol;
 
 #if LIBAVFORMAT_VERSION_MAJOR < 53
@@ -254,12 +277,19 @@ URLProtocol *av_protocol_next(URLProtocol *p);
  * @deprecated Use av_register_protocol() instead.
  */
 attribute_deprecated int register_protocol(URLProtocol *protocol);
+
+/**
+ * @deprecated Use av_register_protocol2() instead.
+ */
+attribute_deprecated int av_register_protocol(URLProtocol *protocol);
 #endif
 
 /**
- * Registers the URLProtocol protocol.
+ * Register the URLProtocol protocol.
+ *
+ * @param size the size of the URLProtocol struct referenced
  */
-int av_register_protocol(URLProtocol *protocol);
+int av_register_protocol2(URLProtocol *protocol, int size);
 
 /**
  * Bytestream IO Context.
@@ -331,8 +361,9 @@ int64_t url_fseek(ByteIOContext *s, int64_t offset, int whence);
 /**
  * Skip given number of bytes forward.
  * @param offset number of bytes
+ * @return 0 on success, <0 on error
  */
-void url_fskip(ByteIOContext *s, int64_t offset);
+int url_fskip(ByteIOContext *s, int64_t offset);
 
 /**
  * ftell() equivalent for ByteIOContext.
@@ -341,7 +372,7 @@ void url_fskip(ByteIOContext *s, int64_t offset);
 int64_t url_ftell(ByteIOContext *s);
 
 /**
- * Gets the filesize.
+ * Get the filesize.
  * @return filesize or AVERROR
  */
 int64_t url_fsize(ByteIOContext *s);
@@ -377,13 +408,13 @@ void put_flush_packet(ByteIOContext *s);
 
 
 /**
- * Reads size bytes from ByteIOContext into buf.
+ * Read size bytes from ByteIOContext into buf.
  * @return number of bytes read or AVERROR
  */
 int get_buffer(ByteIOContext *s, unsigned char *buf, int size);
 
 /**
- * Reads size bytes from ByteIOContext into buf.
+ * Read size bytes from ByteIOContext into buf.
  * This reads at most 1 packet. If that is not enough fewer bytes will be
  * returned.
  * @return number of bytes read or AVERROR
@@ -412,7 +443,7 @@ static inline int url_is_streamed(ByteIOContext *s)
 }
 
 /**
- * Creates and initializes a ByteIOContext for accessing the
+ * Create and initialize a ByteIOContext for accessing the
  * resource referenced by the URLContext h.
  * @note When the URLContext h has been opened in read+write mode, the
  * ByteIOContext can be used only for writing.
@@ -435,7 +466,7 @@ int url_resetbuf(ByteIOContext *s, int flags);
 #endif
 
 /**
- * Rewinds the ByteIOContext using the specified buffer containing the first buf_size bytes of the file.
+ * Rewind the ByteIOContext using the specified buffer containing the first buf_size bytes of the file.
  * Used after probing to avoid seeking.
  * Joins buf and s->buffer, taking any overlap into consideration.
  * @note s->buffer must overlap with buf or they can't be joined and the function fails
@@ -450,7 +481,7 @@ int url_resetbuf(ByteIOContext *s, int flags);
 int ff_rewind_with_probe_data(ByteIOContext *s, unsigned char *buf, int buf_size);
 
 /**
- * Creates and initializes a ByteIOContext for accessing the
+ * Create and initialize a ByteIOContext for accessing the
  * resource indicated by url.
  * @note When the resource indicated by url has been opened in
  * read+write mode, the ByteIOContext can be used only for writing.
@@ -503,7 +534,10 @@ int url_open_dyn_packet_buf(ByteIOContext **s, int max_packet_size);
 
 /**
  * Return the written size and a pointer to the buffer. The buffer
- *  must be freed with av_free().
+ * must be freed with av_free(). If the buffer is opened with
+ * url_open_dyn_buf, then padding of FF_INPUT_BUFFER_PADDING_SIZE is
+ * added; if opened with url_open_dyn_packet_buf, no padding is added.
+ *
  * @param s IO context
  * @param pbuffer pointer to a byte buffer
  * @return the length of the byte buffer

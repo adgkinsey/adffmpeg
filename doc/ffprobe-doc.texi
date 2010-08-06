@@ -7,8 +7,17 @@
 @sp 3
 @end titlepage
 
-@chapter Introduction
+@chapter Synopsis
 
+The generic syntax is:
+
+@example
+@c man begin SYNOPSIS
+ffprobe [options] [@file{input_file}]
+@c man end
+@end example
+
+@chapter Description
 @c man begin DESCRIPTION
 
 FFprobe gathers information from multimedia streams and prints it in
@@ -46,18 +55,7 @@ are prefixed by the string ``TAG:''.
 
 @c man end
 
-@chapter Invocation
-
-@section Syntax
-
-The generic syntax is:
-
-@example
-@c man begin SYNOPSIS
-ffprobe [options] [@file{input_file}]
-@c man end
-@end example
-
+@chapter Options
 @c man begin OPTIONS
 
 @include fftools-common-opts.texi
@@ -97,6 +95,13 @@ stream.
 All the container format information is printed within a section with
 name ``FORMAT''.
 
+@item -show_packets
+Show information about each packet contained in the input multimedia
+stream.
+
+The information for each single packet is printed within a dedicated
+section with name ``PACKET''.
+
 @item -show_streams
 Show information about each media stream contained in the input
 multimedia stream.
@@ -107,13 +112,20 @@ with name ``STREAM''.
 @end table
 @c man end
 
+@include protocols.texi
+@include indevs.texi
+
 @ignore
 
 @setfilename ffprobe
 @settitle FFprobe media prober
 
 @c man begin SEEALSO
-ffmpeg(1), ffplay(1), ffserver(1)
+ffmpeg(1), ffplay(1), ffserver(1) and the FFmpeg HTML documentation
+@c man end
+
+@c man begin AUTHORS
+The FFmpeg developers
 @c man end
 
 @end ignore
