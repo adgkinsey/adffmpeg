@@ -220,11 +220,6 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
 	/// \todo Detect frame type and do the right thing
 	pktExt = av_malloc(sizeof(PARFrameExtra));
 	pktExt->dsFrameData = av_malloc(sizeof(FrameData));
-	pktExt->dsFrameData->frameType = NetVuVideo;
-	pktExt->dsFrameData->frameData = av_malloc(sizeof(NetVuImageData));
-	memcpy(pktExt->dsFrameData->frameData, avfp->frameInfo.frameBuffer, 
-			sizeof(NetVuImageData));
-	pktExt->dsFrameData->additionalData = NULL;
 	pktExt->indexInfoCount = parReader_getIndexInfo(&pktExt->indexInfo);
 	
 	memcpy(pkt->data, avfp->frameInfo.frameData, siz);
@@ -236,6 +231,11 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
 		const NetVuImageData *pic = avfp->frameInfo.frameBuffer;
 		
 		pktExt->frameInfo->frameBufferSize = sizeof(NetVuImageData);
+		pktExt->dsFrameData->frameType = NetVuVideo;
+		pktExt->dsFrameData->frameData = av_malloc(sizeof(NetVuImageData));
+		memcpy(pktExt->dsFrameData->frameData, avfp->frameInfo.frameBuffer, 
+				sizeof(NetVuImageData));
+		pktExt->dsFrameData->additionalData = NULL;
 		
 		switch(pic->vid_format)  {
 			case(FRAME_FORMAT_JPEG_422):
@@ -253,6 +253,11 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
 	else if (parReader_frameIsAudio(&avfp->frameInfo))  {
 		//const NetVuAudioData *aud = avfp->frameInfo.frameBuffer;
 		pktExt->frameInfo->frameBufferSize = sizeof(NetVuAudioData);
+		pktExt->dsFrameData->frameType = NetVuAudio;
+		pktExt->dsFrameData->frameData = av_malloc(sizeof(NetVuAudioData));
+		memcpy(pktExt->dsFrameData->frameData, avfp->frameInfo.frameBuffer, 
+				sizeof(NetVuAudioData));
+		pktExt->dsFrameData->additionalData = NULL;
 	}
 	
 	if (pktExt->frameInfo->frameBufferSize > 0)  {
