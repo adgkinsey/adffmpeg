@@ -1,11 +1,13 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+version 0.6.1:
 
-version <next>:
-
-- WebM support in Matroska demuxer
-
+- fix autodetection of E-AC-3 substream samples
+- performance fix for seekable http
+- Backport AAC-HE v2 from trunk
+- Add missing VP80 fourcc code for the VP8 codec
+- smaller documentation fixes
 
 
 version 0.6:
@@ -77,6 +79,16 @@ version 0.6:
 - spectral extension support in the E-AC-3 decoder
 - unsharp video filter
 - RTP hinting in the mov/3gp/mp4 muxer
+- Dirac in Ogg demuxing
+- seek to keyframes in Ogg
+- 4:2:2 and 4:4:4 Theora decoding
+- 35% faster VP3/Theora decoding
+- faster AAC decoding
+- faster H.264 decoding
+- WebM support in Matroska de/muxer
+- low overhead Ogg muxing
+- VP8 de/encoding via libvpx
+- CODEC_CAP_EXPERIMENTAL added
 
 
 

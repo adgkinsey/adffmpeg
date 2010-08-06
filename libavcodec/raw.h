@@ -34,6 +34,6 @@ typedef struct PixelFormatTag {
     unsigned int fourcc;
 } PixelFormatTag;
 
-extern const PixelFormatTag ff_raw_pix_fmt_tags[];
+extern const PixelFormatTag ff_raw_pixelFormatTags[];
 
 #endif /* AVCODEC_RAW_H */

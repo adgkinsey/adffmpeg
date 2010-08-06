@@ -19,7 +19,6 @@ HEADERS = adler32.h                                                     \
           mem.h                                                         \
           pixdesc.h                                                     \
           pixfmt.h                                                      \
-          random_seed.h                                                 \
           rational.h                                                    \
           sha1.h                                                        \
 

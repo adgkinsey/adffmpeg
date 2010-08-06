@@ -1,5 +1,6 @@
 /*
- * Chomp bitstream filter
+ * Header file for hardcoded AAC tables
+ *
  * Copyright (c) 2010 Alex Converse <alex.converse@gmail.com>
  *
  * This file is part of FFmpeg.
@@ -19,29 +20,15 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "avcodec.h"
-#include "internal.h"
+#ifndef AAC_TABLEGEN_INIT_H
+#define AAC_TABLEGEN_INIT_H
 
-static int chomp_filter(AVBitStreamFilterContext *bsfc,
-                        AVCodecContext *avctx, const char *args,
-                        uint8_t  **poutbuf, int *poutbuf_size,
-                        const uint8_t *buf, int      buf_size,
-                        int keyframe)
-{
-    while (buf_size > 0 && !buf[buf_size-1])
-        buf_size--;
+#if CONFIG_HARDCODED_TABLES
+#define ff_aac_tableinit()
+extern const float ff_aac_pow2sf_tab[428];
+#else
+void ff_aac_tableinit(void);
+extern       float ff_aac_pow2sf_tab[428];
+#endif /* CONFIG_HARDCODED_TABLES */
 
-    *poutbuf = (uint8_t*) buf;
-    *poutbuf_size = buf_size;
-
-    return 0;
-}
-
-/**
- * This filter removes a string of \0 bytes from the end of a packet.
- */
-AVBitStreamFilter chomp_bsf = {
-    "chomp",
-    0,
-    chomp_filter,
-};
+#endif /* AAC_TABLEGEN_INIT_H */

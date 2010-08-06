@@ -67,6 +67,7 @@ int ff_rate_control_init(MpegEncContext *s)
 {
     RateControlContext *rcc= &s->rc_context;
     int i;
+    const char *error = NULL;
     static const char * const const_names[]={
         "PI",
         "E",
@@ -106,9 +107,9 @@ int ff_rate_control_init(MpegEncContext *s)
     };
     emms_c();
 
-    rcc->rc_eq_eval = ff_parse_expr(s->avctx->rc_eq ? s->avctx->rc_eq : "tex^qComp", const_names, func1_names, func1, NULL, NULL, 0, s->avctx);
+    rcc->rc_eq_eval = ff_parse_expr(s->avctx->rc_eq ? s->avctx->rc_eq : "tex^qComp", const_names, func1, func1_names, NULL, NULL, &error);
     if (!rcc->rc_eq_eval) {
-        av_log(s->avctx, AV_LOG_ERROR, "Error parsing rc_eq \"%s\"\n", s->avctx->rc_eq);
+        av_log(s->avctx, AV_LOG_ERROR, "Error parsing rc_eq \"%s\": %s\n", s->avctx->rc_eq, error? error : "");
         return -1;
     }
 

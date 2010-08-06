@@ -99,7 +99,6 @@ typedef struct {
 } NUTContext;
 
 extern const AVCodecTag ff_nut_subtitle_tags[];
-extern const AVCodecTag ff_nut_video_tags[];
 
 typedef struct {
     char str[9];

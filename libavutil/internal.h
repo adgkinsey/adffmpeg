@@ -54,6 +54,14 @@
 #endif
 #endif
 
+#ifndef av_alias
+#if HAVE_ATTRIBUTE_MAY_ALIAS && (!defined(__ICC) || __ICC > 1110) && AV_GCC_VERSION_AT_LEAST(3,3)
+#   define av_alias __attribute__((may_alias))
+#else
+#   define av_alias
+#endif
+#endif
+
 #ifndef INT16_MIN
 #define INT16_MIN       (-0x7fff - 1)
 #endif
@@ -194,6 +202,17 @@
 #   define NULL_IF_CONFIG_SMALL(x) NULL
 #else
 #   define NULL_IF_CONFIG_SMALL(x) x
+#endif
+
+#if HAVE_SYMVER_ASM_LABEL
+#   define FF_SYMVER(type, name, args, ver)                     \
+    type ff_##name args __asm__ (EXTERN_PREFIX #name "@" ver);  \
+    type ff_##name args
+#elif HAVE_SYMVER_GNU_ASM
+#   define FF_SYMVER(type, name, args, ver)                             \
+    __asm__ (".symver ff_" #name "," EXTERN_PREFIX #name "@" ver);      \
+    type ff_##name args;                                                \
+    type ff_##name args
 #endif
 
 #endif /* AVUTIL_INTERNAL_H */

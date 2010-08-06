@@ -55,8 +55,7 @@ AVFilterPicRef *avfilter_default_get_video_buffer(AVFilterLink *link, int perms,
         pic->linesize[i] = FFALIGN(pic->linesize[i], 16);
 
     tempsize = ff_fill_pointer((AVPicture *)pic, NULL, pic->format, ref->h);
-    buf = av_malloc(tempsize + 16); // +2 is needed for swscaler, +16 to be
-                                    // SIMD-friendly
+    buf = av_malloc(tempsize);
     ff_fill_pointer((AVPicture *)pic, buf, pic->format, ref->h);
 
     memcpy(ref->data,     pic->data,     sizeof(pic->data));
@@ -77,8 +76,6 @@ void avfilter_default_start_frame(AVFilterLink *link, AVFilterPicRef *picref)
         out->outpic->pts = picref->pts;
         out->outpic->pos = picref->pos;
         out->outpic->pixel_aspect = picref->pixel_aspect;
-        out->outpic->interlaced      = picref->interlaced;
-        out->outpic->top_field_first = picref->top_field_first;
         avfilter_start_frame(out, avfilter_ref_pic(out->outpic, ~0));
     }
 }

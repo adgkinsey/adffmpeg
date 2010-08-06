@@ -89,7 +89,7 @@ Configuration options:
   --disable-avformat       disable libavformat build
   --disable-swscale        disable libswscale build
   --enable-postproc        enable GPLed postprocessing support [no]
-  --disable-avfilter       disable video filter support [no]
+  --enable-avfilter        video filter support [no]
   --enable-avfilter-lavf   video filters dependent on avformat [no]
   --enable-beosthreads     use BeOS threads [no]
   --enable-os2threads      use OS/2 threads [no]
@@ -184,6 +184,7 @@ External library support:
   --enable-libtheora       enable Theora encoding via libtheora [no]
   --enable-libvorbis       enable Vorbis encoding via libvorbis,
                            native implementation exists [no]
+  --enable-libvpx          enable VP8 support via libvpx [no]
   --enable-libx264         enable H.264 encoding via x264 [no]
   --enable-libxvid         enable Xvid encoding via xvidcore,
                            native MPEG-4/Xvid encoder exists [no]
@@ -252,6 +253,8 @@ NOTE: Object files are built at the place where configure is launched.
 EOF
   exit 0
 }
+
+quotes='""'
 
 log(){
     echo "$@" >> $logfile
@@ -929,6 +932,7 @@ CONFIG_LIST="
     libspeex
     libtheora
     libvorbis
+    libvpx
     libx264
     libxvid
     lpc
@@ -1086,6 +1090,9 @@ HAVE_LIST="
     struct_sockaddr_in6
     struct_sockaddr_sa_len
     struct_sockaddr_storage
+    symver
+    symver_gnu_asm
+    symver_asm_label
     sys_mman_h
     sys_resource_h
     sys_select_h
@@ -1199,6 +1206,8 @@ fast_unaligned_if_any="armv6 ppc x86"
 
 need_memalign="altivec neon sse"
 inline_asm_deps="!tms470"
+
+symver_if_any="symver_asm_label symver_gnu_asm"
 
 # subsystems
 mdct_select="fft"
@@ -1351,6 +1360,8 @@ libschroedinger_encoder_deps="libschroedinger"
 libspeex_decoder_deps="libspeex"
 libtheora_encoder_deps="libtheora"
 libvorbis_encoder_deps="libvorbis"
+libvpx_decoder_deps="libvpx"
+libvpx_encoder_deps="libvpx"
 libx264_encoder_deps="libx264"
 libxvid_encoder_deps="libxvid"
 
@@ -1411,8 +1422,8 @@ x11_grab_device_indev_extralibs="-lX11 -lXext -lXfixes"
 gopher_protocol_deps="network"
 http_protocol_deps="network"
 http_protocol_select="tcp_protocol"
-rtmp_protocol_select="tcp_protocol"
-rtp_protocol_select="udp_protocol"
+rtmp_protocol_deps="tcp_protocol"
+rtp_protocol_deps="udp_protocol"
 tcp_protocol_deps="network"
 udp_protocol_deps="network"
 ds_protocol_deps="network"
@@ -1474,7 +1485,6 @@ host_os=$target_os_default
 # configurable options
 enable avcodec
 enable avdevice
-enable avfilter
 enable avformat
 enable avutil
 enable asm
@@ -1828,9 +1838,9 @@ elif $cc -V 2>&1 | grep -q Sun; then
                 -march=*|-mcpu=*)
                     case "${flag#*=}" in
                         native)                   echo -xtarget=native       ;;
-                        v9|niagara)               echo -xarch=sparc          ;;
+                        v9)                       echo -xarch=sparc          ;;
                         ultrasparc)               echo -xarch=sparcvis       ;;
-                        ultrasparc3|niagara2)     echo -xarch=sparcvis2      ;;
+                        ultrasparc3|niagara*)     echo -xarch=sparcvis2      ;;
                         i586|pentium)             echo -xchip=pentium        ;;
                         i686|pentiumpro|pentium2) echo -xtarget=pentium_pro  ;;
                         pentium3*|c3-2)           echo -xtarget=pentium3     ;;
@@ -2025,10 +2035,6 @@ elif enabled x86; then
 elif enabled sparc; then
 
     case $cpu in
-        niagara)
-            cpuflags="-mcpu=$cpu"
-            disable vis
-        ;;
         sparc64)
             cpuflags="-mcpu=v9"
         ;;
@@ -2619,14 +2625,17 @@ enabled libopencore_amrwb  && require libopencore_amrwb opencore-amrwb/dec_if.h 
 enabled libopenjpeg && require libopenjpeg openjpeg.h opj_version -lopenjpeg
 enabled libparreader && require2 libparreader "parreader.h parreader_types.h" parReader_getPicStructSize -lparreader
 enabled librtmp    && require  librtmp librtmp/rtmp.h RTMP_Init -lrtmp
+enabled librtmp    && require  librtmp librtmp/rtmp.h RTMP_Init $(pkg-config --libs librtmp)
 enabled libschroedinger && add_cflags $(pkg-config --cflags schroedinger-1.0) &&
                            require libschroedinger schroedinger/schro.h schro_init $(pkg-config --libs schroedinger-1.0)
 enabled libspeex   && require  libspeex speex/speex.h speex_decoder_init -lspeex
 enabled libtheora  && require  libtheora theora/theoraenc.h th_info_init -ltheoraenc -ltheoradec -logg
 enabled libvorbis  && require  libvorbis vorbis/vorbisenc.h vorbis_info_init -lvorbisenc -lvorbis -logg
+enabled libvpx     && require2 libvpx "vpx/vpx_decoder.h vpx/vp8dx.h" "vpx_codec_dec_init_ver" -lvpx &&
+                      require2 libvpx "vpx/vpx_encoder.h vpx/vp8cx.h" "vpx_codec_enc_init_ver" -lvpx
 enabled libx264    && require  libx264 x264.h x264_encoder_encode -lx264 -lm &&
-                      { check_cpp_condition x264.h "X264_BUILD >= 90" ||
-                        die "ERROR: libx264 version must be >= 0.90."; }
+                      { check_cpp_condition x264.h "X264_BUILD >= 83" ||
+                        die "ERROR: libx264 version must be >= 0.83."; }
 enabled libxvid    && require  libxvid xvid.h xvid_global -lxvidcore
 enabled mlib       && require  mediaLib mlib_types.h mlib_VectorSub_S16_U8_Mod -lmlib
 
@@ -2738,8 +2747,17 @@ check_ldflags '-Wl,-rpath-link,\$(BUILD_ROOT)/libpostproc -Wl,-rpath-link,\$(BUI
 check_ldflags -Wl,-Bsymbolic
 
 echo "X{};" > $TMPV
-test_ldflags -Wl,--version-script,$TMPV &&
+if test_ldflags -Wl,--version-script,$TMPV; then
     append SHFLAGS '-Wl,--version-script,\$(SUBDIR)lib\$(NAME).ver'
+    check_cc <<EOF && enable symver_asm_label
+void ff_foo(void) __asm__ ("av_foo@VERSION");
+void ff_foo(void) { ${inline_asm+__asm__($quotes);} }
+EOF
+    check_cc <<EOF && enable symver_gnu_asm
+__asm__(".symver ff_foo,av_foo@VERSION");
+void ff_foo(void) {}
+EOF
+fi
 
 if enabled small; then
     add_cflags $size_cflags
@@ -2894,6 +2912,7 @@ echo "libschroedinger enabled   ${libschroedinger-no}"
 echo "libspeex enabled          ${libspeex-no}"
 echo "libtheora enabled         ${libtheora-no}"
 echo "libvorbis enabled         ${libvorbis-no}"
+echo "libvpx enabled            ${libvpx-no}"
 echo "libx264 enabled           ${libx264-no}"
 echo "libxvid enabled           ${libxvid-no}"
 echo "zlib enabled              ${zlib-no}"

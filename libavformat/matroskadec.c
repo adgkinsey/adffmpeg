@@ -623,7 +623,7 @@ static int ebml_read_ascii(ByteIOContext *pb, int size, char **str)
     if (!(*str = av_malloc(size + 1)))
         return AVERROR(ENOMEM);
     if (get_buffer(pb, (uint8_t *) *str, size) != size) {
-        av_freep(str);
+        av_free(*str);
         return AVERROR(EIO);
     }
     (*str)[size] = '\0';
@@ -643,10 +643,8 @@ static int ebml_read_binary(ByteIOContext *pb, int length, EbmlBin *bin)
 
     bin->size = length;
     bin->pos  = url_ftell(pb);
-    if (get_buffer(pb, bin->data, length) != length) {
-        av_freep(&bin->data);
+    if (get_buffer(pb, bin->data, length) != length)
         return AVERROR(EIO);
-    }
 
     return 0;
 }
@@ -683,7 +681,7 @@ static int matroska_ebmlnum_uint(MatroskaDemuxContext *matroska,
 {
     ByteIOContext pb;
     init_put_byte(&pb, data, size, 0, NULL, NULL, NULL, NULL);
-    return ebml_read_num(matroska, &pb, FFMIN(size, 8), num);
+    return ebml_read_num(matroska, &pb, 8, num);
 }
 
 /*
@@ -1168,8 +1166,6 @@ static int matroska_read_header(AVFormatContext *s, AVFormatParameters *ap)
         return -1;
     matroska_execute_seekhead(matroska);
 
-    if (!matroska->time_scale)
-        matroska->time_scale = 1000000;
     if (matroska->duration)
         matroska->ctx->duration = matroska->duration * matroska->time_scale
                                   * 1000 / AV_TIME_BASE;

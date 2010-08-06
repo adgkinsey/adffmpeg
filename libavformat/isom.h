@@ -25,7 +25,7 @@
 #define AVFORMAT_ISOM_H
 
 #include "avio.h"
-#include "internal.h"
+#include "riff.h"
 #include "dv.h"
 
 /* isom.c */

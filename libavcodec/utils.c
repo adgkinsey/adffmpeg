@@ -709,7 +709,6 @@ av_cold int avcodec_close(AVCodecContext *avctx)
     if (avctx->codec && avctx->codec->close)
         avctx->codec->close(avctx);
     avcodec_default_free_buffers(avctx);
-    avctx->coded_frame = NULL;
     av_freep(&avctx->priv_data);
     if(avctx->codec && avctx->codec->encode)
         av_freep(&avctx->extradata);
@@ -725,14 +724,18 @@ av_cold int avcodec_close(AVCodecContext *avctx)
 
 AVCodec *avcodec_find_encoder(enum CodecID id)
 {
-    AVCodec *p;
+    AVCodec *p, *experimental=NULL;
     p = first_avcodec;
     while (p) {
-        if (p->encode != NULL && p->id == id)
-            return p;
+        if (p->encode != NULL && p->id == id) {
+            if (p->capabilities & CODEC_CAP_EXPERIMENTAL && !experimental) {
+                experimental = p;
+            } else
+                return p;
+        }
         p = p->next;
     }
-    return NULL;
+    return experimental;
 }
 
 AVCodec *avcodec_find_encoder_by_name(const char *name)
@@ -1293,12 +1296,4 @@ int av_lockmgr_register(int (*cb)(void **mutex, enum AVLockOp op))
             return -1;
     }
     return 0;
-}
-
-unsigned int ff_toupper4(unsigned int x)
-{
-    return     toupper( x     &0xFF)
-            + (toupper((x>>8 )&0xFF)<<8 )
-            + (toupper((x>>16)&0xFF)<<16)
-            + (toupper((x>>24)&0xFF)<<24);
 }

@@ -80,7 +80,9 @@ const int program_birth_year = 2003;
 /* NOTE: the size must be big enough to compensate the hardware audio buffersize size */
 #define SAMPLE_ARRAY_SIZE (2*65536)
 
+#if !CONFIG_AVFILTER
 static int sws_flags = SWS_BICUBIC;
+#endif
 
 typedef struct PacketQueue {
     AVPacketList *first_pkt, *last_pkt;
@@ -1565,7 +1567,7 @@ static int input_get_buffer(AVCodecContext *codec, AVFrame *pic)
     AVFilterContext *ctx = codec->opaque;
     AVFilterPicRef  *ref;
     int perms = AV_PERM_WRITE;
-    int i, w, h, stride[4];
+    int w, h, stride[4];
     unsigned edge;
 
     if(pic->buffer_hints & FF_BUFFER_HINTS_VALID) {
@@ -1587,7 +1589,7 @@ static int input_get_buffer(AVCodecContext *codec, AVFrame *pic)
 
     ref->w = codec->width;
     ref->h = codec->height;
-    for(i = 0; i < 3; i ++) {
+    for(int i = 0; i < 3; i ++) {
         unsigned hshift = i == 0 ? 0 : av_pix_fmt_descriptors[ref->pic->format].log2_chroma_w;
         unsigned vshift = i == 0 ? 0 : av_pix_fmt_descriptors[ref->pic->format].log2_chroma_h;
 
@@ -1766,11 +1768,9 @@ static int video_thread(void *arg)
 
 #if CONFIG_AVFILTER
     int64_t pos;
-    char sws_flags_str[128];
     AVFilterContext *filt_src = NULL, *filt_out = NULL;
     AVFilterGraph *graph = av_mallocz(sizeof(AVFilterGraph));
-    snprintf(sws_flags_str, sizeof(sws_flags_str), "flags=%d", sws_flags);
-    graph->scale_sws_opts = av_strdup(sws_flags_str);
+    graph->scale_sws_opts = av_strdup("sws_flags=bilinear");
 
     if(!(filt_src = avfilter_open(&input_filter,  "src")))   goto the_end;
     if(!(filt_out = avfilter_open(&output_filter, "out")))   goto the_end;
@@ -3047,7 +3047,7 @@ static const OptionDef options[] = {
     { "framedrop", OPT_BOOL | OPT_EXPERT, {(void*)&framedrop}, "drop frames when cpu is too slow", "" },
     { "window_title", OPT_STRING | HAS_ARG, {(void*)&window_title}, "set window title", "window title" },
 #if CONFIG_AVFILTER
-    { "vf", OPT_STRING | HAS_ARG, {(void*)&vfilters}, "video filters", "filter list" },
+    { "vfilters", OPT_STRING | HAS_ARG, {(void*)&vfilters}, "video filters", "filter list" },
 #endif
     { "rdftspeed", OPT_INT | HAS_ARG| OPT_AUDIO | OPT_EXPERT, {(void*)&rdftspeed}, "rdft speed", "msecs" },
     { "default", OPT_FUNC2 | HAS_ARG | OPT_AUDIO | OPT_VIDEO | OPT_EXPERT, {(void*)opt_default}, "generic catch all option", "" },

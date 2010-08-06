@@ -275,8 +275,8 @@ int init_vlc_sparse(VLC *vlc, int nb_bits, int nb_codes,
              const void *symbols, int symbols_wrap, int symbols_size,
              int flags)
 {
-    VLCcode *buf;
-    int i, j, ret;
+    VLCcode buf[nb_codes];
+    int i, j;
 
     vlc->bits = nb_bits;
     if(flags & INIT_VLC_USE_NEW_STATIC){
@@ -294,8 +294,6 @@ int init_vlc_sparse(VLC *vlc, int nb_bits, int nb_codes,
 #ifdef DEBUG_VLC
     av_log(NULL,AV_LOG_DEBUG,"build table nb_codes=%d\n", nb_codes);
 #endif
-
-    buf = av_malloc((nb_codes+1)*sizeof(VLCcode));
 
     assert(symbols_size <= 2 || !symbols);
     j = 0;
@@ -321,10 +319,7 @@ int init_vlc_sparse(VLC *vlc, int nb_bits, int nb_codes,
     COPY(buf[j].bits && buf[j].bits <= nb_bits);
     nb_codes = j;
 
-    ret = build_table(vlc, nb_bits, nb_codes, buf, flags);
-
-    av_free(buf);
-    if (ret < 0) {
+    if (build_table(vlc, nb_bits, nb_codes, buf, flags) < 0) {
         av_freep(&vlc->table);
         return -1;
     }
