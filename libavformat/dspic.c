@@ -17,7 +17,7 @@ static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData );
 static const long       DSPacketHeaderMagicNumber = 0xfaced0ff;
 static const char *     DSApp0Identifier = "DigiSpr";
 
-static AVInputFormat dspicInputFormat = {
+AVInputFormat dspic_demuxer = {
     "dspic",
     "dspic format",
     sizeof(DSPicFormat),
@@ -28,12 +28,6 @@ static AVInputFormat dspicInputFormat = {
     dspicReadSeek,
     dspicReadPts,
 };
-
-int dspicInit( void )
-{
-    av_register_input_format(&dspicInputFormat);
-    return 0;
-}
 
 static int dspicProbe( AVProbeData *p )
 {
