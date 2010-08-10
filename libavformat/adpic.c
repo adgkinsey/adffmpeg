@@ -497,6 +497,19 @@ static AVStream *get_stream(struct AVFormatContext *s, NetVuImageData *pic)
 			st->codec->width = pic->format.target_pixels;
 			st->codec->height = pic->format.target_lines;
 			st->index = i;
+			
+			// Set pixel aspect ratio, display aspect is (sar * width / height)
+			// May get overridden by codec
+			if( (st->codec->width  > 360) && (st->codec->height <= 480) )  {
+				st->sample_aspect_ratio = (AVRational){1, 2};
+			}
+			else  {
+				st->sample_aspect_ratio = (AVRational){1, 1};
+			}
+			
+			// Use milliseconds as the time base
+			st->r_frame_rate = (AVRational){1,1000};	
+			av_set_pts_info(st, 32, 1, 1000);
 		}
 	}
 	return st;
@@ -1701,6 +1714,11 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             errorVal = ADPIC_GET_STREAM_ERROR;
 		    goto cleanup;
 	    }
+		else  {
+			pkt->pts = video_data->session_time;
+			pkt->pts *= 1000ULL;
+			pkt->pts += video_data->milliseconds;
+		}
     }
     else if( currentFrameType == NetVuAudio )
     {
@@ -1757,7 +1775,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 
     pkt->priv = frameData;
 
-	pkt->duration =  ((int)(AV_TIME_BASE * 1.0));
+	pkt->duration = 0;
 
     errorVal = ADPIC_NO_ERROR;
 
@@ -1778,16 +1796,6 @@ cleanup:
 	return errorVal;
 }
 
-static int64_t adpic_read_pts(AVFormatContext *s, int stream_index, int64_t *ppos, int64_t pos_limit)
-{
-	return -1;
-}
-
-static int adpic_read_seek(AVFormatContext *s, int stream_index, int64_t timestamp, int flags)
-{
-	return -1;
-}
-
 
 AVInputFormat adpic_demuxer = {
     "adpic",
@@ -1797,8 +1805,6 @@ AVInputFormat adpic_demuxer = {
     adpic_read_header,
     adpic_read_packet,
     adpic_read_close,
-    adpic_read_seek,
-    adpic_read_pts,
 };
 
 
