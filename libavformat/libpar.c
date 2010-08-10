@@ -181,11 +181,11 @@ int createStream(AVFormatContext * avf,
 		// May get overridden by codec
 		if( (w > 360) && (h <= 480) )  {
 			st->sample_aspect_ratio = (AVRational){1, 2};
-			st->codec->sample_aspect_ratio = (AVRational){1, 2};
+			//st->codec->sample_aspect_ratio = (AVRational){1, 2};
 		}
 		else  {
 			st->sample_aspect_ratio = (AVRational){1, 1};
-			st->codec->sample_aspect_ratio = (AVRational){1, 1};
+			//st->codec->sample_aspect_ratio = (AVRational){1, 1};
 		}
 		
 		parReader_getStreamName(frameInfo->frameBuffer, 
