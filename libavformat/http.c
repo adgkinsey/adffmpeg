@@ -49,6 +49,7 @@ typedef struct {
     char location[URL_SIZE];
     HTTPAuthState auth_state;
     unsigned char headers[BUFFER_SIZE];
+    int willclose;          /**< Set if the server correctly handles Connection: close and will close the connection after feeding us the content. */
 
     /* BMOJ - added to hold utc_offset from header */
 	char* sever;
@@ -294,6 +295,10 @@ static int process_line(URLContext *h, char *line, int line_count,
         } else if(!strcmp(tag, "Server")) {
 			copy_value_to_field( p, &s->sever);
 		}
+        } else if (!strcmp (tag, "Connection")) {
+            if (!strcmp(p, "close"))
+                s->willclose = 1;
+        }
     }
     return 1;
 }
@@ -452,6 +457,7 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
     s->line_count = 0;
     s->off = 0;
     s->filesize = -1;
+    s->willclose = 0;
     if (post) {
         /* Pretend that it did work. We didn't read any header yet, since
          * we've still to send the POST data, but the code calling this
@@ -516,6 +522,8 @@ static int http_read(URLContext *h, uint8_t *buf, int size)
         memcpy(buf, s->buf_ptr, len);
         s->buf_ptr += len;
     } else {
+        if (!s->willclose && s->filesize >= 0 && s->off >= s->filesize)
+            return AVERROR_EOF;
         len = url_read(s->hd, buf, size);
     }
     if (len > 0) {
