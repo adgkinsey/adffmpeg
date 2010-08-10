@@ -96,6 +96,7 @@ int createStream(AVFormatContext * avf,
 				 const FrameInfo *frameInfo, const DisplaySettings *dispSet)
 {
 	//PARContext *p = avf->priv_data;
+	char name[128];
 	
 	int streamId = frameInfo->channel;
 	AVStream * st = av_new_stream(avf, streamId);
@@ -186,6 +187,12 @@ int createStream(AVFormatContext * avf,
 			st->sample_aspect_ratio = (AVRational){1, 1};
 			st->codec->sample_aspect_ratio = (AVRational){1, 1};
 		}
+		
+		parReader_getStreamName(frameInfo->frameBuffer, 
+								frameInfo->frameBufferSize, 
+								name, 
+								sizeof(name));
+		av_metadata_set2(&st->metadata, "Title", name, 0);
 		
 		/// \todo Generate from index
 		//st->duration = 0;
