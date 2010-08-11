@@ -96,18 +96,20 @@ int createStream(AVFormatContext * avf,
 				 const FrameInfo *frameInfo, const DisplaySettings *dispSet)
 {
 	//PARContext *p = avf->priv_data;
+	const NetVuImageData *pic = NULL;
 	char name[128];
 	
 	int streamId = frameInfo->channel;
 	AVStream * st = av_new_stream(avf, streamId);
 	
 	if (parReader_frameIsVideo(frameInfo))  {
+		st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
+		
 		/// \todo Move this into parreader.dll
-		const NetVuImageData *pic = frameInfo->frameBuffer;
+		pic = frameInfo->frameBuffer;
 		switch(pic->vid_format)  {
 			case(FRAME_FORMAT_JPEG_422):
 			case(FRAME_FORMAT_JPEG_411):
-				st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
 				st->codec->codec_id = CODEC_ID_MJPEG;
 				st->codec->has_b_frames = 0;
 				break;
@@ -115,53 +117,23 @@ int createStream(AVFormatContext * avf,
 			case(FRAME_FORMAT_MPEG4_411_I):
 			case(FRAME_FORMAT_MPEG4_411_GOV_P):
 			case(FRAME_FORMAT_MPEG4_411_GOV_I):
-				st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
 				st->codec->codec_id = CODEC_ID_MPEG4;
 				break;
 			case(FRAME_FORMAT_RAW_422I):
 			case(FRAME_FORMAT_H264_I):
 			case(FRAME_FORMAT_H264_P):
-				st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
 				st->codec->codec_id = CODEC_ID_H264;
 				break;
 			default:
-				st->codec->codec_type = AVMEDIA_TYPE_UNKNOWN;
 				st->codec->codec_id = CODEC_ID_NONE;
 				break;
 		}
 	}
 	else if (parReader_frameIsAudio(frameInfo))  {
-		/// \todo Move this into parreader.dll
-		const NetVuAudioData *aud = frameInfo->frameBuffer;
-		switch(aud->mode)  {
-			case(FRAME_FORMAT_AUD_RAW):
-			case(FRAME_FORMAT_AUD_ADPCM):
-			case(FRAME_FORMAT_AUD_ADPCM_8000):
-			case(FRAME_FORMAT_AUD_ADPCM_16000):
-			case(FRAME_FORMAT_AUD_L16_44100):
-			case(FRAME_FORMAT_AUD_ADPCM_11025):
-			case(FRAME_FORMAT_AUD_ADPCM_22050):
-			case(FRAME_FORMAT_AUD_ADPCM_32000):
-			case(FRAME_FORMAT_AUD_ADPCM_44100):
-			case(FRAME_FORMAT_AUD_ADPCM_48000):
-			case(FRAME_FORMAT_AUD_L16_8000):
-			case(FRAME_FORMAT_AUD_L16_11025):
-			case(FRAME_FORMAT_AUD_L16_16000):
-			case(FRAME_FORMAT_AUD_L16_22050):
-			case(FRAME_FORMAT_AUD_L16_32000):
-			case(FRAME_FORMAT_AUD_L16_48000):
-			case(FRAME_FORMAT_AUD_L16_12000):
-			case(FRAME_FORMAT_AUD_L16_24000):
-				st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
-				st->codec->codec_id = CODEC_ID_ADPCM_ADH;
-				st->codec->channels = 1;
-				st->codec->block_align = 0;
-				break;
-			default:
-				st->codec->codec_type = AVMEDIA_TYPE_UNKNOWN;
-				st->codec->codec_id = CODEC_ID_NONE;
-				break;
-		}
+		st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
+		st->codec->codec_id = CODEC_ID_ADPCM_ADH;
+		st->codec->channels = 1;
+		st->codec->block_align = 0;
 	}
 	else  {
 		st->codec->codec_type = AVMEDIA_TYPE_DATA;
@@ -181,11 +153,9 @@ int createStream(AVFormatContext * avf,
 		// May get overridden by codec
 		if( (w > 360) && (h <= 480) )  {
 			st->sample_aspect_ratio = (AVRational){1, 2};
-			st->codec->sample_aspect_ratio = (AVRational){1, 2};
 		}
 		else  {
 			st->sample_aspect_ratio = (AVRational){1, 1};
-			st->codec->sample_aspect_ratio = (AVRational){1, 1};
 		}
 		
 		parReader_getStreamName(frameInfo->frameBuffer, 
@@ -197,6 +167,8 @@ int createStream(AVFormatContext * avf,
 		/// \todo Generate from index
 		//st->duration = 0;
 		//st->start_time
+		
+		st->nb_frames = parReader_getFrameCount();
 	}
 	else if (AVMEDIA_TYPE_AUDIO == st->codec->codec_type)  {
 		/// \todo Initialise AVStream with audio parameters
@@ -294,6 +266,8 @@ static int par_probe(AVProbeData *p)
 	fInfo.frameBuffer = p->buf;
 	fInfo.frameBufferSize = p->buf_size;
 	
+	parReader_setLogLevel(PARREADER_LOG_WARNING);
+	
 	res = parReader_loadParFile(NULL, p->filename, -1, &fInfo, 0);
 	//parReader_closeParFile();
 	if (1 == res)
@@ -339,22 +313,25 @@ static int par_read_packet(AVFormatContext * avf, AVPacket * pkt)
 	else
 		siz = parReader_loadFrame(&p->frameInfo, &p->dispSet, &fileChanged);
 	
-	if (siz > 0)  {
-		if (NULL != p->frameInfo.frameData)  {
-			createPacket(avf, pkt, siz, fileChanged);
-			return 0;
-		}
-		else  {
-			p->frameCached = 0;
-			return AVERROR(EAGAIN);
-		}
-	}
-	else  {
+	if (siz <= 0)  {
 		p->frameCached = 0;
 		p->fileChanged = 0;
 		pkt->size = 0;
 		return AVERROR_EOF;
 	}
+	
+	if (NULL == p->frameInfo.frameData)  {
+		p->frameCached = 0;
+		return AVERROR(EAGAIN);
+	}
+	
+	createPacket(avf, pkt, siz, fileChanged);
+	if (fileChanged)  {
+		if (parReader_getFilename(avf->filename, sizeof(avf->filename)) > 0)  {
+			avf->streams[0]->nb_frames = parReader_getFrameCount();
+		}
+	}
+	return 0;		
 }
 
 static int par_read_seek(AVFormatContext *avf, int stream, 
