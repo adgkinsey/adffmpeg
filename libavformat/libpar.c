@@ -97,6 +97,7 @@ int createStream(AVFormatContext * avf,
 {
 	//PARContext *p = avf->priv_data;
 	const NetVuImageData *pic = NULL;
+	const NetVuAudioData *aud = NULL;
 	char name[128];
 	
 	int streamId = frameInfo->channel;
@@ -134,6 +135,62 @@ int createStream(AVFormatContext * avf,
 		st->codec->codec_id = CODEC_ID_ADPCM_ADH;
 		st->codec->channels = 1;
 		st->codec->block_align = 0;
+		
+		aud = frameInfo->frameBuffer;
+		st->codec->codec_tag = 0x0011;
+		switch(aud->mode)  {
+			case(FRAME_FORMAT_AUD_ADPCM_8000):
+				st->codec->sample_rate = 8000;
+				break;
+			case(FRAME_FORMAT_AUD_ADPCM_16000):
+				st->codec->sample_rate = 16000;
+				break;
+			case(FRAME_FORMAT_AUD_L16_44100):
+				st->codec->sample_rate = 441000;
+				break;
+			case(FRAME_FORMAT_AUD_ADPCM_11025):
+				st->codec->sample_rate = 11025;
+				break;
+			case(FRAME_FORMAT_AUD_ADPCM_22050):
+				st->codec->sample_rate = 22050;
+				break;
+			case(FRAME_FORMAT_AUD_ADPCM_32000):
+				st->codec->sample_rate = 32000;
+				break;
+			case(FRAME_FORMAT_AUD_ADPCM_44100):
+				st->codec->sample_rate = 44100;
+				break;
+			case(FRAME_FORMAT_AUD_ADPCM_48000):
+				st->codec->sample_rate = 48000;
+				break;
+			case(FRAME_FORMAT_AUD_L16_8000):
+				st->codec->sample_rate = 8000;
+				break;
+			case(FRAME_FORMAT_AUD_L16_11025):
+				st->codec->sample_rate = 11025;
+				break;
+			case(FRAME_FORMAT_AUD_L16_16000):
+				st->codec->sample_rate = 16000;
+				break;
+			case(FRAME_FORMAT_AUD_L16_22050):
+				st->codec->sample_rate = 22050;
+				break;
+			case(FRAME_FORMAT_AUD_L16_32000):
+				st->codec->sample_rate = 32000;
+				break;
+			case(FRAME_FORMAT_AUD_L16_48000):
+				st->codec->sample_rate = 48000;
+				break;
+			case(FRAME_FORMAT_AUD_L16_12000):
+				st->codec->sample_rate = 12000;
+				break;
+			case(FRAME_FORMAT_AUD_L16_24000):
+				st->codec->sample_rate = 24000;
+				break;
+			default:
+				st->codec->sample_rate = 8000;
+				break;
+		}
 	}
 	else  {
 		st->codec->codec_type = AVMEDIA_TYPE_DATA;
@@ -343,52 +400,54 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 	int streamId = st->id;
 	int isKeyFrame = 0;
 	
-	if ( (flags & AVSEEK_FLAG_FRAME) && (target < 0) )   {
-		p->dispSet.fileSeqNo = -target;
-		p->dispSet.frameNumber = 0;
-	}
-	else  {
-		// Don't seek beyond the file
-		p->dispSet.fileLock = 1;
-		
-		if (flags & AVSEEK_FLAG_FRAME)
-			p->dispSet.frameNumber = target;
-		else
-			p->dispSet.timestamp = target / 1000LL;
-	}
-	
-	if (flags & AVSEEK_FLAG_BACKWARD)
-		p->dispSet.playMode = RWND;
-	
-	p->dispSet.cameraNum = streamId;
 	do  {
-		siz = parReader_loadFrame(&p->frameInfo, &p->dispSet, &p->fileChanged);
-		if (0 == siz)
-			break;
-		
-		if (parReader_frameIsVideo(&p->frameInfo))  {
-			if (flags & AVSEEK_FLAG_ANY)
-				isKeyFrame = 1;
-			else
-				isKeyFrame = parReader_isIFrame(&p->frameInfo);
+		if ( (flags & AVSEEK_FLAG_FRAME) && (target < 0) )   {
+			p->dispSet.fileSeqNo = -target;
+			p->dispSet.frameNumber = 0;
 		}
 		else  {
-			// Always seek to a video frame
-			isKeyFrame = 0;
+			if (flags & AVSEEK_FLAG_FRAME)  {
+				// Don't seek beyond the file
+				p->dispSet.fileLock = 1;
+				p->dispSet.frameNumber = target;
+			}
+			else
+				p->dispSet.timestamp = target / 1000LL;
 		}
-	} while ( (streamId != p->frameInfo.channel) || (0 == isKeyFrame) );
-	
-	if (0 == siz)  {
-		// If we have failed to load a frame then try again with (target - 1)
-		if (RWND == p->dispSet.playMode)
-			par_read_seek(avf, stream, target + 1, flags);
-		else
-			par_read_seek(avf, stream, target - 1, flags);
-	}
-	else  {
-		p->frameCached = siz;
-		st->codec->frame_number = p->frameInfo.frameNumber;
-	}
+		
+		if (flags & AVSEEK_FLAG_BACKWARD)
+			p->dispSet.playMode = RWND;
+		
+		p->dispSet.cameraNum = streamId;
+		do  {
+			siz = parReader_loadFrame(&p->frameInfo, &p->dispSet, &p->fileChanged);
+			if (0 == siz)
+				break;
+			
+			if (parReader_frameIsVideo(&p->frameInfo))  {
+				if (flags & AVSEEK_FLAG_ANY)
+					isKeyFrame = 1;
+				else
+					isKeyFrame = parReader_isIFrame(&p->frameInfo);
+			}
+			else  {
+				// Always seek to a video frame
+				isKeyFrame = 0;
+			}
+		} while ( (streamId != p->frameInfo.channel) || (0 == isKeyFrame) );
+		
+		if (0 == siz)  {
+			// If we have failed to load a frame then try again with (target - 1)
+			if (RWND == p->dispSet.playMode)
+				target = target + 1;
+			else
+				target = target - 1;
+		}
+		else  {
+			p->frameCached = siz;
+			st->codec->frame_number = p->frameInfo.frameNumber;
+		}
+	} while (0 == siz);
 	
 	p->dispSet.fileLock = 0;
 	p->dispSet.playMode = PLAY;
