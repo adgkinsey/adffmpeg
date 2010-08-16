@@ -137,7 +137,6 @@ int createStream(AVFormatContext * avf,
 		st->codec->block_align = 0;
 		
 		aud = frameInfo->frameBuffer;
-		st->codec->codec_tag = 0x0011;
 		switch(aud->mode)  {
 			case(FRAME_FORMAT_AUD_ADPCM_8000):
 				st->codec->sample_rate = 8000;
@@ -191,6 +190,7 @@ int createStream(AVFormatContext * avf,
 				st->codec->sample_rate = 8000;
 				break;
 		}
+		st->codec->codec_tag = 0x0012;
 	}
 	else  {
 		st->codec->codec_type = AVMEDIA_TYPE_DATA;
