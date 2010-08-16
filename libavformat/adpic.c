@@ -592,7 +592,7 @@ static AVStream *get_audio_stream( struct AVFormatContext *s, NetVuAudioData* au
 					st->codec->sample_rate = 8000;
 					break;
 			}
-			st->codec->codec_tag = 0x0011;
+			st->codec->codec_tag = 0x0012;
 
 			st->index = i;
 		}
