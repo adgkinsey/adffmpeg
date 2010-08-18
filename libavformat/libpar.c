@@ -390,6 +390,17 @@ static int par_read_packet(AVFormatContext * avf, AVPacket * pkt)
 	return 0;		
 }
 
+#ifdef USE_SEEK2
+
+static int par_read_seek2(AVFormatContext *avf, int stream_index, 
+						  int64_t min_ts, int64_t ts, int64_t max_ts, 
+						  int flags)
+{
+	return 0;
+}
+
+#endif
+
 static int par_read_seek(AVFormatContext *avf, int stream, 
 						 int64_t target, int flags)
 {
@@ -398,6 +409,11 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 	AVStream *st = avf->streams[stream];
 	int streamId = st->id;
 	int isKeyFrame = 0;
+	int step;
+	
+	p->dispSet.cameraNum = streamId;
+	if (flags & AVSEEK_FLAG_BACKWARD)
+		p->dispSet.playMode = RWND;
 	
 	do  {
 		if ( (flags & AVSEEK_FLAG_FRAME) && (target < 0) )   {
@@ -414,10 +430,6 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 				p->dispSet.timestamp = target / 1000LL;
 		}
 		
-		if (flags & AVSEEK_FLAG_BACKWARD)
-			p->dispSet.playMode = RWND;
-		
-		p->dispSet.cameraNum = streamId;
 		do  {
 			siz = parReader_loadFrame(&p->frameInfo, &p->dispSet, &p->fileChanged);
 			if (0 == siz)
@@ -437,10 +449,21 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 		
 		if (0 == siz)  {
 			// If we have failed to load a frame then try again with (target - 1)
-			if (RWND == p->dispSet.playMode)
-				target = target + 1;
-			else
-				target = target - 1;
+			if (target >= 0)  {
+				if (flags & AVSEEK_FLAG_FRAME)
+					step = 1;
+				else
+					step = 1000;
+				
+				if (RWND == p->dispSet.playMode)
+					target = target + step;
+				else
+					target = target - step;
+			}
+			else  {
+				// Jumping to file failed, should never happen
+				break;
+			}
 		}
 		else  {
 			p->frameCached = siz;
@@ -488,4 +511,7 @@ AVInputFormat libparreader_demuxer = {
     par_read_close,
     par_read_seek,
     //.extensions = "par",
+#ifdef USE_SEEK2
+    .read_seek2 = par_read_seek2,
+#endif
 };
