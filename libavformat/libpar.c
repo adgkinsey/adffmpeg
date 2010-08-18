@@ -103,7 +103,7 @@ int createStream(AVFormatContext * avf,
 	int streamId = frameInfo->channel;
 	AVStream * st = av_new_stream(avf, streamId);
 	
-	st->filename = avf->filename;
+	st->filename = av_strdup(avf->filename);
 	
 	if (parReader_frameIsVideo(frameInfo))  {
 		st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
