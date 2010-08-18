@@ -341,19 +341,19 @@ static void maybe_print_config(const char *lib, const char *cfg)
 
 void show_banner(void)
 {
-    fprintf(stderr, "%s version " FFMPEG_VERSION ", Copyright (c) %d-%d the FFmpeg developers\n",
-            program_name, program_birth_year, this_year);
-    fprintf(stderr, "  built on %s %s with %s %s\n",
-            __DATE__, __TIME__, CC_TYPE, CC_VERSION);
-    fprintf(stderr, "  configuration: " FFMPEG_CONFIGURATION "\n");
-    PRINT_LIB_CONFIG(AVUTIL,   "libavutil",   avutil_configuration());
-    PRINT_LIB_CONFIG(AVCODEC,  "libavcodec",  avcodec_configuration());
-    PRINT_LIB_CONFIG(AVFORMAT, "libavformat", avformat_configuration());
-    PRINT_LIB_CONFIG(AVDEVICE, "libavdevice", avdevice_configuration());
-    PRINT_LIB_CONFIG(AVFILTER, "libavfilter", avfilter_configuration());
-    PRINT_LIB_CONFIG(SWSCALE,  "libswscale",  swscale_configuration());
-    PRINT_LIB_CONFIG(POSTPROC, "libpostproc", postproc_configuration());
-    print_all_lib_versions(stderr, 1);
+    //fprintf(stderr, "%s version " FFMPEG_VERSION ", Copyright (c) %d-%d the FFmpeg developers\n",
+    //        program_name, program_birth_year, this_year);
+    //fprintf(stderr, "  built on %s %s with %s %s\n",
+    //        __DATE__, __TIME__, CC_TYPE, CC_VERSION);
+    //fprintf(stderr, "  configuration: " FFMPEG_CONFIGURATION "\n");
+    //PRINT_LIB_CONFIG(AVUTIL,   "libavutil",   avutil_configuration());
+    //PRINT_LIB_CONFIG(AVCODEC,  "libavcodec",  avcodec_configuration());
+    //PRINT_LIB_CONFIG(AVFORMAT, "libavformat", avformat_configuration());
+    //PRINT_LIB_CONFIG(AVDEVICE, "libavdevice", avdevice_configuration());
+    //PRINT_LIB_CONFIG(AVFILTER, "libavfilter", avfilter_configuration());
+    //PRINT_LIB_CONFIG(SWSCALE,  "libswscale",  swscale_configuration());
+    //PRINT_LIB_CONFIG(POSTPROC, "libpostproc", postproc_configuration());
+    //print_all_lib_versions(stderr, 1);
 }
 
 void show_version(void) {

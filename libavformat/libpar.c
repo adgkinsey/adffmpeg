@@ -401,7 +401,7 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 	
 	do  {
 		if ( (flags & AVSEEK_FLAG_FRAME) && (target < 0) )   {
-			p->dispSet.fileSeqNo = -target;
+			p->dispSet.fileSeqNo = (-target)-1;
 			p->dispSet.frameNumber = 0;
 		}
 		else  {
