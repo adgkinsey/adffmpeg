@@ -34,7 +34,6 @@ typedef struct {
 } PARContext;
 
 
-
 void libpar_packet_destroy(struct AVPacket *packet);
 int createStream(AVFormatContext * avf, 
 				 const FrameInfo *frameInfo, const DisplaySettings *dispSet);
@@ -98,10 +97,13 @@ int createStream(AVFormatContext * avf,
 	//PARContext *p = avf->priv_data;
 	const NetVuImageData *pic = NULL;
 	const NetVuAudioData *aud = NULL;
-	char name[128];
+	char textbuffer[128];
+	int w, h;
 	
 	int streamId = frameInfo->channel;
 	AVStream * st = av_new_stream(avf, streamId);
+	
+	st->filename = avf->filename;
 	
 	if (parReader_frameIsVideo(frameInfo))  {
 		st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
@@ -129,6 +131,38 @@ int createStream(AVFormatContext * avf,
 				st->codec->codec_id = CODEC_ID_NONE;
 				break;
 		}
+		
+		parReader_getFrameSize(frameInfo, &w, &h);
+		st->codec->width = w;
+		st->codec->height = h;
+		
+		st->r_frame_rate = (AVRational){1,1000};	
+		av_set_pts_info(st, 32, 1, 1000);
+	
+		// Set pixel aspect ratio, display aspect is (sar * width / height)
+		/// \todo Could set better values here by checking resolutions and 
+		/// assuming PAL/NTSC aspect
+		if( (w > 360) && (h <= 480) )  {
+			st->sample_aspect_ratio = (AVRational){1, 2};
+		}
+		else  {
+			st->sample_aspect_ratio = (AVRational){1, 1};
+		}
+		
+		parReader_getStreamName(frameInfo->frameBuffer, 
+								frameInfo->frameBufferSize, 
+								textbuffer, 
+								sizeof(textbuffer));
+		av_metadata_set2(&st->metadata, "title", textbuffer, 0);
+		
+		parReader_getStreamDate(frameInfo, textbuffer, sizeof(textbuffer));
+		av_metadata_set2(&st->metadata, "date", textbuffer, 0);
+		
+		/// \todo Generate from index
+		//st->duration = 0;
+		//st->start_time
+		
+		st->nb_frames = parReader_getFrameCount();
 	}
 	else if (parReader_frameIsAudio(frameInfo))  {
 		st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
@@ -195,42 +229,6 @@ int createStream(AVFormatContext * avf,
 	else  {
 		st->codec->codec_type = AVMEDIA_TYPE_DATA;
 	}
-	
-	if (AVMEDIA_TYPE_VIDEO == st->codec->codec_type)  {
-		int w, h;
-		
-		parReader_getFrameSize(frameInfo, &w, &h);
-		st->codec->width = w;
-		st->codec->height = h;
-		
-		st->r_frame_rate = (AVRational){1,1000};	
-		av_set_pts_info(st, 32, 1, 1000);
-	
-		// Set pixel aspect ratio, display aspect is (sar * width / height)
-		// May get overridden by codec
-		if( (w > 360) && (h <= 480) )  {
-			st->sample_aspect_ratio = (AVRational){1, 2};
-		}
-		else  {
-			st->sample_aspect_ratio = (AVRational){1, 1};
-		}
-		
-		parReader_getStreamName(frameInfo->frameBuffer, 
-								frameInfo->frameBufferSize, 
-								name, 
-								sizeof(name));
-		av_metadata_set2(&st->metadata, "Title", name, 0);
-		
-		/// \todo Generate from index
-		//st->duration = 0;
-		//st->start_time
-		
-		st->nb_frames = parReader_getFrameCount();
-	}
-	else if (AVMEDIA_TYPE_AUDIO == st->codec->codec_type)  {
-		/// \todo Initialise AVStream with audio parameters
-	}
-	
 	return st->index;
 }
 
@@ -350,6 +348,7 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
 	// Reading the header opens the file, so ignore this file change notifier
 	p->fileChanged = 0;
 	
+	parReader_getFilename(avf->filename, sizeof(avf->filename));
 	createStream(avf, &p->frameInfo, &p->dispSet);
 	
 	avf->ctx_flags |= AVFMTCTX_NOHEADER;
