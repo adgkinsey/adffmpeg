@@ -128,41 +128,44 @@ int createStream(AVFormatContext * avf,
 				st->codec->codec_id = CODEC_ID_H264;
 				break;
 			default:
+				st->codec->codec_type = AVMEDIA_TYPE_DATA;
 				st->codec->codec_id = CODEC_ID_NONE;
 				break;
 		}
 		
-		parReader_getFrameSize(frameInfo, &w, &h);
-		st->codec->width = w;
-		st->codec->height = h;
+		if (AVMEDIA_TYPE_VIDEO == st->codec->codec_type)  {
+			parReader_getFrameSize(frameInfo, &w, &h);
+			st->codec->width = w;
+			st->codec->height = h;
+			
+			st->r_frame_rate = (AVRational){1,1000};	
+			av_set_pts_info(st, 32, 1, 1000);
 		
-		st->r_frame_rate = (AVRational){1,1000};	
-		av_set_pts_info(st, 32, 1, 1000);
-	
-		// Set pixel aspect ratio, display aspect is (sar * width / height)
-		/// \todo Could set better values here by checking resolutions and 
-		/// assuming PAL/NTSC aspect
-		if( (w > 360) && (h <= 480) )  {
-			st->sample_aspect_ratio = (AVRational){1, 2};
+			// Set pixel aspect ratio, display aspect is (sar * width / height)
+			/// \todo Could set better values here by checking resolutions and 
+			/// assuming PAL/NTSC aspect
+			if( (w > 360) && (h <= 480) )  {
+				st->sample_aspect_ratio = (AVRational){1, 2};
+			}
+			else  {
+				st->sample_aspect_ratio = (AVRational){1, 1};
+			}
+			
+			parReader_getStreamName(frameInfo->frameBuffer, 
+									frameInfo->frameBufferSize, 
+									textbuffer, 
+									sizeof(textbuffer));
+			av_metadata_set2(&st->metadata, "title", textbuffer, 0);
+			
+			parReader_getStreamDate(frameInfo, textbuffer, sizeof(textbuffer));
+			av_metadata_set2(&st->metadata, "date", textbuffer, 0);
+			
+			/// \todo Generate from index
+			//st->duration = 0;
+			//st->start_time
+			
+			st->nb_frames = parReader_getFrameCount();
 		}
-		else  {
-			st->sample_aspect_ratio = (AVRational){1, 1};
-		}
-		
-		parReader_getStreamName(frameInfo->frameBuffer, 
-								frameInfo->frameBufferSize, 
-								textbuffer, 
-								sizeof(textbuffer));
-		av_metadata_set2(&st->metadata, "title", textbuffer, 0);
-		
-		parReader_getStreamDate(frameInfo, textbuffer, sizeof(textbuffer));
-		av_metadata_set2(&st->metadata, "date", textbuffer, 0);
-		
-		/// \todo Generate from index
-		//st->duration = 0;
-		//st->start_time
-		
-		st->nb_frames = parReader_getFrameCount();
 	}
 	else if (parReader_frameIsAudio(frameInfo))  {
 		st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
