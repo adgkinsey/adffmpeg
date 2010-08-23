@@ -508,8 +508,9 @@ static AVStream *get_stream(struct AVFormatContext *s, NetVuImageData *pic)
 			}
 			
 			// Use milliseconds as the time base
-			st->r_frame_rate = (AVRational){1,1000};	
+			st->r_frame_rate = (AVRational){1,1000};
 			av_set_pts_info(st, 32, 1, 1000);
+			st->codec->time_base = (AVRational){1,1000};
 		}
 	}
 	return st;
@@ -545,7 +546,53 @@ static AVStream *get_audio_stream( struct AVFormatContext *s, NetVuAudioData* au
 		    st->codec->codec_id = CODEC_ID_ADPCM_ADH;
             st->codec->channels = 1;
             st->codec->block_align = 0;
-            // Should probably fill in other known values here. Like bit rate, sample rate, num channels, etc
+            // Should probably fill in other known values here. Like bit rate etc.
+			
+			// Use milliseconds as the time base
+			st->r_frame_rate = (AVRational){1,1000};
+			av_set_pts_info(st, 32, 1, 1000);
+			st->codec->time_base = (AVRational){1,1000};
+			
+			switch(audioHeader->mode)  {
+				case(AUD_MODE_AUD_ADPCM_8000):
+				case(AUD_MODE_AUD_L16_8000):
+					st->codec->sample_rate = 8000;
+					break;
+				case(AUD_MODE_AUD_ADPCM_16000):
+				case(AUD_MODE_AUD_L16_16000):
+					st->codec->sample_rate = 16000;
+					break;
+				case(AUD_MODE_AUD_L16_44100):
+				case(AUD_MODE_AUD_ADPCM_44100):
+					st->codec->sample_rate = 441000;
+					break;
+				case(AUD_MODE_AUD_ADPCM_11025):
+				case(AUD_MODE_AUD_L16_11025):
+					st->codec->sample_rate = 11025;
+					break;
+				case(AUD_MODE_AUD_ADPCM_22050):
+				case(AUD_MODE_AUD_L16_22050):
+					st->codec->sample_rate = 22050;
+					break;
+				case(AUD_MODE_AUD_ADPCM_32000):
+				case(AUD_MODE_AUD_L16_32000):
+					st->codec->sample_rate = 32000;
+					break;
+				case(AUD_MODE_AUD_ADPCM_48000):
+				case(AUD_MODE_AUD_L16_48000):
+					st->codec->sample_rate = 48000;
+					break;
+				case(AUD_MODE_AUD_L16_12000):
+					st->codec->sample_rate = 12000;
+					break;
+				case(AUD_MODE_AUD_L16_24000):
+					st->codec->sample_rate = 24000;
+					break;
+				default:
+					st->codec->sample_rate = 8000;
+					break;
+			}
+			st->codec->codec_tag = 0x0012;
 
 			st->index = i;
 		}

@@ -97,6 +97,25 @@ enum pkt_offsets { DATA_TYPE, DATA_CHANNEL, DATA_SIZE_BYTE_0 , DATA_SIZE_BYTE_1 
 #define PIC_MODE_H264P           7
 #define PIC_MODE_H264J           8
 
+#define AUD_MODE_AUD_RAW		   1 // historical - reserved RTP payload type
+#define AUD_MODE_AUD_ADPCM		   2 // historical - reserved RTP payload type
+#define AUD_MODE_AUD_ADPCM_8000	   5 
+#define AUD_MODE_AUD_ADPCM_16000   6 
+#define AUD_MODE_AUD_L16_44100	  11 
+#define AUD_MODE_AUD_ADPCM_11025  16 
+#define AUD_MODE_AUD_ADPCM_22050  17 
+#define AUD_MODE_AUD_ADPCM_32000  96 
+#define AUD_MODE_AUD_ADPCM_44100  97 
+#define AUD_MODE_AUD_ADPCM_48000  98 
+#define AUD_MODE_AUD_L16_8000	 100 
+#define AUD_MODE_AUD_L16_11025	 101 
+#define AUD_MODE_AUD_L16_16000	 102 
+#define AUD_MODE_AUD_L16_22050	 103 
+#define AUD_MODE_AUD_L16_32000	 104 
+#define AUD_MODE_AUD_L16_48000	 105 
+#define AUD_MODE_AUD_L16_12000	 106 
+#define AUD_MODE_AUD_L16_24000	 107 
+
 #define start_of_image(x) ((void *)((int8_t *)&(x)[1]+(x)->start_offset))	/* PRC 007 */
 #define size_of_image(x) ((x)->size+(x)->start_offset+sizeof( NetVuImageData ))
 
