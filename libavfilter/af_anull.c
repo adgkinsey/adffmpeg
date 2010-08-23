@@ -1,6 +1,4 @@
 /*
- * copyright (c) 2009 Michael Niedermayer
- *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -18,34 +16,26 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVFORMAT_METADATA_H
-#define AVFORMAT_METADATA_H
-
 /**
  * @file
- * internal metadata API header
- * see avformat.h or the public API!
+ * null audio filter
  */
 
+#include "avfilter.h"
 
-#include "avformat.h"
+AVFilter avfilter_af_anull = {
+    .name      = "anull",
+    .description = NULL_IF_CONFIG_SMALL("Pass the source unchanged to the output."),
 
-struct AVMetadata{
-    int count;
-    AVMetadataTag *elems;
+    .priv_size = 0,
+
+    .inputs    = (AVFilterPad[]) {{ .name             = "default",
+                                    .type             = AVMEDIA_TYPE_AUDIO,
+                                    .get_audio_buffer = avfilter_null_get_audio_buffer,
+                                    .filter_samples   = avfilter_null_filter_samples },
+                                  { .name = NULL}},
+
+    .outputs   = (AVFilterPad[]) {{ .name             = "default",
+                                    .type             = AVMEDIA_TYPE_AUDIO, },
+                                  { .name = NULL}},
 };
-
-struct AVMetadataConv{
-    const char *native;
-    const char *generic;
-};
-
-#if FF_API_OLD_METADATA
-void ff_metadata_demux_compat(AVFormatContext *s);
-void ff_metadata_mux_compat(AVFormatContext *s);
-#endif
-
-void metadata_conv(AVMetadata **pm, const AVMetadataConv *d_conv,
-                                    const AVMetadataConv *s_conv);
-
-#endif /* AVFORMAT_METADATA_H */

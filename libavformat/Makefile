@@ -28,6 +28,7 @@ OBJS-$(CONFIG_AMR_MUXER)                 += amr.o
 OBJS-$(CONFIG_ANM_DEMUXER)               += anm.o
 OBJS-$(CONFIG_APC_DEMUXER)               += apc.o
 OBJS-$(CONFIG_APE_DEMUXER)               += ape.o apetag.o
+OBJS-$(CONFIG_APPLEHTTP_DEMUXER)         += applehttp.o
 OBJS-$(CONFIG_ASF_DEMUXER)               += asfdec.o asf.o asfcrypt.o \
                                             riff.o avlanguage.o
 OBJS-$(CONFIG_ASF_MUXER)                 += asfenc.o asf.o riff.o
@@ -219,6 +220,7 @@ OBJS-$(CONFIG_RTP_MUXER)                 += rtp.o         \
                                             rtpenc_mpv.o     \
                                             rtpenc.o      \
                                             rtpenc_h264.o \
+                                            rtpenc_vp8.o  \
                                             rtpenc_xiph.o \
                                             avc.o
 OBJS-$(CONFIG_RTSP_DEMUXER)              += rtsp.o httpauth.o
@@ -235,6 +237,7 @@ OBJS-$(CONFIG_SDP_DEMUXER)               += rtsp.o        \
                                             rtpdec_mpeg4.o \
                                             rtpdec_qdm2.o \
                                             rtpdec_svq3.o \
+                                            rtpdec_vp8.o  \
                                             rtpdec_xiph.o
 OBJS-$(CONFIG_SEGAFILM_DEMUXER)          += segafilm.o
 OBJS-$(CONFIG_SHORTEN_DEMUXER)           += raw.o
@@ -291,6 +294,7 @@ OBJS+= avio.o aviobuf.o
 OBJS-$(CONFIG_FILE_PROTOCOL)             += file.o
 OBJS-$(CONFIG_GOPHER_PROTOCOL)           += gopher.o
 OBJS-$(CONFIG_HTTP_PROTOCOL)             += http.o httpauth.o
+OBJS-$(CONFIG_MMSH_PROTOCOL)             += mmsh.o mms.o asf.o
 OBJS-$(CONFIG_MMST_PROTOCOL)             += mmst.o mms.o asf.o
 OBJS-$(CONFIG_MD5_PROTOCOL)              += md5proto.o
 OBJS-$(CONFIG_PIPE_PROTOCOL)             += file.o

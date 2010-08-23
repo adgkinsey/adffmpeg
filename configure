@@ -1378,6 +1378,7 @@ x11_grab_device_indev_extralibs="-lX11 -lXext -lXfixes"
 gopher_protocol_deps="network"
 http_protocol_deps="network"
 http_protocol_select="tcp_protocol"
+mmsh_protocol_select="http_protocol"
 mmst_protocol_deps="network"
 rtmp_protocol_select="tcp_protocol"
 rtp_protocol_select="udp_protocol"
@@ -1498,6 +1499,7 @@ mpg_test_deps="mpeg1system_muxer mpegps_demuxer"
 
 set_ne_test_deps pixdesc
 set_ne_test_deps pixfmts_crop
+set_ne_test_deps pixfmts_hflip
 set_ne_test_deps pixfmts_null
 set_ne_test_deps pixfmts_pad
 set_ne_test_deps pixfmts_scale
@@ -3224,7 +3226,7 @@ comment=$2
 version=$3
 libs=$4
 requires=$5
-enabled $shortname || return 0
+enabled ${name#lib} || return 0
 cat <<EOF > $name/$name.pc
 prefix=$prefix
 exec_prefix=\${prefix}

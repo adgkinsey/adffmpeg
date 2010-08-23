@@ -56,6 +56,7 @@ void av_register_all(void)
     REGISTER_DEMUXER  (ANM, anm);
     REGISTER_DEMUXER  (APC, apc);
     REGISTER_DEMUXER  (APE, ape);
+    REGISTER_DEMUXER  (APPLEHTTP, applehttp);
     REGISTER_MUXDEMUX (ASF, asf);
     REGISTER_MUXDEMUX (ASS, ass);
     REGISTER_MUXER    (ASF_STREAM, asf_stream);
@@ -230,6 +231,7 @@ void av_register_all(void)
     REGISTER_PROTOCOL (FILE, file);
     REGISTER_PROTOCOL (GOPHER, gopher);
     REGISTER_PROTOCOL (HTTP, http);
+    REGISTER_PROTOCOL (MMSH, mmsh);
     REGISTER_PROTOCOL (MMST, mmst);
     REGISTER_PROTOCOL (MD5,  md5);
     REGISTER_PROTOCOL (PIPE, pipe);
