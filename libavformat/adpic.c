@@ -1133,7 +1133,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     unsigned char           ch, ch1;
     unsigned char           adpkt[SEPARATOR_SIZE];
     int                     data_type = MAX_DATA_TYPE;
-    int                     data_channel;
+    int                     data_channel = 0;
     int                     n, size = -1;
     int                     status;
     int                     i =0, BuffSize;
@@ -1762,9 +1762,13 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		    goto cleanup;
 	    }
 		else  {
-			pkt->pts = video_data->session_time;
-			pkt->pts *= 1000ULL;
-			pkt->pts += video_data->milliseconds;
+			if (video_data->session_time > 0)  {
+				pkt->pts = video_data->session_time;
+				pkt->pts *= 1000ULL;
+				pkt->pts += video_data->milliseconds;
+			}
+			else
+				pkt->pts = AV_NOPTS_VALUE;
 		}
     }
     else if( currentFrameType == NetVuAudio )
@@ -1776,6 +1780,15 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             errorVal = ADPIC_GET_AUDIO_STREAM_ERROR;
 		    goto cleanup;
         }
+		else  {
+			if (audio_data->seconds > 0)  {
+				pkt->pts = audio_data->seconds;
+				pkt->pts *= 1000ULL;
+				pkt->pts += audio_data->msecs;
+			}
+			else
+				pkt->pts = AV_NOPTS_VALUE;
+		}
     }
     else if( currentFrameType == NetVuDataInfo || currentFrameType == NetVuDataLayout )
     {
