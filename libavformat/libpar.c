@@ -310,9 +310,19 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 		pktExt->frameInfo->frameData = pkt->data;
 	}
 
-	pkt->pts = avfp->frameInfo.imageTime;
-	pkt->pts *= 1000ULL;
-	pkt->pts += avfp->frameInfo.imageMS;
+	if (avfp->frameInfo.imageTime > 0)  {
+		pkt->pts = avfp->frameInfo.imageTime;
+		pkt->pts *= 1000ULL;
+		pkt->pts += avfp->frameInfo.imageMS;
+	}
+	else if (avfp->frameInfo.indexTime > 0)  {
+		pkt->pts = avfp->frameInfo.indexTime;
+		pkt->pts *= 1000ULL;
+		pkt->pts += avfp->frameInfo.indexMS;
+	}
+	else  {
+		pkt->pts = AV_NOPTS_VALUE;
+	}
 	
 	pkt->priv = pktExt;	
 	pkt->destruct = libpar_packet_destroy;
