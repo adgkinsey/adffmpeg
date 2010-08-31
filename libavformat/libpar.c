@@ -104,11 +104,12 @@ int createStream(AVFormatContext * avf,
 	AVStream * st = av_new_stream(avf, streamId);
 	
 	st->filename = av_strdup(avf->filename);
+	st->nb_frames = 0;
+	st->start_time = frameInfo->indexTime * 1000 + frameInfo->indexMS;
 	
 	if (parReader_frameIsVideo(frameInfo))  {
 		st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
 		
-		/// \todo Move this into parreader.dll
 		pic = frameInfo->frameBuffer;
 		switch(pic->vid_format)  {
 			case(FRAME_FORMAT_JPEG_422):
@@ -128,6 +129,7 @@ int createStream(AVFormatContext * avf,
 				st->codec->codec_id = CODEC_ID_H264;
 				break;
 			default:
+				// Set unknown types to data so we don't try and play them
 				st->codec->codec_type = AVMEDIA_TYPE_DATA;
 				st->codec->codec_id = CODEC_ID_NONE;
 				break;
@@ -137,9 +139,11 @@ int createStream(AVFormatContext * avf,
 			parReader_getFrameSize(frameInfo, &w, &h);
 			st->codec->width = w;
 			st->codec->height = h;
+			st->start_time = frameInfo->imageTime * 1000 + frameInfo->imageMS;
 			
-			st->r_frame_rate = (AVRational){1,1000};	
+			// Set timebase to 1 millisecond, and min frame rate to 1 / timebase
 			av_set_pts_info(st, 32, 1, 1000);
+			st->r_frame_rate = (AVRational){1,1};	
 		
 			// Set pixel aspect ratio, display aspect is (sar * width / height)
 			/// \todo Could set better values here by checking resolutions and 
@@ -159,12 +163,6 @@ int createStream(AVFormatContext * avf,
 			
 			parReader_getStreamDate(frameInfo, textbuffer, sizeof(textbuffer));
 			av_metadata_set2(&st->metadata, "date", textbuffer, 0);
-			
-			/// \todo Generate from index
-			//st->duration = 0;
-			//st->start_time
-			
-			st->nb_frames = parReader_getFrameCount();
 		}
 	}
 	else if (parReader_frameIsAudio(frameInfo))  {
@@ -172,6 +170,7 @@ int createStream(AVFormatContext * avf,
 		st->codec->codec_id = CODEC_ID_ADPCM_ADH;
 		st->codec->channels = 1;
 		st->codec->block_align = 0;
+		st->start_time = frameInfo->imageTime * 1000 + frameInfo->imageMS;
 		
 		aud = frameInfo->frameBuffer;
 		switch(aud->mode)  {
@@ -232,6 +231,10 @@ int createStream(AVFormatContext * avf,
 	else  {
 		st->codec->codec_type = AVMEDIA_TYPE_DATA;
 	}
+	
+	// Don't set the st->duration since we don't really know it, so we use
+	// avf->duration
+	
 	return st->index;
 }
 
@@ -307,9 +310,19 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 		pktExt->frameInfo->frameData = pkt->data;
 	}
 
-	pkt->pts = avfp->frameInfo.imageTime;
-	pkt->pts *= 1000ULL;
-	pkt->pts += avfp->frameInfo.imageMS;
+	if (avfp->frameInfo.imageTime > 0)  {
+		pkt->pts = avfp->frameInfo.imageTime;
+		pkt->pts *= 1000ULL;
+		pkt->pts += avfp->frameInfo.imageMS;
+	}
+	else if (avfp->frameInfo.indexTime > 0)  {
+		pkt->pts = avfp->frameInfo.indexTime;
+		pkt->pts *= 1000ULL;
+		pkt->pts += avfp->frameInfo.indexMS;
+	}
+	else  {
+		pkt->pts = AV_NOPTS_VALUE;
+	}
 	
 	pkt->priv = pktExt;	
 	pkt->destruct = libpar_packet_destroy;
@@ -340,11 +353,37 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
 	PARContext *p = avf->priv_data;
 	//ByteIOContext *pb = avf->pb;
 	//KeyValuePair *index;
+	char **filelist;
+	int seqLen;
 
 	p->frameInfo.frameBufferSize = MAX_FRAMEBUFFER_SIZE;
 	p->frameInfo.frameBuffer = av_malloc(p->frameInfo.frameBufferSize);
 	
 	parReader_setDisplaySettingsDefaults(&p->dispSet);
+	
+	seqLen = parReader_getFilelist(&filelist);
+	if (1 == seqLen)  {
+		int frameNumber, frameCount;
+		unsigned long start, end;
+		if (parReader_getIndexData(&frameNumber, &frameCount, &start, &end))  {
+			avf->duration = end - start;
+		}
+	}
+	else  {
+		int res, frameNumber, frameCount;
+		unsigned long start, end, realStart, realEnd;
+		if (parReader_getIndexData(&frameNumber, &frameCount, &start, &end))  {
+			realStart = start;
+			res = parReader_loadParFile(NULL, filelist[0], seqLen - 1, &p->frameInfo, 0);
+			if (parReader_getIndexData(&frameNumber, &frameCount, &start, &end))  {
+				realEnd = end;
+				avf->duration = realEnd - realStart;
+			}
+			res = parReader_loadParFile(NULL, filelist[0], -1, &p->frameInfo, 0);
+		}
+	}
+	// Note: Do not set avf->start_time, ffmpeg computes it from AVStream values
+	
 	siz = parReader_loadFrame(&p->frameInfo, &p->dispSet, &p->fileChanged);
 	p->frameCached = siz;
 	
@@ -384,12 +423,11 @@ static int par_read_packet(AVFormatContext * avf, AVPacket * pkt)
 		return AVERROR(EAGAIN);
 	}
 	
+	if (fileChanged)
+		parReader_getFilename(avf->filename, sizeof(avf->filename));
+	
 	createPacket(avf, pkt, siz, fileChanged);
-	if (fileChanged)  {
-		if (parReader_getFilename(avf->filename, sizeof(avf->filename)) > 0)  {
-			avf->streams[0]->nb_frames = parReader_getFrameCount();
-		}
-	}
+	
 	return 0;		
 }
 
