@@ -1,6 +1,6 @@
 /*
- * vp3dsp MMX function declarations
- * Copyright (c) 2007 Aurelien Jacobs <aurel@gnuage.org>
+ * RAW Dirac demuxer
+ * Copyright (c) 2007 Marco Gerards <marco@gnu.org>
  *
  * This file is part of FFmpeg.
  *
@@ -19,18 +19,25 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVCODEC_X86_VP3DSP_MMX_H
-#define AVCODEC_X86_VP3DSP_MMX_H
+#include "libavutil/intreadwrite.h"
+#include "avformat.h"
+#include "rawdec.h"
 
-#include <stdint.h>
-#include "libavcodec/dsputil.h"
+static int dirac_probe(AVProbeData *p)
+{
+    if (AV_RL32(p->buf) == MKTAG('B', 'B', 'C', 'D'))
+        return AVPROBE_SCORE_MAX;
+    else
+        return 0;
+}
 
-void ff_vp3_idct_mmx(int16_t *data);
-void ff_vp3_idct_put_mmx(uint8_t *dest, int line_size, DCTELEM *block);
-void ff_vp3_idct_add_mmx(uint8_t *dest, int line_size, DCTELEM *block);
-void ff_vp3_idct_dc_add_mmx2(uint8_t *dest, int line_size, const DCTELEM *block);
-
-void ff_vp3_v_loop_filter_mmx2(uint8_t *src, int stride, int *bounding_values);
-void ff_vp3_h_loop_filter_mmx2(uint8_t *src, int stride, int *bounding_values);
-
-#endif /* AVCODEC_X86_VP3DSP_MMX_H */
+AVInputFormat dirac_demuxer = {
+    "dirac",
+    NULL_IF_CONFIG_SMALL("raw Dirac"),
+    0,
+    dirac_probe,
+    ff_raw_video_read_header,
+    ff_raw_read_partial_packet,
+    .flags= AVFMT_GENERIC_INDEX,
+    .value = CODEC_ID_DIRAC,
+};

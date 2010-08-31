@@ -1,6 +1,6 @@
 /*
- * RAW muxer and demuxer
- * Copyright (C) 2007  Aurelien Jacobs <aurel@gnuage.org>
+ * RAW null muxer
+ * Copyright (c) 2002 Fabrice Bellard
  *
  * This file is part of FFmpeg.
  *
@@ -19,14 +19,22 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVFORMAT_RAW_H
-#define AVFORMAT_RAW_H
-
 #include "avformat.h"
 
-int pcm_read_seek(AVFormatContext *s,
-                  int stream_index, int64_t timestamp, int flags);
+static int null_write_packet(struct AVFormatContext *s, AVPacket *pkt)
+{
+    return 0;
+}
 
-int ff_raw_read_partial_packet(AVFormatContext *s, AVPacket *pkt);
-
-#endif /* AVFORMAT_RAW_H */
+AVOutputFormat null_muxer = {
+    "null",
+    NULL_IF_CONFIG_SMALL("raw null video format"),
+    NULL,
+    NULL,
+    0,
+    AV_NE(CODEC_ID_PCM_S16BE, CODEC_ID_PCM_S16LE),
+    CODEC_ID_RAWVIDEO,
+    NULL,
+    null_write_packet,
+    .flags = AVFMT_NOFILE | AVFMT_RAWPICTURE | AVFMT_NOTIMESTAMPS,
+};
