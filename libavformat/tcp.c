@@ -118,7 +118,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
                      goto fail1; 
                 }
             }
-            if(ret == SOCKET_ERROR)
+            if(ret == -1)
             {
                 ret = AVERROR(EIO);
                 goto fail1;
