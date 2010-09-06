@@ -28,9 +28,9 @@
 typedef struct {
 	FrameData *dsFrameData;
 	int indexInfoCount;
-	FrameInfo *frameInfo;
-	KeyValuePair *indexInfo;
+	ParFrameInfo *frameInfo;
+	ParKeyValuePair *indexInfo;
 	int fileChanged;
-} PARFrameExtra;
+} LibparFrameExtra;
 
 #endif /* AVFORMAT_LIBPAR_H */

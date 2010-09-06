@@ -27,8 +27,8 @@
 #include <parreader_types.h>
 
 typedef struct {
-	DisplaySettings dispSet;
-	FrameInfo frameInfo;
+	ParDisplaySettings dispSet;
+	ParFrameInfo frameInfo;
 	int fileChanged;
 	int frameCached;
 } PARContext;
@@ -36,7 +36,7 @@ typedef struct {
 
 void libpar_packet_destroy(struct AVPacket *packet);
 int createStream(AVFormatContext * avf, 
-				 const FrameInfo *frameInfo, const DisplaySettings *dispSet);
+				 const ParFrameInfo *frameInfo, const ParDisplaySettings *dispSet);
 void createPacket(AVFormatContext * avf, AVPacket *packet, int siz, int fChang);
 
 
@@ -61,7 +61,7 @@ const unsigned int MAX_FRAMEBUFFER_SIZE = 256 * 1024;
 
 void libpar_packet_destroy(struct AVPacket *packet)
 {
-	PARFrameExtra *fed = (PARFrameExtra*)packet->priv;
+	LibparFrameExtra *fed = (LibparFrameExtra*)packet->priv;
 	
 	if (packet->data == NULL) {
          return;
@@ -92,7 +92,7 @@ void libpar_packet_destroy(struct AVPacket *packet)
 }
 
 int createStream(AVFormatContext * avf, 
-				 const FrameInfo *frameInfo, const DisplaySettings *dispSet)
+				 const ParFrameInfo *frameInfo, const ParDisplaySettings *dispSet)
 {
 	//PARContext *p = avf->priv_data;
 	const NetVuImageData *pic = NULL;
@@ -241,7 +241,7 @@ int createStream(AVFormatContext * avf,
 void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 {
 	PARContext *avfp = avf->priv_data;
-	PARFrameExtra *pktExt = NULL;
+	LibparFrameExtra *pktExt = NULL;
 
 	int streamIndex = -1;
 	int id = avfp->frameInfo.channel;
@@ -257,14 +257,14 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 	av_new_packet(pkt, siz);
 	pkt->stream_index = streamIndex;
 	
-	pktExt = av_malloc(sizeof(PARFrameExtra));
+	pktExt = av_malloc(sizeof(LibparFrameExtra));
 	pktExt->fileChanged = fChang;
 	pktExt->dsFrameData = av_malloc(sizeof(FrameData));
 	pktExt->indexInfoCount = parReader_getIndexInfo(&pktExt->indexInfo);
 	
 	memcpy(pkt->data, avfp->frameInfo.frameData, siz);
 	
-	pktExt->frameInfo = av_malloc(sizeof(FrameInfo));	
+	pktExt->frameInfo = av_malloc(sizeof(ParFrameInfo));	
 	
 	if (parReader_frameIsVideo(&avfp->frameInfo))  {
 		/// \todo Move this into parreader.dll
@@ -303,7 +303,7 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 	if (pktExt->frameInfo->frameBufferSize > 0)  {
 		// Save frameBufferSize as it's about to be overwritten by memcpy
 		int fbs = pktExt->frameInfo->frameBufferSize;
-		memcpy(pktExt->frameInfo, &(avfp->frameInfo), sizeof(FrameInfo));
+		memcpy(pktExt->frameInfo, &(avfp->frameInfo), sizeof(ParFrameInfo));
 		pktExt->frameInfo->frameBufferSize = fbs;
 		pktExt->frameInfo->frameBuffer = av_malloc(fbs);
 		memcpy(pktExt->frameInfo->frameBuffer,avfp->frameInfo.frameBuffer, fbs);
@@ -333,7 +333,7 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 static int par_probe(AVProbeData *p)
 {
 	int res;
-	FrameInfo fInfo;
+	ParFrameInfo fInfo;
 	fInfo.frameBuffer = p->buf;
 	fInfo.frameBufferSize = p->buf_size;
 	
