@@ -267,7 +267,6 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 	pktExt->frameInfo = av_malloc(sizeof(ParFrameInfo));	
 	
 	if (parReader_frameIsVideo(&avfp->frameInfo))  {
-		/// \todo Move this into parreader.dll
 		const NetVuImageData *pic = avfp->frameInfo.frameBuffer;
 		
 		pktExt->frameInfo->frameBufferSize = sizeof(NetVuImageData);
@@ -298,6 +297,9 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 		memcpy(pktExt->dsFrameData->frameData, avfp->frameInfo.frameBuffer, 
 				sizeof(NetVuAudioData));
 		pktExt->dsFrameData->additionalData = NULL;
+	}
+	else  {
+		/// \todo Do something with data frames
 	}
 	
 	if (pktExt->frameInfo->frameBufferSize > 0)  {
@@ -338,6 +340,7 @@ static int par_probe(AVProbeData *p)
 	fInfo.frameBufferSize = p->buf_size;
 	
 	parReader_setLogLevel(PARREADER_LOG_WARNING);
+	//parReader_setLogLevel(PARREADER_LOG_DEBUG);
 	
 	res = parReader_loadParFile(NULL, p->filename, -1, &fInfo, 0);
 	//parReader_closeParFile();
@@ -411,14 +414,14 @@ static int par_read_packet(AVFormatContext * avf, AVPacket * pkt)
 	else
 		siz = parReader_loadFrame(&p->frameInfo, &p->dispSet, &fileChanged);
 	
-	if (siz <= 0)  {
+	if (siz < 0)  {
 		p->frameCached = 0;
 		p->fileChanged = 0;
 		pkt->size = 0;
 		return AVERROR_EOF;
 	}
 	
-	if (NULL == p->frameInfo.frameData)  {
+	if ( (siz == 0) || (NULL == p->frameInfo.frameData) )  {
 		p->frameCached = 0;
 		return AVERROR(EAGAIN);
 	}
@@ -430,17 +433,6 @@ static int par_read_packet(AVFormatContext * avf, AVPacket * pkt)
 	
 	return 0;		
 }
-
-#ifdef USE_SEEK2
-
-static int par_read_seek2(AVFormatContext *avf, int stream_index, 
-						  int64_t min_ts, int64_t ts, int64_t max_ts, 
-						  int flags)
-{
-	return 0;
-}
-
-#endif
 
 static int par_read_seek(AVFormatContext *avf, int stream, 
 						 int64_t target, int flags)
@@ -473,7 +465,7 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 		
 		do  {
 			siz = parReader_loadFrame(&p->frameInfo, &p->dispSet, &p->fileChanged);
-			if (0 == siz)
+			if (siz < 0)
 				break;
 			
 			if (parReader_frameIsVideo(&p->frameInfo))  {
@@ -488,7 +480,7 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 			}
 		} while ( (streamId != p->frameInfo.channel) || (0 == isKeyFrame) );
 		
-		if (0 == siz)  {
+		if (siz <= 0)  {
 			// If we have failed to load a frame then try again with (target - 1)
 			if (target >= 0)  {
 				if (flags & AVSEEK_FLAG_FRAME)
@@ -510,7 +502,7 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 			p->frameCached = siz;
 			st->codec->frame_number = p->frameInfo.frameNumber;
 		}
-	} while (0 == siz);
+	} while (siz <= 0);
 	
 	p->dispSet.fileLock = 0;
 	p->dispSet.playMode = PLAY;
@@ -552,7 +544,4 @@ AVInputFormat libparreader_demuxer = {
     par_read_close,
     par_read_seek,
     //.extensions = "par",
-#ifdef USE_SEEK2
-    .read_seek2 = par_read_seek2,
-#endif
 };
