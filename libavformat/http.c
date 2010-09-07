@@ -45,27 +45,12 @@ typedef struct {
     int64_t off, filesize;
     char location[URL_SIZE];
     HTTPAuthState auth_state;
-
-    /* BMOJ - added to hold utc_offset from header */
-	char* sever;
-    char* content;
-    char* resolution;
-    char* compression;
-    char* rate;
-    char* pps;
-    char* site_id;
-    char* boundry;
-
-    int utc_offset;
-    int isBinary;
 } HTTPContext;
 
 static int http_connect(URLContext *h, const char *path, const char *hoststr,
                         const char *auth, int *new_location);
 static int http_write(URLContext *h, uint8_t *buf, int size);
 
-static void http_parse_content_type_header( char * p, HTTPContext *s );
-static void copy_value_to_field( const char *value, char **dest );
 
 /* return non zero if error */
 static int http_open_cnx(URLContext *h)
@@ -80,15 +65,9 @@ static int http_open_cnx(URLContext *h)
     HTTPContext *s = h->priv_data;
     URLContext *hd = NULL;
 
-    /* CS - I've omitted the following proxy resolution from WinCE builds as it doesn't support the concept of environment variables */
-    /* A better solution will be available but as yet I don't know what that solution should be. Registry or config files probably... */
-#ifndef CONFIG_WINCE
     proxy_path = getenv("http_proxy");
     use_proxy = (proxy_path != NULL) && !getenv("no_proxy") &&
         av_strstart(proxy_path, "http://", NULL);
-#else
-    use_proxy = 0;
-#endif /* ifndef CONFIG_WINCE */
 
     /* fill the dest addr */
  redo:
@@ -148,7 +127,7 @@ static int http_open(URLContext *h, const char *uri, int flags)
 
     h->is_streamed = 1;
 
-    s = av_mallocz(sizeof(HTTPContext));
+    s = av_malloc(sizeof(HTTPContext));
     if (!s) {
         return AVERROR(ENOMEM);
     }
@@ -262,102 +241,9 @@ static int process_line(URLContext *h, char *line, int line_count,
             ff_http_auth_handle_header(&s->auth_state, tag, p);
         } else if (!strcmp (tag, "Authentication-Info")) {
             ff_http_auth_handle_header(&s->auth_state, tag, p);
-        } else if (!strcmp (tag, "Content-type")) {
-            http_parse_content_type_header( p, s );
-        } else if(!strcmp(tag, "Server")) {
-			copy_value_to_field( p, &s->sever);
-		}
+        }
     }
     return 1;
-}
-
-static void http_parse_content_type_header( char * p, HTTPContext *s )
-{
-	int finishedContentHeader = 0;
-    char *  name  = NULL;
-    char *  value = NULL;
-
-    //strip the content-type from the headder
-    value = p;
-    while((*p != ';') && (*p != '\0'))
-    {
-        p++;
-    }
-
-	if(*p == '\0')
-	{ finishedContentHeader = 1; }
-
-    *p = '\0';
-    p++;
-    copy_value_to_field( value, &s->content );
-
-    if( strstr(s->content, "adhbinary")!=NULL)
-    {s->isBinary=1;}
-    else
-    {s->isBinary=0;}
-    
-    while( *p != '\0' && finishedContentHeader != 1)
-    {
-        while(isspace(*p))p++; /* Skip whitespace */
-        name = p;
-
-        /* Now we get attributes in <name>=<value> pairs */
-        while (*p != '\0' && *p != '=')
-            p++;
-
-        if (*p != '=')
-            return;
-
-        *p = '\0';
-        p++;
-
-        value = p;
-
-        while (*p != '\0' && *p != ';')
-            p++;
-
-        if (*p == ';')
-        {
-            *p = '\0';
-            p++;
-        }
-
-        /* Strip any "s off */
-        if( strlen(value) > 0 )
-        {
-            if( *value == '"' && *(value + strlen(value) - 1) == '"' )
-            {
-                *(value + strlen(value) - 1) = '\0';
-                value += 1;
-            }
-        }
-
-        /* Copy the attribute into the relevant field */
-		if( strcmp( name, "resolution" ) == 0 )
-            copy_value_to_field( value, &s->resolution);
-        if( strcmp( name, "compression" ) == 0 )
-            copy_value_to_field( value, &s->compression);
-        if( strcmp( name, "rate" ) == 0 )
-            copy_value_to_field( value, &s->rate);
-        if( strcmp( name, "pps" ) == 0 )
-            copy_value_to_field( value, &s->pps);
-        if( strcmp( name, "utc_offset" ) == 0 )
-		    s->utc_offset = atoi(value);
-		if( strcmp( name, "site_id" ) == 0 )
-            copy_value_to_field( value, &s->site_id);
-        if( strcmp( name, "boundary" ) == 0 )
-            copy_value_to_field( value, &s->boundry);
-    }
-}
-
-static void copy_value_to_field( const char *value, char **dest )
-{
-    if( *dest != NULL )
-        av_free( *dest );
-
-    *dest = av_malloc( strlen(value) + 1 );
-    strcpy( *dest, value );
-    (*dest)[strlen(value)] = '\0';
 }
 
 static int http_connect(URLContext *h, const char *path, const char *hoststr,
@@ -420,8 +306,6 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
             return err;
         if (err == 0)
             break;
-        h->utc_offset = s->utc_offset;
-        h->isBinary = s->isBinary;
         s->line_count++;
     }
 
@@ -513,31 +397,6 @@ static int http_close(URLContext *h)
     }
 
     url_close(s->hd);
-	
-    if( s->sever )
-		av_free( s->sever );
-
-    if( s->content )
-        av_free( s->content );
-
-    /* Make sure we release any memory that may have been allocated to store authentication info */
-    if( s->resolution )
-        av_free( s->resolution );
-
-    if( s->compression )
-        av_free( s->compression );
-
-    if( s->rate )
-        av_free( s->rate );
-
-    if( s->pps )
-        av_free( s->pps );
-
-    if( s->site_id )
-        av_free( s->site_id );
-
-    if( s->boundry )
-        av_free( s->boundry );
 
     av_free(s);
     return ret;
@@ -594,13 +453,4 @@ URLProtocol http_protocol = {
     http_seek,
     http_close,
     .url_get_file_handle = http_get_file_handle,
-};
-
-URLProtocol netvu_protocol = {
-    "netvu",
-    http_open,
-    http_read,
-    http_write,
-    NULL, /* seek */
-    http_close,
 };

@@ -58,17 +58,17 @@ typedef struct {
 
     int utc_offset;
     int isBinary;
-} HTTPContext;
+} NetvuContext;
 
-static int http_connect(URLContext *h, const char *path, const char *hoststr,
+static int netvu_connect(URLContext *h, const char *path, const char *hoststr,
                         const char *auth, int *new_location);
-static int http_write(URLContext *h, uint8_t *buf, int size);
+static int netvu_write(URLContext *h, uint8_t *buf, int size);
 
-static void http_parse_content_type_header( char * p, HTTPContext *s );
+static void netvu_parse_content_type_header( char * p, NetvuContext *s );
 static void copy_value_to_field( const char *value, char **dest );
 
 /* return non zero if error */
-static int http_open_cnx(URLContext *h)
+static int netvu_open_cnx(URLContext *h)
 {
     const char *path, *proxy_path;
     char hostname[1024], hoststr[1024];
@@ -77,7 +77,7 @@ static int http_open_cnx(URLContext *h)
     char buf[1024];
     int port, use_proxy, err, location_changed = 0, redirects = 0;
     HTTPAuthType cur_auth_type;
-    HTTPContext *s = h->priv_data;
+    NetvuContext *s = h->priv_data;
     URLContext *hd = NULL;
 
     /* CS - I've omitted the following proxy resolution from WinCE builds as it doesn't support the concept of environment variables */
@@ -117,7 +117,7 @@ static int http_open_cnx(URLContext *h)
 
     s->hd = hd;
     cur_auth_type = s->auth_state.auth_type;
-    if (http_connect(h, path, hoststr, auth, &location_changed) < 0)
+    if (netvu_connect(h, path, hoststr, auth, &location_changed) < 0)
         goto fail;
     if (s->http_code == 401) {
         if (cur_auth_type == HTTP_AUTH_NONE && s->auth_state.auth_type != HTTP_AUTH_NONE) {
@@ -141,14 +141,14 @@ static int http_open_cnx(URLContext *h)
     return AVERROR(EIO);
 }
 
-static int http_open(URLContext *h, const char *uri, int flags)
+static int netvu_open(URLContext *h, const char *uri, int flags)
 {
-    HTTPContext *s;
+    NetvuContext *s;
     int ret;
 
     h->is_streamed = 1;
 
-    s = av_mallocz(sizeof(HTTPContext));
+    s = av_mallocz(sizeof(NetvuContext));
     if (!s) {
         return AVERROR(ENOMEM);
     }
@@ -159,12 +159,12 @@ static int http_open(URLContext *h, const char *uri, int flags)
     memset(&s->auth_state, 0, sizeof(s->auth_state));
     av_strlcpy(s->location, uri, URL_SIZE);
 
-    ret = http_open_cnx(h);
+    ret = netvu_open_cnx(h);
     if (ret != 0)
         av_free (s);
     return ret;
 }
-static int http_getc(HTTPContext *s)
+static int netvu_getc(NetvuContext *s)
 {
     int len;
     if (s->buf_ptr >= s->buf_end) {
@@ -181,14 +181,14 @@ static int http_getc(HTTPContext *s)
     return *s->buf_ptr++;
 }
 
-static int http_get_line(HTTPContext *s, char *line, int line_size)
+static int netvu_get_line(NetvuContext *s, char *line, int line_size)
 {
     int ch;
     char *q;
 
     q = line;
     for(;;) {
-        ch = http_getc(s);
+        ch = netvu_getc(s);
         if (ch < 0)
             return AVERROR(EIO);
         if (ch == '\n') {
@@ -208,7 +208,7 @@ static int http_get_line(HTTPContext *s, char *line, int line_size)
 static int process_line(URLContext *h, char *line, int line_count,
                         int *new_location)
 {
-    HTTPContext *s = h->priv_data;
+    NetvuContext *s = h->priv_data;
     char *tag, *p;
 
     /* end of header */
@@ -263,7 +263,7 @@ static int process_line(URLContext *h, char *line, int line_count,
         } else if (!strcmp (tag, "Authentication-Info")) {
             ff_http_auth_handle_header(&s->auth_state, tag, p);
         } else if (!strcmp (tag, "Content-type")) {
-            http_parse_content_type_header( p, s );
+            netvu_parse_content_type_header( p, s );
         } else if(!strcmp(tag, "Server")) {
 			copy_value_to_field( p, &s->sever);
 		}
@@ -271,7 +271,7 @@ static int process_line(URLContext *h, char *line, int line_count,
     return 1;
 }
 
-static void http_parse_content_type_header( char * p, HTTPContext *s )
+static void netvu_parse_content_type_header( char * p, NetvuContext *s )
 {
 	int finishedContentHeader = 0;
     char *  name  = NULL;
@@ -360,10 +360,10 @@ static void copy_value_to_field( const char *value, char **dest )
     (*dest)[strlen(value)] = '\0';
 }
 
-static int http_connect(URLContext *h, const char *path, const char *hoststr,
+static int netvu_connect(URLContext *h, const char *path, const char *hoststr,
                         const char *auth, int *new_location)
 {
-    HTTPContext *s = h->priv_data;
+    NetvuContext *s = h->priv_data;
     int post, err;
     char line[1024];
     char *authstr = NULL;
@@ -393,7 +393,7 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
              post ? "Transfer-Encoding: chunked\r\n" : "");
 
     av_freep(&authstr);
-    if (http_write(h, s->buffer, strlen(s->buffer)) < 0)
+    if (netvu_write(h, s->buffer, strlen(s->buffer)) < 0)
         return AVERROR(EIO);
 
     /* init input buffer */
@@ -410,7 +410,7 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
 
     /* wait for header */
     for(;;) {
-        if (http_get_line(s, line, sizeof(line)) < 0)
+        if (netvu_get_line(s, line, sizeof(line)) < 0)
             return AVERROR(EIO);
 
         dprintf(NULL, "header='%s'\n", line);
@@ -429,9 +429,9 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
 }
 
 
-static int http_read(URLContext *h, uint8_t *buf, int size)
+static int netvu_read(URLContext *h, uint8_t *buf, int size)
 {
-    HTTPContext *s = h->priv_data;
+    NetvuContext *s = h->priv_data;
     int len;
 
     if (s->chunksize >= 0) {
@@ -440,7 +440,7 @@ static int http_read(URLContext *h, uint8_t *buf, int size)
 
             for(;;) {
                 do {
-                    if (http_get_line(s, line, sizeof(line)) < 0)
+                    if (netvu_get_line(s, line, sizeof(line)) < 0)
                         return AVERROR(EIO);
                 } while (!*line);    /* skip CR LF from last chunk */
 
@@ -474,12 +474,12 @@ static int http_read(URLContext *h, uint8_t *buf, int size)
 }
 
 /* used only when posting data */
-static int http_write(URLContext *h, uint8_t *buf, int size)
+static int netvu_write(URLContext *h, uint8_t *buf, int size)
 {
     char temp[11];  /* 32-bit hex + CRLF + nul */
     int ret;
     char crlf[] = "\r\n";
-    HTTPContext *s = h->priv_data;
+    NetvuContext *s = h->priv_data;
 
     if (s->chunksize == -1) {
         /* headers are sent without any special encoding */
@@ -500,11 +500,11 @@ static int http_write(URLContext *h, uint8_t *buf, int size)
     return size;
 }
 
-static int http_close(URLContext *h)
+static int netvu_close(URLContext *h)
 {
     int ret = 0;
     char footer[] = "0\r\n\r\n";
-    HTTPContext *s = h->priv_data;
+    NetvuContext *s = h->priv_data;
 
     /* signal end of chunked encoding if used */
     if ((h->flags & URL_WRONLY) && s->chunksize != -1) {
@@ -543,64 +543,11 @@ static int http_close(URLContext *h)
     return ret;
 }
 
-static int64_t http_seek(URLContext *h, int64_t off, int whence)
-{
-    HTTPContext *s = h->priv_data;
-    URLContext *old_hd = s->hd;
-    int64_t old_off = s->off;
-    uint8_t old_buf[BUFFER_SIZE];
-    int old_buf_size;
-
-    if (whence == AVSEEK_SIZE)
-        return s->filesize;
-    else if ((s->filesize == -1 && whence == SEEK_END) || h->is_streamed)
-        return -1;
-
-    /* we save the old context in case the seek fails */
-    old_buf_size = s->buf_end - s->buf_ptr;
-    memcpy(old_buf, s->buf_ptr, old_buf_size);
-    s->hd = NULL;
-    if (whence == SEEK_CUR)
-        off += s->off;
-    else if (whence == SEEK_END)
-        off += s->filesize;
-    s->off = off;
-
-    /* if it fails, continue on old connection */
-    if (http_open_cnx(h) < 0) {
-        memcpy(s->buffer, old_buf, old_buf_size);
-        s->buf_ptr = s->buffer;
-        s->buf_end = s->buffer + old_buf_size;
-        s->hd = old_hd;
-        s->off = old_off;
-        return -1;
-    }
-    url_close(old_hd);
-    return off;
-}
-
-static int
-http_get_file_handle(URLContext *h)
-{
-    HTTPContext *s = h->priv_data;
-    return url_get_file_handle(s->hd);
-}
-
-URLProtocol http_protocol = {
-    "http",
-    http_open,
-    http_read,
-    http_write,
-    http_seek,
-    http_close,
-    .url_get_file_handle = http_get_file_handle,
-};
-
 URLProtocol netvu_protocol = {
     "netvu",
-    http_open,
-    http_read,
-    http_write,
+    netvu_open,
+    netvu_read,
+    netvu_write,
     NULL, /* seek */
-    http_close,
+    netvu_close,
 };
