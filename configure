@@ -1394,6 +1394,8 @@ spdif_muxer_select="aac_parser"
 tg2_muxer_select="mov_muxer"
 tgp_muxer_select="mov_muxer"
 w64_demuxer_deps="wav_demuxer"
+dspic_demuxer_deps="adpic_demuxer"
+dspic_demuxer_select="adpic_demuxer"
 
 # indevs / outdevs
 alsa_indev_deps="alsa_asoundlib_h snd_pcm_htimestamp"
@@ -1426,8 +1428,8 @@ rtmp_protocol_deps="tcp_protocol"
 rtp_protocol_deps="udp_protocol"
 tcp_protocol_deps="network"
 udp_protocol_deps="network"
-ds_protocol_deps="network"
-netvu_protocol_deps="http_protocol"
+ds_protocol_deps="tcp_protocol dspic_demuxer"
+netvu_protocol_deps="tcp_protocol"
 
 # filters
 movie_filter_deps="avfilter_lavf"
