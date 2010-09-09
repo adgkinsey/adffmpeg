@@ -13,9 +13,13 @@ static AVStream * GetStream( struct AVFormatContext *s, int camera, int width, i
 static int ReadNetworkMessageHeader( ByteIOContext *context, MessageHeader *header );
 static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize );
 static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData );
+static int dspic_new_packet(AVPacket *pkt, int size);
+static void dspic_release_packet( AVPacket *pkt );
+
 
 static const long       DSPacketHeaderMagicNumber = 0xfaced0ff;
 static const char *     DSApp0Identifier = "DigiSpr";
+
 
 AVInputFormat dspic_demuxer = {
     "dspic",
@@ -28,6 +32,7 @@ AVInputFormat dspic_demuxer = {
     dspicReadSeek,
     dspicReadPts,
 };
+
 
 static int dspicProbe( AVProbeData *p )
 {
@@ -77,7 +82,7 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
             /* Read any extra bytes then try again */
             dataSize = header.length - (SIZEOF_MESSAGE_HEADER_IO - sizeof(unsigned long));
 
-            if( (retVal = adpic_new_packet( pkt, dataSize )) < 0 )
+            if( (retVal = dspic_new_packet( pkt, dataSize )) < 0 )
                 return retVal;
 
             if( get_buffer( ioContext, pkt->data, dataSize ) != dataSize )
@@ -91,7 +96,7 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
             dataSize = header.length - (SIZEOF_MESSAGE_HEADER_IO - sizeof(unsigned long));
 
             /* Allocate packet data large enough for what we have */
-            if( (retVal = adpic_new_packet( pkt, dataSize )) < 0 )
+            if( (retVal = dspic_new_packet( pkt, dataSize )) < 0 )
                 return retVal;
 
             /* Read the jfif data out of the buffer */
@@ -437,4 +442,48 @@ long64 TimeTolong64( time_t time )
     memcpy( bufPtr, &time, sizeof(time_t) );
 
     return timeOut;
+}
+
+static int dspic_new_packet(AVPacket *pkt, int size)
+{
+    int     retVal = av_new_packet( pkt, size );
+
+    if( retVal >= 0 )
+    {
+        // Give the packet its own destruct function
+        pkt->destruct = dspic_release_packet;
+    }
+
+    return retVal;
+}
+
+static void dspic_release_packet( AVPacket *pkt )
+{
+    if (pkt != NULL)
+    {
+        if (pkt->priv != NULL)
+        {
+            // Have a look what type of frame we have and then delete anything inside as appropriate
+            FrameData *     frameData = (FrameData *)pkt->priv;
+
+            // Nothing else has nested allocs so just delete the frameData if it exists
+            if( frameData->frameData != NULL )
+            {
+                av_free( frameData->frameData );
+                frameData->frameData = NULL;
+            }
+
+            if( frameData->additionalData != NULL )
+            {
+                av_free( frameData->additionalData );
+                frameData->additionalData = NULL;
+            }
+        }
+
+        av_free( pkt->priv );
+        pkt->priv = NULL;
+
+        // Now use the default routine to release the rest of the packet's resources
+        av_destruct_packet( pkt );
+    }
 }
