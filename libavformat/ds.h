@@ -212,7 +212,7 @@ typedef struct _srvConnectReplyMsg
     long					telemetryCamMask;
     long					failedCamMask;
     long					maxMsgInterval;
-    long64			        timestamp;                          /* TODO: Verify - this was a 'hyper long' before. Assuming 64 bit value. Is this correct? Is solution portable? */
+    int64_t			        timestamp;                          /* TODO: Verify - this was a 'hyper long' before. Assuming 64 bit value. Is this correct? Is solution portable? */
     char					cameraTitles[16][28];
     long                    unitType;
     unsigned long           applicationVersion;
@@ -232,7 +232,7 @@ typedef struct _srvFeatureConnectReplyMsg
     long					telemetryCamMask;
     long					failedCamMask;
     long					maxMsgInterval;
-    long64			        timestamp;                          /* TODO: Verify - this was a 'hyper long' before. Assuming 64 bit value. Is this correct? Is solution portable? */
+    int64_t			        timestamp;                          /* TODO: Verify - this was a 'hyper long' before. Assuming 64 bit value. Is this correct? Is solution portable? */
     char					cameraTitles[16][28];
     long                    unitType;
     unsigned long           applicationVersion;
@@ -273,8 +273,8 @@ typedef struct _cliImgPlayRequestMsg
 	long					cameraMask;
 	long					mode;			    /*	(enum VCR_MODE) */
 	long					pace;
-	long64				    fromTime;		    /*		(time_u)	*/
-	long64				    toTime;		        /*		(time_u)	*/
+	int64_t				    fromTime;		    /*		(time_u)	*/
+	int64_t				    toTime;		        /*		(time_u)	*/
 } CliImgPlayRequestMsg;
 #define VER_TCP_CLI_IMG_PLAY_REQUEST        0x00000001
 #define SIZEOF_TCP_CLI_IMG_PLAY_REQUEST_IO  28            /* Size in bytes of the MessageHeader structure. Can't use sizeof to read/write one of these to network as structure packing may differ based on platform */

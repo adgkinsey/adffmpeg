@@ -7,10 +7,6 @@
 extern "C" {
 #endif
 
-/* TODO: We need a 64 bit value for the structures that we'll use later. As 64 bit values aren't part of the ANSI standard, we'll
-have to conditionally typedef the 64 bit value here based on the compiler/platform we're building for */
-typedef long long                       long64;
-
 #define TITLE_LENGTH 30
 #define MAX_NAME_LEN 30
 
@@ -74,8 +70,8 @@ typedef struct _dmImageData
 {
     char            identifier[ID_LENGTH];
     unsigned long   jpegLength;
-    long64          imgSeq;
-    long64          imgTime;
+    int64_t          imgSeq;
+    int64_t          imgTime;
     unsigned char   camera;
     unsigned char   status;
     unsigned short  activity[NUM_ACTIVITIES];
@@ -114,10 +110,6 @@ typedef struct _framedata
     void *              frameData;      /* Pointer to structure holding the information for the frame. Type determined by the data type field */
     void *              additionalData; /* CS - Added to hold text data. Not sure I prefer it here but as a first version, it works */
 } FrameData;
-
-int long64ToTimeValues( const long64 *timeValue, time_t * time, unsigned short *ms, unsigned short *flags );
-long64 TimeTolong64( time_t time );
-int adpic_new_packet( AVPacket *pkt, int size );
 
 #define GET_FLAG_MASK_ZONE_UNKNOWN(x)       ( ((x) & 0x80) >> 7 )
 #define GET_FLAG_MASK_DST(x)                ( ((x) & 0x180) >> 8 )

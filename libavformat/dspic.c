@@ -238,12 +238,12 @@ static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData )
         bufIdx += sizeof(unsigned long);
         frameData->jpegLength = NTOH32(frameData->jpegLength);
 
-        memcpy( &frameData->imgSeq, &buffer[bufIdx], sizeof(long64) );
-        bufIdx += sizeof(long64);
+        memcpy( &frameData->imgSeq, &buffer[bufIdx], sizeof(int64_t) );
+        bufIdx += sizeof(int64_t);
         frameData->imgSeq = NTOH64(frameData->imgSeq);
 
-        memcpy( &frameData->imgTime, &buffer[bufIdx], sizeof(long64) );
-        bufIdx += sizeof(long64);
+        memcpy( &frameData->imgTime, &buffer[bufIdx], sizeof(int64_t) );
+        bufIdx += sizeof(int64_t);
 
         memcpy( &frameData->camera, &buffer[bufIdx], sizeof(unsigned char) );
         bufIdx += sizeof(unsigned char);
@@ -374,74 +374,6 @@ static AVStream * GetStream( struct AVFormatContext *s, int camera, int width, i
 	}
 
 	return stream;
-}
-
-int long64ToTimeValues( const long64 *timeValue, time_t * time, unsigned short *ms, unsigned short *flags )
-{
-    int         retVal = AVERROR_IO;
-    const uint8_t *   bufPtr = NULL;
-
-    /* Format of the input 64 bit block is as follows:
-       Bits               |             value
-       -------------------------------------------------------
-       0-15               |             flags
-       16-31              |             milliseconds offset
-       32-63              |             time_t struct
-
-       NOTE: We're not using structs here as we need portability and cannot guarantee how different compilers will align/pack structures.
-    */
-
-    if( time != NULL && ms != NULL && flags != NULL )
-    {
-        bufPtr = (const uint8_t*)timeValue;
-
-        memcpy( time, bufPtr, sizeof(time_t) );
-        bufPtr += sizeof(time_t);
-        *time = NTOH32( *time );
-
-        memcpy( ms, bufPtr, sizeof(unsigned short) );
-        bufPtr += sizeof(unsigned short);
-        *ms = NTOH16( *ms );
-
-        memcpy( flags, bufPtr, sizeof(unsigned short) );
-        *flags = NTOH16( *flags );
-#if 0
-        memcpy( flags, bufPtr, sizeof(unsigned short) );
-        bufPtr += sizeof(unsigned short);
-
-        memcpy( ms, bufPtr, sizeof(unsigned short) );
-        bufPtr += sizeof(unsigned short);
-
-        memcpy( time, bufPtr, sizeof(time_t) );
-#endif
-
-        retVal = 0;
-    }
-
-    return retVal;
-}
-
-long64 TimeTolong64( time_t time )
-{
-    long64          timeOut = 0;
-    unsigned short  flags = 0;
-    unsigned short  ms = 0;
-    uint8_t *       bufPtr = NULL;
-
-    /* For now, we're saying we don't know the time zone */
-    SET_FLAG_ZONE_UNKNOWN(flags);
-
-    bufPtr = (uint8_t*)&timeOut;
-
-    memcpy( bufPtr, &flags, sizeof(unsigned short) );
-    bufPtr += sizeof(unsigned short);
-
-    memcpy( bufPtr, &ms, sizeof(unsigned short) );
-    bufPtr += sizeof(unsigned short);
-
-    memcpy( bufPtr, &time, sizeof(time_t) );
-
-    return timeOut;
 }
 
 static int dspic_new_packet(AVPacket *pkt, int size)

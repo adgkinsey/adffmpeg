@@ -28,7 +28,7 @@
 
 typedef struct _dspicFormat
 {
-    long64  t;
+    int64_t  t;
      ByteIOContext      pb;
 } DSPicFormat;
 
