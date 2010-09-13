@@ -29,6 +29,8 @@ static int ReadFeatureConnectReplyMessage( URLContext * h, NetworkMessage *messa
 static int GetUserAndPassword( const char * auth, char *user, char *password  );
 static int CrackURI( const char *path, int *streamType, int *res, int *cam, time_t *from, time_t *to, int *rate, vcrMode *playMode );
 static int DSReadBuffer( URLContext *h, uint8_t *buffer, int size );
+static int64_t TimeTolong64( time_t time );
+
 
 URLProtocol ds_protocol = {
     "dm",  /* protocol string (i.e. dm://) */
@@ -340,9 +342,9 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
     ClientConnectMsg *  connectMsg = NULL;
     int                 channelID = -2;
     int                 streamType, res, cam;
-    time_t              from, to;
-    int                 rate;
-    vcrMode             playMode;
+    time_t              from = 0, to = 0;
+    int                 rate = 0;
+    vcrMode             playMode = VM_PLAY;
     char                user[MAX_USER_ID_LENGTH];
     char                password[MAX_USER_ID_LENGTH];
 
@@ -861,7 +863,7 @@ static int ReadConnectReplyMessage( URLContext * h, NetworkMessage *message )
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->maxMsgInterval, sizeof(long) ) != sizeof(long) )
         return AVERROR_IO;
 
-    if( DSReadBuffer( h, (uint8_t *)&bodyPtr->timestamp, sizeof(long64) ) != sizeof(long64) )
+    if( DSReadBuffer( h, (uint8_t *)&bodyPtr->timestamp, sizeof(int64_t) ) != sizeof(int64_t) )
         return AVERROR_IO;
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->cameraTitles, (16 * 28) ) != (16 * 28) )
@@ -932,7 +934,7 @@ static int ReadFeatureConnectReplyMessage( URLContext * h, NetworkMessage *messa
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->maxMsgInterval, sizeof(long) ) != sizeof(long) )
         return AVERROR_IO;
 
-    if( DSReadBuffer( h, (uint8_t *)&bodyPtr->timestamp, sizeof(long64) ) != sizeof(long64) )
+    if( DSReadBuffer( h, (uint8_t *)&bodyPtr->timestamp, sizeof(int64_t) ) != sizeof(int64_t) )
         return AVERROR_IO;
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->cameraTitles, (16 * 28) ) != (16 * 28) )
@@ -1092,7 +1094,7 @@ static int SendNetworkMessage( URLContext *h, NetworkMessage *message )
     case TCP_CLI_IMG_PLAY_REQUEST:
         {
             long            temp;
-            long64          tempBig;
+            int64_t          tempBig;
 
             temp = HTON32( ((CliImgPlayRequestMsg*)message->body)->cameraMask );
             memcpy( &messageBuffer[bufIdx], &temp, sizeof(long) );
@@ -1107,16 +1109,39 @@ static int SendNetworkMessage( URLContext *h, NetworkMessage *message )
             bufIdx += sizeof(long);
 
             tempBig = HTON64( ((CliImgPlayRequestMsg*)message->body)->fromTime );
-            memcpy( &messageBuffer[bufIdx], &tempBig, sizeof(long64) );
-            bufIdx += sizeof(long64);
+            memcpy( &messageBuffer[bufIdx], &tempBig, sizeof(int64_t) );
+            bufIdx += sizeof(int64_t);
 
             tempBig = HTON64( ((CliImgPlayRequestMsg*)message->body)->toTime );
-            memcpy( &messageBuffer[bufIdx], &tempBig, sizeof(long64) );
-            bufIdx += sizeof(long64);
+            memcpy( &messageBuffer[bufIdx], &tempBig, sizeof(int64_t) );
+            bufIdx += sizeof(int64_t);
         }
         break;
     }
 
     /* Write to output stream - remember to add on the 4 bytes for the magic number which precedes the length */
     return DSWrite( h, messageBuffer, message->header.length + sizeof(unsigned long) );
+}
+
+static int64_t TimeTolong64( time_t time )
+{
+    int64_t          timeOut = 0;
+    unsigned short  flags = 0;
+    unsigned short  ms = 0;
+    uint8_t *       bufPtr = NULL;
+
+    /* For now, we're saying we don't know the time zone */
+    SET_FLAG_ZONE_UNKNOWN(flags);
+
+    bufPtr = (uint8_t*)&timeOut;
+
+    memcpy( bufPtr, &flags, sizeof(unsigned short) );
+    bufPtr += sizeof(unsigned short);
+
+    memcpy( bufPtr, &ms, sizeof(unsigned short) );
+    bufPtr += sizeof(unsigned short);
+
+    memcpy( bufPtr, &time, sizeof(time_t) );
+
+    return timeOut;
 }

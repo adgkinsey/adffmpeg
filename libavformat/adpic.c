@@ -50,6 +50,7 @@ static int process_mp4data_line( char *line, int line_count, NetVuImageData *vid
 static void adpic_release_packet( AVPacket *pkt );
 static int adpic_is_valid_separator( unsigned char * buf, int bufLen );
 
+static int adpic_new_packet( AVPacket *pkt, int size );
 int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size);
 void audioheader_network2host( NetVuAudioData *hdr );
 int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt);
@@ -1885,7 +1886,7 @@ int logger (int log_level, const char *fmt, ...)
     return 0;
 }
 
-int adpic_new_packet(AVPacket *pkt, int size)
+static int adpic_new_packet(AVPacket *pkt, int size)
 {
     int     retVal = av_new_packet( pkt, size );
 

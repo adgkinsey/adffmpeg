@@ -13,9 +13,13 @@ static AVStream * GetStream( struct AVFormatContext *s, int camera, int width, i
 static int ReadNetworkMessageHeader( ByteIOContext *context, MessageHeader *header );
 static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize );
 static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData );
+static int dspic_new_packet(AVPacket *pkt, int size);
+static void dspic_release_packet( AVPacket *pkt );
+
 
 static const long       DSPacketHeaderMagicNumber = 0xfaced0ff;
 static const char *     DSApp0Identifier = "DigiSpr";
+
 
 AVInputFormat dspic_demuxer = {
     "dspic",
@@ -28,6 +32,7 @@ AVInputFormat dspic_demuxer = {
     dspicReadSeek,
     dspicReadPts,
 };
+
 
 static int dspicProbe( AVProbeData *p )
 {
@@ -77,7 +82,7 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
             /* Read any extra bytes then try again */
             dataSize = header.length - (SIZEOF_MESSAGE_HEADER_IO - sizeof(unsigned long));
 
-            if( (retVal = adpic_new_packet( pkt, dataSize )) < 0 )
+            if( (retVal = dspic_new_packet( pkt, dataSize )) < 0 )
                 return retVal;
 
             if( get_buffer( ioContext, pkt->data, dataSize ) != dataSize )
@@ -91,7 +96,7 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
             dataSize = header.length - (SIZEOF_MESSAGE_HEADER_IO - sizeof(unsigned long));
 
             /* Allocate packet data large enough for what we have */
-            if( (retVal = adpic_new_packet( pkt, dataSize )) < 0 )
+            if( (retVal = dspic_new_packet( pkt, dataSize )) < 0 )
                 return retVal;
 
             /* Read the jfif data out of the buffer */
@@ -233,12 +238,12 @@ static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData )
         bufIdx += sizeof(unsigned long);
         frameData->jpegLength = NTOH32(frameData->jpegLength);
 
-        memcpy( &frameData->imgSeq, &buffer[bufIdx], sizeof(long64) );
-        bufIdx += sizeof(long64);
+        memcpy( &frameData->imgSeq, &buffer[bufIdx], sizeof(int64_t) );
+        bufIdx += sizeof(int64_t);
         frameData->imgSeq = NTOH64(frameData->imgSeq);
 
-        memcpy( &frameData->imgTime, &buffer[bufIdx], sizeof(long64) );
-        bufIdx += sizeof(long64);
+        memcpy( &frameData->imgTime, &buffer[bufIdx], sizeof(int64_t) );
+        bufIdx += sizeof(int64_t);
 
         memcpy( &frameData->camera, &buffer[bufIdx], sizeof(unsigned char) );
         bufIdx += sizeof(unsigned char);
@@ -371,70 +376,46 @@ static AVStream * GetStream( struct AVFormatContext *s, int camera, int width, i
 	return stream;
 }
 
-int long64ToTimeValues( const long64 *timeValue, time_t * time, unsigned short *ms, unsigned short *flags )
+static int dspic_new_packet(AVPacket *pkt, int size)
 {
-    int         retVal = AVERROR_IO;
-    const uint8_t *   bufPtr = NULL;
+    int     retVal = av_new_packet( pkt, size );
 
-    /* Format of the input 64 bit block is as follows:
-       Bits               |             value
-       -------------------------------------------------------
-       0-15               |             flags
-       16-31              |             milliseconds offset
-       32-63              |             time_t struct
-
-       NOTE: We're not using structs here as we need portability and cannot guarantee how different compilers will align/pack structures.
-    */
-
-    if( time != NULL && ms != NULL && flags != NULL )
+    if( retVal >= 0 )
     {
-        bufPtr = (const uint8_t*)timeValue;
-
-        memcpy( time, bufPtr, sizeof(time_t) );
-        bufPtr += sizeof(time_t);
-        *time = NTOH32( *time );
-
-        memcpy( ms, bufPtr, sizeof(unsigned short) );
-        bufPtr += sizeof(unsigned short);
-        *ms = NTOH16( *ms );
-
-        memcpy( flags, bufPtr, sizeof(unsigned short) );
-        *flags = NTOH16( *flags );
-#if 0
-        memcpy( flags, bufPtr, sizeof(unsigned short) );
-        bufPtr += sizeof(unsigned short);
-
-        memcpy( ms, bufPtr, sizeof(unsigned short) );
-        bufPtr += sizeof(unsigned short);
-
-        memcpy( time, bufPtr, sizeof(time_t) );
-#endif
-
-        retVal = 0;
+        // Give the packet its own destruct function
+        pkt->destruct = dspic_release_packet;
     }
 
     return retVal;
 }
 
-long64 TimeTolong64( time_t time )
+static void dspic_release_packet( AVPacket *pkt )
 {
-    long64          timeOut = 0;
-    unsigned short  flags = 0;
-    unsigned short  ms = 0;
-    uint8_t *       bufPtr = NULL;
+    if (pkt != NULL)
+    {
+        if (pkt->priv != NULL)
+        {
+            // Have a look what type of frame we have and then delete anything inside as appropriate
+            FrameData *     frameData = (FrameData *)pkt->priv;
 
-    /* For now, we're saying we don't know the time zone */
-    SET_FLAG_ZONE_UNKNOWN(flags);
+            // Nothing else has nested allocs so just delete the frameData if it exists
+            if( frameData->frameData != NULL )
+            {
+                av_free( frameData->frameData );
+                frameData->frameData = NULL;
+            }
 
-    bufPtr = (uint8_t*)&timeOut;
+            if( frameData->additionalData != NULL )
+            {
+                av_free( frameData->additionalData );
+                frameData->additionalData = NULL;
+            }
+        }
 
-    memcpy( bufPtr, &flags, sizeof(unsigned short) );
-    bufPtr += sizeof(unsigned short);
+        av_free( pkt->priv );
+        pkt->priv = NULL;
 
-    memcpy( bufPtr, &ms, sizeof(unsigned short) );
-    bufPtr += sizeof(unsigned short);
-
-    memcpy( bufPtr, &time, sizeof(time_t) );
-
-    return timeOut;
+        // Now use the default routine to release the rest of the packet's resources
+        av_destruct_packet( pkt );
+    }
 }
