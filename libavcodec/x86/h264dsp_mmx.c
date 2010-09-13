@@ -18,6 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/cpu.h"
 #include "libavutil/x86_cpu.h"
 #include "libavcodec/h264dsp.h"
 #include "dsputil_mmx.h"
@@ -474,7 +475,7 @@ static void ff_h264_idct_add8_mmx2(uint8_t **dest, const int *block_offset, DCTE
     }
 }
 
-#if CONFIG_GPL && HAVE_YASM
+#if HAVE_YASM
 static void ff_h264_idct_dc_add8_mmx2(uint8_t *dst, int16_t *block, int stride)
 {
     __asm__ volatile(
@@ -742,7 +743,7 @@ H264_BIWEIGHT_MMX    ( 4,  2)
 
 void ff_h264dsp_init_x86(H264DSPContext *c)
 {
-    int mm_flags = mm_support();
+    int mm_flags = av_get_cpu_flags();
 
     if (mm_flags & AV_CPU_FLAG_MMX) {
         c->h264_idct_dc_add=
@@ -819,11 +820,9 @@ void ff_h264dsp_init_x86(H264DSPContext *c)
                 c->h264_v_loop_filter_luma_intra = ff_x264_deblock_v_luma_intra_sse2;
                 c->h264_h_loop_filter_luma_intra = ff_x264_deblock_h_luma_intra_sse2;
 #endif
-#if CONFIG_GPL
                 c->h264_idct_add16 = ff_h264_idct_add16_sse2;
                 c->h264_idct_add8  = ff_h264_idct_add8_sse2;
                 c->h264_idct_add16intra = ff_h264_idct_add16intra_sse2;
-#endif
             }
             if (mm_flags&AV_CPU_FLAG_SSSE3) {
                 c->biweight_h264_pixels_tab[0]= ff_h264_biweight_16x16_ssse3;
