@@ -33,7 +33,15 @@ version <next>:
 - Apple HTTP Live Streaming demuxer
 - a64 codec
 - MMS-HTTP support
-- G.722 ADPCM audio decoder
+- G.722 ADPCM audio encoder/decoder
+- R10k video decoder
+- ocv_smooth filter
+- frei0r wrapper filter
+- change crop filter syntax to width:height:x:y
+- make the crop filter accept parametric expressions
+- make ffprobe accept AVFormatContext options
+- yadif filter
+- blackframe filter
 
 
 version 0.6:

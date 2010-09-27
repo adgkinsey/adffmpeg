@@ -40,9 +40,8 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     struct addrinfo hints, *ai, *cur_ai;
     int port, fd = -1;
     TCPContext *s = NULL;
-    fd_set wfds;
-    fd_set efds;    /* CS - Added to detect error condition on connect() */
-    int fd_max, ret, TimeOutCount = 0;
+    fd_set wfds, efds;
+    int fd_max, ret;
     struct timeval tv;
     socklen_t optlen;
     char hostname[1024],proto[1024],path[1024];
@@ -98,22 +97,15 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
             }
             fd_max = fd;
             FD_ZERO(&wfds);
-            FD_SET(fd, &wfds);
-            /* CS - Added error set here to detect error in connect operation */
             FD_ZERO(&efds);
+            FD_SET(fd, &wfds);
             FD_SET(fd, &efds);
             tv.tv_sec = 0;
             tv.tv_usec = 100 * 1000;
             ret = select(fd_max + 1, NULL, &wfds, &efds, &tv);
 
-            if (ret > 0 && FD_ISSET(fd, &wfds))
+            if (ret > 0 && (FD_ISSET(fd, &wfds) || FD_ISSET(fd, &efds)))
                 break; /* Connected ok, break out of the loop here */
-            else if( ret > 0 && FD_ISSET(fd, &efds) )
-            {
-                /* There was an error during connection */
-                ret = AVERROR(EIO);
-                goto fail1;
-            }
             else if (ret == 0)
             {
                 TimeOutCount++;
@@ -123,7 +115,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
                      goto fail1; 
                 }
             }
-            if(ret == -1)
+            else
             {
                 ret = AVERROR(EIO);
                 goto fail1;

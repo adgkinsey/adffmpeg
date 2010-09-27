@@ -294,6 +294,7 @@ OBJS-$(CONFIG_LIBPARREADER_DEMUXER)      += libpar.o
 # protocols I/O
 OBJS+= avio.o aviobuf.o
 
+OBJS-$(CONFIG_CONCAT_PROTOCOL)           += concat.o
 OBJS-$(CONFIG_FILE_PROTOCOL)             += file.o
 OBJS-$(CONFIG_GOPHER_PROTOCOL)           += gopher.o
 OBJS-$(CONFIG_HTTP_PROTOCOL)             += http.o httpauth.o
@@ -310,7 +311,6 @@ OBJS-$(CONFIG_RTMP_PROTOCOL)             += $(RTMP-OBJS-yes)
 OBJS-$(CONFIG_RTP_PROTOCOL)              += rtpproto.o
 OBJS-$(CONFIG_TCP_PROTOCOL)              += tcp.o
 OBJS-$(CONFIG_UDP_PROTOCOL)              += udp.o
-OBJS-$(CONFIG_CONCAT_PROTOCOL)           += concat.o
 
 OBJS-$(CONFIG_DSPIC_DEMUXER)			 += jfif_img.o ds.o dspic.o
 OBJS-$(CONFIG_ADPIC_DEMUXER)			 += jfif_img.o adpic.o

@@ -31,8 +31,8 @@
 #include "libavutil/cpu.h"
 
 #define LIBAVCODEC_VERSION_MAJOR 52
-#define LIBAVCODEC_VERSION_MINOR 88
-#define LIBAVCODEC_VERSION_MICRO  0
+#define LIBAVCODEC_VERSION_MINOR 91
+#define LIBAVCODEC_VERSION_MICRO  1
 
 #define LIBAVCODEC_VERSION_INT  AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, \
                                                LIBAVCODEC_VERSION_MINOR, \
@@ -53,6 +53,9 @@
 #endif
 #ifndef FF_API_MM_FLAGS
 #define FF_API_MM_FLAGS         (LIBAVCODEC_VERSION_MAJOR < 53)
+#endif
+#ifndef FF_API_OPT_SHOW
+#define FF_API_OPT_SHOW         (LIBAVCODEC_VERSION_MAJOR < 53)
 #endif
 
 #define AV_NOPTS_VALUE          INT64_C(0x8000000000000000)
@@ -227,6 +230,7 @@ enum CodecID {
     CODEC_ID_ANSI,
     CODEC_ID_A64_MULTI,
     CODEC_ID_A64_MULTI5,
+    CODEC_ID_R10K,
 
     /* various PCM "codecs" */
     CODEC_ID_PCM_S16LE= 0x10000,
@@ -1925,12 +1929,6 @@ typedef struct AVCodecContext {
      */
     void *internal_buffer;
 
-#define FF_LAMBDA_SHIFT 7
-#define FF_LAMBDA_SCALE (1<<FF_LAMBDA_SHIFT)
-#define FF_QP2LAMBDA 118 ///< factor to convert from H.263 QP to lambda
-#define FF_LAMBDA_MAX (256*128-1)
-
-#define FF_QUALITY_SCALE FF_LAMBDA_SCALE //FIXME maybe remove
     /**
      * Global quality for codecs which cannot change it per frame.
      * This should be proportional to MPEG-1/2/4 qscale.

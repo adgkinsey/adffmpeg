@@ -162,8 +162,10 @@ Configuration options:
 External library support:
   --enable-avisynth        enable reading of AVISynth script files [no]
   --enable-bzlib           enable bzlib [autodetect]
+  --enable-frei0r          enable frei0r video filtering
   --enable-libopencore-amrnb enable AMR-NB de/encoding via libopencore-amrnb [no]
   --enable-libopencore-amrwb enable AMR-WB decoding via libopencore-amrwb [no]
+  --enable-libopencv       enable video filtering via libopencv [no]
   --enable-libdc1394       enable IIDC-1394 grabbing using libdc1394
                            and libraw1394 [no]
   --enable-libdirac        enable Dirac support via libdirac [no]
@@ -873,6 +875,7 @@ CONFIG_LIST="
     ffprobe
     ffserver
     fft
+    frei0r
     golomb
     gpl
     gray
@@ -888,6 +891,7 @@ CONFIG_LIST="
     libnut
     libopencore_amrnb
     libopencore_amrwb
+    libopencv
     libopenjpeg
 	libparreader
     librtmp
@@ -981,6 +985,7 @@ HAVE_LIST="
     $ARCH_EXT_LIST
     $HAVE_LIST_PUB
     $THREADS_LIST
+    aligned_stack
     alsa_asoundlib_h
     altivec_h
     arpa_inet_h
@@ -1049,6 +1054,7 @@ HAVE_LIST="
     poll_h
     setrlimit
     strerror_r
+    strtok_r
     struct_addrinfo
     struct_ipv6_mreq
     struct_sockaddr_in6
@@ -1164,6 +1170,7 @@ mmx2_deps="mmx"
 sse_deps="mmx"
 ssse3_deps="sse"
 
+aligned_stack_if_any="ppc x86"
 fast_64bit_if_any="alpha ia64 mips64 parisc64 ppc64 sparc64 x86_64"
 fast_clz_if_any="alpha armv5te avr32 mips ppc x86"
 fast_unaligned_if_any="armv6 ppc x86"
@@ -1383,6 +1390,9 @@ vfwcap_indev_extralibs="-lavicap32"
 x11_grab_device_indev_deps="x11grab XShmCreateImage"
 x11_grab_device_indev_extralibs="-lX11 -lXext -lXfixes"
 
+# filters
+frei0r_filter_deps="frei0r dlopen strtok_r"
+
 # protocols
 gopher_protocol_deps="network"
 http_protocol_deps="network"
@@ -1395,6 +1405,11 @@ tcp_protocol_deps="network"
 udp_protocol_deps="network"
 ds_protocol_deps="tcp_protocol"
 netvu_protocol_deps="tcp_protocol"
+
+# filters
+blackframe_filter_deps="gpl"
+ocv_smooth_filter_deps="libopencv"
+yadif_filter_deps="gpl"
 
 # libraries
 avdevice_deps="avcodec avformat"
@@ -1839,6 +1854,7 @@ elif $cc --version 2>/dev/null | grep -q Intel; then
     cc_type=icc
     cc_version="AV_STRINGIFY(__INTEL_COMPILER)"
     cc_ident=$($cc --version | head -n1)
+    icc_version=$($cc -dumpversion)
     CC_DEPFLAGS='-MMD'
     AS_DEPFLAGS='-MMD'
     speed_cflags='-O3'
@@ -1968,9 +1984,17 @@ elif $cc -V 2>&1 | grep -q Sun; then
             esac
         done
     }
-elif $cc -v 2>&1 | grep -q PathScale; then
+elif $cc -v 2>&1 | grep -q 'PathScale\|Path64'; then
     cc_type=pathscale
     cc_version=__PATHSCALE__
+    cc_ident=$($cc -v 2>&1 | head -n1 | tr -d :)
+    CC_DEPFLAGS='-MMD -MF $(@:.o=.d) -MT $@'
+    AS_DEPFLAGS='-MMD -MF $(@:.o=.d) -MT $@'
+    speed_cflags='-O2'
+    size_cflags='-Os'
+elif $cc -v 2>&1 | grep -q Open64; then
+    cc_type=open64
+    cc_version=__OPEN64__
     cc_ident=$($cc -v 2>&1 | head -n1 | tr -d :)
     CC_DEPFLAGS='-MMD -MF $(@:.o=.d) -MT $@'
     AS_DEPFLAGS='-MMD -MF $(@:.o=.d) -MT $@'
@@ -2589,14 +2613,23 @@ EOF
 
     check_asm bswap '"bswap %%eax" ::: "%eax"'
 
-    YASMFLAGS="-f $objformat"
-    enabled     x86_64        && append YASMFLAGS "-m amd64"
-    enabled     pic           && append YASMFLAGS "-DPIC"
-    test -n "$extern_prefix"  && append YASMFLAGS "-DPREFIX"
-    case "$objformat" in
-        elf) enabled debug && append YASMFLAGS "-g dwarf2" ;;
-    esac
     if ! disabled_any asm mmx yasm; then
+        if check_cmd $yasmexe --version; then
+            enabled x86_64 && yasm_extra="-m amd64"
+            yasm_debug="-g dwarf2"
+        elif check_cmd nasm -v; then
+            yasmexe=nasm
+            yasm_debug="-g -F dwarf"
+            enabled x86_64 && test "$objformat" = elf && objformat=elf64
+        fi
+
+        YASMFLAGS="-f $objformat $yasm_extra"
+        enabled pic               && append YASMFLAGS "-DPIC"
+        test -n "$extern_prefix"  && append YASMFLAGS "-DPREFIX"
+        case "$objformat" in
+            elf*) enabled debug && append YASMFLAGS $yasm_debug ;;
+        esac
+
         check_yasm "pabsw xmm0, xmm0" && enable yasm ||
             die "yasm not found, use --disable-yasm for a crippled build"
     fi
@@ -2637,6 +2670,7 @@ check_func  mkstemp
 check_func  ${malloc_prefix}posix_memalign      && enable posix_memalign
 check_func  setrlimit
 check_func  strerror_r
+check_func  strtok_r
 check_func_headers io.h setmode
 check_func_headers lzo/lzo1x.h lzo1x_999_compress
 check_lib2 "windows.h psapi.h" GetProcessMemoryInfo -lpsapi
@@ -2710,15 +2744,18 @@ check_mathfunc truncf
 
 # these are off by default, so fail if requested and not available
 enabled avisynth   && require2 vfw32 "windows.h vfw.h" AVIFileInit -lavifil32
+enabled frei0r     && { check_header frei0r.h || die "ERROR: frei0r.h header not found"; }
 enabled libdirac   && add_cflags $(pkg-config --cflags dirac) &&
                       require  libdirac libdirac_decoder/dirac_parser.h dirac_decoder_init $(pkg-config --libs dirac) &&
                       require  libdirac libdirac_encoder/dirac_encoder.h dirac_encoder_init $(pkg-config --libs dirac)
 enabled libfaac    && require2 libfaac "stdint.h faac.h" faacEncGetVersion -lfaac
 enabled libgsm     && require  libgsm gsm/gsm.h gsm_create -lgsm
-enabled libmp3lame && require  libmp3lame lame/lame.h lame_init -lmp3lame
+enabled libmp3lame && require  "libmp3lame >= 3.98.3" lame/lame.h hip_decode_init -lmp3lame
 enabled libnut     && require  libnut libnut.h nut_demuxer_init -lnut
 enabled libopencore_amrnb  && require libopencore_amrnb opencore-amrnb/interf_dec.h Decoder_Interface_init -lopencore-amrnb
 enabled libopencore_amrwb  && require libopencore_amrwb opencore-amrwb/dec_if.h D_IF_init -lopencore-amrwb
+enabled libopencv  && { check_lib opencv/cv.h cvCreateImageHeader $(pkg-config --libs opencv) ||
+                        die "ERROR: libopencv not found"; }
 enabled libopenjpeg && require libopenjpeg openjpeg.h opj_version -lopenjpeg
 enabled libparreader && require2 libparreader "parreader.h parreader_types.h" parReader_getPicStructSize -lparreader
 enabled librtmp    && { check_lib librtmp/rtmp.h RTMP_Socket $(pkg-config --libs librtmp) ||
@@ -2890,6 +2927,11 @@ if enabled icc; then
     check_ldflags -march=$cpu
     # icc 11.0 and 11.1 work with ebp_available, but don't pass the test
     enable ebp_available
+    if enabled x86_32; then
+        test ${icc_version%%.*} -ge 11 && \
+            check_cflags -falign-stack=maintain-16-byte || \
+            disable aligned_stack
+    fi
 elif enabled ccc; then
     # disable some annoying warnings
     add_cflags -msg_disable cvtu32to64
@@ -2996,6 +3038,7 @@ echo "threading support         ${thread_type-no}"
 echo "SDL support               ${sdl-no}"
 echo "Sun medialib support      ${mlib-no}"
 echo "AVISynth enabled          ${avisynth-no}"
+echo "frei0r enabled            ${frei0r-no}"
 echo "libdc1394 support         ${libdc1394-no}"
 echo "libdirac enabled          ${libdirac-no}"
 echo "libfaac enabled           ${libfaac-no}"
@@ -3004,6 +3047,7 @@ echo "libmp3lame enabled        ${libmp3lame-no}"
 echo "libnut enabled            ${libnut-no}"
 echo "libopencore-amrnb support ${libopencore_amrnb-no}"
 echo "libopencore-amrwb support ${libopencore_amrwb-no}"
+echo "libopencv support         ${libopencv-no}"
 echo "libopenjpeg enabled       ${libopenjpeg-no}"
 echo "libparreader enabled      ${libparreader-no}"
 echo "librtmp enabled           ${librtmp-no}"
@@ -3050,6 +3094,7 @@ if enabled source_path_used; then
         libavcore
         libavdevice
         libavfilter
+        libavfilter/$arch
         libavformat
         libavutil
         libavutil/$arch

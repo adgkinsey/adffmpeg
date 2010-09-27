@@ -25,6 +25,7 @@
  * @author Michael Niedermayer <michaelni@gmx.at>
  */
 
+#include "libavcore/imgutils.h"
 #include "internal.h"
 #include "dsputil.h"
 #include "avcodec.h"
@@ -1318,14 +1319,9 @@ static av_always_inline void hl_decode_mb_internal(H264Context *h, int simple){
                 chroma_dc_dequant_idct_c(h->mb + 16*16, h->chroma_qp[0], h->dequant4_coeff[IS_INTRA(mb_type) ? 1:4][h->chroma_qp[0]][0]);
                 chroma_dc_dequant_idct_c(h->mb + 16*16+4*16, h->chroma_qp[1], h->dequant4_coeff[IS_INTRA(mb_type) ? 2:5][h->chroma_qp[1]][0]);
                 if(is_h264){
-                    idct_add = h->h264dsp.h264_idct_add;
-                    idct_dc_add = h->h264dsp.h264_idct_dc_add;
-                    for(i=16; i<16+8; i++){
-                        if(h->non_zero_count_cache[ scan8[i] ])
-                            idct_add   (dest[(i&4)>>2] + block_offset[i], h->mb + i*16, uvlinesize);
-                        else if(h->mb[i*16])
-                            idct_dc_add(dest[(i&4)>>2] + block_offset[i], h->mb + i*16, uvlinesize);
-                    }
+                    h->h264dsp.h264_idct_add8(dest, block_offset,
+                                              h->mb, uvlinesize,
+                                              h->non_zero_count_cache);
                 }else{
                     for(i=16; i<16+8; i++){
                         if(h->non_zero_count_cache[ scan8[i] ] || h->mb[i*16]){
@@ -1910,6 +1906,17 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
             s->current_picture_ptr->frame_num= h->prev_frame_num;
             ff_generate_sliding_window_mmcos(h);
             ff_h264_execute_ref_pic_marking(h, h->mmco, h->mmco_index);
+            /* Error concealment: if a ref is missing, copy the previous ref in its place.
+             * FIXME: avoiding a memcpy would be nice, but ref handling makes many assumptions
+             * about there being no actual duplicates.
+             * FIXME: this doesn't copy padding for out-of-frame motion vectors.  Given we're
+             * concealing a lost frame, this probably isn't noticable by comparison, but it should
+             * be fixed. */
+            av_image_copy(h->short_ref[0]->data, h->short_ref[0]->linesize,
+                          (const uint8_t**)h->short_ref[1]->data, h->short_ref[1]->linesize,
+                          PIX_FMT_YUV420P, s->mb_width*16, s->mb_height*16);
+            h->short_ref[0]->frame_num = h->prev_frame_num;
+            h->short_ref[0]->poc = h->short_ref[1]->poc+2;
         }
 
         /* See if we have a decoded first field looking for a pair... */

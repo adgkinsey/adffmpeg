@@ -93,7 +93,9 @@ typedef struct AVStreamMap {
     int sync_stream_index;
 } AVStreamMap;
 
-/** select an input file for an output file */
+/**
+ * select an input file for an output file
+ */
 typedef struct AVMetaDataMap {
     int out_file;
     int in_file;
@@ -430,9 +432,9 @@ static int configure_filters(AVInputStream *ist, AVOutputStream *ost)
     last_filter = ist->input_video_filter;
 
     if (ost->video_crop) {
-        snprintf(args, 255, "%d:%d:%d:%d", ost->leftBand, ost->topBand,
-                 codec->width,
-                 codec->height);
+        snprintf(args, 255, "%d:%d:%d:%d",
+                 codec->width, codec->height,
+                 ost->leftBand, ost->topBand);
         if ((ret = avfilter_open(&filter, avfilter_get_by_name("crop"), NULL)) < 0)
             return ret;
         if ((ret = avfilter_init_filter(filter, args, NULL)) < 0)
@@ -502,6 +504,7 @@ static int configure_filters(AVInputStream *ist, AVOutputStream *ost)
 
 static void term_exit(void)
 {
+    av_log(NULL, AV_LOG_QUIET, "");
 #if HAVE_TERMIOS_H
     tcsetattr (0, TCSANOW, &oldtty);
 #endif
@@ -867,9 +870,9 @@ need_realloc:
 
     if(audio_sync_method){
         double delta = get_sync_ipts(ost) * enc->sample_rate - ost->sync_opts
-                - av_fifo_size(ost->fifo)/(ost->st->codec->channels * 2);
-        double idelta= delta*ist->st->codec->sample_rate / enc->sample_rate;
-        int byte_delta= ((int)idelta)*2*ist->st->codec->channels;
+                - av_fifo_size(ost->fifo)/(enc->channels * 2);
+        double idelta= delta*dec->sample_rate / enc->sample_rate;
+        int byte_delta= ((int)idelta)*2*dec->channels;
 
         //FIXME resample delay
         if(fabs(delta) > 50){
@@ -911,13 +914,13 @@ need_realloc:
         }
     }else
         ost->sync_opts= lrintf(get_sync_ipts(ost) * enc->sample_rate)
-                        - av_fifo_size(ost->fifo)/(ost->st->codec->channels * 2); //FIXME wrong
+                        - av_fifo_size(ost->fifo)/(enc->channels * 2); //FIXME wrong
 
     if (ost->audio_resample) {
         buftmp = audio_buf;
         size_out = audio_resample(ost->resample,
                                   (short *)buftmp, (short *)buf,
-                                  size / (ist->st->codec->channels * isize));
+                                  size / (dec->channels * isize));
         size_out = size_out * enc->channels * osize;
     } else {
         buftmp = buf;
@@ -972,7 +975,7 @@ need_realloc:
             if(enc->coded_frame && enc->coded_frame->pts != AV_NOPTS_VALUE)
                 pkt.pts= av_rescale_q(enc->coded_frame->pts, enc->time_base, ost->st->time_base);
             pkt.flags |= AV_PKT_FLAG_KEY;
-            write_frame(s, &pkt, ost->st->codec, bitstream_filters[ost->file_index][pkt.stream_index]);
+            write_frame(s, &pkt, enc, bitstream_filters[ost->file_index][pkt.stream_index]);
 
             ost->sync_opts += enc->frame_size;
         }
@@ -1007,7 +1010,7 @@ need_realloc:
         if(enc->coded_frame && enc->coded_frame->pts != AV_NOPTS_VALUE)
             pkt.pts= av_rescale_q(enc->coded_frame->pts, enc->time_base, ost->st->time_base);
         pkt.flags |= AV_PKT_FLAG_KEY;
-        write_frame(s, &pkt, ost->st->codec, bitstream_filters[ost->file_index][pkt.stream_index]);
+        write_frame(s, &pkt, enc, bitstream_filters[ost->file_index][pkt.stream_index]);
     }
 }
 
@@ -3870,15 +3873,6 @@ static void opt_intra_matrix(const char *arg)
     parse_matrix_coeffs(intra_matrix, arg);
 }
 
-/**
- * Trivial log callback.
- * Only suitable for show_help and similar since it lacks prefix handling.
- */
-static void log_callback_help(void* ptr, int level, const char* fmt, va_list vl)
-{
-    vfprintf(stdout, fmt, vl);
-}
-
 static void show_usage(void)
 {
     printf("Hyper fast Audio and Video encoder\n");
@@ -3914,11 +3908,11 @@ static void show_help(void)
                       OPT_GRAB,
                       OPT_GRAB);
     printf("\n");
-    av_opt_show(avcodec_opts[0], NULL);
+    av_opt_show2(avcodec_opts[0], NULL, AV_OPT_FLAG_ENCODING_PARAM|AV_OPT_FLAG_DECODING_PARAM, 0);
     printf("\n");
-    av_opt_show(avformat_opts, NULL);
+    av_opt_show2(avformat_opts, NULL, AV_OPT_FLAG_ENCODING_PARAM|AV_OPT_FLAG_DECODING_PARAM, 0);
     printf("\n");
-    av_opt_show(sws_opts, NULL);
+    av_opt_show2(sws_opts, NULL, AV_OPT_FLAG_ENCODING_PARAM|AV_OPT_FLAG_DECODING_PARAM, 0);
 }
 
 static void opt_target(const char *arg)
@@ -4298,6 +4292,8 @@ int main(int argc, char **argv)
 {
     int i;
     int64_t ti;
+
+    av_log_set_flags(AV_LOG_SKIP_REPEATED);
 
     avcodec_register_all();
 #if CONFIG_AVDEVICE

@@ -56,6 +56,11 @@ struct SwsContext *sws_opts;
 
 const int this_year = 2010;
 
+void log_callback_help(void* ptr, int level, const char* fmt, va_list vl)
+{
+    vfprintf(stdout, fmt, vl);
+}
+
 double parse_number_or_die(const char *context, const char *numstr, int type, double min, double max)
 {
     char *tail;
@@ -193,12 +198,12 @@ int opt_default(const char *opt, const char *arg){
     const AVOption *o= NULL;
     int opt_types[]={AV_OPT_FLAG_VIDEO_PARAM, AV_OPT_FLAG_AUDIO_PARAM, 0, AV_OPT_FLAG_SUBTITLE_PARAM, 0};
 
-    for(type=0; type<AVMEDIA_TYPE_NB && ret>= 0; type++){
+    for(type=0; *avcodec_opts && type<AVMEDIA_TYPE_NB && ret>= 0; type++){
         const AVOption *o2 = av_find_opt(avcodec_opts[0], opt, NULL, opt_types[type], opt_types[type]);
         if(o2)
             ret = av_set_string3(avcodec_opts[type], opt, arg, 1, &o);
     }
-    if(!o)
+    if(!o && avformat_opts)
         ret = av_set_string3(avformat_opts, opt, arg, 1, &o);
     if(!o && sws_opts)
         ret = av_set_string3(sws_opts, opt, arg, 1, &o);
@@ -225,7 +230,7 @@ int opt_default(const char *opt, const char *arg){
     opt_names= av_realloc(opt_names, sizeof(void*)*(opt_name_count+1));
     opt_names[opt_name_count++]= o->name;
 
-    if(avcodec_opts[0]->debug || avformat_opts->debug)
+    if ((*avcodec_opts && avcodec_opts[0]->debug) || (avformat_opts && avformat_opts->debug))
         av_log_set_level(AV_LOG_DEBUG);
     return 0;
 }

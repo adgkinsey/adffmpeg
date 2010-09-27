@@ -25,8 +25,8 @@
 #include "libavutil/avutil.h"
 
 #define LIBAVFILTER_VERSION_MAJOR  1
-#define LIBAVFILTER_VERSION_MINOR 38
-#define LIBAVFILTER_VERSION_MICRO  3
+#define LIBAVFILTER_VERSION_MINOR 46
+#define LIBAVFILTER_VERSION_MICRO  0
 
 #define LIBAVFILTER_VERSION_INT AV_VERSION_INT(LIBAVFILTER_VERSION_MAJOR, \
                                                LIBAVFILTER_VERSION_MINOR, \
@@ -391,7 +391,7 @@ struct AVFilterPad {
 
     /**
      * Frame poll callback. This returns the number of immediately available
-     * frames. It should return a positive value if the next request_frame()
+     * samples. It should return a positive value if the next request_frame()
      * is guaranteed to return one frame (with no delay).
      *
      * Defaults to just calling the source poll_frame() method.
