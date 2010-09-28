@@ -35,8 +35,9 @@ typedef struct {
 
 
 void libpar_packet_destroy(struct AVPacket *packet);
-int createStream(AVFormatContext * avf, 
-				 const ParFrameInfo *frameInfo, const ParDisplaySettings *dispSet);
+AVStream* createStream(AVFormatContext * avf, 
+				       const ParFrameInfo *frameInfo, 
+                       const ParDisplaySettings *dispSet);
 void createPacket(AVFormatContext * avf, AVPacket *packet, int siz, int fChang);
 
 
@@ -91,8 +92,9 @@ void libpar_packet_destroy(struct AVPacket *packet)
 	av_destruct_packet(packet);
 }
 
-int createStream(AVFormatContext * avf, 
-				 const ParFrameInfo *frameInfo, const ParDisplaySettings *dispSet)
+AVStream* createStream(AVFormatContext * avf, 
+				       const ParFrameInfo *frameInfo, 
+                       const ParDisplaySettings *dispSet)
 {
 	//PARContext *p = avf->priv_data;
 	const NetVuImageData *pic = NULL;
@@ -235,7 +237,7 @@ int createStream(AVFormatContext * avf,
 	// Don't set the st->duration since we don't really know it, so we use
 	// avf->duration
 	
-	return st->index;
+	return st;
 }
 
 void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
@@ -252,7 +254,8 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 		}
 	}
 	if (-1 == streamIndex)  {
-		streamIndex = createStream(avf, &avfp->frameInfo, &avfp->dispSet);
+        AVStream *str = createStream(avf, &avfp->frameInfo, &avfp->dispSet);
+        streamIndex = str->index;
 	}
 	av_new_packet(pkt, siz);
 	pkt->stream_index = streamIndex;
@@ -342,6 +345,7 @@ static int par_probe(AVProbeData *p)
 	parReader_setLogLevel(PARREADER_LOG_WARNING);
 	//parReader_setLogLevel(PARREADER_LOG_DEBUG);
 	
+    av_log(NULL, AV_LOG_DEBUG, "par_probe:  %s\n", p->filename);
 	res = parReader_loadParFile(NULL, p->filename, -1, &fInfo, 0);
 	//parReader_closeParFile();
 	if (1 == res)
@@ -354,10 +358,11 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
 {
 	int siz;
 	PARContext *p = avf->priv_data;
-	//ByteIOContext *pb = avf->pb;
-	//KeyValuePair *index;
 	char **filelist;
 	int seqLen;
+    int64_t seconds = 0;
+    AVStream *strm = NULL;
+    AVRational secondsTB = {1,1};
 
 	p->frameInfo.frameBufferSize = MAX_FRAMEBUFFER_SIZE;
 	p->frameInfo.frameBuffer = av_malloc(p->frameInfo.frameBufferSize);
@@ -369,7 +374,7 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
 		int frameNumber, frameCount;
 		unsigned long start, end;
 		if (parReader_getIndexData(&frameNumber, &frameCount, &start, &end))  {
-			avf->duration = end - start;
+            seconds = end - start;
 		}
 	}
 	else  {
@@ -377,15 +382,16 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
 		unsigned long start, end, realStart, realEnd;
 		if (parReader_getIndexData(&frameNumber, &frameCount, &start, &end))  {
 			realStart = start;
+            av_log(NULL, AV_LOG_DEBUG, "par_read_header:  %s (%d)\n", filelist[0], seqLen - 1);
 			res = parReader_loadParFile(NULL, filelist[0], seqLen - 1, &p->frameInfo, 0);
 			if (parReader_getIndexData(&frameNumber, &frameCount, &start, &end))  {
 				realEnd = end;
-				avf->duration = realEnd - realStart;
+				seconds = realEnd - realStart;
 			}
+            av_log(NULL, AV_LOG_DEBUG, "par_read_header:  %s (%d)\n", filelist[0], -1);
 			res = parReader_loadParFile(NULL, filelist[0], -1, &p->frameInfo, 0);
 		}
 	}
-	// Note: Do not set avf->start_time, ffmpeg computes it from AVStream values
 	
 	siz = parReader_loadFrame(&p->frameInfo, &p->dispSet, &p->fileChanged);
 	p->frameCached = siz;
@@ -394,7 +400,11 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
 	p->fileChanged = 0;
 	
 	parReader_getFilename(avf->filename, sizeof(avf->filename));
-	createStream(avf, &p->frameInfo, &p->dispSet);
+    
+	strm = createStream(avf, &p->frameInfo, &p->dispSet);
+    
+    // Note: Do not set avf->start_time, ffmpeg computes it from AVStream values
+    avf->duration = av_rescale_q(seconds, secondsTB, strm->time_base);
 	
 	avf->ctx_flags |= AVFMTCTX_NOHEADER;
 	
@@ -444,6 +454,8 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 	int isKeyFrame = 0;
 	int step;
 	
+    av_log(NULL, AV_LOG_DEBUG, "par_read_seek target    = %"PRId64"\n", target);
+    
 	p->dispSet.cameraNum = streamId;
 	if (flags & AVSEEK_FLAG_BACKWARD)
 		p->dispSet.playMode = RWND;
@@ -459,12 +471,21 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 				p->dispSet.fileLock = 1;
 				p->dispSet.frameNumber = target;
 			}
-			else
+			else  {
 				p->dispSet.timestamp = target / 1000LL;
+                p->dispSet.millisecs = target % 1000;
+            }
 		}
 		
 		do  {
 			siz = parReader_loadFrame(&p->frameInfo, &p->dispSet, &p->fileChanged);
+			
+			// If this frame is not acceptable we want to just iterate through
+			// until we find one that is, not seek again, so reset targets
+			p->dispSet.frameNumber = -1;
+			p->dispSet.timestamp = 0;
+			p->dispSet.millisecs = 0;
+	
 			if (siz < 0)
 				break;
 			
@@ -506,6 +527,9 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 	
 	p->dispSet.fileLock = 0;
 	p->dispSet.playMode = PLAY;
+    
+    av_log(NULL, AV_LOG_DEBUG, "par_read_seek seek_done = %lu\n", p->frameInfo.imageTime);
+    
 	return p->frameInfo.imageTime;
 }
 
