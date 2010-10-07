@@ -36,8 +36,7 @@ typedef struct {
 
 void libpar_packet_destroy(struct AVPacket *packet);
 AVStream* createStream(AVFormatContext * avf, 
-				       const ParFrameInfo *frameInfo, 
-                       const ParDisplaySettings *dispSet);
+				       const ParFrameInfo *frameInfo);
 void createPacket(AVFormatContext * avf, AVPacket *packet, int siz, int fChang);
 
 
@@ -69,41 +68,41 @@ void libpar_packet_destroy(struct AVPacket *packet)
     }
 	
 	if (fed)  {
-		av_free(fed->dsFrameData->frameData);
-		fed->dsFrameData->frameData = NULL;
-		av_free(fed->dsFrameData);
-		fed->dsFrameData = NULL;
+		if (fed->dsFrameData->frameData)
+			av_free(fed->dsFrameData->frameData);
+		if (fed->dsFrameData)
+			av_free(fed->dsFrameData);
 		
-		av_free(fed->frameInfo->frameBuffer);
-		fed->frameInfo->frameBufferSize = 0;
-		fed->frameInfo->frameData = NULL;
-		fed->frameInfo->frameBuffer = NULL;
-		av_free(fed->frameInfo);
-		fed->frameInfo = NULL;
+		if (fed->frameInfo->frameBuffer)
+			av_free(fed->frameInfo->frameBuffer);
+		if (fed->frameInfo)
+			av_free(fed->frameInfo);
 		
-		parReader_freeIndexInfo(fed->indexInfo);
-		fed->indexInfo = NULL;
+		if (fed->indexInfo)
+			parReader_freeIndexInfo(fed->indexInfo);
+			
 		av_free(fed);
-		fed = NULL;
 	}
-	packet->priv = NULL;
-	packet->destruct = NULL;
 	
 	av_destruct_packet(packet);
 }
 
 AVStream* createStream(AVFormatContext * avf, 
-				       const ParFrameInfo *frameInfo, 
-                       const ParDisplaySettings *dispSet)
+				       const ParFrameInfo *frameInfo)
 {
 	//PARContext *p = avf->priv_data;
 	const NetVuImageData *pic = NULL;
 	const NetVuAudioData *aud = NULL;
 	char textbuffer[128];
 	int w, h;
+	int streamId = -1;
+	AVStream * st = NULL;
 	
-	int streamId = frameInfo->channel;
-	AVStream * st = av_new_stream(avf, streamId);
+	if ( (NULL == avf) || (NULL == frameInfo) || (NULL == frameInfo->frameBuffer) )
+		return NULL;
+	
+	streamId = frameInfo->channel;
+	st = av_new_stream(avf, streamId);
 	
 	st->filename = av_strdup(avf->filename);
 	st->nb_frames = 0;
@@ -254,20 +253,45 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 		}
 	}
 	if (-1 == streamIndex)  {
-        AVStream *str = createStream(avf, &avfp->frameInfo, &avfp->dispSet);
-        streamIndex = str->index;
+        AVStream *str = createStream(avf, &avfp->frameInfo);
+		if (str)
+			streamIndex = str->index;
+		else
+			return;
 	}
 	av_new_packet(pkt, siz);
+	
+	if (NULL == pkt->data)  {
+		pkt->size = 0;
+		return;
+	}
+	
+	pkt->destruct = libpar_packet_destroy;
+		
 	pkt->stream_index = streamIndex;
 	
 	pktExt = av_malloc(sizeof(LibparFrameExtra));
+	if (NULL == pktExt)  {
+		pkt->size = 0;
+		return;
+	}
+	pkt->priv = pktExt;
+	
 	pktExt->fileChanged = fChang;
 	pktExt->dsFrameData = av_malloc(sizeof(FrameData));
+	if (NULL == pktExt->dsFrameData)  {
+		pkt->size = 0;
+		return;
+	}
 	pktExt->indexInfoCount = parReader_getIndexInfo(&pktExt->indexInfo);
 	
 	memcpy(pkt->data, avfp->frameInfo.frameData, siz);
 	
 	pktExt->frameInfo = av_malloc(sizeof(ParFrameInfo));	
+	if (NULL == pktExt->frameInfo)  {
+		pkt->size = 0;
+		return;
+	}
 	
 	if (parReader_frameIsVideo(&avfp->frameInfo))  {
 		const NetVuImageData *pic = avfp->frameInfo.frameBuffer;
@@ -275,6 +299,10 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 		pktExt->frameInfo->frameBufferSize = sizeof(NetVuImageData);
 		pktExt->dsFrameData->frameType = NetVuVideo;
 		pktExt->dsFrameData->frameData = av_malloc(sizeof(NetVuImageData));
+		if (NULL == pktExt->dsFrameData->frameData)  {
+			pkt->size = 0;
+			return;
+		}
 		memcpy(pktExt->dsFrameData->frameData, avfp->frameInfo.frameBuffer, 
 				sizeof(NetVuImageData));
 		pktExt->dsFrameData->additionalData = NULL;
@@ -297,6 +325,10 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 		pktExt->frameInfo->frameBufferSize = sizeof(NetVuAudioData);
 		pktExt->dsFrameData->frameType = NetVuAudio;
 		pktExt->dsFrameData->frameData = av_malloc(sizeof(NetVuAudioData));
+		if (NULL == pktExt->dsFrameData->frameData)  {
+			pkt->size = 0;
+			return;
+		}
 		memcpy(pktExt->dsFrameData->frameData, avfp->frameInfo.frameBuffer, 
 				sizeof(NetVuAudioData));
 		pktExt->dsFrameData->additionalData = NULL;
@@ -311,6 +343,10 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 		memcpy(pktExt->frameInfo, &(avfp->frameInfo), sizeof(ParFrameInfo));
 		pktExt->frameInfo->frameBufferSize = fbs;
 		pktExt->frameInfo->frameBuffer = av_malloc(fbs);
+		if (NULL == pktExt->frameInfo->frameBuffer)  {
+			pkt->size = 0;
+			return;
+		}
 		memcpy(pktExt->frameInfo->frameBuffer,avfp->frameInfo.frameBuffer, fbs);
 		pktExt->frameInfo->frameData = pkt->data;
 	}
@@ -328,9 +364,6 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 	else  {
 		pkt->pts = AV_NOPTS_VALUE;
 	}
-	
-	pkt->priv = pktExt;	
-	pkt->destruct = libpar_packet_destroy;
 	
 	avfp->frameCached = 0;
 }
@@ -401,10 +434,11 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
 	
 	parReader_getFilename(avf->filename, sizeof(avf->filename));
     
-	strm = createStream(avf, &p->frameInfo, &p->dispSet);
-    
-    // Note: Do not set avf->start_time, ffmpeg computes it from AVStream values
-    avf->duration = av_rescale_q(seconds, secondsTB, strm->time_base);
+	strm = createStream(avf, &p->frameInfo);
+	if (strm)  {
+		// Note: Do not set avf->start_time, ffmpeg computes it from AVStream values
+		avf->duration = av_rescale_q(seconds, secondsTB, strm->time_base);
+	}
 	
 	avf->ctx_flags |= AVFMTCTX_NOHEADER;
 	
