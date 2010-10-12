@@ -36,7 +36,7 @@
 #define BINARY_PUSH_MIME_STR "video/adhbinary"
 
 /* These are the data types that are supported by the DS2 video servers. */
-enum data_type { DATA_JPEG, DATA_JFIF, DATA_MPEG4I, DATA_MPEG4P, DATA_AUDIO_ADPCM, DATA_AUDIO_RAW, DATA_MINIMAL_MPEG4, DATA_MINIMAL_AUDIO_ADPCM, DATA_LAYOUT, DATA_INFO, DATA_H264I, DATA_H264P, MAX_DATA_TYPE };
+enum data_type { DATA_JPEG, DATA_JFIF, DATA_MPEG4I, DATA_MPEG4P, DATA_AUDIO_ADPCM, DATA_AUDIO_RAW, DATA_MINIMAL_MPEG4, DATA_MINIMAL_AUDIO_ADPCM, DATA_LAYOUT, DATA_INFO, DATA_H264I, DATA_H264P, DATA_XML_INFO, MAX_DATA_TYPE };
 #define DATA_PLAINTEXT              (MAX_DATA_TYPE + 1)   /* This value is only used internally within the library DATA_PLAINTEXT blocks should not be exposed to the client */
 
 static int adpicSkipInfoList(ByteIOContext * pb);
@@ -283,8 +283,24 @@ static int adpic_probe(AVProbeData *p)
 
     // CS - There is no way this scheme of identification is strong enough. Probably should attempt
     // to parse a full frame out of the probedata buffer
+    //0 DATA_JPEG, 
+    //1 DATA_JFIF, 
+    //2 DATA_MPEG4I, 
+    //3 DATA_MPEG4P, 
+    //4 DATA_AUDIO_ADPCM, 
+    //5 DATA_AUDIO_RAW, 
+    //6 DATA_MINIMAL_MPEG4, 
+    //7 DATA_MINIMAL_AUDIO_ADPCM, 
+    //8 DATA_LAYOUT, 
+    //9 DATA_INFO, 
+    //10 DATA_H264I, 
+    //11 DATA_H264P, 
+    //12 DATA_XML_INFO
+    
     if ( ((p->buf[0] == 9) && (p->buf[2] == 0) && (p->buf[3] == 0)) || 
-         ((p->buf[0] <= 7) && (p->buf[2] == 0) && (p->buf[3] == 0)) )
+         ((p->buf[0] <= 7) && (p->buf[2] == 0) && (p->buf[3] == 0)) ||
+         ((p->buf[0] == 12) && (p->buf[2] == 0) && (p->buf[3] == 0))
+         )
     {
         isMIME = FALSE;
         return AVPROBE_SCORE_MAX;
