@@ -352,7 +352,7 @@ char *txt;
 			char cpy[80];
 				memset(cpy,0,80);
 				strncpy(cpy,txt,pic->start_offset);
-				logger (LOG_DEBUG, "JFIF_IMG: 1 adding text %s\n", cpy);
+				//logger (LOG_DEBUG, "JFIF_IMG: 1 adding text %s\n", cpy);
 #endif
 				strncpy(bufptr, txt, pic->start_offset);
 				bufptr += pic->start_offset;
