@@ -14,22 +14,15 @@ calc_q_tables()
 
 */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-
 #include "libavformat/internal.h"
 #include "libavutil/bswap.h"
 
 #include "jfif_img.h"
 #include "adpic.h"
-//#include "os.h"		/* byte-swapping routines */
 
 static int find_q(unsigned char *qy);
 static void parse_comment( char *text, int text_len, NetVuImageData *pic, char **additionalText );
 static void calcQtabs(void);
-//static long filesize( int handle );
 
 
 /* JCB 004 start */
@@ -40,8 +33,6 @@ static const char camera_number[] = "Number: ";
 static const char image_date[] = "Date: ";
 static const char image_time[] = "Time: ";
 static const char image_ms[] = "MSec: ";
-//static const char add_compress_tables[] = "Tables: NO\r\n";
-//static const char omit_compress_tables[] = "Tables: YES\r\n";
 static const char q_factor[] = "Q-Factor: ";
 static const char alarm_comment[] = "Alarm-text: ";
 static const char active_alarms[] = "Active-alarms: ";	/* JCB 007 */
@@ -53,7 +44,6 @@ static const char utc_offset[] = "UTCoffset: ";			/* JCB 005 */
 static char comment_msg[256];
 
 static const unsigned char jfif_header[] =
-// {	0xFF,0xD8,0xFF,0xE0,0x00,0x10,0x4A,0x46,0x49,0x46,0x00,0x01,0x01,0x00,0x00,0x01,0x00,0x01,0x00,0x00};
 {	0xFF,0xD8,0xFF,0xE0,0x00,0x10,0x4A,0x46,0x49,0x46,0x00,0x01,0x02,0x02,0x00,0x32,0x00,0x19,0x00,0x00};	// JCB 019
 
 static const unsigned char sof_422_header[] =

@@ -83,15 +83,6 @@ typedef struct _minimal_audio_header	// PRC 002
 }MinimalAudioHeader;
 
 
-typedef struct {
-    int64_t  riff_end;
-    int64_t  movi_end;
-    int64_t movi_list;
-    int index_loaded;
-} ADPICDecContext;
-
-
-
 static void pic_network2host(NetVuImageData *pic)
 {
 	network2host32(pic->version);
@@ -267,16 +258,6 @@ static int adpic_is_valid_separator( unsigned char * buf, int bufLen )
 
 static int adpic_read_close(AVFormatContext *s)
 {
-#if 0
-    int i;
-//    ADPICDecContext *adpic = s->priv_data;
-
-    for(i=0;i<s->nb_streams;i++) 
-	{
-        AVStream *st = s->streams[i];
-        av_free(st);
-    }
-#endif
     return 0;
 }
 
@@ -1278,7 +1259,6 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		    // We now know the packet size required for the image, allocate it.
 		    if ((status = adpic_new_packet(pkt, header_size+video_data->size+2))<0) // PRC 003
 		    {
-			    //logger(LOG_DEBUG,"ADPIC: DATA_JPEG adpic_new_packet %d failed, status %d\n", header_size+video_data->size+2, status);
                 errorVal = ADPIC_JPEG_NEW_PACKET_ERROR;
 			    goto cleanup;
 		    }

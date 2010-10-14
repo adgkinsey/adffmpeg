@@ -18,13 +18,6 @@
 #ifndef __ADPIC_H__
 #define __ADPIC_H__
 
-//#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
-#include "avformat.h"
-#include "ds_exports.h"
-
 #ifndef FALSE
 #define FALSE 0
 #endif
