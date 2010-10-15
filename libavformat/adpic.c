@@ -33,7 +33,8 @@
 #include "adaudio.h"    // RTP payload values. For inserting into MIME audio packets
 #include "jfif_img.h"
 
-#define BINARY_PUSH_MIME_STR "video/adhbinary"
+#define BINARY_PUSH_MIME_STR    "video/adhbinary"
+#define TEMP_BUFFER_SIZE        1024
 
 /* These are the data types that are supported by the DS2 video servers. */
 enum data_type { DATA_JPEG, DATA_JFIF, DATA_MPEG4I, DATA_MPEG4P, DATA_AUDIO_ADPCM, DATA_AUDIO_RAW, DATA_MINIMAL_MPEG4, DATA_MINIMAL_AUDIO_ADPCM, DATA_LAYOUT, DATA_INFO, DATA_H264I, DATA_H264P, DATA_XML_INFO, MAX_DATA_TYPE };
@@ -166,13 +167,15 @@ static int adpic_probe(AVProbeData *p)
     //11 DATA_H264P, 
     //12 DATA_XML_INFO
     
-    if ( ((p->buf[0] == 9) && (p->buf[2] == 0) && (p->buf[3] == 0)) || 
-         ((p->buf[0] <= 7) && (p->buf[2] == 0) && (p->buf[3] == 0)) ||
-         ((p->buf[0] == 12) && (p->buf[2] == 0) && (p->buf[3] == 0))
-         )
+    if ( (p->buf[DATA_SIZE_BYTE_0] == 0) && (p->buf[DATA_SIZE_BYTE_1] == 0) )
     {
-        isMIME = FALSE;
-        return AVPROBE_SCORE_MAX;
+        if ((p->buf[DATA_TYPE] == DATA_INFO)                || 
+            (p->buf[DATA_TYPE] <= DATA_MINIMAL_AUDIO_ADPCM) ||
+            (p->buf[DATA_TYPE] == DATA_XML_INFO)            )
+        {
+            isMIME = FALSE;
+            return AVPROBE_SCORE_MAX;
+        }
     }
     else
     {
@@ -527,7 +530,6 @@ static AVStream * get_data_stream( struct AVFormatContext *s )
 
 static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size, long *extra )
 {
-    #define TEMP_BUFFER_SIZE    1024
     unsigned char               buffer[TEMP_BUFFER_SIZE];
     unsigned char *             q = NULL;
     int                         ch, err, lineCount = 0;
@@ -717,7 +719,6 @@ static int process_line( char *line, int *line_count, int *dataType, int *size, 
 
 static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, NetVuImageData *video_data, char **additionalTextData )
 {
-#define TEMP_BUFFER_SIZE        1024
     unsigned char               buffer[TEMP_BUFFER_SIZE];
     int                         ch, err;
     unsigned char *             q = NULL;
@@ -943,7 +944,6 @@ static int adpicFindTag(const char *Tag, ByteIOContext *pb, int MaxLookAhead)
 	//NOTE Looks for the folowing pattern "<infoList>" at the begining of the 
 	//     buffer return 1 if its found and 0 if not
 
-	#define TEMP_BUFFER_SIZE    1024
     int                         LookAheadPos = 0;
     unsigned char               buffer[TEMP_BUFFER_SIZE];
     unsigned char               *q = buffer;
@@ -1640,7 +1640,7 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 			if (video_data->session_time > 0)  {
 				pkt->pts = video_data->session_time;
 				pkt->pts *= 1000ULL;
-				pkt->pts += video_data->milliseconds % 1000;
+				pkt->pts += video_data->milliseconds & 0x03FF;
 			}
 			else
 				pkt->pts = AV_NOPTS_VALUE;
