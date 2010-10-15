@@ -31,7 +31,6 @@
 #include "libavutil/bswap.h"
 
 #include "adpic.h"
-#include "adaudio.h"    // RTP payload values. For inserting into MIME audio packets
 #include "jfif_img.h"
 
 
