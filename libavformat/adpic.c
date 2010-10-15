@@ -26,12 +26,14 @@
 	---------------------------------------------------------------------------
 */
 
-#include <stdio.h>
+#include "avformat.h"
 #include "libavcodec/avcodec.h"
 #include "libavutil/bswap.h"
+
 #include "adpic.h"
 #include "adaudio.h"    // RTP payload values. For inserting into MIME audio packets
 #include "jfif_img.h"
+
 
 #define BINARY_PUSH_MIME_STR    "video/adhbinary"
 #define TEMP_BUFFER_SIZE        1024
@@ -1732,17 +1734,6 @@ cleanup:
 }
 
 
-AVInputFormat adpic_demuxer = {
-    "adpic",
-    "adpic format",
-    0,
-    adpic_probe,
-    adpic_read_header,
-    adpic_read_packet,
-    adpic_read_close,
-};
-
-
 static int adpic_new_packet(AVPacket *pkt, int size)
 {
     int     retVal = av_new_packet( pkt, size );
@@ -1825,3 +1816,11 @@ static int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size)
 }
 
 
+AVInputFormat adpic_demuxer = {
+    .name           = "adpic",
+    .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings video format"), 
+    .read_probe     = adpic_probe,
+    .read_header    = adpic_read_header,
+    .read_packet    = adpic_read_packet,
+    .read_close     = adpic_read_close,
+};

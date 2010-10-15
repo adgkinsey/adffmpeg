@@ -593,13 +593,12 @@ static int par_read_close(AVFormatContext * avf)
 //};
 
 AVInputFormat libparreader_demuxer = {
-    "libpar",
-    NULL_IF_CONFIG_SMALL("AD-Holdings PAR format"),
-    sizeof(PARContext),
-    par_probe,
-    par_read_header,
-    par_read_packet,
-    par_read_close,
-    par_read_seek,
-    //.extensions = "par",
+    .name           = "libpar",
+    .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings PAR format"),
+    .priv_data_size = sizeof(PARContext),
+    .read_probe     = par_probe,
+    .read_header    = par_read_header,
+    .read_packet    = par_read_packet,
+    .read_close     = par_read_close,
+    .read_seek      = par_read_seek,
 };

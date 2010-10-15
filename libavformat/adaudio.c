@@ -1,9 +1,14 @@
-#include "adaudio.h"
+#include "avformat.h"
 #include "ds_exports.h"
 
-static AVStream *get_audio_stream( struct AVFormatContext *s );
 
-int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt);
+#define SIZEOF_RTP_HEADER                                               12
+
+#define AD_AUDIO_STREAM_ID                                              0x212ED83E;
+
+
+static AVStream *get_audio_stream( struct AVFormatContext *s );
+static int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt);
 
 
 static int adaudio_probe(AVProbeData *p)
@@ -35,7 +40,7 @@ static int adaudio_read_header(AVFormatContext *s, AVFormatParameters *ap)
 	return 0;
 }
 
-int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
+static int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
     ByteIOContext *         ioContext = s->pb;
     int                     retVal = AVERROR_IO;
@@ -97,33 +102,6 @@ int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     return retVal;
 }
 
-static int adaudio_read_close(AVFormatContext *s)
-{
-    return 0;
-}
-
-static int adaudio_read_seek( AVFormatContext *s, int stream_index, int64_t timestamp, int flags )
-{
-    return -1;
-}
-
-static int64_t adaudio_read_pts(AVFormatContext *s, int stream_index, int64_t *ppos, int64_t pos_limit)
-{
-	return -1;
-}
-
-AVInputFormat adaudio_demuxer = {
-    "adaudio",
-    "adaudio format",
-    sizeof(ADAudioContext),
-    adaudio_probe,
-    adaudio_read_header,
-    adaudio_read_packet,
-    adaudio_read_close,
-    adaudio_read_seek,
-    adaudio_read_pts,
-};
-
 static AVStream *get_audio_stream( struct AVFormatContext *s )
 {
     int id;
@@ -160,3 +138,12 @@ static AVStream *get_audio_stream( struct AVFormatContext *s )
 
 	return st;
 }
+
+
+AVInputFormat adaudio_demuxer = {
+    .name           = "adaudio",
+    .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings audio format"), 
+    .read_probe     = adaudio_probe,
+    .read_header    = adaudio_read_header,
+    .read_packet    = adaudio_read_packet,
+};

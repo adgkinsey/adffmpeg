@@ -1,11 +1,12 @@
 #ifndef __DS_EXPORTS_H__
 #define __DS_EXPORTS_H__
 
-#include "avformat.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include <stdint.h>
+
 
 #define TITLE_LENGTH 30
 #define MAX_NAME_LEN 30
@@ -70,8 +71,8 @@ typedef struct _dmImageData
 {
     char            identifier[ID_LENGTH];
     unsigned long   jpegLength;
-    int64_t          imgSeq;
-    int64_t          imgTime;
+    int64_t         imgSeq;
+    int64_t         imgTime;
     unsigned char   camera;
     unsigned char   status;
     unsigned short  activity[NUM_ACTIVITIES];
