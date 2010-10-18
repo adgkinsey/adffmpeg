@@ -1,13 +1,12 @@
+#include "avformat.h"
 #include "libavcodec/avcodec.h"
 #include "libavutil/bswap.h"
-#include "dspic.h"
+#include "ds.h"
 
 static int dspicProbe( AVProbeData *p );
 static int dspicReadHeader( AVFormatContext *s, AVFormatParameters *ap );
 static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt );
 static int dspicReadClose( AVFormatContext *s );
-static int dspicReadSeek( AVFormatContext *s, int stream_index, int64_t timestamp, int flags );
-static int64_t dspicReadPts( AVFormatContext *s, int stream_index, int64_t *ppos, int64_t pos_limit );
 static AVStream * GetStream( struct AVFormatContext *s, int camera, int width, int height );
 static int ReadNetworkMessageHeader( ByteIOContext *context, MessageHeader *header );
 static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize );
@@ -16,21 +15,8 @@ static int dspic_new_packet(AVPacket *pkt, int size);
 static void dspic_release_packet( AVPacket *pkt );
 
 
-static const long       DSPacketHeaderMagicNumber = 0xfaced0ff;
+static const long       DSPacketHeaderMagicNumber = DS_HEADER_MAGIC_NUMBER;
 static const char *     DSApp0Identifier = "DigiSpr";
-
-
-AVInputFormat dspic_demuxer = {
-    "dspic",
-    "dspic format",
-    sizeof(DSPicFormat),
-    dspicProbe,
-    dspicReadHeader,
-    dspicReadPacket,
-    dspicReadClose,
-    dspicReadSeek,
-    dspicReadPts,
-};
 
 
 #define TRUE    1
@@ -356,17 +342,6 @@ static int dspicReadClose( AVFormatContext *s )
     return 0;
 }
 
-static int dspicReadSeek( AVFormatContext *s, int stream_index, int64_t timestamp, int flags )
-{
-    /* Unsupported */
-    return -1;
-}
-
-static int64_t dspicReadPts( AVFormatContext *s, int stream_index, int64_t *ppos, int64_t pos_limit )
-{
-    return -1;
-}
-
 static AVStream * GetStream( struct AVFormatContext *s, int camera, int width, int height )
 {
     int                 codecType = 0;
@@ -450,3 +425,13 @@ static void dspic_release_packet( AVPacket *pkt )
         av_destruct_packet( pkt );
     }
 }
+
+
+AVInputFormat dspic_demuxer = {
+    .name           = "dspic",
+    .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings Digital-Sprite format"), 
+    .read_probe     = dspicProbe,
+    .read_header    = dspicReadHeader,
+    .read_packet    = dspicReadPacket,
+    .read_close     = dspicReadClose,
+};
