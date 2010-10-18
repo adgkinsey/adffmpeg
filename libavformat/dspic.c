@@ -1,7 +1,6 @@
 #include "libavcodec/avcodec.h"
 #include "libavutil/bswap.h"
 #include "dspic.h"
-#include "jfif_img.h"
 
 static int dspicProbe( AVProbeData *p );
 static int dspicReadHeader( AVFormatContext *s, AVFormatParameters *ap );
@@ -32,6 +31,38 @@ AVInputFormat dspic_demuxer = {
     dspicReadSeek,
     dspicReadPts,
 };
+
+
+#define TRUE    1
+#define FALSE   0
+
+#ifdef WORDS_BIGENDIAN
+#define network2host32(x) x = x
+#define host2network32(x) x = x
+#define host2be32(x) x = x
+#define be2host32(x) x = x
+#define host2le32(x) ((void)(x=bswap_32(x)))
+#define le2host32(x) ((void)(x=bswap_32(x)))
+#define network2host16(x) 
+#define host2network16(x)
+#define host2be16(x)
+#define be2host16(x)
+#define host2le16(x) ((void)(x=bswap_32(x)))
+#define le2host16(x) ((void)(x=bswap_32(x)))
+#else
+#define network2host32(x) ((void)(x=bswap_32(x)))
+#define host2network32(x) ((void)(x=bswap_32(x)))
+#define host2be32(x) ((void)(x=bswap_32(x)))
+#define be2host32(x) ((void)(x=bswap_32(x)))
+#define host2le32(x) x = x 
+#define le2host32(x) x = x
+#define network2host16(x) ((void)(x=bswap_16(x)))
+#define host2network16(x) ((void)(x=bswap_16(x)))
+#define host2be16(x) ((void)(x=bswap_16(x)))
+#define be2host16(x) ((void)(x=bswap_16(x)))
+#define host2le16(x) 
+#define le2host16(x) 
+#endif
 
 
 static int dspicProbe( AVProbeData *p )

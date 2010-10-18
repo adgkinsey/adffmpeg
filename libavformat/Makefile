@@ -312,7 +312,7 @@ OBJS-$(CONFIG_RTP_PROTOCOL)              += rtpproto.o
 OBJS-$(CONFIG_TCP_PROTOCOL)              += tcp.o
 OBJS-$(CONFIG_UDP_PROTOCOL)              += udp.o
 
-OBJS-$(CONFIG_DSPIC_DEMUXER)			 += jfif_img.o ds.o dspic.o
+OBJS-$(CONFIG_DSPIC_DEMUXER)			 += ds.o dspic.o
 OBJS-$(CONFIG_ADPIC_DEMUXER)			 += jfif_img.o adpic.o
 OBJS-$(CONFIG_ADAUDIO_DEMUXER)			 += adaudio.o
 OBJS-$(CONFIG_DS_PROTOCOL)               += dsenc.o ds.o

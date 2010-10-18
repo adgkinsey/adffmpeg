@@ -26,17 +26,19 @@
 	---------------------------------------------------------------------------
 */
 
-#include <stdio.h>
+#include "avformat.h"
 #include "libavcodec/avcodec.h"
 #include "libavutil/bswap.h"
+
 #include "adpic.h"
-#include "adaudio.h"    // RTP payload values. For inserting into MIME audio packets
 #include "jfif_img.h"
 
-#define BINARY_PUSH_MIME_STR "video/adhbinary"
+
+#define BINARY_PUSH_MIME_STR    "video/adhbinary"
+#define TEMP_BUFFER_SIZE        1024
 
 /* These are the data types that are supported by the DS2 video servers. */
-enum data_type { DATA_JPEG, DATA_JFIF, DATA_MPEG4I, DATA_MPEG4P, DATA_AUDIO_ADPCM, DATA_AUDIO_RAW, DATA_MINIMAL_MPEG4, DATA_MINIMAL_AUDIO_ADPCM, DATA_LAYOUT, DATA_INFO, DATA_H264I, DATA_H264P, MAX_DATA_TYPE };
+enum data_type { DATA_JPEG, DATA_JFIF, DATA_MPEG4I, DATA_MPEG4P, DATA_AUDIO_ADPCM, DATA_AUDIO_RAW, DATA_MINIMAL_MPEG4, DATA_MINIMAL_AUDIO_ADPCM, DATA_LAYOUT, DATA_INFO, DATA_H264I, DATA_H264P, DATA_XML_INFO, MAX_DATA_TYPE };
 #define DATA_PLAINTEXT              (MAX_DATA_TYPE + 1)   /* This value is only used internally within the library DATA_PLAINTEXT blocks should not be exposed to the client */
 
 static int adpicSkipInfoList(ByteIOContext * pb);
@@ -51,9 +53,12 @@ static void adpic_release_packet( AVPacket *pkt );
 static int adpic_is_valid_separator( unsigned char * buf, int bufLen );
 
 static int adpic_new_packet( AVPacket *pkt, int size );
-int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size);
-void audioheader_network2host( NetVuAudioData *hdr );
-int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt);
+static int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size);
+static void audioheader_network2host( NetVuAudioData *hdr );
+static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt);
+
+
+static void pic_network2host(NetVuImageData *pic);
 
 
 /* CS - The following structure is used to extract 6 bytes from the incoming stream. It needs therefore to be aligned on a 
@@ -80,16 +85,7 @@ typedef struct _minimal_audio_header	// PRC 002
 }MinimalAudioHeader;
 
 
-typedef struct {
-    int64_t  riff_end;
-    int64_t  movi_end;
-    int64_t movi_list;
-    int index_loaded;
-} ADPICDecContext;
-
-
-
-void pic_network2host(NetVuImageData *pic)
+static void pic_network2host(NetVuImageData *pic)
 {
 	network2host32(pic->version);
 	network2host32(pic->mode);
@@ -114,7 +110,7 @@ void pic_network2host(NetVuImageData *pic)
 	network2host16(pic->format.line_offset);
 }
 
-void audioheader_network2host( NetVuAudioData *hdr )
+static void audioheader_network2host( NetVuAudioData *hdr )
 {
     network2host32(hdr->version);
     network2host32(hdr->mode);
@@ -123,131 +119,6 @@ void audioheader_network2host( NetVuAudioData *hdr )
     network2host32(hdr->sizeOfAudioData);
     network2host32(hdr->seconds);
     network2host32(hdr->msecs);
-}
-
-void pic_host2network(NetVuImageData *pic)
-{
-	host2network32(pic->version);
-	host2network32(pic->mode);
-	host2network32(pic->cam);
-	host2network32(pic->vid_format);
-	host2network32(pic->start_offset);
-	host2network32(pic->size);
-	host2network32(pic->max_size);
-	host2network32(pic->target_size);
-	host2network32(pic->factor);
-	host2network32(pic->alm_bitmask_hi);
-	host2network32(pic->status);
-	host2network32(pic->session_time);
-	host2network32(pic->milliseconds);
-	host2network32(pic->utc_offset);
-	host2network32(pic->alm_bitmask);
-	host2network16(pic->format.src_pixels);
-	host2network16(pic->format.src_lines);
-	host2network16(pic->format.target_pixels);
-	host2network16(pic->format.target_lines);
-	host2network16(pic->format.pixel_offset);
-	host2network16(pic->format.line_offset);
-}
-
-void pic_le2host(NetVuImageData *pic)
-{
-	le2host32(pic->version);
-	le2host32(pic->mode);
-	le2host32(pic->cam);
-	le2host32(pic->vid_format);
-	le2host32(pic->start_offset);
-	le2host32(pic->size);
-	le2host32(pic->max_size);
-	le2host32(pic->target_size);
-	le2host32(pic->factor);
-	le2host32(pic->alm_bitmask_hi);
-	le2host32(pic->status);
-	le2host32(pic->session_time);
-	le2host32(pic->milliseconds);
-	le2host32(pic->utc_offset);
-	le2host32(pic->alm_bitmask);
-	le2host16(pic->format.src_pixels);
-	le2host16(pic->format.src_lines);
-	le2host16(pic->format.target_pixels);
-	le2host16(pic->format.target_lines);
-	le2host16(pic->format.pixel_offset);
-	le2host16(pic->format.line_offset);
-}
-
-void pic_host2le(NetVuImageData *pic)
-{
-	host2le32(pic->version);
-	host2le32(pic->mode);
-	host2le32(pic->cam);
-	host2le32(pic->vid_format);
-	host2le32(pic->start_offset);
-	host2le32(pic->size);
-	host2le32(pic->max_size);
-	host2le32(pic->target_size);
-	host2le32(pic->factor);
-	host2le32(pic->alm_bitmask_hi);
-	host2le32(pic->status);
-	host2le32(pic->session_time);
-	host2le32(pic->milliseconds);
-	host2le32(pic->utc_offset);
-	host2le32(pic->alm_bitmask);
-	host2le16(pic->format.src_pixels);
-	host2le16(pic->format.src_lines);
-	host2le16(pic->format.target_pixels);
-	host2le16(pic->format.target_lines);
-	host2le16(pic->format.pixel_offset);
-	host2le16(pic->format.line_offset);
-}
-
-void pic_be2host(NetVuImageData *pic)
-{
-	be2host32(pic->version);
-	be2host32(pic->mode);
-	be2host32(pic->cam);
-	be2host32(pic->vid_format);
-	be2host32(pic->start_offset);
-	be2host32(pic->size);
-	be2host32(pic->max_size);
-	be2host32(pic->target_size);
-	be2host32(pic->factor);
-	be2host32(pic->alm_bitmask_hi);
-	be2host32(pic->status);
-	be2host32(pic->session_time);
-	be2host32(pic->milliseconds);
-	be2host32(pic->utc_offset);
-	be2host32(pic->alm_bitmask);
-	be2host16(pic->format.src_pixels);
-	be2host16(pic->format.src_lines);
-	be2host16(pic->format.target_pixels);
-	be2host16(pic->format.target_lines);
-	be2host16(pic->format.pixel_offset);
-	be2host16(pic->format.line_offset);
-}
-
-void pic_host2be(NetVuImageData *pic)
-{
-	host2be32(pic->version);
-	host2be32(pic->mode);
-	host2be32(pic->cam);
-	host2be32(pic->vid_format);
-	host2be32(pic->start_offset);
-	host2be32(pic->size);
-	host2be32(pic->max_size);
-	host2be32(pic->target_size);
-	host2be32(pic->factor);
-	host2be32(pic->alm_bitmask_hi);
-	host2be32(pic->status);
-	host2be32(pic->session_time);
-	host2be32(pic->milliseconds);
-	host2be32(pic->utc_offset);
-	host2be32(pic->alm_bitmask);
-	host2be16(pic->format.src_pixels);
-	host2be16(pic->format.src_lines);
-	host2be16(pic->format.target_pixels);
-	host2be16(pic->format.target_lines);
-	host2be16(pic->format.pixel_offset);
-	host2be16(pic->format.line_offset);
 }
 
 static const char *     MIME_BOUNDARY_PREFIX1 = "--0plm(";
@@ -283,11 +154,29 @@ static int adpic_probe(AVProbeData *p)
 
     // CS - There is no way this scheme of identification is strong enough. Probably should attempt
     // to parse a full frame out of the probedata buffer
-    if ( ((p->buf[0] == 9) && (p->buf[2] == 0) && (p->buf[3] == 0)) || 
-         ((p->buf[0] <= 7) && (p->buf[2] == 0) && (p->buf[3] == 0)) )
+    //0 DATA_JPEG, 
+    //1 DATA_JFIF, 
+    //2 DATA_MPEG4I, 
+    //3 DATA_MPEG4P, 
+    //4 DATA_AUDIO_ADPCM, 
+    //5 DATA_AUDIO_RAW, 
+    //6 DATA_MINIMAL_MPEG4, 
+    //7 DATA_MINIMAL_AUDIO_ADPCM, 
+    //8 DATA_LAYOUT, 
+    //9 DATA_INFO, 
+    //10 DATA_H264I, 
+    //11 DATA_H264P, 
+    //12 DATA_XML_INFO
+    
+    if ( (p->buf[DATA_SIZE_BYTE_0] == 0) && (p->buf[DATA_SIZE_BYTE_1] == 0) )
     {
-        isMIME = FALSE;
-        return AVPROBE_SCORE_MAX;
+        if ((p->buf[DATA_TYPE] == DATA_INFO)                || 
+            (p->buf[DATA_TYPE] <= DATA_MINIMAL_AUDIO_ADPCM) ||
+            (p->buf[DATA_TYPE] == DATA_XML_INFO)            )
+        {
+            isMIME = FALSE;
+            return AVPROBE_SCORE_MAX;
+        }
     }
     else
     {
@@ -373,16 +262,6 @@ static int adpic_is_valid_separator( unsigned char * buf, int bufLen )
 
 static int adpic_read_close(AVFormatContext *s)
 {
-#if 0
-    int i;
-//    ADPICDecContext *adpic = s->priv_data;
-
-    for(i=0;i<s->nb_streams;i++) 
-	{
-        AVStream *st = s->streams[i];
-        av_free(st);
-    }
-#endif
     return 0;
 }
 
@@ -652,7 +531,6 @@ static AVStream * get_data_stream( struct AVFormatContext *s )
 
 static int adpic_parse_mime_header( ByteIOContext *pb, int *dataType, int *size, long *extra )
 {
-    #define TEMP_BUFFER_SIZE    1024
     unsigned char               buffer[TEMP_BUFFER_SIZE];
     unsigned char *             q = NULL;
     int                         ch, err, lineCount = 0;
@@ -842,7 +720,6 @@ static int process_line( char *line, int *line_count, int *dataType, int *size, 
 
 static int adpic_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, NetVuImageData *video_data, char **additionalTextData )
 {
-#define TEMP_BUFFER_SIZE        1024
     unsigned char               buffer[TEMP_BUFFER_SIZE];
     int                         ch, err;
     unsigned char *             q = NULL;
@@ -1068,7 +945,6 @@ static int adpicFindTag(const char *Tag, ByteIOContext *pb, int MaxLookAhead)
 	//NOTE Looks for the folowing pattern "<infoList>" at the begining of the 
 	//     buffer return 1 if its found and 0 if not
 
-	#define TEMP_BUFFER_SIZE    1024
     int                         LookAheadPos = 0;
     unsigned char               buffer[TEMP_BUFFER_SIZE];
     unsigned char               *q = buffer;
@@ -1122,7 +998,7 @@ static int adpicFindTag(const char *Tag, ByteIOContext *pb, int MaxLookAhead)
 	return 0;
 }
 
-int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
+static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
     ByteIOContext *         pb = s->pb;
 	URLContext*             urlContext = pb->opaque;
@@ -1384,7 +1260,6 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		    // We now know the packet size required for the image, allocate it.
 		    if ((status = adpic_new_packet(pkt, header_size+video_data->size+2))<0) // PRC 003
 		    {
-			    //logger(LOG_DEBUG,"ADPIC: DATA_JPEG adpic_new_packet %d failed, status %d\n", header_size+video_data->size+2, status);
                 errorVal = ADPIC_JPEG_NEW_PACKET_ERROR;
 			    goto cleanup;
 		    }
@@ -1766,7 +1641,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 			if (video_data->session_time > 0)  {
 				pkt->pts = video_data->session_time;
 				pkt->pts *= 1000ULL;
-				pkt->pts += video_data->milliseconds;
+				pkt->pts += video_data->milliseconds & 0x03FF;
 			}
 			else
 				pkt->pts = AV_NOPTS_VALUE;
@@ -1785,7 +1660,7 @@ int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 			if (audio_data->seconds > 0)  {
 				pkt->pts = audio_data->seconds;
 				pkt->pts *= 1000ULL;
-				pkt->pts += audio_data->msecs;
+				pkt->pts += audio_data->msecs % 1000;
 			}
 			else
 				pkt->pts = AV_NOPTS_VALUE;
@@ -1858,34 +1733,6 @@ cleanup:
 }
 
 
-AVInputFormat adpic_demuxer = {
-    "adpic",
-    "adpic format",
-    sizeof(ADPICContext),
-    adpic_probe,
-    adpic_read_header,
-    adpic_read_packet,
-    adpic_read_close,
-};
-
-
-int logger (int log_level, const char *fmt, ...)
-{
-    //FILE* fpw = fopen("c:\\adpicLog.txt", "a");
-    //fprintf(fpw, "Start of log\n");
-
-    //for(loop=0; loop<10; loop++)
-    //{
-    //    fprintf(fpw, "%c", pb->buf_ptr[loop]);
-    //    fflush(fpw);   
-    //}
-    //fprintf(fpw, "\nEnd of log\n");
-
-    //fflush(fpw);
-    //fclose(fpw); 
-    return 0;
-}
-
 static int adpic_new_packet(AVPacket *pkt, int size)
 {
     int     retVal = av_new_packet( pkt, size );
@@ -1941,7 +1788,7 @@ static void adpic_release_packet( AVPacket *pkt )
     }
 }
 
-int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size)
+static int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size)
 {
     int TotalDataRead = 0;
     int DataReadThisTime = 0;
@@ -1968,3 +1815,11 @@ int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size)
 }
 
 
+AVInputFormat adpic_demuxer = {
+    .name           = "adpic",
+    .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings video format"), 
+    .read_probe     = adpic_probe,
+    .read_header    = adpic_read_header,
+    .read_packet    = adpic_read_packet,
+    .read_close     = adpic_read_close,
+};
