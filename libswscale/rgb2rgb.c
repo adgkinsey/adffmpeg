@@ -47,7 +47,7 @@ void (*rgb16to32)(const uint8_t *src, uint8_t *dst, long src_size);
 void (*rgb24tobgr24)(const uint8_t *src, uint8_t *dst, long src_size);
 void (*rgb24to16)(const uint8_t *src, uint8_t *dst, long src_size);
 void (*rgb24to15)(const uint8_t *src, uint8_t *dst, long src_size);
-void (*rgb32tobgr32)(const uint8_t *src, uint8_t *dst, long src_size);
+void (*shuffle_bytes_2103)(const uint8_t *src, uint8_t *dst, long src_size);
 void (*rgb32tobgr16)(const uint8_t *src, uint8_t *dst, long src_size);
 void (*rgb32tobgr15)(const uint8_t *src, uint8_t *dst, long src_size);
 
@@ -99,6 +99,7 @@ void (*yuyvtoyuv422)(uint8_t *ydst, uint8_t *udst, uint8_t *vdst, const uint8_t 
 
 
 #if ARCH_X86
+DECLARE_ASM_CONST(8, uint64_t, mmx_ff)       = 0x00000000000000FFULL;
 DECLARE_ASM_CONST(8, uint64_t, mmx_null)     = 0x0000000000000000ULL;
 DECLARE_ASM_CONST(8, uint64_t, mmx_one)      = 0xFFFFFFFFFFFFFFFFULL;
 DECLARE_ASM_CONST(8, uint64_t, mask32b)      = 0x000000FF000000FFULL;
@@ -148,14 +149,10 @@ DECLARE_ASM_CONST(8, uint64_t, blue_15mask)  = 0x0000001f0000001fULL;
 
 //Note: We have C, MMX, MMX2, 3DNOW versions, there is no 3DNOW + MMX2 one.
 //plain C versions
-#undef HAVE_MMX
-#undef HAVE_MMX2
-#undef HAVE_AMD3DNOW
-#undef HAVE_SSE2
-#define HAVE_MMX 0
-#define HAVE_MMX2 0
-#define HAVE_AMD3DNOW 0
-#define HAVE_SSE2 0
+#define COMPILE_TEMPLATE_MMX 0
+#define COMPILE_TEMPLATE_MMX2 0
+#define COMPILE_TEMPLATE_AMD3DNOW 0
+#define COMPILE_TEMPLATE_SSE2 0
 #define RENAME(a) a ## _C
 #include "rgb2rgb_template.c"
 
@@ -163,24 +160,33 @@ DECLARE_ASM_CONST(8, uint64_t, blue_15mask)  = 0x0000001f0000001fULL;
 
 //MMX versions
 #undef RENAME
-#undef HAVE_MMX
-#define HAVE_MMX 1
+#undef COMPILE_TEMPLATE_MMX
+#define COMPILE_TEMPLATE_MMX 1
 #define RENAME(a) a ## _MMX
 #include "rgb2rgb_template.c"
 
 //MMX2 versions
 #undef RENAME
-#undef HAVE_MMX2
-#define HAVE_MMX2 1
+#undef COMPILE_TEMPLATE_MMX2
+#define COMPILE_TEMPLATE_MMX2 1
 #define RENAME(a) a ## _MMX2
+#include "rgb2rgb_template.c"
+
+//SSE2 versions
+#undef RENAME
+#undef COMPILE_TEMPLATE_SSE2
+#define COMPILE_TEMPLATE_SSE2 1
+#define RENAME(a) a ## _SSE2
 #include "rgb2rgb_template.c"
 
 //3DNOW versions
 #undef RENAME
-#undef HAVE_MMX2
-#undef HAVE_AMD3DNOW
-#define HAVE_MMX2 0
-#define HAVE_AMD3DNOW 1
+#undef COMPILE_TEMPLATE_MMX2
+#undef COMPILE_TEMPLATE_SSE2
+#undef COMPILE_TEMPLATE_AMD3DNOW
+#define COMPILE_TEMPLATE_MMX2 0
+#define COMPILE_TEMPLATE_SSE2 1
+#define COMPILE_TEMPLATE_AMD3DNOW 1
 #define RENAME(a) a ## _3DNOW
 #include "rgb2rgb_template.c"
 
@@ -196,7 +202,9 @@ DECLARE_ASM_CONST(8, uint64_t, blue_15mask)  = 0x0000001f0000001fULL;
 void sws_rgb2rgb_init(int flags)
 {
 #if HAVE_MMX2 || HAVE_AMD3DNOW || HAVE_MMX
-    if (flags & SWS_CPU_CAPS_MMX2)
+    if (flags & SWS_CPU_CAPS_SSE2)
+        rgb2rgb_init_SSE2();
+    else if (flags & SWS_CPU_CAPS_MMX2)
         rgb2rgb_init_MMX2();
     else if (flags & SWS_CPU_CAPS_3DNOW)
         rgb2rgb_init_3DNOW();
@@ -207,31 +215,15 @@ void sws_rgb2rgb_init(int flags)
         rgb2rgb_init_C();
 }
 
-/**
- * Convert the palette to the same packet 32-bit format as the palette
- */
+#if LIBSWSCALE_VERSION_MAJOR < 1
 void palette8topacked32(const uint8_t *src, uint8_t *dst, long num_pixels, const uint8_t *palette)
 {
-    long i;
-
-    for (i=0; i<num_pixels; i++)
-        ((uint32_t *) dst)[i] = ((const uint32_t *) palette)[src[i]];
+    sws_convertPalette8ToPacked32(src, dst, num_pixels, palette);
 }
 
-/**
- * Palette format: ABCD -> dst format: ABC
- */
 void palette8topacked24(const uint8_t *src, uint8_t *dst, long num_pixels, const uint8_t *palette)
 {
-    long i;
-
-    for (i=0; i<num_pixels; i++) {
-        //FIXME slow?
-        dst[0]= palette[src[i]*4+0];
-        dst[1]= palette[src[i]*4+1];
-        dst[2]= palette[src[i]*4+2];
-        dst+= 3;
-    }
+    sws_convertPalette8ToPacked24(src, dst, num_pixels, palette);
 }
 
 /**
@@ -247,24 +239,9 @@ void palette8tobgr16(const uint8_t *src, uint8_t *dst, long num_pixels, const ui
 {
     long i;
     for (i=0; i<num_pixels; i++)
-        ((uint16_t *)dst)[i] = bswap_16(((const uint16_t *)palette)[src[i]]);
+        ((uint16_t *)dst)[i] = av_bswap16(((const uint16_t *)palette)[src[i]]);
 }
-
-/**
- * Palette is assumed to contain BGR15, see rgb32to15 to convert the palette.
- */
-void palette8torgb15(const uint8_t *src, uint8_t *dst, long num_pixels, const uint8_t *palette)
-{
-    long i;
-    for (i=0; i<num_pixels; i++)
-        ((uint16_t *)dst)[i] = ((const uint16_t *)palette)[src[i]];
-}
-void palette8tobgr15(const uint8_t *src, uint8_t *dst, long num_pixels, const uint8_t *palette)
-{
-    long i;
-    for (i=0; i<num_pixels; i++)
-        ((uint16_t *)dst)[i] = bswap_16(((const uint16_t *)palette)[src[i]]);
-}
+#endif
 
 void rgb32to24(const uint8_t *src, uint8_t *dst, long src_size)
 {
@@ -455,7 +432,6 @@ void shuffle_bytes_##a##b##c##d(const uint8_t *src, uint8_t *dst, long src_size)
 
 DEFINE_SHUFFLE_BYTES(0, 3, 2, 1);
 DEFINE_SHUFFLE_BYTES(1, 2, 3, 0);
-DEFINE_SHUFFLE_BYTES(2, 1, 0, 3);
 DEFINE_SHUFFLE_BYTES(3, 0, 1, 2);
 DEFINE_SHUFFLE_BYTES(3, 2, 1, 0);
 
