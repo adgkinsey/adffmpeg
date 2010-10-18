@@ -42,6 +42,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     TCPContext *s = NULL;
     fd_set wfds, efds;
     int fd_max, ret;
+    int TimeOutCount = 0;
     struct timeval tv;
     socklen_t optlen;
     char hostname[1024],proto[1024],path[1024];

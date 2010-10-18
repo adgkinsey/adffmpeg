@@ -10,7 +10,7 @@
 /* -------------------------------------- Local function declarations -------------------------------------- */
 static int DSOpen( URLContext *h, const char *uri, int flags );
 static int DSRead( URLContext *h, uint8_t *buf, int size );
-static int DSWrite( URLContext *h, uint8_t *buf, int size );
+static int DSWrite( URLContext *h, const uint8_t *buf, int size );
 static int DSClose( URLContext *h );
 static int DSConnect( URLContext *h, const char *path, const char *hoststr, const char *auth );
 static inline int MessageSize( const NetworkMessage *message );
@@ -31,15 +31,6 @@ static int CrackURI( const char *path, int *streamType, int *res, int *cam, time
 static int DSReadBuffer( URLContext *h, uint8_t *buffer, int size );
 static int64_t TimeTolong64( time_t time );
 
-
-URLProtocol ds_protocol = {
-    "dm",  /* protocol string (i.e. dm://) */
-    DSOpen,
-    DSRead,
-    DSWrite,
-    NULL, /* seek */
-    DSClose,
-};
 
 /****************************************************************************************************************
  * Function: CreateNetworkMessage
@@ -272,7 +263,7 @@ static int DSRead( URLContext *h, uint8_t *buf, int size )
  * Return:
  *   0 on success, non 0 on failure
  ****************************************************************************************************************/
-static int DSWrite( URLContext *h, uint8_t *buf, int size )
+static int DSWrite( URLContext *h, const uint8_t *buf, int size )
 {
     /* All we need to do in here is call the generic write function on our underlying TCP connection */
     DSContext *     context = (DSContext *)h->priv_data;
@@ -1145,3 +1136,12 @@ static int64_t TimeTolong64( time_t time )
 
     return timeOut;
 }
+
+
+URLProtocol ds_protocol = {
+    .name                = "dm",
+    .url_open            = DSOpen,
+    .url_read            = DSRead,
+    .url_write           = DSWrite,
+    .url_close           = DSClose,
+};

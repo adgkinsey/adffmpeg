@@ -289,14 +289,14 @@ typedef struct _cliImgPlayRequestMsg
 #define NTOH16(x)               (x)
 #define HTON16(x)               (x)
 #else
-#define NTOH64(x)               (bswap_64(x))
-#define HTON64(x)               (bswap_64(x))
+#define NTOH64(x)               (av_bswap64(x))
+#define HTON64(x)               (av_bswap64(x))
 
-#define NTOH32(x)               (bswap_32(x))
-#define HTON32(x)               (bswap_32(x))
+#define NTOH32(x)               (av_bswap32(x))
+#define HTON32(x)               (av_bswap32(x))
 
-#define NTOH16(x)               (bswap_16(x))
-#define HTON16(x)               (bswap_16(x))
+#define NTOH16(x)               (av_bswap16(x))
+#define HTON16(x)               (av_bswap16(x))
 
 #endif /* WORDS_BIGENDIAN */
 
