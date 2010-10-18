@@ -38,6 +38,7 @@
 #include "mathops.h"
 #include "rectangle.h"
 #include "vdpau_internal.h"
+#include "libavutil/avassert.h"
 
 #include "cabac.h"
 
@@ -1826,8 +1827,7 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
 
         avcodec_set_dimensions(s->avctx, s->width, s->height);
         s->avctx->sample_aspect_ratio= h->sps.sar;
-        if(!s->avctx->sample_aspect_ratio.den)
-            s->avctx->sample_aspect_ratio.den = 1;
+        av_assert0(s->avctx->sample_aspect_ratio.den);
 
         if(h->sps.video_signal_type_present_flag){
             s->avctx->color_range = h->sps.full_range ? AVCOL_RANGE_JPEG : AVCOL_RANGE_MPEG;
@@ -1898,6 +1898,7 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
     if(h0->current_slice == 0){
         while(h->frame_num !=  h->prev_frame_num &&
               h->frame_num != (h->prev_frame_num+1)%(1<<h->sps.log2_max_frame_num)){
+            Picture *prev = h->short_ref_count ? h->short_ref[0] : NULL;
             av_log(h->s.avctx, AV_LOG_DEBUG, "Frame num gap %d %d\n", h->frame_num, h->prev_frame_num);
             if (ff_h264_frame_start(h) < 0)
                 return -1;
@@ -1912,11 +1913,15 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
              * FIXME: this doesn't copy padding for out-of-frame motion vectors.  Given we're
              * concealing a lost frame, this probably isn't noticable by comparison, but it should
              * be fixed. */
-            av_image_copy(h->short_ref[0]->data, h->short_ref[0]->linesize,
-                          (const uint8_t**)h->short_ref[1]->data, h->short_ref[1]->linesize,
-                          PIX_FMT_YUV420P, s->mb_width*16, s->mb_height*16);
-            h->short_ref[0]->frame_num = h->prev_frame_num;
-            h->short_ref[0]->poc = h->short_ref[1]->poc+2;
+            if (h->short_ref_count) {
+                if (prev) {
+                    av_image_copy(h->short_ref[0]->data, h->short_ref[0]->linesize,
+                                  (const uint8_t**)prev->data, prev->linesize,
+                                  s->avctx->pix_fmt, s->mb_width*16, s->mb_height*16);
+                    h->short_ref[0]->poc = prev->poc+2;
+                }
+                h->short_ref[0]->frame_num = h->prev_frame_num;
+            }
         }
 
         /* See if we have a decoded first field looking for a pair... */

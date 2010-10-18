@@ -13,6 +13,32 @@ libavutil:   2009-03-08
 
 API changes, most recent first:
 
+2010-10-16 - r25502 - lavfi 1.52.0 - avfilter_graph_config()
+  Add the function avfilter_graph_config() in avfiltergraph.h.
+
+2010-10-15 - r25493 - lavf 52.83.0 - metadata API
+  Change demuxers to export metadata in generic format and
+  muxers to accept generic format. Deprecate the public
+  conversion API.
+
+2010-10-10 - r25441 - lavfi 1.49.0 - AVFilterLink.time_base
+  Add time_base field to AVFilterLink.
+
+2010-09-27 - r25236 - lavu 50.31.0 - av_set_options_string()
+  Move av_set_options_string() from libavfilter/parseutils.h to
+  libavutil/opt.h.
+
+2010-09-27 - r25227 - lavfi 1.47.0 - AVFilterLink
+  Make the AVFilterLink fields srcpad and dstpad store the pointers to
+  the source and destination pads, rather than their indexes.
+
+2010-09-27 - r25225 - lavu 50.30.0 - av_get_token()
+  Move av_get_token() from libavfilter/parseutils.h to
+  libavutil/avstring.h.
+
+2010-09-26 - r32368 - lsws 0.12.0 - swscale.h
+  Add the functions sws_alloc_context() and sws_init_context().
+
 2010-09-26 - r25210 - lavu 50.29.0 - opt.h
   Move libavcodec/opt.h to libavutil/opt.h.
 
