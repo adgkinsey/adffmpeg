@@ -25,26 +25,30 @@
 #include <strings.h>
 #include "internal.h"
 #include "network.h"
+#include "http.h"
 #include "os_support.h"
 #include "httpauth.h"
+#include "libavutil/opt.h"
 
 /* XXX: POST protocol is not completely implemented because ffmpeg uses
    only a subset of it. */
 
 /* used for protocol handling */
 #define BUFFER_SIZE 1024
-#define URL_SIZE    4096
 #define MAX_REDIRECTS 8
 
 typedef struct {
+    const AVClass *class;
     URLContext *hd;
     unsigned char buffer[BUFFER_SIZE], *buf_ptr, *buf_end;
     int line_count;
     int http_code;
     int64_t chunksize;      /**< Used if "Transfer-Encoding: chunked" otherwise -1. */
     int64_t off, filesize;
-    char location[URL_SIZE];
+    char location[MAX_URL_SIZE];
     HTTPAuthState auth_state;
+    unsigned char headers[BUFFER_SIZE];
+    int willclose;          /**< Set if the server correctly handles Connection: close and will close the connection after feeding us the content. */
 
     /* BMOJ - added to hold utc_offset from header */
 	char* sever;
@@ -60,9 +64,17 @@ typedef struct {
     int isBinary;
 } NetvuContext;
 
+#define OFFSET(x) offsetof(NetvuContext, x)
+static const AVOption options[] = {
+{"chunksize", "use chunked transfer-encoding for posts, -1 disables it, 0 enables it", OFFSET(chunksize), FF_OPT_TYPE_INT64, 0, -1, 0 }, /* Default to 0, for chunked POSTs */
+{NULL}
+};
+static const AVClass netvucontext_class = {
+    "NETVU", av_default_item_name, options, LIBAVUTIL_VERSION_INT
+};
+
 static int netvu_connect(URLContext *h, const char *path, const char *hoststr,
                         const char *auth, int *new_location);
-static int netvu_write(URLContext *h, uint8_t *buf, int size);
 
 static void netvu_parse_content_type_header( char * p, NetvuContext *s );
 static void copy_value_to_field( const char *value, char **dest );
@@ -93,12 +105,12 @@ static int netvu_open_cnx(URLContext *h)
     /* fill the dest addr */
  redo:
     /* needed in any case to build the host string */
-    ff_url_split(NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port,
+    av_url_split(NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port,
                  path1, sizeof(path1), s->location);
     ff_url_join(hoststr, sizeof(hoststr), NULL, NULL, hostname, port, NULL);
 
     if (use_proxy) {
-        ff_url_split(NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port,
+        av_url_split(NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port,
                      NULL, 0, proxy_path);
         path = s->location;
     } else {
@@ -138,31 +150,20 @@ static int netvu_open_cnx(URLContext *h)
  fail:
     if (hd)
         url_close(hd);
+    s->hd = NULL;
     return AVERROR(EIO);
 }
 
 static int netvu_open(URLContext *h, const char *uri, int flags)
 {
-    NetvuContext *s;
-    int ret;
+    NetvuContext *s = h->priv_data;
 
     h->is_streamed = 1;
 
-    s = av_mallocz(sizeof(NetvuContext));
-    if (!s) {
-        return AVERROR(ENOMEM);
-    }
-    h->priv_data = s;
     s->filesize = -1;
-    s->chunksize = -1;
-    s->off = 0;
-    memset(&s->auth_state, 0, sizeof(s->auth_state));
-    av_strlcpy(s->location, uri, URL_SIZE);
+    av_strlcpy(s->location, uri, sizeof(s->location));
 
-    ret = netvu_open_cnx(h);
-    if (ret != 0)
-        av_free (s);
-    return ret;
+    return netvu_open_cnx(h);
 }
 static int netvu_getc(NetvuContext *s)
 {
@@ -209,7 +210,7 @@ static int process_line(URLContext *h, char *line, int line_count,
                         int *new_location)
 {
     NetvuContext *s = h->priv_data;
-    char *tag, *p;
+    char *tag, *p, *end;
 
     /* end of header */
     if (line[0] == '\0')
@@ -221,14 +222,18 @@ static int process_line(URLContext *h, char *line, int line_count,
             p++;
         while (isspace(*p))
             p++;
-        s->http_code = strtol(p, NULL, 10);
+        s->http_code = strtol(p, &end, 10);
 
         dprintf(NULL, "http_code=%d\n", s->http_code);
 
         /* error codes are 4xx and 5xx, but regard 401 as a success, so we
          * don't abort until all headers have been parsed. */
-        if (s->http_code >= 400 && s->http_code < 600 && s->http_code != 401)
+        if (s->http_code >= 400 && s->http_code < 600 && s->http_code != 401) {
+            end += strspn(end, SPACE_CHARS);
+            av_log(NULL, AV_LOG_WARNING, "HTTP error %d %s\n",
+                   s->http_code, end);
             return -1;
+        }
     } else {
         while (*p != '\0' && *p != ':')
             p++;
@@ -262,6 +267,9 @@ static int process_line(URLContext *h, char *line, int line_count,
             ff_http_auth_handle_header(&s->auth_state, tag, p);
         } else if (!strcmp (tag, "Authentication-Info")) {
             ff_http_auth_handle_header(&s->auth_state, tag, p);
+		} else if (!strcmp (tag, "Connection")) {
+            if (!strcmp(p, "close"))
+                s->willclose = 1;
         } else if (!strcmp (tag, "Content-type")) {
             netvu_parse_content_type_header( p, s );
         } else if(!strcmp(tag, "Server")) {
@@ -269,6 +277,12 @@ static int process_line(URLContext *h, char *line, int line_count,
 		}
     }
     return 1;
+}
+
+static inline int has_header(const char *str, const char *header)
+{
+    /* header + 2 to skip over CRLF prefix. (make sure you have one!) */
+    return av_stristart(str, header + 2, NULL) || av_stristr(str, header);
 }
 
 static void netvu_parse_content_type_header( char * p, NetvuContext *s )
@@ -366,34 +380,51 @@ static int netvu_connect(URLContext *h, const char *path, const char *hoststr,
     NetvuContext *s = h->priv_data;
     int post, err;
     char line[1024];
+    char headers[1024] = "";
     char *authstr = NULL;
     int64_t off = s->off;
+    int len = 0;
 
 
     /* send http header */
     post = h->flags & URL_WRONLY;
     authstr = ff_http_auth_create_response(&s->auth_state, auth, path,
                                         post ? "POST" : "GET");
+
+    /* set default headers if needed */
+    if (!has_header(s->headers, "\r\nUser-Agent: "))
+       len += av_strlcatf(headers + len, sizeof(headers) - len,
+                          "User-Agent: %s\r\n", LIBAVFORMAT_IDENT);
+    if (!has_header(s->headers, "\r\nAccept: "))
+        len += av_strlcpy(headers + len, "Accept: */*\r\n",
+                          sizeof(headers) - len);
+    if (!has_header(s->headers, "\r\nRange: "))
+        len += av_strlcatf(headers + len, sizeof(headers) - len,
+                           "Range: bytes=%"PRId64"-\r\n", s->off);
+    if (!has_header(s->headers, "\r\nConnection: "))
+        len += av_strlcpy(headers + len, "Connection: close\r\n",
+                          sizeof(headers)-len);
+    if (!has_header(s->headers, "\r\nHost: "))
+        len += av_strlcatf(headers + len, sizeof(headers) - len,
+                           "Host: %s\r\n", hoststr);
+
+    /* now add in custom headers */
+    av_strlcpy(headers+len, s->headers, sizeof(headers)-len);
+
     snprintf(s->buffer, sizeof(s->buffer),
              "%s %s HTTP/1.1\r\n"
-             "User-Agent: %s\r\n"
-             "Accept: */*\r\n"
-             "Range: bytes=%"PRId64"-\r\n"
-             "Host: %s\r\n"
              "%s"
-             "Connection: close\r\n"
+             "%s"
              "%s"
              "\r\n",
              post ? "POST" : "GET",
              path,
-             LIBAVFORMAT_IDENT,
-             s->off,
-             hoststr,
-             authstr ? authstr : "",
-             post ? "Transfer-Encoding: chunked\r\n" : "");
+             post && s->chunksize >= 0 ? "Transfer-Encoding: chunked\r\n" : "",
+             headers,
+             authstr ? authstr : "");
 
     av_freep(&authstr);
-    if (netvu_write(h, s->buffer, strlen(s->buffer)) < 0)
+    if (url_write(s->hd, s->buffer, strlen(s->buffer)) < 0)
         return AVERROR(EIO);
 
     /* init input buffer */
@@ -402,11 +433,15 @@ static int netvu_connect(URLContext *h, const char *path, const char *hoststr,
     s->line_count = 0;
     s->off = 0;
     s->filesize = -1;
+    s->willclose = 0;
     if (post) {
-        /* always use chunked encoding for upload data */
-        s->chunksize = 0;
+        /* Pretend that it did work. We didn't read any header yet, since
+         * we've still to send the POST data, but the code calling this
+         * function will check http_code after we return. */
+        s->http_code = 200;
         return 0;
     }
+    s->chunksize = -1;
 
     /* wait for header */
     for(;;) {
@@ -463,6 +498,8 @@ static int netvu_read(URLContext *h, uint8_t *buf, int size)
         memcpy(buf, s->buf_ptr, len);
         s->buf_ptr += len;
     } else {
+        if (!s->willclose && s->filesize >= 0 && s->off >= s->filesize)
+            return AVERROR_EOF;
         len = url_read(s->hd, buf, size);
     }
     if (len > 0) {
@@ -474,15 +511,15 @@ static int netvu_read(URLContext *h, uint8_t *buf, int size)
 }
 
 /* used only when posting data */
-static int netvu_write(URLContext *h, uint8_t *buf, int size)
+static int netvu_write(URLContext *h, const uint8_t *buf, int size)
 {
-    char temp[11];  /* 32-bit hex + CRLF + nul */
+    char temp[11] = "";  /* 32-bit hex + CRLF + nul */
     int ret;
     char crlf[] = "\r\n";
     NetvuContext *s = h->priv_data;
 
     if (s->chunksize == -1) {
-        /* headers are sent without any special encoding */
+        /* non-chunked data is sent without any special encoding */
         return url_write(s->hd, buf, size);
     }
 
@@ -512,7 +549,8 @@ static int netvu_close(URLContext *h)
         ret = ret > 0 ? 0 : ret;
     }
 
-    url_close(s->hd);
+    if (s->hd)
+    	url_close(s->hd);
 	
     if( s->sever )
 		av_free( s->sever );
@@ -543,11 +581,57 @@ static int netvu_close(URLContext *h)
     return ret;
 }
 
+static int64_t netvu_seek(URLContext *h, int64_t off, int whence)
+{
+    NetvuContext *s = h->priv_data;
+    URLContext *old_hd = s->hd;
+    int64_t old_off = s->off;
+    uint8_t old_buf[BUFFER_SIZE];
+    int old_buf_size;
+
+    if (whence == AVSEEK_SIZE)
+        return s->filesize;
+    else if ((s->filesize == -1 && whence == SEEK_END) || h->is_streamed)
+        return -1;
+
+    /* we save the old context in case the seek fails */
+    old_buf_size = s->buf_end - s->buf_ptr;
+    memcpy(old_buf, s->buf_ptr, old_buf_size);
+    s->hd = NULL;
+    if (whence == SEEK_CUR)
+        off += s->off;
+    else if (whence == SEEK_END)
+        off += s->filesize;
+    s->off = off;
+
+    /* if it fails, continue on old connection */
+    if (netvu_open_cnx(h) < 0) {
+        memcpy(s->buffer, old_buf, old_buf_size);
+        s->buf_ptr = s->buffer;
+        s->buf_end = s->buffer + old_buf_size;
+        s->hd = old_hd;
+        s->off = old_off;
+        return -1;
+    }
+    url_close(old_hd);
+    return off;
+}
+
+static int
+netvu_get_file_handle(URLContext *h)
+{
+    NetvuContext *s = h->priv_data;
+    return url_get_file_handle(s->hd);
+}
+
 URLProtocol netvu_protocol = {
     "netvu",
     netvu_open,
     netvu_read,
     netvu_write,
-    NULL, /* seek */
+	netvu_seek,
     netvu_close,
+	.url_get_file_handle = netvu_get_file_handle,
+    .priv_data_size = sizeof(NetvuContext),
+    .priv_data_class = &netvucontext_class,
 };
