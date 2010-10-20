@@ -507,7 +507,7 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 			}
 			else  {
 				p->dispSet.timestamp = target / 1000LL;
-                p->dispSet.millisecs = target % 1000;
+                p->dispSet.millisecs = target & 0x03FF;
             }
 		}
 		
