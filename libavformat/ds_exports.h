@@ -19,35 +19,37 @@ extern "C" {
 /* Image collection parameters (for Brooktree decoder collection setup) */
 typedef struct
 {
-	uint16_t src_pixels;		/* Input image size (horizontal) */
-	uint16_t src_lines;		    /* Input image size (vertical) */
-	uint16_t target_pixels;	    /* Output image size (horizontal) */
-	uint16_t target_lines;	    /* Output image size (vertical) */
-	uint16_t pixel_offset;	    /* Image start offset (horizontal) */
-	uint16_t line_offset;		/* Image start offset (vertical) */
+	uint16_t src_pixels;		///< Input image size (horizontal)
+	uint16_t src_lines;		    ///<  Input image size (vertical)
+	uint16_t target_pixels;	    ///<  Output image size (horizontal)
+	uint16_t target_lines;	    ///<  Output image size (vertical)
+	uint16_t pixel_offset;	    ///<  Image start offset (horizontal)
+	uint16_t line_offset;		///<  Image start offset (vertical)
 }Picture;
 typedef struct _imageData
 {
-	uint32_t version;	            /* structure version number */
-	int32_t mode;				    // in PIC_REVISION 0 this was the DFT style FULL_HI etc
-							        // in PIC_REVISION 1 this is used to specify AD or JFIF format image amongst other things
-	int32_t cam;				    /*  camera number */
-	int32_t vid_format;			    /* 422 or 411 */
-	uint32_t start_offset;	        /* start of picture PRC 007 */
-	int32_t size;				    /* size of image */
-	int32_t max_size;			    /* maximum size allowed */
-	int32_t target_size;		    /* size wanted for compression JCB 004 */
-	int32_t factor;				    /* Q factor */
-	uint32_t alm_bitmask_hi;		/* High 32 bits of the alarm bitmask */
-	int32_t status;				    /* status of last action performed on picture */
-	uint32_t session_time;	        /* playback time of image */		/* JCB 002 */
-	uint32_t milliseconds;	        /* sub-second count for playback speed control JCB 005  PRC 009 */
-	char res[3+1];			        /* picture size JCB 004 */
-	char title[TITLE_LENGTH+1];		/* JCB 003 camera title */
-	char alarm[TITLE_LENGTH+1];		/* JCB 003 alarm text - title, comment etc */
-	Picture format;					/* NOTE: Do not assign to a pointer due to CW-alignment */
-	char locale[MAX_NAME_LEN];	    /* JCB 006 */
-	int32_t utc_offset;				/* JCB 006 */
+	uint32_t version;	            ///<  structure version number */
+	
+	/// in PIC_REVISION 0 this was the DFT style FULL_HI etc
+	/// in PIC_REVISION 1 this is used to specify AD or JFIF format image amongst other things
+	int32_t mode;
+	int32_t cam;				    ///< camera number
+	int32_t vid_format;			    ///< 422 or 411
+	uint32_t start_offset;	        ///< start of picture PRC 007
+	int32_t size;				    ///< size of image
+	int32_t max_size;			    ///< maximum size allowed
+	int32_t target_size;		    ///< size wanted for compression JCB 004
+	int32_t factor;				    ///< Q factor
+	uint32_t alm_bitmask_hi;		///< High 32 bits of the alarm bitmask
+	int32_t status;				    ///< status of last action performed on picture
+	uint32_t session_time;	        ///< playback time of image  JCB 002
+	uint32_t milliseconds;	        ///< sub-second count for playback speed control JCB 005  PRC 009
+	char res[3+1];			        ///< picture size JCB 004
+	char title[TITLE_LENGTH+1];		///< JCB 003 camera title
+	char alarm[TITLE_LENGTH+1];		///< JCB 003 alarm text - title, comment etc
+	Picture format;					///< NOTE: Do not assign to a pointer due to CW-alignment
+	char locale[MAX_NAME_LEN];	    ///< JCB 006
+	int32_t utc_offset;				///< JCB 006
 	uint32_t alm_bitmask;
 } NetVuImageData;
 

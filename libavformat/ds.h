@@ -13,22 +13,8 @@
 #include "ds_exports.h"
 
 /* -------------------------------------- Constants -------------------------------------- */
-#define DS_DEFAULT_PORT                             8234                /* Deafult TCP and UDP port for comms */
 #define DS_HEADER_MAGIC_NUMBER                      0xFACED0FF
-#define MAX_USER_ID_LENGTH                          30
-#define ACCESS_KEY_LENGTH                           36
-#define MAC_ADDR_LENGTH                             16
-#define UNIT_NAME_LENGTH                            32
 
-#define DS_WRITE_BUFFER_SIZE                        1024
-#define DS_READ_BUFFER_SIZE                         1024
-
-#define DS_PLAYBACK_MODE_LIVE                       0x00
-#define DS_PLAYBACK_MODE_PLAY                       0x01
-
-#define DS_RESOLUTION_HI                            2
-#define DS_RESOLUTION_MED                           1
-#define DS_RESOLUTION_LOW                           0
 
 /* -------------------------------------- Structures/types -------------------------------------- */
 typedef enum _controlMessages
@@ -123,11 +109,6 @@ typedef enum _controlMessages
     NET_NUMBER_OF_MESSAGE_TYPES			/* 57*/    /* ALWAYS KEEP AS LAST ITEMS */
 } ControlMessageTypes;
 
-typedef struct _dsContext
-{
-    URLContext *        TCPContext; /* Context of the underlying TCP network connection */
-} DSContext;
-
 typedef struct _messageHeader
 {
     unsigned long       magicNumber;
@@ -140,144 +121,6 @@ typedef struct _messageHeader
 } MessageHeader;
 #define SIZEOF_MESSAGE_HEADER_IO                28      /* Size in bytes of the MessageHeader structure. Can't use sizeof to read/write one of these to network as structure packing may differ based on platform */
 
-typedef struct _networkMessage
-{
-    MessageHeader       header;
-    void *              body;
-} NetworkMessage;
-
-typedef enum _imgControlMsgType
-{
-    IMG_LIVE,
-    IMG_PLAY,
-    IMG_GOTO,
-    IMG_DATA,
-    IMG_STOP
-} ImgControlMsgType;
-
-typedef struct _clientConnectMsg
-{
-    unsigned long           udpPort;
-    long                    connectType;        /* ImgControlMsgType enum. long used to avoid sizeof(enum) discrepancies */
-    char                    userID[MAX_USER_ID_LENGTH];
-    char                    accessKey[ACCESS_KEY_LENGTH];
-} ClientConnectMsg;
-#define VER_TCP_CLI_CONNECT                     0x00000003
-#define SIZEOF_TCP_CLI_CONNECT_IO               (MAX_USER_ID_LENGTH + ACCESS_KEY_LENGTH + 8)      /* Size in bytes of the MessageHeader structure. Can't use sizeof to read/write one of these to network as structure packing may differ based on platform */
-
-typedef enum _netRejectReason
-{
-	REJECT_BUSY,
-	REJECT_INVALID_USER_ID,
-	REJECT_AUTHENTIFICATION_REQUIRED,
-	REJECT_AUTHENTIFICATION_INVALID,
-	REJECT_UNAUTHORISED,
-	REJECT_OTHER,
-	REJECT_PASSWORD_CHANGE_REQUIRED,
-	REJECT_OUT_OF_MEMORY,
-	REJECT_CORRUPT_USERS_FILES
-} NetRejectReason;
-
-typedef struct _srvConnectRejectMsg
-{
-    long					reason;				/* enum NET_REJECT_REASON */
-    long					timestamp;
-    char					macAddr[MAC_ADDR_LENGTH];
-    unsigned long           appVersion;
-    unsigned long           minViewerVersion;
-} SrvConnectRejectMsg;
-#define VER_TCP_SRV_CONNECT_REJECT          0x00000001
-
-typedef enum _realmType
-{
-    REALM_LIVE,
-    REALM_PLAYBACK,
-    REALM_TELEM,
-    REALM_EVENTS,
-    REALM_ADMIN,
-    REALM_PASSWORD,
-    REALM_PW_ONCE,
-    REALM_VIEW_ALL,
-    REALM_MCI,
-    REALM_FILE_EXPORT,
-    REALM_WEB,
-    REALM_POS,
-    NUM_FIXED_REALMS,
-} RealmType;
-
-typedef struct _srvConnectReplyMsg
-{
-    long					numCameras;
-    long					viewableCamMask;
-    long					telemetryCamMask;
-    long					failedCamMask;
-    long					maxMsgInterval;
-    int64_t			        timestamp;                          /* TODO: Verify - this was a 'hyper long' before. Assuming 64 bit value. Is this correct? Is solution portable? */
-    char					cameraTitles[16][28];
-    long                    unitType;
-    unsigned long           applicationVersion;
-    long                    videoStandard;
-    char                    macAddr[MAC_ADDR_LENGTH];
-    char                    unitName[UNIT_NAME_LENGTH];
-    long					numFixedRealms;	                    /* Number of FIXED system realms */
-    unsigned long		    realmFlags[NUM_FIXED_REALMS];	    /* Indicates if user is in realm. */
-    unsigned long           minimumViewerVersion;
-} SrvConnectReplyMsg;
-#define VER_TCP_SRV_CONNECT_REPLY           0x00000001
-
-typedef struct _srvFeatureConnectReplyMsg
-{
-    long					numCameras;
-    long					viewableCamMask;
-    long					telemetryCamMask;
-    long					failedCamMask;
-    long					maxMsgInterval;
-    int64_t			        timestamp;                          /* TODO: Verify - this was a 'hyper long' before. Assuming 64 bit value. Is this correct? Is solution portable? */
-    char					cameraTitles[16][28];
-    long                    unitType;
-    unsigned long           applicationVersion;
-    long                    videoStandard;
-    char                    macAddr[MAC_ADDR_LENGTH];
-    char                    unitName[UNIT_NAME_LENGTH];
-
-    unsigned long           minimumViewerVersion;
-    unsigned long 		    unitFeature01;
-    unsigned long 		    unitFeature02;
-    unsigned long 		    unitFeature03;
-    unsigned long 		    unitFeature04;
-    long					numFixedRealms;	               /* Number of FIXED system realms */
-    unsigned long		    realmFlags[NUM_FIXED_REALMS];	   /* Indicates if user is in realm. */
-} SrvFeatureConnectReplyMsg;
-#define VER_TCP_SRV_FEATURE_CONNECT_REPLY   0x00000002
-
-typedef struct _cliImgLiveRequestMsg
-{
-	long					cameraMask;
-	long					resolution;
-} CliImgLiveRequestMsg;
-#define VER_TCP_CLI_IMG_LIVE_REQUEST        0x00000001
-#define SIZEOF_TCP_CLI_IMG_LIVE_REQUEST_IO  8            /* Size in bytes of the MessageHeader structure. Can't use sizeof to read/write one of these to network as structure packing may differ based on platform */
-
-typedef enum _vcrMode
-{
-	VM_PLAY,
-    VM_VIS_REW,
-    VM_VIS_FF,
-    VM_STOP,
-    VM_PLAY_SHUTTLE,
-	VM_FINISH
-} vcrMode;
-
-typedef struct _cliImgPlayRequestMsg
-{
-	long					cameraMask;
-	long					mode;			    /*	(enum VCR_MODE) */
-	long					pace;
-	int64_t				    fromTime;		    /*		(time_u)	*/
-	int64_t				    toTime;		        /*		(time_u)	*/
-} CliImgPlayRequestMsg;
-#define VER_TCP_CLI_IMG_PLAY_REQUEST        0x00000001
-#define SIZEOF_TCP_CLI_IMG_PLAY_REQUEST_IO  28            /* Size in bytes of the MessageHeader structure. Can't use sizeof to read/write one of these to network as structure packing may differ based on platform */
 
 #ifdef WORDS_BIGENDIAN
 #define NTOH64(x)               (x)
@@ -300,10 +143,8 @@ typedef struct _cliImgPlayRequestMsg
 
 #endif /* WORDS_BIGENDIAN */
 
-/* -------------------------------------- Function declarations -------------------------------------- */
-extern NetworkMessage *     CreateNetworkMessage( ControlMessageTypes messageType, long channelID );
-extern void                 FreeNetworkMessage( NetworkMessage **message );
-extern void                 NToHMessageHeader( MessageHeader *header );
 
+/* -------------------------------------- Function declarations -------------------------------------- */
+extern void                 NToHMessageHeader( MessageHeader *header );
 
 #endif /* __DS_H__ */
