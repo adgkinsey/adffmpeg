@@ -51,8 +51,6 @@ typedef struct URLContext {
     int max_packet_size;  /**< if non zero, the stream is packetized with this max packet size */
     void *priv_data;
     char *filename; /**< specified URL */
-    int utc_offset;
-    int isBinary;
 } URLContext;
 
 typedef struct URLPollEntry {
