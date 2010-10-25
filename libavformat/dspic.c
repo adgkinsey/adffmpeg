@@ -33,7 +33,7 @@ static int dspicProbe( AVProbeData *p )
     /* Get what should be the magic number field of the first header */
     memcpy( &magicNumber, p->buf, sizeof(long) );
     /* Adjust the byte ordering */
-    magicNumber = be2me_32(magicNumber);
+    magicNumber = av_be2ne32(magicNumber);
 
     if( magicNumber == DSPacketHeaderMagicNumber )
         return 100;
@@ -151,8 +151,8 @@ static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize )
 		i+= 2;
 		memcpy(&length, &data[i], 2 );
 		i+= 2;
-		marker = be2me_16(marker);
-		length = be2me_16(length);
+		marker = av_be2ne16(marker);
+		length = av_be2ne16(length);
 
 		switch (marker)
 		{
@@ -225,11 +225,11 @@ static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData )
 
         memcpy( &frameData->jpegLength, &buffer[bufIdx], sizeof(unsigned long) );
         bufIdx += sizeof(unsigned long);
-        frameData->jpegLength = be2me_32(frameData->jpegLength);
+        frameData->jpegLength = av_be2ne32(frameData->jpegLength);
 
         memcpy( &frameData->imgSeq, &buffer[bufIdx], sizeof(int64_t) );
         bufIdx += sizeof(int64_t);
-        frameData->imgSeq = be2me_64(frameData->imgSeq);
+        frameData->imgSeq = av_be2ne64(frameData->imgSeq);
 
         memcpy( &frameData->imgTime, &buffer[bufIdx], sizeof(int64_t) );
         bufIdx += sizeof(int64_t);
@@ -245,27 +245,27 @@ static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData )
 
         memcpy( &frameData->QFactor, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->QFactor = be2me_16(frameData->QFactor);
+        frameData->QFactor = av_be2ne16(frameData->QFactor);
 
         memcpy( &frameData->height, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->height = be2me_16(frameData->height);
+        frameData->height = av_be2ne16(frameData->height);
 
         memcpy( &frameData->width, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->width = be2me_16(frameData->width);
+        frameData->width = av_be2ne16(frameData->width);
 
         memcpy( &frameData->resolution, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->resolution = be2me_16(frameData->resolution);
+        frameData->resolution = av_be2ne16(frameData->resolution);
 
         memcpy( &frameData->interlace, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->interlace = be2me_16(frameData->interlace);
+        frameData->interlace = av_be2ne16(frameData->interlace);
 
         memcpy( &frameData->subHeaderMask, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->subHeaderMask = be2me_16(frameData->subHeaderMask);
+        frameData->subHeaderMask = av_be2ne16(frameData->subHeaderMask);
 
         memcpy( frameData->camTitle, &buffer[bufIdx], sizeof(char) * CAM_TITLE_LENGTH );
         bufIdx += sizeof(char) * CAM_TITLE_LENGTH;

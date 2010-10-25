@@ -203,8 +203,8 @@ static int64_t TimeTolong64( time_t time );
 #define HTON64(x)
 #define HTON32(x)
 #else
-#define HTON64(x)               (bswap_64(x))
-#define HTON32(x)               (bswap_32(x))
+#define HTON64(x)               (av_bswap64(x))
+#define HTON32(x)               (av_bswap32(x))
 #endif
 
 
@@ -921,13 +921,13 @@ void NToHMessageHeader( MessageHeader *header )
 {
     if( header )
     {
-        header->magicNumber = be2me_32(header->magicNumber);
-        header->length = be2me_32(header->length);
-        header->channelID = be2me_32(header->channelID);
-        header->sequence = be2me_32(header->sequence);
-        header->messageVersion = be2me_32(header->messageVersion);
-        header->checksum = be2me_32(header->checksum);
-        header->messageType = be2me_32(header->messageType);
+        header->magicNumber = av_be2ne32(header->magicNumber);
+        header->length = av_be2ne32(header->length);
+        header->channelID = av_be2ne32(header->channelID);
+        header->sequence = av_be2ne32(header->sequence);
+        header->messageVersion = av_be2ne32(header->messageVersion);
+        header->checksum = av_be2ne32(header->checksum);
+        header->messageType = av_be2ne32(header->messageType);
     }
 }
 
@@ -996,10 +996,10 @@ static int ReadConnectRejectMessage( URLContext * h, NetworkMessage *message )
         return AVERROR_IO;
 
     /* Correct the byte ordering */
-    bodyPtr->reason = be2me_32(bodyPtr->reason);
-    bodyPtr->timestamp = be2me_32(bodyPtr->timestamp);
-    bodyPtr->appVersion = be2me_32(bodyPtr->appVersion);
-    bodyPtr->minViewerVersion = be2me_32(bodyPtr->minViewerVersion);
+    bodyPtr->reason = av_be2ne32(bodyPtr->reason);
+    bodyPtr->timestamp = av_be2ne32(bodyPtr->timestamp);
+    bodyPtr->appVersion = av_be2ne32(bodyPtr->appVersion);
+    bodyPtr->minViewerVersion = av_be2ne32(bodyPtr->minViewerVersion);
 
     return 0;
 }
@@ -1054,7 +1054,7 @@ static int ReadConnectReplyMessage( URLContext * h, NetworkMessage *message )
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->numFixedRealms, sizeof(long) ) != sizeof(long) )
         return AVERROR_IO;
 
-    bodyPtr->numFixedRealms = be2me_32(bodyPtr->numFixedRealms);
+    bodyPtr->numFixedRealms = av_be2ne32(bodyPtr->numFixedRealms);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->realmFlags, (sizeof(unsigned long) * bodyPtr->numFixedRealms) ) != (sizeof(unsigned long) * bodyPtr->numFixedRealms) )
         return AVERROR_IO;
@@ -1063,16 +1063,16 @@ static int ReadConnectReplyMessage( URLContext * h, NetworkMessage *message )
         return AVERROR_IO;
 
     /* Correct the byte ordering */
-    bodyPtr->numCameras = be2me_32(bodyPtr->numCameras);
-    bodyPtr->viewableCamMask = be2me_32(bodyPtr->viewableCamMask);
-    bodyPtr->telemetryCamMask = be2me_32(bodyPtr->telemetryCamMask);
-    bodyPtr->failedCamMask = be2me_32(bodyPtr->failedCamMask);
-    bodyPtr->maxMsgInterval = be2me_32(bodyPtr->maxMsgInterval);
-    bodyPtr->unitType = be2me_32(bodyPtr->unitType);
-    bodyPtr->applicationVersion = be2me_32(bodyPtr->applicationVersion);
-    bodyPtr->videoStandard = be2me_32(bodyPtr->videoStandard);
-    bodyPtr->numFixedRealms = be2me_32(bodyPtr->numFixedRealms);
-    bodyPtr->minimumViewerVersion = be2me_32(bodyPtr->minimumViewerVersion);
+    bodyPtr->numCameras = av_be2ne32(bodyPtr->numCameras);
+    bodyPtr->viewableCamMask = av_be2ne32(bodyPtr->viewableCamMask);
+    bodyPtr->telemetryCamMask = av_be2ne32(bodyPtr->telemetryCamMask);
+    bodyPtr->failedCamMask = av_be2ne32(bodyPtr->failedCamMask);
+    bodyPtr->maxMsgInterval = av_be2ne32(bodyPtr->maxMsgInterval);
+    bodyPtr->unitType = av_be2ne32(bodyPtr->unitType);
+    bodyPtr->applicationVersion = av_be2ne32(bodyPtr->applicationVersion);
+    bodyPtr->videoStandard = av_be2ne32(bodyPtr->videoStandard);
+    bodyPtr->numFixedRealms = av_be2ne32(bodyPtr->numFixedRealms);
+    bodyPtr->minimumViewerVersion = av_be2ne32(bodyPtr->minimumViewerVersion);
 
     return 0;
 }
@@ -1140,25 +1140,25 @@ static int ReadFeatureConnectReplyMessage( URLContext * h, NetworkMessage *messa
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->numFixedRealms, sizeof(long) ) != sizeof(long) )
         return AVERROR_IO;
 
-    bodyPtr->numFixedRealms = be2me_32(bodyPtr->numFixedRealms);
+    bodyPtr->numFixedRealms = av_be2ne32(bodyPtr->numFixedRealms);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->realmFlags, (sizeof(unsigned long) * bodyPtr->numFixedRealms) ) != (sizeof(unsigned long) * bodyPtr->numFixedRealms) )
         return AVERROR_IO;
 
     /* Correct the byte ordering */
-    bodyPtr->numCameras = be2me_32(bodyPtr->numCameras);
-    bodyPtr->viewableCamMask = be2me_32(bodyPtr->viewableCamMask);
-    bodyPtr->telemetryCamMask = be2me_32(bodyPtr->telemetryCamMask);
-    bodyPtr->failedCamMask = be2me_32(bodyPtr->failedCamMask);
-    bodyPtr->maxMsgInterval = be2me_32(bodyPtr->maxMsgInterval);
-    bodyPtr->unitType = be2me_32(bodyPtr->unitType);
-    bodyPtr->applicationVersion = be2me_32(bodyPtr->applicationVersion);
-    bodyPtr->videoStandard = be2me_32(bodyPtr->videoStandard);
-    bodyPtr->minimumViewerVersion = be2me_32(bodyPtr->minimumViewerVersion);
-    bodyPtr->unitFeature01 = be2me_32(bodyPtr->unitFeature01);
-    bodyPtr->unitFeature02 = be2me_32(bodyPtr->unitFeature02);
-    bodyPtr->unitFeature03 = be2me_32(bodyPtr->unitFeature03);
-    bodyPtr->unitFeature04 = be2me_32(bodyPtr->unitFeature04);
+    bodyPtr->numCameras = av_be2ne32(bodyPtr->numCameras);
+    bodyPtr->viewableCamMask = av_be2ne32(bodyPtr->viewableCamMask);
+    bodyPtr->telemetryCamMask = av_be2ne32(bodyPtr->telemetryCamMask);
+    bodyPtr->failedCamMask = av_be2ne32(bodyPtr->failedCamMask);
+    bodyPtr->maxMsgInterval = av_be2ne32(bodyPtr->maxMsgInterval);
+    bodyPtr->unitType = av_be2ne32(bodyPtr->unitType);
+    bodyPtr->applicationVersion = av_be2ne32(bodyPtr->applicationVersion);
+    bodyPtr->videoStandard = av_be2ne32(bodyPtr->videoStandard);
+    bodyPtr->minimumViewerVersion = av_be2ne32(bodyPtr->minimumViewerVersion);
+    bodyPtr->unitFeature01 = av_be2ne32(bodyPtr->unitFeature01);
+    bodyPtr->unitFeature02 = av_be2ne32(bodyPtr->unitFeature02);
+    bodyPtr->unitFeature03 = av_be2ne32(bodyPtr->unitFeature03);
+    bodyPtr->unitFeature04 = av_be2ne32(bodyPtr->unitFeature04);
 
     return 0;
 }
@@ -1171,31 +1171,31 @@ static void HToNMessageHeader( MessageHeader *header, unsigned char *buf )
     if( header != NULL && buf != NULL )
     {
         /* Set whatever header values we can in here */
-        tempHeader.magicNumber = be2me_32(header->magicNumber);
+        tempHeader.magicNumber = av_be2ne32(header->magicNumber);
         memcpy( &buf[bufIdx], &tempHeader.magicNumber, sizeof(unsigned long) );
         bufIdx += sizeof(unsigned long);
 
-        tempHeader.length = be2me_32(header->length);
+        tempHeader.length = av_be2ne32(header->length);
         memcpy( &buf[bufIdx], &tempHeader.length, sizeof(unsigned long) );
         bufIdx += sizeof(unsigned long);
 
-        tempHeader.channelID = be2me_32(header->channelID);
+        tempHeader.channelID = av_be2ne32(header->channelID);
         memcpy( &buf[bufIdx], &tempHeader.channelID, sizeof(long) );
         bufIdx += sizeof(long);
 
-        tempHeader.sequence = be2me_32(header->sequence); /* Currently unsupported at server */
+        tempHeader.sequence = av_be2ne32(header->sequence); /* Currently unsupported at server */
         memcpy( &buf[bufIdx], &tempHeader.sequence, sizeof(long) );
         bufIdx += sizeof(long);
 
-        tempHeader.messageVersion = be2me_32(header->messageVersion);
+        tempHeader.messageVersion = av_be2ne32(header->messageVersion);
         memcpy( &buf[bufIdx], &tempHeader.messageVersion, sizeof(unsigned long) );
         bufIdx += sizeof(unsigned long);
 
-        tempHeader.checksum = be2me_32(header->checksum); /* As suggested in protocol documentation */
+        tempHeader.checksum = av_be2ne32(header->checksum); /* As suggested in protocol documentation */
         memcpy( &buf[bufIdx], &tempHeader.checksum, sizeof(long) );
         bufIdx += sizeof(long);
 
-        tempHeader.messageType = be2me_32(header->messageType);
+        tempHeader.messageType = av_be2ne32(header->messageType);
         memcpy( &buf[bufIdx], &tempHeader.messageType, sizeof(long) );
         bufIdx += sizeof(long);
     }
