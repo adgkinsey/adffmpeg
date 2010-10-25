@@ -397,11 +397,35 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
 	p->frameInfo.frameBufferSize = MAX_FRAMEBUFFER_SIZE;
 	p->frameInfo.frameBuffer = av_malloc(p->frameInfo.frameBufferSize);
 	
+	switch(av_log_get_level())  {
+		case(AV_LOG_QUIET):
+			parReader_setLogLevel(-1);
+			break;
+		case(AV_LOG_PANIC):
+			parReader_setLogLevel(PARREADER_LOG_CRITICAL);
+			break;
+		case(AV_LOG_FATAL):
+			parReader_setLogLevel(PARREADER_LOG_CRITICAL);
+			break;
+		case(AV_LOG_ERROR):
+			parReader_setLogLevel(PARREADER_LOG_ERROR);
+			break;
+		case(AV_LOG_WARNING):
+			parReader_setLogLevel(PARREADER_LOG_WARNING);
+			break;
+		case(AV_LOG_INFO):
+			parReader_setLogLevel(PARREADER_LOG_INFO);
+			break;
+		case(AV_LOG_VERBOSE):
+			parReader_setLogLevel(PARREADER_LOG_INFO);
+			break;
+		case(AV_LOG_DEBUG):
+			parReader_setLogLevel(PARREADER_LOG_DEBUG);
+			break;
+	}
+	
 	parReader_setDisplaySettingsDefaults(&p->dispSet);
-	
-	parReader_setLogLevel(PARREADER_LOG_WARNING);
-	//parReader_setLogLevel(PARREADER_LOG_DEBUG);
-	
+		
 	res = parReader_loadParFile(NULL, avf->filename, -1, &p->frameInfo, 0);
 	if (0 == res)
 		return AVERROR(EIO);
