@@ -98,38 +98,38 @@ static AdpicContext* lastProbedCtxt;
 
 static void pic_network2host(NetVuImageData *pic)
 {
-	network2host32(pic->version);
-	network2host32(pic->mode);
-	network2host32(pic->cam);
-	network2host32(pic->vid_format);
-	network2host32(pic->start_offset);
-	network2host32(pic->size);
-	network2host32(pic->max_size);
-	network2host32(pic->target_size);
-	network2host32(pic->factor);
-	network2host32(pic->alm_bitmask_hi);
-	network2host32(pic->status);
-	network2host32(pic->session_time);
-	network2host32(pic->milliseconds);
-	network2host32(pic->utc_offset);
-	network2host32(pic->alm_bitmask);
-	network2host16(pic->format.src_pixels);
-	network2host16(pic->format.src_lines);
-	network2host16(pic->format.target_pixels);
-	network2host16(pic->format.target_lines);
-	network2host16(pic->format.pixel_offset);
-	network2host16(pic->format.line_offset);
+	pic->version				= be2me_32(pic->version);
+	pic->mode					= be2me_32(pic->mode);
+	pic->cam					= be2me_32(pic->cam);
+	pic->vid_format				= be2me_32(pic->vid_format);
+	pic->start_offset			= be2me_32(pic->start_offset);
+	pic->size					= be2me_32(pic->size);
+	pic->max_size				= be2me_32(pic->max_size);
+	pic->target_size			= be2me_32(pic->target_size);
+	pic->factor					= be2me_32(pic->factor);
+	pic->alm_bitmask_hi			= be2me_32(pic->alm_bitmask_hi);
+	pic->status					= be2me_32(pic->status);
+	pic->session_time			= be2me_32(pic->session_time);
+	pic->milliseconds			= be2me_32(pic->milliseconds);
+	pic->utc_offset				= be2me_32(pic->utc_offset);
+	pic->alm_bitmask			= be2me_32(pic->alm_bitmask);
+	pic->format.src_pixels		= be2me_16(pic->format.src_pixels);
+	pic->format.src_lines		= be2me_16(pic->format.src_lines);
+	pic->format.target_pixels	= be2me_16(pic->format.target_pixels);
+	pic->format.target_lines	= be2me_16(pic->format.target_lines);
+	pic->format.pixel_offset	= be2me_16(pic->format.pixel_offset);
+	pic->format.line_offset		= be2me_16(pic->format.line_offset);
 }
 
 static void audioheader_network2host( NetVuAudioData *hdr )
 {
-    network2host32(hdr->version);
-    network2host32(hdr->mode);
-    network2host32(hdr->channel);
-    network2host32(hdr->sizeOfAdditionalData);
-    network2host32(hdr->sizeOfAudioData);
-    network2host32(hdr->seconds);
-    network2host32(hdr->msecs);
+    hdr->version				= be2me_32(hdr->version);
+    hdr->mode					= be2me_32(hdr->mode);
+    hdr->channel				= be2me_32(hdr->channel);
+    hdr->sizeOfAdditionalData	= be2me_32(hdr->sizeOfAdditionalData);
+    hdr->sizeOfAudioData		= be2me_32(hdr->sizeOfAudioData);
+    hdr->seconds				= be2me_32(hdr->seconds);
+    hdr->msecs					= be2me_32(hdr->msecs);
 }
 
 static const char *     MIME_BOUNDARY_PREFIX1 = "--0plm(";
@@ -1076,7 +1076,7 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     {
         // Get info out of the separator
 	    memcpy(&size, &adpkt[DATA_SIZE_BYTE_0], 4);
-	    network2host32(size);
+	    size = be2me_32(size);
 	    data_type = adpkt[DATA_TYPE];
 	    data_channel = (adpkt[DATA_CHANNEL]+1);
     }
@@ -1441,8 +1441,8 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		        goto cleanup;
             }
 
-            network2host32(videoHeader.t);
-            network2host16(videoHeader.ms);
+            videoHeader.t  = be2me_32(videoHeader.t);
+            videoHeader.ms = be2me_16(videoHeader.ms);
 
             /* Copy pertinent data into generic video data structure */
             video_data->cam = data_channel;
@@ -1488,9 +1488,9 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		        goto cleanup;
             }
 
-            network2host32(audioHeader.t);
-            network2host16(audioHeader.ms);
-            network2host16(audioHeader.mode);
+            audioHeader.t    = be2me_32(audioHeader.t);
+            audioHeader.ms   = be2me_16(audioHeader.ms);
+            audioHeader.mode = be2me_16(audioHeader.mode);
 
             /* Copy pertinent data into generic audio data structure */
             audio_data->mode = audioHeader.mode;
