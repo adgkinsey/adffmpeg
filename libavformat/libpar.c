@@ -20,6 +20,8 @@
  */
 
 #include "avformat.h"
+#include "libavutil/bswap.h"
+
 #include "ds_exports.h"
 #include "libpar.h"
 
@@ -370,18 +372,13 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 
 static int par_probe(AVProbeData *p)
 {
-	int res;
-	ParFrameInfo fInfo;
-	fInfo.frameBuffer = p->buf;
-	fInfo.frameBufferSize = p->buf_size;
+	unsigned long first4;
+	if (p->buf_size < 4)
+		return 0;
 	
-	parReader_setLogLevel(PARREADER_LOG_WARNING);
-	//parReader_setLogLevel(PARREADER_LOG_DEBUG);
-	
-    av_log(NULL, AV_LOG_DEBUG, "par_probe:  %s\n", p->filename);
-	res = parReader_loadParFile(NULL, p->filename, -1, &fInfo, 0);
-	//parReader_closeParFile();
-	if (1 == res)
+	first4 = *((unsigned long *)p->buf);
+	first4 = le2me_32(first4);
+	if (first4 == 0x00524150)
 		return AVPROBE_SCORE_MAX;
 	else
 		return 0;
@@ -389,7 +386,7 @@ static int par_probe(AVProbeData *p)
 
 static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
 {
-	int siz;
+	int res, siz;
 	PARContext *p = avf->priv_data;
 	char **filelist;
 	int seqLen;
@@ -401,6 +398,13 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
 	p->frameInfo.frameBuffer = av_malloc(p->frameInfo.frameBufferSize);
 	
 	parReader_setDisplaySettingsDefaults(&p->dispSet);
+	
+	parReader_setLogLevel(PARREADER_LOG_WARNING);
+	//parReader_setLogLevel(PARREADER_LOG_DEBUG);
+	
+	res = parReader_loadParFile(NULL, avf->filename, -1, &p->frameInfo, 0);
+	if (0 == res)
+		return AVERROR(EIO);
 	
 	seqLen = parReader_getFilelist(&filelist);
 	if (1 == seqLen)  {
@@ -431,8 +435,6 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
 	
 	// Reading the header opens the file, so ignore this file change notifier
 	p->fileChanged = 0;
-	
-	parReader_getFilename(avf->filename, sizeof(avf->filename));
     
 	strm = createStream(avf, &p->frameInfo);
 	if (strm)  {
