@@ -165,6 +165,9 @@ AVStream* createStream(AVFormatContext * avf,
 			
 			parReader_getStreamDate(frameInfo, textbuffer, sizeof(textbuffer));
 			av_metadata_set2(&st->metadata, "date", textbuffer, 0);
+			
+			snprintf(textbuffer, sizeof(textbuffer), "%d", frameInfo->channel);
+			av_metadata_set2(&st->metadata, "camera", textbuffer, 0);
 		}
 	}
 	else if (parReader_frameIsAudio(frameInfo))  {

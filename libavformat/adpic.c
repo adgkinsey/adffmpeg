@@ -328,6 +328,7 @@ static AVStream *get_stream(struct AVFormatContext *s, NetVuImageData *pic)
     int yres = pic->format.target_lines;
     int codec_type, codec_id, id;
     int i, found;
+	char textbuffer[4];
     AVStream *st;
 
 	switch(pic->vid_format)
@@ -394,6 +395,8 @@ static AVStream *get_stream(struct AVFormatContext *s, NetVuImageData *pic)
 			st->codec->time_base = (AVRational){1,1000};
 			
 			av_metadata_set2(&st->metadata, "title", pic->title, 0);
+			snprintf(textbuffer, sizeof(textbuffer), "%d", pic->cam);
+			av_metadata_set2(&st->metadata, "camera", textbuffer, 0);
 		}
 	}
 	return st;
