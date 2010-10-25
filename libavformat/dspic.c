@@ -22,34 +22,6 @@ static const char *     DSApp0Identifier = "DigiSpr";
 #define TRUE    1
 #define FALSE   0
 
-#ifdef WORDS_BIGENDIAN
-#define network2host32(x) x = x
-#define host2network32(x) x = x
-#define host2be32(x) x = x
-#define be2host32(x) x = x
-#define host2le32(x) ((void)(x=bswap_32(x)))
-#define le2host32(x) ((void)(x=bswap_32(x)))
-#define network2host16(x) 
-#define host2network16(x)
-#define host2be16(x)
-#define be2host16(x)
-#define host2le16(x) ((void)(x=bswap_32(x)))
-#define le2host16(x) ((void)(x=bswap_32(x)))
-#else
-#define network2host32(x) ((void)(x=bswap_32(x)))
-#define host2network32(x) ((void)(x=bswap_32(x)))
-#define host2be32(x) ((void)(x=bswap_32(x)))
-#define be2host32(x) ((void)(x=bswap_32(x)))
-#define host2le32(x) x = x 
-#define le2host32(x) x = x
-#define network2host16(x) ((void)(x=bswap_16(x)))
-#define host2network16(x) ((void)(x=bswap_16(x)))
-#define host2be16(x) ((void)(x=bswap_16(x)))
-#define be2host16(x) ((void)(x=bswap_16(x)))
-#define host2le16(x) 
-#define le2host16(x) 
-#endif
-
 
 static int dspicProbe( AVProbeData *p )
 {
@@ -61,7 +33,7 @@ static int dspicProbe( AVProbeData *p )
     /* Get what should be the magic number field of the first header */
     memcpy( &magicNumber, p->buf, sizeof(long) );
     /* Adjust the byte ordering */
-    magicNumber = NTOH32(magicNumber);
+    magicNumber = be2me_32(magicNumber);
 
     if( magicNumber == DSPacketHeaderMagicNumber )
         return 100;
@@ -179,8 +151,8 @@ static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize )
 		i+= 2;
 		memcpy(&length, &data[i], 2 );
 		i+= 2;
-		network2host16(marker);
-		network2host16(length);
+		marker = be2me_16(marker);
+		length = be2me_16(length);
 
 		switch (marker)
 		{
@@ -253,11 +225,11 @@ static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData )
 
         memcpy( &frameData->jpegLength, &buffer[bufIdx], sizeof(unsigned long) );
         bufIdx += sizeof(unsigned long);
-        frameData->jpegLength = NTOH32(frameData->jpegLength);
+        frameData->jpegLength = be2me_32(frameData->jpegLength);
 
         memcpy( &frameData->imgSeq, &buffer[bufIdx], sizeof(int64_t) );
         bufIdx += sizeof(int64_t);
-        frameData->imgSeq = NTOH64(frameData->imgSeq);
+        frameData->imgSeq = be2me_64(frameData->imgSeq);
 
         memcpy( &frameData->imgTime, &buffer[bufIdx], sizeof(int64_t) );
         bufIdx += sizeof(int64_t);
@@ -273,27 +245,27 @@ static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData )
 
         memcpy( &frameData->QFactor, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->QFactor = NTOH16(frameData->QFactor);
+        frameData->QFactor = be2me_16(frameData->QFactor);
 
         memcpy( &frameData->height, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->height = NTOH16(frameData->height);
+        frameData->height = be2me_16(frameData->height);
 
         memcpy( &frameData->width, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->width = NTOH16(frameData->width);
+        frameData->width = be2me_16(frameData->width);
 
         memcpy( &frameData->resolution, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->resolution = NTOH16(frameData->resolution);
+        frameData->resolution = be2me_16(frameData->resolution);
 
         memcpy( &frameData->interlace, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->interlace = NTOH16(frameData->interlace);
+        frameData->interlace = be2me_16(frameData->interlace);
 
         memcpy( &frameData->subHeaderMask, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->subHeaderMask = NTOH16(frameData->subHeaderMask);
+        frameData->subHeaderMask = be2me_16(frameData->subHeaderMask);
 
         memcpy( frameData->camTitle, &buffer[bufIdx], sizeof(char) * CAM_TITLE_LENGTH );
         bufIdx += sizeof(char) * CAM_TITLE_LENGTH;
