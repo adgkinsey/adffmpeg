@@ -25,6 +25,13 @@ static void parse_comment( char *text, int text_len, NetVuImageData *pic, char *
 static void calcQtabs(void);
 
 
+#if HAVE_BIGENDIAN
+#define host2network16(x)
+#else
+#define host2network16(x) ((void)(x=bswap_16(x)))
+#endif
+
+
 /* JCB 004 start */
 static const char comment_version[] = "Version: 00.02\r\n";
 static const char comment_version_0_1[] = "Version: 00.01\r\n";
@@ -605,8 +612,8 @@ int huf_cmp_offset=0, huf_tab_no=0;
 		i+= 2;
 		memcpy(&length, &data[i], 2 );
 		i+= 2;
-		network2host16(marker);
-		network2host16(length);
+		marker = be2me_16(marker);
+		length = be2me_16(length);
 
 		switch (marker)
 		{
@@ -631,9 +638,9 @@ int huf_cmp_offset=0, huf_tab_no=0;
 			break;
 		case 0xffc0 :	// SOF
 			memcpy(&pic->format.target_pixels, &data[i+3], 2);
-			network2host16(pic->format.target_pixels);
+			pic->format.target_pixels = be2me_16(pic->format.target_pixels);
 			memcpy(&pic->format.target_lines, &data[i+1], 2);
-			network2host16(pic->format.target_lines);
+			pic->format.target_lines = be2me_16(pic->format.target_lines);
 			if (data[i+7]==0x22)	// PRC 022
 			{
 				pic->vid_format = PIC_MODE_JPEG_411;

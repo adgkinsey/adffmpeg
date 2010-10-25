@@ -2,14 +2,11 @@
 #include "libavcodec/avcodec.h"
 #include "libavutil/bswap.h"
 #include "ds.h"
-#include "dspic.h"
 
 static int dspicProbe( AVProbeData *p );
 static int dspicReadHeader( AVFormatContext *s, AVFormatParameters *ap );
 static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt );
 static int dspicReadClose( AVFormatContext *s );
-static int dspicReadSeek( AVFormatContext *s, int stream_index, int64_t timestamp, int flags );
-static int64_t dspicReadPts( AVFormatContext *s, int stream_index, int64_t *ppos, int64_t pos_limit );
 static AVStream * GetStream( struct AVFormatContext *s, int camera, int width, int height );
 static int ReadNetworkMessageHeader( ByteIOContext *context, MessageHeader *header );
 static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize );
@@ -18,53 +15,12 @@ static int dspic_new_packet(AVPacket *pkt, int size);
 static void dspic_release_packet( AVPacket *pkt );
 
 
-static const long       DSPacketHeaderMagicNumber = 0xfaced0ff;
+static const long       DSPacketHeaderMagicNumber = DS_HEADER_MAGIC_NUMBER;
 static const char *     DSApp0Identifier = "DigiSpr";
-
-
-AVInputFormat dspic_demuxer = {
-    "dspic",
-    "dspic format",
-    sizeof(DSPicFormat),
-    dspicProbe,
-    dspicReadHeader,
-    dspicReadPacket,
-    dspicReadClose,
-    dspicReadSeek,
-    dspicReadPts,
-};
 
 
 #define TRUE    1
 #define FALSE   0
-
-#ifdef WORDS_BIGENDIAN
-#define network2host32(x) x = x
-#define host2network32(x) x = x
-#define host2be32(x) x = x
-#define be2host32(x) x = x
-#define host2le32(x) ((void)(x=av_bswap32(x)))
-#define le2host32(x) ((void)(x=av_bswap32(x)))
-#define network2host16(x) 
-#define host2network16(x)
-#define host2be16(x)
-#define be2host16(x)
-#define host2le16(x) ((void)(x=av_bswap32(x)))
-#define le2host16(x) ((void)(x=av_bswap32(x)))
-#else
-#define network2host32(x) ((void)(x=av_bswap32(x)))
-#define host2network32(x) ((void)(x=av_bswap32(x)))
-#define host2be32(x) ((void)(x=av_bswap32(x)))
-#define be2host32(x) ((void)(x=av_bswap32(x)))
-#define host2le32(x) x = x 
-#define le2host32(x) x = x
-#define network2host16(x) ((void)(x=av_bswap16(x)))
-#define host2network16(x) ((void)(x=av_bswap16(x)))
-#define host2be16(x) ((void)(x=av_bswap16(x)))
-#define be2host16(x) ((void)(x=av_bswap16(x)))
-#define host2le16(x) 
-#define le2host16(x) 
-#endif
 
 
 static int dspicProbe( AVProbeData *p )
@@ -77,7 +33,7 @@ static int dspicProbe( AVProbeData *p )
     /* Get what should be the magic number field of the first header */
     memcpy( &magicNumber, p->buf, sizeof(long) );
     /* Adjust the byte ordering */
-    magicNumber = NTOH32(magicNumber);
+    magicNumber = be2me_32(magicNumber);
 
     if( magicNumber == DSPacketHeaderMagicNumber )
         return 100;
@@ -195,8 +151,8 @@ static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize )
 		i+= 2;
 		memcpy(&length, &data[i], 2 );
 		i+= 2;
-		network2host16(marker);
-		network2host16(length);
+		marker = be2me_16(marker);
+		length = be2me_16(length);
 
 		switch (marker)
 		{
@@ -269,11 +225,11 @@ static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData )
 
         memcpy( &frameData->jpegLength, &buffer[bufIdx], sizeof(unsigned long) );
         bufIdx += sizeof(unsigned long);
-        frameData->jpegLength = NTOH32(frameData->jpegLength);
+        frameData->jpegLength = be2me_32(frameData->jpegLength);
 
         memcpy( &frameData->imgSeq, &buffer[bufIdx], sizeof(int64_t) );
         bufIdx += sizeof(int64_t);
-        frameData->imgSeq = NTOH64(frameData->imgSeq);
+        frameData->imgSeq = be2me_64(frameData->imgSeq);
 
         memcpy( &frameData->imgTime, &buffer[bufIdx], sizeof(int64_t) );
         bufIdx += sizeof(int64_t);
@@ -289,27 +245,27 @@ static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData )
 
         memcpy( &frameData->QFactor, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->QFactor = NTOH16(frameData->QFactor);
+        frameData->QFactor = be2me_16(frameData->QFactor);
 
         memcpy( &frameData->height, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->height = NTOH16(frameData->height);
+        frameData->height = be2me_16(frameData->height);
 
         memcpy( &frameData->width, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->width = NTOH16(frameData->width);
+        frameData->width = be2me_16(frameData->width);
 
         memcpy( &frameData->resolution, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->resolution = NTOH16(frameData->resolution);
+        frameData->resolution = be2me_16(frameData->resolution);
 
         memcpy( &frameData->interlace, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->interlace = NTOH16(frameData->interlace);
+        frameData->interlace = be2me_16(frameData->interlace);
 
         memcpy( &frameData->subHeaderMask, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->subHeaderMask = NTOH16(frameData->subHeaderMask);
+        frameData->subHeaderMask = be2me_16(frameData->subHeaderMask);
 
         memcpy( frameData->camTitle, &buffer[bufIdx], sizeof(char) * CAM_TITLE_LENGTH );
         bufIdx += sizeof(char) * CAM_TITLE_LENGTH;
@@ -356,17 +312,6 @@ static int ReadNetworkMessageHeader( ByteIOContext *context, MessageHeader *head
 static int dspicReadClose( AVFormatContext *s )
 {
     return 0;
-}
-
-static int dspicReadSeek( AVFormatContext *s, int stream_index, int64_t timestamp, int flags )
-{
-    /* Unsupported */
-    return -1;
-}
-
-static int64_t dspicReadPts( AVFormatContext *s, int stream_index, int64_t *ppos, int64_t pos_limit )
-{
-    return -1;
 }
 
 static AVStream * GetStream( struct AVFormatContext *s, int camera, int width, int height )
@@ -452,3 +397,13 @@ static void dspic_release_packet( AVPacket *pkt )
         av_destruct_packet( pkt );
     }
 }
+
+
+AVInputFormat dspic_demuxer = {
+    .name           = "dspic",
+    .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings Digital-Sprite format"), 
+    .read_probe     = dspicProbe,
+    .read_header    = dspicReadHeader,
+    .read_packet    = dspicReadPacket,
+    .read_close     = dspicReadClose,
+};

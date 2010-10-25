@@ -29,40 +29,11 @@
 #include "os_support.h"
 #include "httpauth.h"
 #include "libavutil/opt.h"
+#include "netvu.h"
+
 
 /* XXX: POST protocol is not completely implemented because ffmpeg uses
    only a subset of it. */
-
-/* used for protocol handling */
-#define BUFFER_SIZE 1024
-#define MAX_REDIRECTS 8
-
-typedef struct {
-    const AVClass *class;
-    URLContext *hd;
-    unsigned char buffer[BUFFER_SIZE], *buf_ptr, *buf_end;
-    int line_count;
-    int http_code;
-    int64_t chunksize;      /**< Used if "Transfer-Encoding: chunked" otherwise -1. */
-    int64_t off, filesize;
-    char location[MAX_URL_SIZE];
-    HTTPAuthState auth_state;
-    unsigned char headers[BUFFER_SIZE];
-    int willclose;          /**< Set if the server correctly handles Connection: close and will close the connection after feeding us the content. */
-
-    /* BMOJ - added to hold utc_offset from header */
-	char* sever;
-    char* content;
-    char* resolution;
-    char* compression;
-    char* rate;
-    char* pps;
-    char* site_id;
-    char* boundry;
-
-    int utc_offset;
-    int isBinary;
-} NetvuContext;
 
 #define OFFSET(x) offsetof(NetvuContext, x)
 static const AVOption options[] = {
@@ -273,7 +244,7 @@ static int process_line(URLContext *h, char *line, int line_count,
         } else if (!strcmp (tag, "Content-type")) {
             netvu_parse_content_type_header( p, s );
         } else if(!strcmp(tag, "Server")) {
-			copy_value_to_field( p, &s->sever);
+			copy_value_to_field( p, &s->server);
 		}
     }
     return 1;
@@ -344,23 +315,23 @@ static void netvu_parse_content_type_header( char * p, NetvuContext *s )
                 *(value + strlen(value) - 1) = '\0';
                 value += 1;
             }
-        }
 
-        /* Copy the attribute into the relevant field */
-		if( strcmp( name, "resolution" ) == 0 )
-            copy_value_to_field( value, &s->resolution);
-        if( strcmp( name, "compression" ) == 0 )
-            copy_value_to_field( value, &s->compression);
-        if( strcmp( name, "rate" ) == 0 )
-            copy_value_to_field( value, &s->rate);
-        if( strcmp( name, "pps" ) == 0 )
-            copy_value_to_field( value, &s->pps);
-        if( strcmp( name, "utc_offset" ) == 0 )
-		    s->utc_offset = atoi(value);
-		if( strcmp( name, "site_id" ) == 0 )
-            copy_value_to_field( value, &s->site_id);
-        if( strcmp( name, "boundary" ) == 0 )
-            copy_value_to_field( value, &s->boundry);
+			/* Copy the attribute into the relevant field */
+			if( strcmp( name, "resolution" ) == 0 )
+				copy_value_to_field( value, &s->resolution);
+			if( strcmp( name, "compression" ) == 0 )
+				copy_value_to_field( value, &s->compression);
+			if( strcmp( name, "rate" ) == 0 )
+				copy_value_to_field( value, &s->rate);
+			if( strcmp( name, "pps" ) == 0 )
+				copy_value_to_field( value, &s->pps);
+			if( strcmp( name, "utc_offset" ) == 0 )
+				s->utc_offset = atoi(value);
+			if( strcmp( name, "site_id" ) == 0 )
+				copy_value_to_field( value, &s->site_id);
+			if( strcmp( name, "boundary" ) == 0 )
+				copy_value_to_field( value, &s->boundry);
+		}
     }
 }
 
@@ -455,8 +426,6 @@ static int netvu_connect(URLContext *h, const char *path, const char *hoststr,
             return err;
         if (err == 0)
             break;
-        h->utc_offset = s->utc_offset;
-        h->isBinary = s->isBinary;
         s->line_count++;
     }
 
@@ -552,8 +521,8 @@ static int netvu_close(URLContext *h)
     if (s->hd)
     	url_close(s->hd);
 	
-    if( s->sever )
-		av_free( s->sever );
+    if( s->server )
+		av_free( s->server );
 
     if( s->content )
         av_free( s->content );

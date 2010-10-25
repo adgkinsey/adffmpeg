@@ -53,9 +53,6 @@ typedef struct URLContext {
     void *priv_data;
     char *filename; /**< specified URL */
     int is_connected;
-	
-    int utc_offset;
-    int isBinary;
 } URLContext;
 
 typedef struct URLPollEntry {

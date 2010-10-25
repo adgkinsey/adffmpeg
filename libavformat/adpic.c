@@ -27,11 +27,11 @@
 */
 
 #include "avformat.h"
-#include "libavcodec/avcodec.h"
 #include "libavutil/bswap.h"
 
 #include "adpic.h"
 #include "jfif_img.h"
+#include "netvu.h"
 
 
 #define BINARY_PUSH_MIME_STR    "video/adhbinary"
@@ -40,6 +40,14 @@
 /* These are the data types that are supported by the DS2 video servers. */
 enum data_type { DATA_JPEG, DATA_JFIF, DATA_MPEG4I, DATA_MPEG4P, DATA_AUDIO_ADPCM, DATA_AUDIO_RAW, DATA_MINIMAL_MPEG4, DATA_MINIMAL_AUDIO_ADPCM, DATA_LAYOUT, DATA_INFO, DATA_H264I, DATA_H264P, DATA_XML_INFO, MAX_DATA_TYPE };
 #define DATA_PLAINTEXT              (MAX_DATA_TYPE + 1)   /* This value is only used internally within the library DATA_PLAINTEXT blocks should not be exposed to the client */
+
+
+typedef struct {
+	int isMIME;
+    int utc_offset;
+    int isBinary;
+} AdpicContext;
+
 
 static int adpicSkipInfoList(ByteIOContext * pb);
 static int adpicFindTag(const char *Tag, ByteIOContext *pb, int MaxLookAhead);
@@ -85,40 +93,43 @@ typedef struct _minimal_audio_header	// PRC 002
 }MinimalAudioHeader;
 
 
+static AdpicContext* lastProbedCtxt;
+
+
 static void pic_network2host(NetVuImageData *pic)
 {
-	network2host32(pic->version);
-	network2host32(pic->mode);
-	network2host32(pic->cam);
-	network2host32(pic->vid_format);
-	network2host32(pic->start_offset);
-	network2host32(pic->size);
-	network2host32(pic->max_size);
-	network2host32(pic->target_size);
-	network2host32(pic->factor);
-	network2host32(pic->alm_bitmask_hi);
-	network2host32(pic->status);
-	network2host32(pic->session_time);
-	network2host32(pic->milliseconds);
-	network2host32(pic->utc_offset);
-	network2host32(pic->alm_bitmask);
-	network2host16(pic->format.src_pixels);
-	network2host16(pic->format.src_lines);
-	network2host16(pic->format.target_pixels);
-	network2host16(pic->format.target_lines);
-	network2host16(pic->format.pixel_offset);
-	network2host16(pic->format.line_offset);
+	pic->version				= be2me_32(pic->version);
+	pic->mode					= be2me_32(pic->mode);
+	pic->cam					= be2me_32(pic->cam);
+	pic->vid_format				= be2me_32(pic->vid_format);
+	pic->start_offset			= be2me_32(pic->start_offset);
+	pic->size					= be2me_32(pic->size);
+	pic->max_size				= be2me_32(pic->max_size);
+	pic->target_size			= be2me_32(pic->target_size);
+	pic->factor					= be2me_32(pic->factor);
+	pic->alm_bitmask_hi			= be2me_32(pic->alm_bitmask_hi);
+	pic->status					= be2me_32(pic->status);
+	pic->session_time			= be2me_32(pic->session_time);
+	pic->milliseconds			= be2me_32(pic->milliseconds);
+	pic->utc_offset				= be2me_32(pic->utc_offset);
+	pic->alm_bitmask			= be2me_32(pic->alm_bitmask);
+	pic->format.src_pixels		= be2me_16(pic->format.src_pixels);
+	pic->format.src_lines		= be2me_16(pic->format.src_lines);
+	pic->format.target_pixels	= be2me_16(pic->format.target_pixels);
+	pic->format.target_lines	= be2me_16(pic->format.target_lines);
+	pic->format.pixel_offset	= be2me_16(pic->format.pixel_offset);
+	pic->format.line_offset		= be2me_16(pic->format.line_offset);
 }
 
 static void audioheader_network2host( NetVuAudioData *hdr )
 {
-    network2host32(hdr->version);
-    network2host32(hdr->mode);
-    network2host32(hdr->channel);
-    network2host32(hdr->sizeOfAdditionalData);
-    network2host32(hdr->sizeOfAudioData);
-    network2host32(hdr->seconds);
-    network2host32(hdr->msecs);
+    hdr->version				= be2me_32(hdr->version);
+    hdr->mode					= be2me_32(hdr->mode);
+    hdr->channel				= be2me_32(hdr->channel);
+    hdr->sizeOfAdditionalData	= be2me_32(hdr->sizeOfAdditionalData);
+    hdr->sizeOfAudioData		= be2me_32(hdr->sizeOfAudioData);
+    hdr->seconds				= be2me_32(hdr->seconds);
+    hdr->msecs					= be2me_32(hdr->msecs);
 }
 
 static const char *     MIME_BOUNDARY_PREFIX1 = "--0plm(";
@@ -137,11 +148,10 @@ static const char *     MIME_TYPE_MP4  = "image/admp4";
 static const char *     MIME_TYPE_TEXT = "text/plain";
 static const char *     MIME_TYPE_ADPCM = "audio/adpcm";
 static const char *     MIME_TYPE_LAYOUT = "data/layout";
-static int              isMIME = 0;
 
 /****************************************************************************************************************
  * Function: adpic_probe
- * Desc: used to identifi the stream as an ad stream 
+ * Desc: used to identify the stream as an ad stream 
  * Params: 
  * Return:
  *  AVPROBE_SCORE_MAX if this straem is identifide as a ad stream 0 if not 
@@ -167,17 +177,23 @@ static int adpic_probe(AVProbeData *p)
     //10 DATA_H264I, 
     //11 DATA_H264P, 
     //12 DATA_XML_INFO
+	
+	if (lastProbedCtxt)
+		av_free(lastProbedCtxt);
+		
+	lastProbedCtxt = av_malloc(sizeof(*lastProbedCtxt));
     
-    if ( (p->buf[DATA_SIZE_BYTE_0] == 0) && (p->buf[DATA_SIZE_BYTE_1] == 0) )
-    {
-        if ((p->buf[DATA_TYPE] == DATA_INFO)                || 
-            (p->buf[DATA_TYPE] <= DATA_MINIMAL_AUDIO_ADPCM) ||
-            (p->buf[DATA_TYPE] == DATA_XML_INFO)            )
-        {
-            isMIME = FALSE;
-            return AVPROBE_SCORE_MAX;
-        }
-    }
+	if ((p->buf[DATA_TYPE] <= DATA_XML_INFO) && (p->buf[DATA_CHANNEL] <= 32))  {
+		unsigned long dataSize = (p->buf[DATA_SIZE_BYTE_0] << 24) + 
+								 (p->buf[DATA_SIZE_BYTE_1] << 16) + 
+								 (p->buf[DATA_SIZE_BYTE_2] << 8 ) + 
+								 p->buf[DATA_SIZE_BYTE_3];
+		if (dataSize <= 0xFFFF)  {
+			lastProbedCtxt->isBinary = TRUE;
+			lastProbedCtxt->isMIME = FALSE;
+			return AVPROBE_SCORE_MAX;
+		}
+	}
     else
     {
         int server_adjustment = 0;
@@ -201,7 +217,8 @@ static int adpic_probe(AVProbeData *p)
         /* Good start, Now check whether we have the start of a MIME boundary separator */
         if( adpic_is_valid_separator( &p->buf[server_adjustment], p->buf_size - server_adjustment ) > 0 )
         {
-            isMIME = TRUE;
+			lastProbedCtxt->isBinary = FALSE;
+			lastProbedCtxt->isMIME = TRUE;
             return AVPROBE_SCORE_MAX;
         }
     }
@@ -267,56 +284,40 @@ static int adpic_read_close(AVFormatContext *s)
 
 static int adpic_read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
-#if 0
-ByteIOContext *pb = s->pb;
-char header_str[256], *hptr, *h0;
-int i, found = FALSE;
-uint32_t header_word;
-h0 = hptr = &header_str[0];
+	AdpicContext*   adpicContext = s->priv_data;
+	ByteIOContext*	pb = s->pb;
+	URLContext*		urlContext = pb->opaque;
+	NetvuContext*	netvu = NULL;
 
-#if 0
-	while(!url_feof(pb))
-	{
-		*hptr = url_fgetc(pb);
-		if ((hptr-h0)>3)
-		{
-			if ( (*(hptr-0) == 0x0a) && (*(hptr-1) == 0x0d) && (*(hptr-2) == 0x0a) && (*(hptr-3) == 0x0d) )
-			{
-				found = TRUE;
-				break;
-			}
-		}
-		else if ((hptr-h0)>=255)
-		{
-			break;
-		}
-		else if (*hptr==0)
-		{
-			break;
-		}
-	}
-	*hptr = 0;
-#else
-	hptr = (char *)&header_word;
-	for (i=0; i<4; i++)
-	{
-		*hptr++ = pb->buf_ptr[i];
-		if (url_feof(pb))
-			return -1;
-	}
-	network2host32(header_word);
-	if (header_word == 0x09000000)
-		found = TRUE;
-#endif
 
-	if (!found)
-	{
-		return -1;
+	s->ctx_flags |= AVFMTCTX_NOHEADER;
+	
+	if (urlContext && urlContext->is_streamed)
+		netvu = urlContext->priv_data;
+	
+	if (netvu)  {
+		if (adpicContext)  {
+			adpicContext->utc_offset	= netvu->utc_offset;
+			adpicContext->isBinary		= netvu->isBinary;
+			if (netvu->boundry)
+				adpicContext->isMIME		= TRUE;
+			else
+				adpicContext->isMIME		= FALSE;
+		}
+		av_metadata_set2(&s->metadata, "server",		netvu->server, 		0);
+		av_metadata_set2(&s->metadata, "content",		netvu->content, 	0);
+		av_metadata_set2(&s->metadata, "resolution",	netvu->resolution, 	0);
+		av_metadata_set2(&s->metadata, "compression",	netvu->compression, 0);
+		av_metadata_set2(&s->metadata, "rate",			netvu->rate, 		0);
+		av_metadata_set2(&s->metadata, "pps",			netvu->pps, 		0);
+		av_metadata_set2(&s->metadata, "site_id",		netvu->site_id, 	0);
+		//av_metadata_set2(&s->metadata, "boundry",		netvu->boundry, 	0);
 	}
-//	printf("%s",header_str );
-#endif
-    s->ctx_flags |= AVFMTCTX_NOHEADER;
-//    s->ctx_flags |= 0;
+	else if (lastProbedCtxt) {
+		*adpicContext = *lastProbedCtxt;
+		av_free(lastProbedCtxt);
+		lastProbedCtxt = NULL;
+	}
 					
 	return 0;
 }
@@ -391,6 +392,8 @@ static AVStream *get_stream(struct AVFormatContext *s, NetVuImageData *pic)
 			st->r_frame_rate = (AVRational){1,1000};
 			av_set_pts_info(st, 32, 1, 1000);
 			st->codec->time_base = (AVRational){1,1000};
+			
+			av_metadata_set2(&st->metadata, "title", pic->title, 0);
 		}
 	}
 	return st;
@@ -879,7 +882,7 @@ static int process_mp4data_line( char *line, int line_count, NetVuImageData *vid
     }
     else if( !memcmp( tag, "UTCoffset", strlen( "UTCoffset" ) ) )
     {
-        video_data->utc_offset = strtol(p, NULL, 10); /* Get the version number */
+        video_data->utc_offset = strtol(p, NULL, 10); /* Get the timezone */
     }
     else
     {
@@ -1000,8 +1003,8 @@ static int adpicFindTag(const char *Tag, ByteIOContext *pb, int MaxLookAhead)
 
 static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
+	AdpicContext*			adpicContext = s->priv_data;
     ByteIOContext *         pb = s->pb;
-	URLContext*             urlContext = pb->opaque;
     AVStream *              st = NULL;
     FrameData *             frameData = NULL;
     NetVuAudioData *        audio_data = NULL;
@@ -1069,19 +1072,16 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     //if ( ((adpkt[0] == 9) && (adpkt[2] == 0) && (adpkt[3] == 0)) || 
     //     ((adpkt[0] >= 0 && adpkt[0] <= 7) && (adpkt[2] == 0) && (adpkt[3] == 0)) ||
     //     ((adpkt[0] >= 0 && adpkt[0] <= 7) && (adpkt[2] == 0) && (adpkt[3] == 1))    )
-    if(urlContext->isBinary) 
+    if(adpicContext->isBinary)
     {
-        isMIME = FALSE;
-
         // Get info out of the separator
 	    memcpy(&size, &adpkt[DATA_SIZE_BYTE_0], 4);
-	    network2host32(size);
+	    size = be2me_32(size);
 	    data_type = adpkt[DATA_TYPE];
 	    data_channel = (adpkt[DATA_CHANNEL]+1);
     }
     else
     {
-        isMIME = TRUE;
         pb->buf_ptr -= SEPARATOR_SIZE;
         restore = pb->buf_ptr;
        
@@ -1315,7 +1315,7 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         case DATA_H264P:
 	    {
             /* We have to parse the data for this frame differently depending on whether we're getting a MIME or binary stream */
-            if( TRUE == isMIME )
+            if( TRUE == adpicContext->isMIME )
             {
                 int mimeBlockType = 0;
 
@@ -1441,8 +1441,8 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		        goto cleanup;
             }
 
-            network2host32(videoHeader.t);
-            network2host16(videoHeader.ms);
+            videoHeader.t  = be2me_32(videoHeader.t);
+            videoHeader.ms = be2me_16(videoHeader.ms);
 
             /* Copy pertinent data into generic video data structure */
             video_data->cam = data_channel;
@@ -1455,7 +1455,7 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             video_data->title[6] = '\n';
             video_data->session_time = videoHeader.t;
             video_data->milliseconds = videoHeader.ms;
-			video_data->utc_offset = urlContext->utc_offset;
+			video_data->utc_offset = adpicContext->utc_offset;
 			
             /* Remember to identify the type of frame data we have - this ensures the right codec is used to decode this frame */
             video_data->vid_format = PIC_MODE_MPEG4_411;
@@ -1488,9 +1488,9 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		        goto cleanup;
             }
 
-            network2host32(audioHeader.t);
-            network2host16(audioHeader.ms);
-            network2host16(audioHeader.mode);
+            audioHeader.t    = be2me_32(audioHeader.t);
+            audioHeader.ms   = be2me_16(audioHeader.ms);
+            audioHeader.mode = be2me_16(audioHeader.mode);
 
             /* Copy pertinent data into generic audio data structure */
             audio_data->mode = audioHeader.mode;
@@ -1515,7 +1515,7 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         // CS - Support for ADPCM frames
         case DATA_AUDIO_ADPCM:
         {
-            if( FALSE == isMIME )
+            if( FALSE == adpicContext->isMIME )
             {
                 // Get the fixed size portion of the audio header
                 if( (n = adpic_get_buffer( pb, (unsigned char*)audio_data, sizeof(NetVuAudioData) - 4 )) != sizeof(NetVuAudioData) - 4 )
@@ -1624,13 +1624,6 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     {
 	    // At this point We have a legal pic structure which we use to determine 
 	    // which codec stream to use
-        if(!isMIME)
-        {
-	        if (data_channel != video_data->cam)
-	        {
-		        //logger(LOG_DEBUG,"ADPIC: adpic_read_packet, data channel (%d) and camera (%d) do not match%d\n", data_channel, video_data->cam );
-	        }
-        }
 	    if ( (st = get_stream( s, video_data)) == NULL )
 	    {
 		    //logger(LOG_DEBUG,"ADPIC: adpic_read_packet, failed get_stream for video\n");
@@ -1660,7 +1653,7 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 			if (audio_data->seconds > 0)  {
 				pkt->pts = audio_data->seconds;
 				pkt->pts *= 1000ULL;
-				pkt->pts += audio_data->msecs % 1000;
+				pkt->pts += audio_data->msecs & 0x03FF;
 			}
 			else
 				pkt->pts = AV_NOPTS_VALUE;
@@ -1799,6 +1792,10 @@ static int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size)
     //get data while ther is no time out and we still need data
     while(TotalDataRead < size && retrys<RetryBoundry)
     {
+		// This shouldn't happen, but sometimes does for some reason, needs investigation
+		if (s->buf_ptr >= s->buf_end)
+			break;
+		
         DataReadThisTime += get_buffer(s, buf, (size-TotalDataRead));
 
         //if we retreave some data keep trying untill we get the required data or we have mutch longer time out 
@@ -1818,6 +1815,7 @@ static int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size)
 AVInputFormat adpic_demuxer = {
     .name           = "adpic",
     .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings video format"), 
+	.priv_data_size = sizeof(AdpicContext),
     .read_probe     = adpic_probe,
     .read_header    = adpic_read_header,
     .read_packet    = adpic_read_packet,

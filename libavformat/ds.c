@@ -7,7 +7,174 @@
 #include "dsenc.h"
 #include "ds.h"
 
+/* -------------------------------------- Constants -------------------------------------- */
+#define DS_DEFAULT_PORT                             8234                /* Deafult TCP and UDP port for comms */
+#define DS_HEADER_MAGIC_NUMBER                      0xFACED0FF
+#define MAX_USER_ID_LENGTH                          30
+#define ACCESS_KEY_LENGTH                           36
+#define MAC_ADDR_LENGTH                             16
+#define UNIT_NAME_LENGTH                            32
+
+#define DS_WRITE_BUFFER_SIZE                        1024
+#define DS_READ_BUFFER_SIZE                         1024
+
+#define DS_PLAYBACK_MODE_LIVE                       0x00
+#define DS_PLAYBACK_MODE_PLAY                       0x01
+
+#define DS_RESOLUTION_HI                            2
+#define DS_RESOLUTION_MED                           1
+#define DS_RESOLUTION_LOW                           0
+
+/* -------------------------------------- Structures/types -------------------------------------- */
+typedef struct _dsContext
+{
+    URLContext *        TCPContext; /* Context of the underlying TCP network connection */
+} DSContext;
+
+typedef struct _networkMessage
+{
+    MessageHeader       header;
+    void *              body;
+} NetworkMessage;
+
+typedef enum _imgControlMsgType
+{
+    IMG_LIVE,
+    IMG_PLAY,
+    IMG_GOTO,
+    IMG_DATA,
+    IMG_STOP
+} ImgControlMsgType;
+
+typedef struct _clientConnectMsg
+{
+    unsigned long           udpPort;
+    long                    connectType;        /* ImgControlMsgType enum. long used to avoid sizeof(enum) discrepancies */
+    char                    userID[MAX_USER_ID_LENGTH];
+    char                    accessKey[ACCESS_KEY_LENGTH];
+} ClientConnectMsg;
+#define VER_TCP_CLI_CONNECT                     0x00000003
+#define SIZEOF_TCP_CLI_CONNECT_IO               (MAX_USER_ID_LENGTH + ACCESS_KEY_LENGTH + 8)      /* Size in bytes of the MessageHeader structure. Can't use sizeof to read/write one of these to network as structure packing may differ based on platform */
+
+typedef enum _netRejectReason
+{
+	REJECT_BUSY,
+	REJECT_INVALID_USER_ID,
+	REJECT_AUTHENTIFICATION_REQUIRED,
+	REJECT_AUTHENTIFICATION_INVALID,
+	REJECT_UNAUTHORISED,
+	REJECT_OTHER,
+	REJECT_PASSWORD_CHANGE_REQUIRED,
+	REJECT_OUT_OF_MEMORY,
+	REJECT_CORRUPT_USERS_FILES
+} NetRejectReason;
+
+typedef struct _srvConnectRejectMsg
+{
+    long					reason;				/* enum NET_REJECT_REASON */
+    long					timestamp;
+    char					macAddr[MAC_ADDR_LENGTH];
+    unsigned long           appVersion;
+    unsigned long           minViewerVersion;
+} SrvConnectRejectMsg;
+#define VER_TCP_SRV_CONNECT_REJECT          0x00000001
+
+typedef enum _realmType
+{
+    REALM_LIVE,
+    REALM_PLAYBACK,
+    REALM_TELEM,
+    REALM_EVENTS,
+    REALM_ADMIN,
+    REALM_PASSWORD,
+    REALM_PW_ONCE,
+    REALM_VIEW_ALL,
+    REALM_MCI,
+    REALM_FILE_EXPORT,
+    REALM_WEB,
+    REALM_POS,
+    NUM_FIXED_REALMS,
+} RealmType;
+
+typedef struct _srvConnectReplyMsg
+{
+    long					numCameras;
+    long					viewableCamMask;
+    long					telemetryCamMask;
+    long					failedCamMask;
+    long					maxMsgInterval;
+    int64_t			        timestamp;                          /* TODO: Verify - this was a 'hyper long' before. Assuming 64 bit value. Is this correct? Is solution portable? */
+    char					cameraTitles[16][28];
+    long                    unitType;
+    unsigned long           applicationVersion;
+    long                    videoStandard;
+    char                    macAddr[MAC_ADDR_LENGTH];
+    char                    unitName[UNIT_NAME_LENGTH];
+    long					numFixedRealms;	                    /* Number of FIXED system realms */
+    unsigned long		    realmFlags[NUM_FIXED_REALMS];	    /* Indicates if user is in realm. */
+    unsigned long           minimumViewerVersion;
+} SrvConnectReplyMsg;
+#define VER_TCP_SRV_CONNECT_REPLY           0x00000001
+
+typedef struct _srvFeatureConnectReplyMsg
+{
+    long					numCameras;
+    long					viewableCamMask;
+    long					telemetryCamMask;
+    long					failedCamMask;
+    long					maxMsgInterval;
+    int64_t			        timestamp;                          /* TODO: Verify - this was a 'hyper long' before. Assuming 64 bit value. Is this correct? Is solution portable? */
+    char					cameraTitles[16][28];
+    long                    unitType;
+    unsigned long           applicationVersion;
+    long                    videoStandard;
+    char                    macAddr[MAC_ADDR_LENGTH];
+    char                    unitName[UNIT_NAME_LENGTH];
+
+    unsigned long           minimumViewerVersion;
+    unsigned long 		    unitFeature01;
+    unsigned long 		    unitFeature02;
+    unsigned long 		    unitFeature03;
+    unsigned long 		    unitFeature04;
+    long					numFixedRealms;	               /* Number of FIXED system realms */
+    unsigned long		    realmFlags[NUM_FIXED_REALMS];	   /* Indicates if user is in realm. */
+} SrvFeatureConnectReplyMsg;
+#define VER_TCP_SRV_FEATURE_CONNECT_REPLY   0x00000002
+
+typedef struct _cliImgLiveRequestMsg
+{
+	long					cameraMask;
+	long					resolution;
+} CliImgLiveRequestMsg;
+#define VER_TCP_CLI_IMG_LIVE_REQUEST        0x00000001
+#define SIZEOF_TCP_CLI_IMG_LIVE_REQUEST_IO  8            /* Size in bytes of the MessageHeader structure. Can't use sizeof to read/write one of these to network as structure packing may differ based on platform */
+
+typedef enum _vcrMode
+{
+	VM_PLAY,
+    VM_VIS_REW,
+    VM_VIS_FF,
+    VM_STOP,
+    VM_PLAY_SHUTTLE,
+	VM_FINISH
+} vcrMode;
+
+typedef struct _cliImgPlayRequestMsg
+{
+	long					cameraMask;
+	long					mode;			    /*	(enum VCR_MODE) */
+	long					pace;
+	int64_t				    fromTime;		    /*		(time_u)	*/
+	int64_t				    toTime;		        /*		(time_u)	*/
+} CliImgPlayRequestMsg;
+#define VER_TCP_CLI_IMG_PLAY_REQUEST        0x00000001
+#define SIZEOF_TCP_CLI_IMG_PLAY_REQUEST_IO  28            /* Size in bytes of the MessageHeader structure. Can't use sizeof to read/write one of these to network as structure packing may differ based on platform */
+
+
 /* -------------------------------------- Local function declarations -------------------------------------- */
+static NetworkMessage *     CreateNetworkMessage( ControlMessageTypes messageType, long channelID );
+static void                 FreeNetworkMessage( NetworkMessage **message );
+
 static int DSOpen( URLContext *h, const char *uri, int flags );
 static int DSRead( URLContext *h, uint8_t *buf, int size );
 static int DSWrite( URLContext *h, const uint8_t *buf, int size );
@@ -32,6 +199,15 @@ static int DSReadBuffer( URLContext *h, uint8_t *buffer, int size );
 static int64_t TimeTolong64( time_t time );
 
 
+#if HAVE_BIGENDIAN
+#define HTON64(x)
+#define HTON32(x)
+#else
+#define HTON64(x)               (bswap_64(x))
+#define HTON32(x)               (bswap_32(x))
+#endif
+
+
 /****************************************************************************************************************
  * Function: CreateNetworkMessage
  * Desc: Allocates and initialises a NetworkMessage for sending to the server based on the given type and channel. 
@@ -43,7 +219,7 @@ static int64_t TimeTolong64( time_t time );
  * Return:
  *   Pointer to new network message on success. NULL on failure
  ****************************************************************************************************************/
-NetworkMessage * CreateNetworkMessage( ControlMessageTypes messageType, long channelID )
+static NetworkMessage * CreateNetworkMessage( ControlMessageTypes messageType, long channelID )
 {
     NetworkMessage *        newMessage = NULL;
     int                     length = 0;
@@ -129,7 +305,7 @@ fail:
  *  message - Address of a pointer to a NetworkMessage struct allocated with CreateNetworkMessage
  * Return:
  ****************************************************************************************************************/
-void FreeNetworkMessage( NetworkMessage **message )
+static void FreeNetworkMessage( NetworkMessage **message )
 {
     /* Simply cascade free all memory allocated */
     if( *message )
@@ -745,13 +921,13 @@ void NToHMessageHeader( MessageHeader *header )
 {
     if( header )
     {
-        header->magicNumber = NTOH32(header->magicNumber);
-        header->length = NTOH32(header->length);
-        header->channelID = NTOH32(header->channelID);
-        header->sequence = NTOH32(header->sequence);
-        header->messageVersion = NTOH32(header->messageVersion);
-        header->checksum = NTOH32(header->checksum);
-        header->messageType = NTOH32(header->messageType);
+        header->magicNumber = be2me_32(header->magicNumber);
+        header->length = be2me_32(header->length);
+        header->channelID = be2me_32(header->channelID);
+        header->sequence = be2me_32(header->sequence);
+        header->messageVersion = be2me_32(header->messageVersion);
+        header->checksum = be2me_32(header->checksum);
+        header->messageType = be2me_32(header->messageType);
     }
 }
 
@@ -820,10 +996,10 @@ static int ReadConnectRejectMessage( URLContext * h, NetworkMessage *message )
         return AVERROR_IO;
 
     /* Correct the byte ordering */
-    bodyPtr->reason = NTOH32(bodyPtr->reason);
-    bodyPtr->timestamp = NTOH32(bodyPtr->timestamp);
-    bodyPtr->appVersion = NTOH32(bodyPtr->appVersion);
-    bodyPtr->minViewerVersion = NTOH32(bodyPtr->minViewerVersion);
+    bodyPtr->reason = be2me_32(bodyPtr->reason);
+    bodyPtr->timestamp = be2me_32(bodyPtr->timestamp);
+    bodyPtr->appVersion = be2me_32(bodyPtr->appVersion);
+    bodyPtr->minViewerVersion = be2me_32(bodyPtr->minViewerVersion);
 
     return 0;
 }
@@ -878,7 +1054,7 @@ static int ReadConnectReplyMessage( URLContext * h, NetworkMessage *message )
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->numFixedRealms, sizeof(long) ) != sizeof(long) )
         return AVERROR_IO;
 
-    bodyPtr->numFixedRealms = NTOH32(bodyPtr->numFixedRealms);
+    bodyPtr->numFixedRealms = be2me_32(bodyPtr->numFixedRealms);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->realmFlags, (sizeof(unsigned long) * bodyPtr->numFixedRealms) ) != (sizeof(unsigned long) * bodyPtr->numFixedRealms) )
         return AVERROR_IO;
@@ -887,16 +1063,16 @@ static int ReadConnectReplyMessage( URLContext * h, NetworkMessage *message )
         return AVERROR_IO;
 
     /* Correct the byte ordering */
-    bodyPtr->numCameras = NTOH32(bodyPtr->numCameras);
-    bodyPtr->viewableCamMask = NTOH32(bodyPtr->viewableCamMask);
-    bodyPtr->telemetryCamMask = NTOH32(bodyPtr->telemetryCamMask);
-    bodyPtr->failedCamMask = NTOH32(bodyPtr->failedCamMask);
-    bodyPtr->maxMsgInterval = NTOH32(bodyPtr->maxMsgInterval);
-    bodyPtr->unitType = NTOH32(bodyPtr->unitType);
-    bodyPtr->applicationVersion = NTOH32(bodyPtr->applicationVersion);
-    bodyPtr->videoStandard = NTOH32(bodyPtr->videoStandard);
-    bodyPtr->numFixedRealms = NTOH32(bodyPtr->numFixedRealms);
-    bodyPtr->minimumViewerVersion = NTOH32(bodyPtr->minimumViewerVersion);
+    bodyPtr->numCameras = be2me_32(bodyPtr->numCameras);
+    bodyPtr->viewableCamMask = be2me_32(bodyPtr->viewableCamMask);
+    bodyPtr->telemetryCamMask = be2me_32(bodyPtr->telemetryCamMask);
+    bodyPtr->failedCamMask = be2me_32(bodyPtr->failedCamMask);
+    bodyPtr->maxMsgInterval = be2me_32(bodyPtr->maxMsgInterval);
+    bodyPtr->unitType = be2me_32(bodyPtr->unitType);
+    bodyPtr->applicationVersion = be2me_32(bodyPtr->applicationVersion);
+    bodyPtr->videoStandard = be2me_32(bodyPtr->videoStandard);
+    bodyPtr->numFixedRealms = be2me_32(bodyPtr->numFixedRealms);
+    bodyPtr->minimumViewerVersion = be2me_32(bodyPtr->minimumViewerVersion);
 
     return 0;
 }
@@ -964,25 +1140,25 @@ static int ReadFeatureConnectReplyMessage( URLContext * h, NetworkMessage *messa
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->numFixedRealms, sizeof(long) ) != sizeof(long) )
         return AVERROR_IO;
 
-    bodyPtr->numFixedRealms = NTOH32(bodyPtr->numFixedRealms);
+    bodyPtr->numFixedRealms = be2me_32(bodyPtr->numFixedRealms);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->realmFlags, (sizeof(unsigned long) * bodyPtr->numFixedRealms) ) != (sizeof(unsigned long) * bodyPtr->numFixedRealms) )
         return AVERROR_IO;
 
     /* Correct the byte ordering */
-    bodyPtr->numCameras = NTOH32(bodyPtr->numCameras);
-    bodyPtr->viewableCamMask = NTOH32(bodyPtr->viewableCamMask);
-    bodyPtr->telemetryCamMask = NTOH32(bodyPtr->telemetryCamMask);
-    bodyPtr->failedCamMask = NTOH32(bodyPtr->failedCamMask);
-    bodyPtr->maxMsgInterval = NTOH32(bodyPtr->maxMsgInterval);
-    bodyPtr->unitType = NTOH32(bodyPtr->unitType);
-    bodyPtr->applicationVersion = NTOH32(bodyPtr->applicationVersion);
-    bodyPtr->videoStandard = NTOH32(bodyPtr->videoStandard);
-    bodyPtr->minimumViewerVersion = NTOH32(bodyPtr->minimumViewerVersion);
-    bodyPtr->unitFeature01 = NTOH32(bodyPtr->unitFeature01);
-    bodyPtr->unitFeature02 = NTOH32(bodyPtr->unitFeature02);
-    bodyPtr->unitFeature03 = NTOH32(bodyPtr->unitFeature03);
-    bodyPtr->unitFeature04 = NTOH32(bodyPtr->unitFeature04);
+    bodyPtr->numCameras = be2me_32(bodyPtr->numCameras);
+    bodyPtr->viewableCamMask = be2me_32(bodyPtr->viewableCamMask);
+    bodyPtr->telemetryCamMask = be2me_32(bodyPtr->telemetryCamMask);
+    bodyPtr->failedCamMask = be2me_32(bodyPtr->failedCamMask);
+    bodyPtr->maxMsgInterval = be2me_32(bodyPtr->maxMsgInterval);
+    bodyPtr->unitType = be2me_32(bodyPtr->unitType);
+    bodyPtr->applicationVersion = be2me_32(bodyPtr->applicationVersion);
+    bodyPtr->videoStandard = be2me_32(bodyPtr->videoStandard);
+    bodyPtr->minimumViewerVersion = be2me_32(bodyPtr->minimumViewerVersion);
+    bodyPtr->unitFeature01 = be2me_32(bodyPtr->unitFeature01);
+    bodyPtr->unitFeature02 = be2me_32(bodyPtr->unitFeature02);
+    bodyPtr->unitFeature03 = be2me_32(bodyPtr->unitFeature03);
+    bodyPtr->unitFeature04 = be2me_32(bodyPtr->unitFeature04);
 
     return 0;
 }
@@ -995,31 +1171,31 @@ static void HToNMessageHeader( MessageHeader *header, unsigned char *buf )
     if( header != NULL && buf != NULL )
     {
         /* Set whatever header values we can in here */
-        tempHeader.magicNumber = NTOH32(header->magicNumber);
+        tempHeader.magicNumber = be2me_32(header->magicNumber);
         memcpy( &buf[bufIdx], &tempHeader.magicNumber, sizeof(unsigned long) );
         bufIdx += sizeof(unsigned long);
 
-        tempHeader.length = NTOH32(header->length);
+        tempHeader.length = be2me_32(header->length);
         memcpy( &buf[bufIdx], &tempHeader.length, sizeof(unsigned long) );
         bufIdx += sizeof(unsigned long);
 
-        tempHeader.channelID = NTOH32(header->channelID);
+        tempHeader.channelID = be2me_32(header->channelID);
         memcpy( &buf[bufIdx], &tempHeader.channelID, sizeof(long) );
         bufIdx += sizeof(long);
 
-        tempHeader.sequence = NTOH32(header->sequence); /* Currently unsupported at server */
+        tempHeader.sequence = be2me_32(header->sequence); /* Currently unsupported at server */
         memcpy( &buf[bufIdx], &tempHeader.sequence, sizeof(long) );
         bufIdx += sizeof(long);
 
-        tempHeader.messageVersion = NTOH32(header->messageVersion);
+        tempHeader.messageVersion = be2me_32(header->messageVersion);
         memcpy( &buf[bufIdx], &tempHeader.messageVersion, sizeof(unsigned long) );
         bufIdx += sizeof(unsigned long);
 
-        tempHeader.checksum = NTOH32(header->checksum); /* As suggested in protocol documentation */
+        tempHeader.checksum = be2me_32(header->checksum); /* As suggested in protocol documentation */
         memcpy( &buf[bufIdx], &tempHeader.checksum, sizeof(long) );
         bufIdx += sizeof(long);
 
-        tempHeader.messageType = NTOH32(header->messageType);
+        tempHeader.messageType = be2me_32(header->messageType);
         memcpy( &buf[bufIdx], &tempHeader.messageType, sizeof(long) );
         bufIdx += sizeof(long);
     }
