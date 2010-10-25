@@ -136,10 +136,6 @@ static int frame_height = 0;
 static float frame_aspect_ratio = 0;
 static enum PixelFormat frame_pix_fmt = PIX_FMT_NONE;
 static enum SampleFormat audio_sample_fmt = SAMPLE_FMT_NONE;
-static int frame_topBand  = 0;
-static int frame_bottomBand = 0;
-static int frame_leftBand  = 0;
-static int frame_rightBand = 0;
 static int max_frames[4] = {INT_MAX, INT_MAX, INT_MAX, INT_MAX};
 static AVRational frame_rate;
 static float video_qscale = 0;
@@ -229,6 +225,7 @@ static int nb_frames_drop = 0;
 static int input_sync;
 static uint64_t limit_filesize = 0;
 static int force_fps = 0;
+static char *forced_key_frames = NULL;
 
 static int pgmyuv_compatibility_hack=0;
 static float dts_delta_threshold = 10;
@@ -276,18 +273,10 @@ typedef struct AVOutputStream {
     int original_height;
     int original_width;
 
-    /* cropping area sizes */
-    int video_crop;
-    int topBand;
-    int bottomBand;
-    int leftBand;
-    int rightBand;
-
-    /* cropping area of first frame */
-    int original_topBand;
-    int original_bottomBand;
-    int original_leftBand;
-    int original_rightBand;
+    /* forced key frames */
+    int64_t *forced_kf_pts;
+    int forced_kf_count;
+    int forced_kf_index;
 
     /* audio only */
     int audio_resample;
@@ -341,29 +330,6 @@ static struct termios oldtty;
 
 #if CONFIG_AVFILTER
 
-static int get_filtered_video_pic(AVFilterContext *ctx,
-                                  AVFilterBufferRef **picref, AVFrame *pic2,
-                                  uint64_t *pts)
-{
-    AVFilterBufferRef *pic;
-
-    if(avfilter_request_frame(ctx->inputs[0]))
-        return -1;
-    if(!(pic = ctx->inputs[0]->cur_buf))
-        return -1;
-    *picref = pic;
-    ctx->inputs[0]->cur_buf = NULL;
-
-    *pts          = pic->pts;
-
-    memcpy(pic2->data,     pic->data,     sizeof(pic->data));
-    memcpy(pic2->linesize, pic->linesize, sizeof(pic->linesize));
-    pic2->interlaced_frame = pic->video->interlaced;
-    pic2->top_field_first  = pic->video->top_field_first;
-
-    return 1;
-}
-
 static int configure_filters(AVInputStream *ist, AVOutputStream *ost)
 {
     AVFilterContext *last_filter, *filter;
@@ -395,23 +361,7 @@ static int configure_filters(AVInputStream *ist, AVOutputStream *ost)
 
     last_filter = ist->input_video_filter;
 
-    if (ost->video_crop) {
-        snprintf(args, 255, "%d:%d:%d:%d",
-                 codec->width, codec->height,
-                 ost->leftBand, ost->topBand);
-        if ((ret = avfilter_open(&filter, avfilter_get_by_name("crop"), NULL)) < 0)
-            return ret;
-        if ((ret = avfilter_init_filter(filter, args, NULL)) < 0)
-            return ret;
-        if ((ret = avfilter_link(last_filter, 0, filter, 0)) < 0)
-            return ret;
-        last_filter = filter;
-        avfilter_graph_add_filter(graph, last_filter);
-    }
-
-    if((codec->width !=
-        icodec->width - (frame_leftBand + frame_rightBand)) ||
-       (codec->height != icodec->height - (frame_topBand  + frame_bottomBand))) {
+    if (codec->width  != icodec->width || codec->height != icodec->height) {
         snprintf(args, 255, "%d:%d:flags=0x%X",
                  codec->width,
                  codec->height,
@@ -1113,16 +1063,9 @@ static void do_video_out(AVFormatContext *s,
                          int *frame_size)
 {
     int nb_frames, i, ret;
-#if !CONFIG_AVFILTER
-    int64_t topBand, bottomBand, leftBand, rightBand;
-#endif
     AVFrame *final_picture, *formatted_picture, *resampling_dst, *padding_src;
-    AVFrame picture_crop_temp, picture_pad_temp;
     AVCodecContext *enc, *dec;
     double sync_ipts;
-
-    avcodec_get_frame_defaults(&picture_crop_temp);
-    avcodec_get_frame_defaults(&picture_pad_temp);
 
     enc = ost->st->codec;
     dec = ist->st->codec;
@@ -1163,28 +1106,13 @@ static void do_video_out(AVFormatContext *s,
     if (nb_frames <= 0)
         return;
 
-#if CONFIG_AVFILTER
     formatted_picture = in_picture;
-#else
-    if (ost->video_crop) {
-        if (av_picture_crop((AVPicture *)&picture_crop_temp, (AVPicture *)in_picture, dec->pix_fmt, ost->topBand, ost->leftBand) < 0) {
-            fprintf(stderr, "error cropping picture\n");
-            if (exit_on_error)
-                ffmpeg_exit(1);
-            return;
-        }
-        formatted_picture = &picture_crop_temp;
-    } else {
-        formatted_picture = in_picture;
-    }
-#endif
-
     final_picture = formatted_picture;
     padding_src = formatted_picture;
     resampling_dst = &ost->pict_tmp;
 
-    if(    (ost->resample_height != (ist->st->codec->height - (ost->topBand  + ost->bottomBand)))
-        || (ost->resample_width  != (ist->st->codec->width  - (ost->leftBand + ost->rightBand)))
+    if (   ost->resample_height != ist->st->codec->height
+        || ost->resample_width  != ist->st->codec->width
         || (ost->resample_pix_fmt!= ist->st->codec->pix_fmt) ) {
 
         fprintf(stderr,"Input Stream #%d.%d frame size changed to %dx%d, %s\n", ist->file_index, ist->index, ist->st->codec->width,     ist->st->codec->height,avcodec_get_pix_fmt_name(ist->st->codec->pix_fmt));
@@ -1196,37 +1124,16 @@ static void do_video_out(AVFormatContext *s,
     if (ost->video_resample) {
         padding_src = NULL;
         final_picture = &ost->pict_tmp;
-        if(  (ost->resample_height != (ist->st->codec->height - (ost->topBand  + ost->bottomBand)))
-          || (ost->resample_width  != (ist->st->codec->width  - (ost->leftBand + ost->rightBand)))
+        if(  ost->resample_height != ist->st->codec->height
+          || ost->resample_width  != ist->st->codec->width
           || (ost->resample_pix_fmt!= ist->st->codec->pix_fmt) ) {
-
-            /* keep bands proportional to the frame size */
-            topBand    = ((int64_t)ist->st->codec->height * ost->original_topBand    / ost->original_height) & ~1;
-            bottomBand = ((int64_t)ist->st->codec->height * ost->original_bottomBand / ost->original_height) & ~1;
-            leftBand   = ((int64_t)ist->st->codec->width  * ost->original_leftBand   / ost->original_width)  & ~1;
-            rightBand  = ((int64_t)ist->st->codec->width  * ost->original_rightBand  / ost->original_width)  & ~1;
-
-            /* sanity check to ensure no bad band sizes sneak in */
-            av_assert0(topBand    <= INT_MAX && topBand    >= 0);
-            av_assert0(bottomBand <= INT_MAX && bottomBand >= 0);
-            av_assert0(leftBand   <= INT_MAX && leftBand   >= 0);
-            av_assert0(rightBand  <= INT_MAX && rightBand  >= 0);
-
-            ost->topBand    = topBand;
-            ost->bottomBand = bottomBand;
-            ost->leftBand   = leftBand;
-            ost->rightBand  = rightBand;
-
-            ost->resample_height = ist->st->codec->height - (ost->topBand  + ost->bottomBand);
-            ost->resample_width  = ist->st->codec->width  - (ost->leftBand + ost->rightBand);
-            ost->resample_pix_fmt= ist->st->codec->pix_fmt;
 
             /* initialize a new scaler context */
             sws_freeContext(ost->img_resample_ctx);
             sws_flags = av_get_int(sws_opts, "sws_flags", NULL);
             ost->img_resample_ctx = sws_getContext(
-                ist->st->codec->width  - (ost->leftBand + ost->rightBand),
-                ist->st->codec->height - (ost->topBand  + ost->bottomBand),
+                ist->st->codec->width,
+                ist->st->codec->height,
                 ist->st->codec->pix_fmt,
                 ost->st->codec->width,
                 ost->st->codec->height,
@@ -1284,6 +1191,11 @@ static void do_video_out(AVFormatContext *s,
             big_picture.pts= ost->sync_opts;
 //            big_picture.pts= av_rescale(ost->sync_opts, AV_TIME_BASE*(int64_t)enc->time_base.num, enc->time_base.den);
 //av_log(NULL, AV_LOG_DEBUG, "%"PRId64" -> encoder\n", ost->sync_opts);
+            if (ost->forced_kf_index < ost->forced_kf_count &&
+                big_picture.pts >= ost->forced_kf_pts[ost->forced_kf_index]) {
+                big_picture.pict_type = FF_I_TYPE;
+                ost->forced_kf_index++;
+            }
             ret = avcodec_encode_video(enc,
                                        bit_buffer, bit_buffer_size,
                                        &big_picture);
@@ -1672,8 +1584,11 @@ static int output_packet(AVInputStream *ist, int ist_index,
         if (start_time == 0 || ist->pts >= start_time)
 #if CONFIG_AVFILTER
         while (frame_available) {
+            AVRational ist_pts_tb;
             if (ist->st->codec->codec_type == AVMEDIA_TYPE_VIDEO && ist->output_video_filter)
-                get_filtered_video_pic(ist->output_video_filter, &ist->picref, &picture, &ist->pts);
+                get_filtered_video_frame(ist->output_video_filter, &picture, &ist->picref, &ist_pts_tb);
+            if (ist->picref)
+                ist->pts = ist->picref->pts;
 #endif
             for(i=0;i<nb_ostreams;i++) {
                 int frame_size;
@@ -1927,6 +1842,29 @@ static int copy_chapters(int infile, int outfile)
         os->chapters[os->nb_chapters - 1] = out_ch;
     }
     return 0;
+}
+
+static void parse_forced_key_frames(char *kf, AVOutputStream *ost,
+                                    AVCodecContext *avctx)
+{
+    char *p;
+    int n = 1, i;
+    int64_t t;
+
+    for (p = kf; *p; p++)
+        if (*p == ',')
+            n++;
+    ost->forced_kf_count = n;
+    ost->forced_kf_pts = av_malloc(sizeof(*ost->forced_kf_pts) * n);
+    if (!ost->forced_kf_pts) {
+        av_log(NULL, AV_LOG_FATAL, "Could not allocate forced key frames array.\n");
+        ffmpeg_exit(1);
+    }
+    for (i = 0; i < n; i++) {
+        p = i ? strchr(p, ',') + 1 : kf;
+        t = parse_time_or_die("force_key_frames", p, 1);
+        ost->forced_kf_pts[i] = av_rescale_q(t, AV_TIME_BASE_Q, avctx->time_base);
+    }
 }
 
 /*
@@ -2209,18 +2147,9 @@ static int transcode(AVFormatContext **output_files,
                     fprintf(stderr, "Video pixel format is unknown, stream cannot be encoded\n");
                     ffmpeg_exit(1);
                 }
-                ost->video_crop = ((frame_leftBand + frame_rightBand + frame_topBand + frame_bottomBand) != 0);
-                ost->video_resample = ((codec->width != icodec->width -
-                                (frame_leftBand + frame_rightBand)) ||
-                        (codec->height != icodec->height -
-                                (frame_topBand  + frame_bottomBand)) ||
+                ost->video_resample = (codec->width != icodec->width   ||
+                                       codec->height != icodec->height ||
                         (codec->pix_fmt != icodec->pix_fmt));
-                if (ost->video_crop) {
-                    ost->topBand    = ost->original_topBand    = frame_topBand;
-                    ost->bottomBand = ost->original_bottomBand = frame_bottomBand;
-                    ost->leftBand   = ost->original_leftBand   = frame_leftBand;
-                    ost->rightBand  = ost->original_rightBand  = frame_rightBand;
-                }
                 if (ost->video_resample) {
                     avcodec_get_frame_defaults(&ost->pict_tmp);
                     if(avpicture_alloc((AVPicture*)&ost->pict_tmp, codec->pix_fmt,
@@ -2230,8 +2159,8 @@ static int transcode(AVFormatContext **output_files,
                     }
                     sws_flags = av_get_int(sws_opts, "sws_flags", NULL);
                     ost->img_resample_ctx = sws_getContext(
-                            icodec->width - (frame_leftBand + frame_rightBand),
-                            icodec->height - (frame_topBand + frame_bottomBand),
+                        icodec->width,
+                        icodec->height,
                             icodec->pix_fmt,
                             codec->width,
                             codec->height,
@@ -2248,8 +2177,8 @@ static int transcode(AVFormatContext **output_files,
 #endif
                     codec->bits_per_raw_sample= 0;
                 }
-                ost->resample_height = icodec->height - (frame_topBand  + frame_bottomBand);
-                ost->resample_width  = icodec->width  - (frame_leftBand + frame_rightBand);
+                ost->resample_height = icodec->height;
+                ost->resample_width  = icodec->width;
                 ost->resample_pix_fmt= icodec->pix_fmt;
                 ost->encoding_needed = 1;
                 ist->decoding_needed = 1;
@@ -2679,6 +2608,7 @@ static int transcode(AVFormatContext **output_files,
                 av_fifo_free(ost->fifo); /* works even if fifo is not
                                              initialized but set to zero */
                 av_free(ost->pict_tmp.data[0]);
+                av_free(ost->forced_kf_pts);
                 if (ost->video_resample)
                     sws_freeContext(ost->img_resample_ctx);
                 if (ost->resample)
@@ -2744,64 +2674,10 @@ static int opt_bitrate(const char *opt, const char *arg)
     return 0;
 }
 
-static void opt_frame_crop_top(const char *arg)
+static int opt_frame_crop(const char *opt, const char *arg)
 {
-    frame_topBand = atoi(arg);
-    if (frame_topBand < 0) {
-        fprintf(stderr, "Incorrect top crop size\n");
-        ffmpeg_exit(1);
-    }
-    if ((frame_topBand) >= frame_height){
-        fprintf(stderr, "Vertical crop dimensions are outside the range of the original image.\nRemember to crop first and scale second.\n");
-        ffmpeg_exit(1);
-    }
-    fprintf(stderr, "-crop* is deprecated in favor of the crop avfilter\n");
-    frame_height -= frame_topBand;
-}
-
-static void opt_frame_crop_bottom(const char *arg)
-{
-    frame_bottomBand = atoi(arg);
-    if (frame_bottomBand < 0) {
-        fprintf(stderr, "Incorrect bottom crop size\n");
-        ffmpeg_exit(1);
-    }
-    if ((frame_bottomBand) >= frame_height){
-        fprintf(stderr, "Vertical crop dimensions are outside the range of the original image.\nRemember to crop first and scale second.\n");
-        ffmpeg_exit(1);
-    }
-    fprintf(stderr, "-crop* is deprecated in favor of the crop avfilter\n");
-    frame_height -= frame_bottomBand;
-}
-
-static void opt_frame_crop_left(const char *arg)
-{
-    frame_leftBand = atoi(arg);
-    if (frame_leftBand < 0) {
-        fprintf(stderr, "Incorrect left crop size\n");
-        ffmpeg_exit(1);
-    }
-    if ((frame_leftBand) >= frame_width){
-        fprintf(stderr, "Horizontal crop dimensions are outside the range of the original image.\nRemember to crop first and scale second.\n");
-        ffmpeg_exit(1);
-    }
-    fprintf(stderr, "-crop* is deprecated in favor of the crop avfilter\n");
-    frame_width -= frame_leftBand;
-}
-
-static void opt_frame_crop_right(const char *arg)
-{
-    frame_rightBand = atoi(arg);
-    if (frame_rightBand < 0) {
-        fprintf(stderr, "Incorrect right crop size\n");
-        ffmpeg_exit(1);
-    }
-    if ((frame_rightBand) >= frame_width){
-        fprintf(stderr, "Horizontal crop dimensions are outside the range of the original image.\nRemember to crop first and scale second.\n");
-        ffmpeg_exit(1);
-    }
-    fprintf(stderr, "-crop* is deprecated in favor of the crop avfilter\n");
-    frame_width -= frame_rightBand;
+    fprintf(stderr, "Option '%s' has been removed, use the crop filter instead\n", opt);
+    return AVERROR(EINVAL);
 }
 
 static void opt_frame_size(const char *arg)
@@ -3488,6 +3364,9 @@ static void new_video_stream(AVFormatContext *oc, int file_idx)
                 video_enc->flags |= CODEC_FLAG_PASS2;
             }
         }
+
+        if (forced_key_frames)
+            parse_forced_key_frames(forced_key_frames, ost, video_enc);
     }
     if (video_language) {
         av_metadata_set2(&st->metadata, "language", video_language, 0);
@@ -3497,6 +3376,7 @@ static void new_video_stream(AVFormatContext *oc, int file_idx)
     /* reset some key parameters */
     video_disable = 0;
     av_freep(&video_codec_name);
+    av_freep(&forced_key_frames);
     video_stream_copy = 0;
     frame_pix_fmt = PIX_FMT_NONE;
 }
@@ -3799,6 +3679,7 @@ static void opt_output_file(const char *filename)
     set_context_opts(oc, avformat_opts, AV_OPT_FLAG_ENCODING_PARAM, NULL);
 
     nb_streamid_map = 0;
+    av_freep(&forced_key_frames);
 }
 
 /* same option as mencoder */
@@ -4211,10 +4092,10 @@ static const OptionDef options[] = {
     { "s", HAS_ARG | OPT_VIDEO, {(void*)opt_frame_size}, "set frame size (WxH or abbreviation)", "size" },
     { "aspect", HAS_ARG | OPT_VIDEO, {(void*)opt_frame_aspect_ratio}, "set aspect ratio (4:3, 16:9 or 1.3333, 1.7777)", "aspect" },
     { "pix_fmt", HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_frame_pix_fmt}, "set pixel format, 'list' as argument shows all the pixel formats supported", "format" },
-    { "croptop", HAS_ARG | OPT_VIDEO, {(void*)opt_frame_crop_top}, "Deprecated, please use the crop avfilter", "size" },
-    { "cropbottom", HAS_ARG | OPT_VIDEO, {(void*)opt_frame_crop_bottom}, "Deprecated, please use the crop avfilter", "size" },
-    { "cropleft", HAS_ARG | OPT_VIDEO, {(void*)opt_frame_crop_left}, "Deprecated, please use the crop avfilter", "size" },
-    { "cropright", HAS_ARG | OPT_VIDEO, {(void*)opt_frame_crop_right}, "Deprecated, please use the crop avfilter", "size" },
+    { "croptop", OPT_FUNC2 | HAS_ARG | OPT_VIDEO, {(void*)opt_frame_crop}, "Removed, use the crop filter instead", "size" },
+    { "cropbottom", OPT_FUNC2 | HAS_ARG | OPT_VIDEO, {(void*)opt_frame_crop}, "Removed, use the crop filter instead", "size" },
+    { "cropleft", OPT_FUNC2 | HAS_ARG | OPT_VIDEO, {(void*)opt_frame_crop}, "Removed, use the crop filter instead", "size" },
+    { "cropright", OPT_FUNC2 | HAS_ARG | OPT_VIDEO, {(void*)opt_frame_crop}, "Removed, use the crop filter instead", "size" },
     { "padtop", OPT_FUNC2 | HAS_ARG | OPT_VIDEO, {(void*)opt_pad}, "Removed, use the pad filter instead", "size" },
     { "padbottom", OPT_FUNC2 | HAS_ARG | OPT_VIDEO, {(void*)opt_pad}, "Removed, use the pad filter instead", "size" },
     { "padleft", OPT_FUNC2 | HAS_ARG | OPT_VIDEO, {(void*)opt_pad}, "Removed, use the pad filter instead", "size" },
@@ -4249,6 +4130,7 @@ static const OptionDef options[] = {
     { "qphist", OPT_BOOL | OPT_EXPERT | OPT_VIDEO, { (void *)&qp_hist }, "show QP histogram" },
     { "force_fps", OPT_BOOL | OPT_EXPERT | OPT_VIDEO, {(void*)&force_fps}, "force the selected framerate, disable the best supported framerate selection" },
     { "streamid", OPT_FUNC2 | HAS_ARG | OPT_EXPERT, {(void*)opt_streamid}, "set the value of an outfile streamid", "streamIndex:value" },
+    { "force_key_frames", OPT_STRING | HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void *)&forced_key_frames}, "force key frames at specified timestamps", "timestamps" },
 
     /* audio options */
     { "ab", OPT_FUNC2 | HAS_ARG | OPT_AUDIO, {(void*)opt_bitrate}, "set bitrate (in bits/s)", "bitrate" },

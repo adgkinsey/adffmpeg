@@ -38,6 +38,7 @@
 #define CONTEXT_SIZE 32
 
 #define MAX_QUANT_TABLES 8
+#define MAX_CONTEXT_INPUTS 5
 
 extern const uint8_t ff_log2_run[32];
 
@@ -216,7 +217,7 @@ typedef struct VlcState{
 } VlcState;
 
 typedef struct PlaneContext{
-    int16_t quant_table[5][256];
+    int16_t quant_table[MAX_CONTEXT_INPUTS][256];
     int context_count;
     uint8_t (*state)[CONTEXT_SIZE];
     VlcState *vlc_state;
@@ -230,6 +231,7 @@ typedef struct FFV1Context{
     RangeCoder c;
     GetBitContext gb;
     PutBitContext pb;
+    uint64_t rc_stat[256][2];
     int version;
     int width, height;
     int chroma_h_shift, chroma_v_shift;
@@ -239,8 +241,8 @@ typedef struct FFV1Context{
     int plane_count;
     int ac;                              ///< 1=range coder <-> 0=golomb rice
     PlaneContext plane[MAX_PLANES];
-    int16_t quant_table[5][256];
-    int16_t quant_tables[MAX_QUANT_TABLES][5][256];
+    int16_t quant_table[MAX_CONTEXT_INPUTS][256];
+    int16_t quant_tables[MAX_QUANT_TABLES][MAX_CONTEXT_INPUTS][256];
     int context_count[MAX_QUANT_TABLES];
     uint8_t state_transition[256];
     int run_index;
@@ -296,8 +298,14 @@ static inline int get_context(PlaneContext *p, int_fast16_t *src, int_fast16_t *
         return p->quant_table[0][(L-LT) & 0xFF] + p->quant_table[1][(LT-T) & 0xFF] + p->quant_table[2][(T-RT) & 0xFF];
 }
 
-static inline void put_symbol_inline(RangeCoder *c, uint8_t *state, int v, int is_signed){
+static inline void put_symbol_inline(RangeCoder *c, uint8_t *state, int v, int is_signed, uint64_t rc_stat[256][2]){
     int i;
+
+#define put_rac(C,S,B) \
+do{\
+    rc_stat[*(S)][B]++;\
+    put_rac(C,S,B);\
+}while(0)
 
     if(v){
         const int a= FFABS(v);
@@ -331,10 +339,12 @@ static inline void put_symbol_inline(RangeCoder *c, uint8_t *state, int v, int i
     }else{
         put_rac(c, state+0, 1);
     }
+#undef put_rac
 }
 
 static void av_noinline put_symbol(RangeCoder *c, uint8_t *state, int v, int is_signed){
-    put_symbol_inline(c, state, v, is_signed);
+    uint64_t rc_stat[256][2]; //we dont bother counting header bits.
+    put_symbol_inline(c, state, v, is_signed, rc_stat);
 }
 
 static inline av_flatten int get_symbol_inline(RangeCoder *c, uint8_t *state, int is_signed){
@@ -482,7 +492,7 @@ static inline int encode_line(FFV1Context *s, int w, int_fast16_t *sample[2], in
         diff= fold(diff, bits);
 
         if(s->ac){
-            put_symbol_inline(c, p->state[context], diff, 1);
+            put_symbol_inline(c, p->state[context], diff, 1, s->rc_stat);
         }else{
             if(context == 0) run_mode=1;
 
@@ -610,7 +620,7 @@ static void write_quant_table(RangeCoder *c, int16_t *quant_table){
     put_symbol(c, state, i-last-1, 0);
 }
 
-static void write_quant_tables(RangeCoder *c, int16_t quant_table[5][256]){
+static void write_quant_tables(RangeCoder *c, int16_t quant_table[MAX_CONTEXT_INPUTS][256]){
     int i;
     for(i=0; i<5; i++)
         write_quant_table(c, quant_table[i]);
@@ -628,8 +638,7 @@ static void write_header(FFV1Context *f){
         put_symbol(c, state, f->ac, 0);
         if(f->ac>1){
             for(i=1; i<256; i++){
-                f->state_transition[i]=ver2_state[i];
-                put_symbol(c, state, ver2_state[i] - c->one_state[i], 1);
+                put_symbol(c, state, f->state_transition[i] - c->one_state[i], 1);
             }
         }
         put_symbol(c, state, f->colorspace, 0); //YUV cs type
@@ -750,8 +759,7 @@ static int write_extra_header(FFV1Context *f){
     put_symbol(c, state, f->ac, 0);
     if(f->ac>1){
         for(i=1; i<256; i++){
-            f->state_transition[i]=ver2_state[i];
-            put_symbol(c, state, ver2_state[i] - c->one_state[i], 1);
+            put_symbol(c, state, f->state_transition[i] - c->one_state[i], 1);
         }
     }
     put_symbol(c, state, f->colorspace, 0); //YUV cs type
@@ -772,15 +780,62 @@ static int write_extra_header(FFV1Context *f){
     return 0;
 }
 
+static int sort_stt(FFV1Context *s, uint8_t stt[256]){
+    int i,i2,changed,print=0;
+
+    do{
+        changed=0;
+        for(i=12; i<244; i++){
+            for(i2=i+1; i2<245 && i2<i+4; i2++){
+#define COST(old, new) \
+    s->rc_stat[old][0]*-log2((256-(new))/256.0)\
+   +s->rc_stat[old][1]*-log2(     (new) /256.0)
+
+#define COST2(old, new) \
+    COST(old, new)\
+   +COST(256-(old), 256-(new))
+
+                double size0= COST2(i, i ) + COST2(i2, i2);
+                double sizeX= COST2(i, i2) + COST2(i2, i );
+                if(sizeX < size0 && i!=128 && i2!=128){
+                    int j;
+                    FFSWAP(int, stt[    i], stt[    i2]);
+                    FFSWAP(int, s->rc_stat[i    ][0],s->rc_stat[    i2][0]);
+                    FFSWAP(int, s->rc_stat[i    ][1],s->rc_stat[    i2][1]);
+                    if(i != 256-i2){
+                        FFSWAP(int, stt[256-i], stt[256-i2]);
+                        FFSWAP(int, s->rc_stat[256-i][0],s->rc_stat[256-i2][0]);
+                        FFSWAP(int, s->rc_stat[256-i][1],s->rc_stat[256-i2][1]);
+                    }
+                    for(j=1; j<256; j++){
+                        if     (stt[j] == i ) stt[j] = i2;
+                        else if(stt[j] == i2) stt[j] = i ;
+                        if(i != 256-i2){
+                            if     (stt[256-j] == 256-i ) stt[256-j] = 256-i2;
+                            else if(stt[256-j] == 256-i2) stt[256-j] = 256-i ;
+                        }
+                    }
+                    print=changed=1;
+                }
+            }
+        }
+    }while(changed);
+    return print;
+}
+
 static av_cold int encode_init(AVCodecContext *avctx)
 {
     FFV1Context *s = avctx->priv_data;
-    int i;
+    int i, j;
 
     common_init(avctx);
 
     s->version=0;
     s->ac= avctx->coder_type ? 2:0;
+
+    if(s->ac>1)
+        for(i=1; i<256; i++)
+            s->state_transition[i]=ver2_state[i];
 
     s->plane_count=2;
     for(i=0; i<256; i++){
@@ -850,6 +905,27 @@ static av_cold int encode_init(AVCodecContext *avctx)
 
     s->picture_number=0;
 
+    if(avctx->stats_in){
+        char *p= avctx->stats_in;
+
+        for(;;){
+            for(j=0; j<256; j++){
+                for(i=0; i<2; i++){
+                    char *next;
+                    s->rc_stat[j][i]= strtol(p, &next, 0);
+                    if(next==p){
+                        av_log(avctx, AV_LOG_ERROR, "2Pass file invalid at %d %d [%s]\n", j,i,p);
+                        return -1;
+                    }
+                    p=next;
+                }
+            }
+            while(*p=='\n' || *p==' ') p++;
+            if(p[0]==0) break;
+        }
+        sort_stt(s, s->state_transition);
+    }
+
     if(s->version>1){
         s->num_h_slices=2;
         s->num_v_slices=2;
@@ -860,6 +936,8 @@ static av_cold int encode_init(AVCodecContext *avctx)
         return -1;
     if(init_slice_state(s) < 0)
         return -1;
+
+    avctx->stats_out= av_mallocz(1024*30);
 
     return 0;
 }
@@ -994,6 +1072,28 @@ static int encode_frame(AVCodecContext *avctx, unsigned char *buf, int buf_size,
         buf_p += bytes;
     }
 
+    if((avctx->flags&CODEC_FLAG_PASS1) && (f->picture_number&31)==0){
+        int j;
+        char *p= avctx->stats_out;
+        char *end= p + 1024*30;
+
+        memset(f->rc_stat, 0, sizeof(f->rc_stat));
+        for(j=0; j<f->slice_count; j++){
+            FFV1Context *fs= f->slice_context[j];
+            for(i=0; i<256; i++){
+                f->rc_stat[i][0] += fs->rc_stat[i][0];
+                f->rc_stat[i][1] += fs->rc_stat[i][1];
+            }
+        }
+
+        for(j=0; j<256; j++){
+            snprintf(p, end-p, "%"PRIu64" %"PRIu64" ", f->rc_stat[j][0], f->rc_stat[j][1]);
+            p+= strlen(p);
+        }
+        snprintf(p, end-p, "\n");
+    } else
+        avctx->stats_out[0] = '\0';
+
     f->picture_number++;
     return buf_p-buf;
 }
@@ -1013,6 +1113,8 @@ static av_cold int common_end(AVCodecContext *avctx){
         }
         av_freep(&fs->sample_buffer);
     }
+
+    av_freep(&avctx->stats_out);
 
     return 0;
 }
@@ -1208,7 +1310,7 @@ static int read_quant_table(RangeCoder *c, int16_t *quant_table, int scale){
     return 2*v - 1;
 }
 
-static int read_quant_tables(RangeCoder *c, int16_t quant_table[5][256]){
+static int read_quant_tables(RangeCoder *c, int16_t quant_table[MAX_CONTEXT_INPUTS][256]){
     int i;
     int context_count=1;
 

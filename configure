@@ -914,6 +914,7 @@ CONFIG_LIST="
     pic
     postproc
     rdft
+    rtpdec
     runtime_cpudetect
     shared
     small
@@ -1365,11 +1366,13 @@ ogg_demuxer_select="golomb"
 libparreader_demuxer_deps="libparreader"
 #libparreader_muxer_deps="libparreader"
 psp_muxer_select="mov_muxer"
-rtsp_demuxer_select="http_protocol sdp_demuxer"
-rtsp_muxer_select="rtp_muxer http_protocol sdp_demuxer"
+rtp_demuxer_select="sdp_demuxer"
+rtpdec_select="asf_demuxer rm_demuxer rtp_protocol mpegts_demuxer mov_demuxer"
+rtsp_demuxer_select="http_protocol rtpdec"
+rtsp_muxer_select="rtp_muxer http_protocol rtp_protocol"
 sap_demuxer_select="sdp_demuxer"
 sap_muxer_select="rtp_muxer rtp_protocol"
-sdp_demuxer_select="asf_demuxer rm_demuxer rtp_protocol mpegts_demuxer mov_demuxer"
+sdp_demuxer_select="rtpdec"
 spdif_muxer_select="aac_parser"
 tg2_muxer_select="mov_muxer"
 tgp_muxer_select="mov_muxer"
