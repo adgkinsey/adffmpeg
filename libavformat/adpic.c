@@ -1123,6 +1123,12 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                     BuffSize = pb->buffer_size - BuffSize;
                 }
 
+				if (BuffSize <= 0)
+				{
+					errorVal = ADPIC_NEW_PACKET_ERROR;
+			        goto cleanup;
+		        }
+				
                 if ((status = adpic_new_packet(pkt, BuffSize))<0) // PRC 003
 		        {
 			        //logger(LOG_DEBUG,"ADPIC: DATA_JFIF adpic_new_packet %d failed, status %d\n", size, status);
