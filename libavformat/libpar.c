@@ -41,6 +41,8 @@ AVStream* createStream(AVFormatContext * avf,
 				       const ParFrameInfo *frameInfo);
 void createPacket(AVFormatContext * avf, AVPacket *packet, int siz, int fChang);
 
+static void parreaderLogger(int level, const char *format, va_list args);
+
 
 const unsigned int MAX_FRAMEBUFFER_SIZE = 256 * 1024;
 
@@ -400,6 +402,7 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
     int64_t seconds = 0;
     AVStream *strm = NULL;
     AVRational secondsTB = {1,1};
+	
 
 	p->frameInfo.frameBufferSize = MAX_FRAMEBUFFER_SIZE;
 	p->frameInfo.frameBuffer = av_malloc(p->frameInfo.frameBufferSize);
@@ -430,6 +433,7 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
 			parReader_setLogLevel(PARREADER_LOG_DEBUG);
 			break;
 	}
+	parReader_setLogCallback(parreaderLogger);
 	
 	parReader_setDisplaySettingsDefaults(&p->dispSet);
 		
@@ -609,6 +613,29 @@ static int par_read_close(AVFormatContext * avf)
 	p->frameInfo.frameBufferSize = 0;
 	
 	return 0;
+}
+
+static void parreaderLogger(int level, const char *format, va_list args)
+{
+	int av_log_level = -1;
+	switch(level)  {
+		case (PARREADER_LOG_CRITICAL):
+			av_log_level = AV_LOG_FATAL;
+			break;
+		case(PARREADER_LOG_ERROR):
+			av_log_level = AV_LOG_ERROR;
+			break;
+		case(PARREADER_LOG_WARNING):
+			av_log_level = AV_LOG_WARNING;
+			break;
+		case(PARREADER_LOG_INFO):
+			av_log_level = AV_LOG_INFO;
+			break;
+		case(PARREADER_LOG_DEBUG):
+			av_log_level = AV_LOG_DEBUG;
+			break;
+	}
+	av_vlog(NULL, av_log_level, format, args);
 }
 
 //AVOutputFormat libparreader_muxer = {
