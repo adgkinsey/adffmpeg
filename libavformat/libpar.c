@@ -19,14 +19,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "avformat.h"
-#include "libavutil/bswap.h"
-
-#include "ds_exports.h"
-#include "libpar.h"
 
 #include <parreader.h>
-#include <parreader_types.h>
+
+#include "avformat.h"
+#include "libavutil/bswap.h"
+#include "libpar.h"
+
 
 typedef struct {
 	ParDisplaySettings dispSet;
@@ -72,11 +71,6 @@ void libpar_packet_destroy(struct AVPacket *packet)
     }
 	
 	if (fed)  {
-		if (fed->dsFrameData->frameData)
-			av_free(fed->dsFrameData->frameData);
-		if (fed->dsFrameData)
-			av_free(fed->dsFrameData);
-		
 		if (fed->frameInfo->frameBuffer)
 			av_free(fed->frameInfo->frameBuffer);
 		if (fed->frameInfo)
@@ -94,9 +88,6 @@ void libpar_packet_destroy(struct AVPacket *packet)
 AVStream* createStream(AVFormatContext * avf, 
 				       const ParFrameInfo *frameInfo)
 {
-	//PARContext *p = avf->priv_data;
-	const NetVuImageData *pic = NULL;
-	const NetVuAudioData *aud = NULL;
 	char textbuffer[128];
 	int w, h;
 	int streamId = -1;
@@ -115,8 +106,7 @@ AVStream* createStream(AVFormatContext * avf,
 	if (parReader_frameIsVideo(frameInfo))  {
 		st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
 		
-		pic = frameInfo->frameBuffer;
-		switch(pic->vid_format)  {
+		switch(getVideoFrameSubType(frameInfo))  {
 			case(FRAME_FORMAT_JPEG_422):
 			case(FRAME_FORMAT_JPEG_411):
 				st->codec->codec_id = CODEC_ID_MJPEG;
@@ -180,8 +170,7 @@ AVStream* createStream(AVFormatContext * avf,
 		st->codec->block_align = 0;
 		st->start_time = frameInfo->imageTime * 1000 + frameInfo->imageMS;
 		
-		aud = frameInfo->frameBuffer;
-		switch(aud->mode)  {
+		switch(getAudioFrameSubType(frameInfo))  {
 			case(FRAME_FORMAT_AUD_ADPCM_8000):
 				st->codec->sample_rate = 8000;
 				break;
@@ -252,7 +241,6 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 	ParFrameInfo *fi = &avfp->frameInfo;
 	LibparFrameExtra *pktExt = NULL;
 	ParFrameInfo *pktFI = NULL;
-	FrameData *pktDS = NULL;
 
 	int streamIndex = -1;
 	int id = fi->channel;
@@ -288,12 +276,6 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 	pkt->priv = pktExt;
 	
 	pktExt->fileChanged = fChang;
-	pktExt->dsFrameData = av_malloc(sizeof(FrameData));
-	if (NULL == pktExt->dsFrameData)  {
-		pkt->size = 0;
-		return;
-	}
-	pktDS = pktExt->dsFrameData;
 	
 	pktExt->indexInfoCount = parReader_getIndexInfo(fi, &pktExt->indexInfo);
 	
@@ -307,48 +289,21 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 	pktFI = pktExt->frameInfo;
 	
 	if (parReader_frameIsVideo(fi))  {
-		const NetVuImageData *pic = fi->frameBuffer;
-		
-		pktFI->frameBufferSize = sizeof(NetVuImageData);
-		pktDS->frameType = NetVuVideo;
-		pktDS->frameData = av_malloc(sizeof(NetVuImageData));
-		if (NULL == pktDS->frameData)  {
-			pkt->size = 0;
-			return;
-		}
-		memcpy(pktDS->frameData, fi->frameBuffer, sizeof(NetVuImageData));
-		pktDS->additionalData = NULL;
-		
-		switch(pic->vid_format)  {
-			case(FRAME_FORMAT_JPEG_422):
-			case(FRAME_FORMAT_JPEG_411):
-			case(FRAME_FORMAT_MPEG4_411_I):
-			case(FRAME_FORMAT_MPEG4_411_GOV_I):
-			case(FRAME_FORMAT_RAW_422I):
-			case(FRAME_FORMAT_H264_I):
-				pkt->flags |= AV_PKT_FLAG_KEY;
-				break;
-			default:
-				break;
-		}
+		pktFI->frameBufferSize = parReader_getPicStructSize();		
+		if (parReader_isIFrame(fi))
+			pkt->flags |= AV_PKT_FLAG_KEY;
 	}
 	else if (parReader_frameIsAudio(fi))  {
-		//const NetVuAudioData *aud = avfp->frameInfo.frameBuffer;
-		pktFI->frameBufferSize = sizeof(NetVuAudioData);
-		pktDS->frameType = NetVuAudio;
-		pktDS->frameData = av_malloc(sizeof(NetVuAudioData));
-		if (NULL == pktDS->frameData)  {
-			pkt->size = 0;
-			return;
-		}
-		memcpy(pktDS->frameData, fi->frameBuffer, sizeof(NetVuAudioData));
-		pktDS->additionalData = NULL;
+		pktFI->frameBufferSize = parReader_getAudStructSize();
 	}
 	else  {
 		/// \todo Do something with data frames
 	}
 	
 	if (pktFI->frameBufferSize > 0)  {
+		// Make a copy of the ParFrameInfo struct and the frame header 
+		// for use by client code that knows this is here
+		
 		// Save frameBufferSize as it's about to be overwritten by memcpy
 		int fbs = pktFI->frameBufferSize;
 		memcpy(pktFI, &(avfp->frameInfo), sizeof(ParFrameInfo));
@@ -359,7 +314,7 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 			return;
 		}
 		memcpy(pktFI->frameBuffer,avfp->frameInfo.frameBuffer, fbs);
-		pktFI->frameData = pkt->data;
+		pktFI->frameData = NULL;
 	}
 
 	if (avfp->frameInfo.imageTime > 0)  {
@@ -610,12 +565,8 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 
 static int par_read_close(AVFormatContext * avf)
 {
-	PARContext *p = avf->priv_data;
-	
+	PARContext *p = avf->priv_data;	
 	av_free(p->frameInfo.frameBuffer);
-	p->frameInfo.frameBuffer = NULL;
-	p->frameInfo.frameBufferSize = 0;
-	
 	return 0;
 }
 
