@@ -39,6 +39,7 @@
 #include "libavcore/parseutils.h"
 #include "libavutil/colorspace.h"
 #include "libavutil/fifo.h"
+#include "libavutil/intreadwrite.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/avstring.h"
 #include "libavutil/libm.h"
@@ -124,7 +125,7 @@ static int nb_output_codecs = 0;
 static AVStreamMap *stream_maps = NULL;
 static int nb_stream_maps;
 
-static AVMetaDataMap meta_data_maps[MAX_FILES];
+static AVMetaDataMap *meta_data_maps = NULL;
 static int nb_meta_data_maps;
 
 /* indexed by output file stream index */
@@ -534,6 +535,7 @@ static int ffmpeg_exit(int ret)
     av_free(input_codecs);
     av_free(output_codecs);
     av_free(stream_maps);
+    av_free(meta_data_maps);
 
     av_free(video_codec_name);
     av_free(audio_codec_name);
@@ -632,6 +634,27 @@ static void choose_pixel_fmt(AVStream *st, AVCodec *codec)
     }
 }
 
+static AVOutputStream *new_output_stream(AVFormatContext *oc, int file_idx)
+{
+    int idx = oc->nb_streams - 1;
+    AVOutputStream *ost;
+
+    output_streams_for_file[file_idx] =
+        grow_array(output_streams_for_file[file_idx],
+                   sizeof(*output_streams_for_file[file_idx]),
+                   &nb_output_streams_for_file[file_idx],
+                   oc->nb_streams);
+    ost = output_streams_for_file[file_idx][idx] =
+        av_mallocz(sizeof(AVOutputStream));
+    if (!ost) {
+        fprintf(stderr, "Could not alloc output stream\n");
+        ffmpeg_exit(1);
+    }
+    ost->file_index = file_idx;
+    ost->index = idx;
+    return ost;
+}
+
 static int read_ffserver_streams(AVFormatContext *s, const char *filename)
 {
     int i, err;
@@ -642,10 +665,12 @@ static int read_ffserver_streams(AVFormatContext *s, const char *filename)
     if (err < 0)
         return err;
     /* copy stream format */
-    s->nb_streams = ic->nb_streams;
+    s->nb_streams = 0;
     for(i=0;i<ic->nb_streams;i++) {
         AVStream *st;
         AVCodec *codec;
+
+        s->nb_streams++;
 
         // FIXME: a more elegant solution is needed
         st = av_mallocz(sizeof(AVStream));
@@ -678,6 +703,8 @@ static int read_ffserver_streams(AVFormatContext *s, const char *filename)
 
         if(st->codec->flags & CODEC_FLAG_BITEXACT)
             nopts = 1;
+
+        new_output_stream(s, nb_output_files);
     }
 
     if (!nopts)
@@ -2819,24 +2846,6 @@ static void opt_audio_codec(const char *arg)
     opt_codec(&audio_stream_copy, &audio_codec_name, AVMEDIA_TYPE_AUDIO, arg);
 }
 
-static void opt_audio_tag(const char *arg)
-{
-    char *tail;
-    audio_codec_tag= strtol(arg, &tail, 0);
-
-    if(!tail || *tail)
-        audio_codec_tag= arg[0] + (arg[1]<<8) + (arg[2]<<16) + (arg[3]<<24);
-}
-
-static void opt_video_tag(const char *arg)
-{
-    char *tail;
-    video_codec_tag= strtol(arg, &tail, 0);
-
-    if(!tail || *tail)
-        video_codec_tag= arg[0] + (arg[1]<<8) + (arg[2]<<16) + (arg[3]<<24);
-}
-
 static void opt_video_codec(const char *arg)
 {
     opt_codec(&video_stream_copy, &video_codec_name, AVMEDIA_TYPE_VIDEO, arg);
@@ -2847,13 +2856,22 @@ static void opt_subtitle_codec(const char *arg)
     opt_codec(&subtitle_stream_copy, &subtitle_codec_name, AVMEDIA_TYPE_SUBTITLE, arg);
 }
 
-static void opt_subtitle_tag(const char *arg)
+static int opt_codec_tag(const char *opt, const char *arg)
 {
     char *tail;
-    subtitle_codec_tag= strtol(arg, &tail, 0);
+    uint32_t *codec_tag;
 
-    if(!tail || *tail)
-        subtitle_codec_tag= arg[0] + (arg[1]<<8) + (arg[2]<<16) + (arg[3]<<24);
+    codec_tag = !strcmp(opt, "atag") ? &audio_codec_tag :
+                !strcmp(opt, "vtag") ? &video_codec_tag :
+                !strcmp(opt, "stag") ? &subtitle_codec_tag : NULL;
+    if (!codec_tag)
+        return -1;
+
+    *codec_tag = strtol(arg, &tail, 0);
+    if (!tail || *tail)
+        *codec_tag = AV_RL32(arg);
+
+    return 0;
 }
 
 static void opt_map(const char *arg)
@@ -2886,8 +2904,10 @@ static void opt_map_meta_data(const char *arg)
     AVMetaDataMap *m;
     char *p;
 
-    m = &meta_data_maps[nb_meta_data_maps++];
+    meta_data_maps = grow_array(meta_data_maps, sizeof(*meta_data_maps),
+                                &nb_meta_data_maps, nb_meta_data_maps + 1);
 
+    m = &meta_data_maps[nb_meta_data_maps - 1];
     m->out_file = strtol(arg, &p, 0);
     if (*p)
         p++;
@@ -3212,27 +3232,6 @@ static void check_audio_video_sub_inputs(int *has_video_ptr, int *has_audio_ptr,
     *has_video_ptr = has_video;
     *has_audio_ptr = has_audio;
     *has_subtitle_ptr = has_subtitle;
-}
-
-static AVOutputStream *new_output_stream(AVFormatContext *oc, int file_idx)
-{
-    int idx = oc->nb_streams - 1;
-    AVOutputStream *ost;
-
-    output_streams_for_file[file_idx] =
-        grow_array(output_streams_for_file[file_idx],
-                   sizeof(*output_streams_for_file[file_idx]),
-                   &nb_output_streams_for_file[file_idx],
-                   oc->nb_streams);
-    ost = output_streams_for_file[file_idx][idx] =
-        av_mallocz(sizeof(AVOutputStream));
-    if (!ost) {
-        fprintf(stderr, "Could not alloc output stream\n");
-        ffmpeg_exit(1);
-    }
-    ost->file_index = file_idx;
-    ost->index = idx;
-    return ost;
 }
 
 static void new_video_stream(AVFormatContext *oc, int file_idx)
@@ -4124,7 +4123,7 @@ static const OptionDef options[] = {
     { "inter_matrix", HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_inter_matrix}, "specify inter matrix coeffs", "matrix" },
     { "top", HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_top_field_first}, "top=1/bottom=0/auto=-1 field first", "" },
     { "dc", OPT_INT | HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)&intra_dc_precision}, "intra_dc_precision", "precision" },
-    { "vtag", HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_video_tag}, "force video tag/fourcc", "fourcc/tag" },
+    { "vtag", OPT_FUNC2 | HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_codec_tag}, "force video tag/fourcc", "fourcc/tag" },
     { "newvideo", OPT_VIDEO | OPT_FUNC2, {(void*)opt_new_stream}, "add a new video stream to the current output stream" },
     { "vlang", HAS_ARG | OPT_STRING | OPT_VIDEO, {(void *)&video_language}, "set the ISO 639 language code (3 letters) of the current video stream" , "code" },
     { "qphist", OPT_BOOL | OPT_EXPERT | OPT_VIDEO, { (void *)&qp_hist }, "show QP histogram" },
@@ -4140,7 +4139,7 @@ static const OptionDef options[] = {
     { "ac", HAS_ARG | OPT_FUNC2 | OPT_AUDIO, {(void*)opt_audio_channels}, "set number of audio channels", "channels" },
     { "an", OPT_BOOL | OPT_AUDIO, {(void*)&audio_disable}, "disable audio" },
     { "acodec", HAS_ARG | OPT_AUDIO, {(void*)opt_audio_codec}, "force audio codec ('copy' to copy stream)", "codec" },
-    { "atag", HAS_ARG | OPT_EXPERT | OPT_AUDIO, {(void*)opt_audio_tag}, "force audio tag/fourcc", "fourcc/tag" },
+    { "atag", OPT_FUNC2 | HAS_ARG | OPT_EXPERT | OPT_AUDIO, {(void*)opt_codec_tag}, "force audio tag/fourcc", "fourcc/tag" },
     { "vol", OPT_INT | HAS_ARG | OPT_AUDIO, {(void*)&audio_volume}, "change audio volume (256=normal)" , "volume" }, //
     { "newaudio", OPT_AUDIO | OPT_FUNC2, {(void*)opt_new_stream}, "add a new audio stream to the current output stream" },
     { "alang", HAS_ARG | OPT_STRING | OPT_AUDIO, {(void *)&audio_language}, "set the ISO 639 language code (3 letters) of the current audio stream" , "code" },
@@ -4151,7 +4150,7 @@ static const OptionDef options[] = {
     { "scodec", HAS_ARG | OPT_SUBTITLE, {(void*)opt_subtitle_codec}, "force subtitle codec ('copy' to copy stream)", "codec" },
     { "newsubtitle", OPT_SUBTITLE | OPT_FUNC2, {(void*)opt_new_stream}, "add a new subtitle stream to the current output stream" },
     { "slang", HAS_ARG | OPT_STRING | OPT_SUBTITLE, {(void *)&subtitle_language}, "set the ISO 639 language code (3 letters) of the current subtitle stream" , "code" },
-    { "stag", HAS_ARG | OPT_EXPERT | OPT_SUBTITLE, {(void*)opt_subtitle_tag}, "force subtitle tag/fourcc", "fourcc/tag" },
+    { "stag", OPT_FUNC2 | HAS_ARG | OPT_EXPERT | OPT_SUBTITLE, {(void*)opt_codec_tag}, "force subtitle tag/fourcc", "fourcc/tag" },
 
     /* grab options */
     { "vc", HAS_ARG | OPT_EXPERT | OPT_VIDEO | OPT_GRAB, {(void*)opt_video_channel}, "set video grab channel (DV1394 only)", "channel" },
