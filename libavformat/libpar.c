@@ -41,6 +41,8 @@ AVStream* createStream(AVFormatContext * avf,
 				       const ParFrameInfo *frameInfo);
 void createPacket(AVFormatContext * avf, AVPacket *packet, int siz, int fChang);
 
+static void parreaderLogger(int level, const char *format, va_list args);
+
 
 const unsigned int MAX_FRAMEBUFFER_SIZE = 256 * 1024;
 
@@ -246,10 +248,13 @@ AVStream* createStream(AVFormatContext * avf,
 void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 {
 	PARContext *avfp = avf->priv_data;
+	ParFrameInfo *fi = &avfp->frameInfo;
 	LibparFrameExtra *pktExt = NULL;
+	ParFrameInfo *pktFI = NULL;
+	FrameData *pktDS = NULL;
 
 	int streamIndex = -1;
-	int id = avfp->frameInfo.channel;
+	int id = fi->channel;
 	for(int ii = 0; ii < avf->nb_streams; ii++)  {
 		if ( (NULL != avf->streams[ii]) && (avf->streams[ii]->id == id) )  {
 			streamIndex = ii;
@@ -257,7 +262,7 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 		}
 	}
 	if (-1 == streamIndex)  {
-        AVStream *str = createStream(avf, &avfp->frameInfo);
+        AVStream *str = createStream(avf, fi);
 		if (str)
 			streamIndex = str->index;
 		else
@@ -287,29 +292,31 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 		pkt->size = 0;
 		return;
 	}
-	pktExt->indexInfoCount = parReader_getIndexInfo(&pktExt->indexInfo);
+	pktDS = pktExt->dsFrameData;
 	
-	memcpy(pkt->data, avfp->frameInfo.frameData, siz);
+	pktExt->indexInfoCount = parReader_getIndexInfo(fi, &pktExt->indexInfo);
 	
-	pktExt->frameInfo = av_malloc(sizeof(ParFrameInfo));	
+	memcpy(pkt->data, fi->frameData, siz);
+	
+	pktExt->frameInfo = av_mallocz(sizeof(ParFrameInfo));	
 	if (NULL == pktExt->frameInfo)  {
 		pkt->size = 0;
 		return;
 	}
+	pktFI = pktExt->frameInfo;
 	
-	if (parReader_frameIsVideo(&avfp->frameInfo))  {
-		const NetVuImageData *pic = avfp->frameInfo.frameBuffer;
+	if (parReader_frameIsVideo(fi))  {
+		const NetVuImageData *pic = fi->frameBuffer;
 		
-		pktExt->frameInfo->frameBufferSize = sizeof(NetVuImageData);
-		pktExt->dsFrameData->frameType = NetVuVideo;
-		pktExt->dsFrameData->frameData = av_malloc(sizeof(NetVuImageData));
-		if (NULL == pktExt->dsFrameData->frameData)  {
+		pktFI->frameBufferSize = sizeof(NetVuImageData);
+		pktDS->frameType = NetVuVideo;
+		pktDS->frameData = av_malloc(sizeof(NetVuImageData));
+		if (NULL == pktDS->frameData)  {
 			pkt->size = 0;
 			return;
 		}
-		memcpy(pktExt->dsFrameData->frameData, avfp->frameInfo.frameBuffer, 
-				sizeof(NetVuImageData));
-		pktExt->dsFrameData->additionalData = NULL;
+		memcpy(pktDS->frameData, fi->frameBuffer, sizeof(NetVuImageData));
+		pktDS->additionalData = NULL;
 		
 		switch(pic->vid_format)  {
 			case(FRAME_FORMAT_JPEG_422):
@@ -324,35 +331,34 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 				break;
 		}
 	}
-	else if (parReader_frameIsAudio(&avfp->frameInfo))  {
+	else if (parReader_frameIsAudio(fi))  {
 		//const NetVuAudioData *aud = avfp->frameInfo.frameBuffer;
-		pktExt->frameInfo->frameBufferSize = sizeof(NetVuAudioData);
-		pktExt->dsFrameData->frameType = NetVuAudio;
-		pktExt->dsFrameData->frameData = av_malloc(sizeof(NetVuAudioData));
-		if (NULL == pktExt->dsFrameData->frameData)  {
+		pktFI->frameBufferSize = sizeof(NetVuAudioData);
+		pktDS->frameType = NetVuAudio;
+		pktDS->frameData = av_malloc(sizeof(NetVuAudioData));
+		if (NULL == pktDS->frameData)  {
 			pkt->size = 0;
 			return;
 		}
-		memcpy(pktExt->dsFrameData->frameData, avfp->frameInfo.frameBuffer, 
-				sizeof(NetVuAudioData));
-		pktExt->dsFrameData->additionalData = NULL;
+		memcpy(pktDS->frameData, fi->frameBuffer, sizeof(NetVuAudioData));
+		pktDS->additionalData = NULL;
 	}
 	else  {
 		/// \todo Do something with data frames
 	}
 	
-	if (pktExt->frameInfo->frameBufferSize > 0)  {
+	if (pktFI->frameBufferSize > 0)  {
 		// Save frameBufferSize as it's about to be overwritten by memcpy
-		int fbs = pktExt->frameInfo->frameBufferSize;
-		memcpy(pktExt->frameInfo, &(avfp->frameInfo), sizeof(ParFrameInfo));
-		pktExt->frameInfo->frameBufferSize = fbs;
-		pktExt->frameInfo->frameBuffer = av_malloc(fbs);
-		if (NULL == pktExt->frameInfo->frameBuffer)  {
+		int fbs = pktFI->frameBufferSize;
+		memcpy(pktFI, &(avfp->frameInfo), sizeof(ParFrameInfo));
+		pktFI->frameBufferSize = fbs;
+		pktFI->frameBuffer = av_malloc(fbs);
+		if (NULL == pktFI->frameBuffer)  {
 			pkt->size = 0;
 			return;
 		}
-		memcpy(pktExt->frameInfo->frameBuffer,avfp->frameInfo.frameBuffer, fbs);
-		pktExt->frameInfo->frameData = pkt->data;
+		memcpy(pktFI->frameBuffer,avfp->frameInfo.frameBuffer, fbs);
+		pktFI->frameData = pkt->data;
 	}
 
 	if (avfp->frameInfo.imageTime > 0)  {
@@ -395,35 +401,61 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
     int64_t seconds = 0;
     AVStream *strm = NULL;
     AVRational secondsTB = {1,1};
+	
 
 	p->frameInfo.frameBufferSize = MAX_FRAMEBUFFER_SIZE;
 	p->frameInfo.frameBuffer = av_malloc(p->frameInfo.frameBufferSize);
 	
+	switch(av_log_get_level())  {
+		case(AV_LOG_QUIET):
+			parReader_setLogLevel(-1);
+			break;
+		case(AV_LOG_PANIC):
+			parReader_setLogLevel(PARREADER_LOG_CRITICAL);
+			break;
+		case(AV_LOG_FATAL):
+			parReader_setLogLevel(PARREADER_LOG_CRITICAL);
+			break;
+		case(AV_LOG_ERROR):
+			parReader_setLogLevel(PARREADER_LOG_ERROR);
+			break;
+		case(AV_LOG_WARNING):
+			parReader_setLogLevel(PARREADER_LOG_WARNING);
+			break;
+		case(AV_LOG_INFO):
+			parReader_setLogLevel(PARREADER_LOG_INFO);
+			break;
+		case(AV_LOG_VERBOSE):
+			parReader_setLogLevel(PARREADER_LOG_INFO);
+			break;
+		case(AV_LOG_DEBUG):
+			parReader_setLogLevel(PARREADER_LOG_DEBUG);
+			break;
+	}
+	parReader_setLogCallback(parreaderLogger);
+	
 	parReader_setDisplaySettingsDefaults(&p->dispSet);
-	
-	parReader_setLogLevel(PARREADER_LOG_WARNING);
-	//parReader_setLogLevel(PARREADER_LOG_DEBUG);
-	
+		
 	res = parReader_loadParFile(NULL, avf->filename, -1, &p->frameInfo, 0);
 	if (0 == res)
 		return AVERROR(EIO);
 	
-	seqLen = parReader_getFilelist(&filelist);
+	seqLen = parReader_getFilelist(&p->frameInfo, &filelist);
 	if (1 == seqLen)  {
 		int frameNumber, frameCount;
 		unsigned long start, end;
-		if (parReader_getIndexData(&frameNumber, &frameCount, &start, &end))  {
+		if (parReader_getIndexData(&p->frameInfo, &frameNumber, &frameCount, &start, &end))  {
             seconds = end - start;
 		}
 	}
 	else  {
 		int res, frameNumber, frameCount;
 		unsigned long start, end, realStart, realEnd;
-		if (parReader_getIndexData(&frameNumber, &frameCount, &start, &end))  {
+		if (parReader_getIndexData(&p->frameInfo, &frameNumber, &frameCount, &start, &end))  {
 			realStart = start;
             av_log(NULL, AV_LOG_DEBUG, "par_read_header:  %s (%d)\n", filelist[0], seqLen - 1);
 			res = parReader_loadParFile(NULL, filelist[0], seqLen - 1, &p->frameInfo, 0);
-			if (parReader_getIndexData(&frameNumber, &frameCount, &start, &end))  {
+			if (parReader_getIndexData(&p->frameInfo, &frameNumber, &frameCount, &start, &end))  {
 				realEnd = end;
 				seconds = realEnd - realStart;
 			}
@@ -475,7 +507,7 @@ static int par_read_packet(AVFormatContext * avf, AVPacket * pkt)
 	}
 	
 	if (fileChanged)
-		parReader_getFilename(avf->filename, sizeof(avf->filename));
+		parReader_getFilename(&p->frameInfo, avf->filename, sizeof(avf->filename));
 	
 	createPacket(avf, pkt, siz, fileChanged);
 	
@@ -580,6 +612,29 @@ static int par_read_close(AVFormatContext * avf)
 	p->frameInfo.frameBufferSize = 0;
 	
 	return 0;
+}
+
+static void parreaderLogger(int level, const char *format, va_list args)
+{
+	int av_log_level = -1;
+	switch(level)  {
+		case (PARREADER_LOG_CRITICAL):
+			av_log_level = AV_LOG_FATAL;
+			break;
+		case(PARREADER_LOG_ERROR):
+			av_log_level = AV_LOG_ERROR;
+			break;
+		case(PARREADER_LOG_WARNING):
+			av_log_level = AV_LOG_WARNING;
+			break;
+		case(PARREADER_LOG_INFO):
+			av_log_level = AV_LOG_INFO;
+			break;
+		case(PARREADER_LOG_DEBUG):
+			av_log_level = AV_LOG_DEBUG;
+			break;
+	}
+	av_vlog(NULL, av_log_level, format, args);
 }
 
 //AVOutputFormat libparreader_muxer = {
