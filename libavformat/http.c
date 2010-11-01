@@ -397,7 +397,6 @@ static int http_close(URLContext *h)
     }
 
     url_close(s->hd);
-
     av_free(s);
     return ret;
 }

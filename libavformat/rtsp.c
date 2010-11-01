@@ -317,21 +317,11 @@ static void rtsp_parse_range_npt(const char *p, int64_t *start, int64_t *end)
 
     get_word_sep(buf, sizeof(buf), "-", &p);
 
-    // CS - THIS IS BAD BUT I DON'T KNOW HOW TO FIX THIS IN WINCE. ULTIMATE 
-    // CAUSE IS THAT parse_date ISN'T IMPLEMENTED FOR CE COS THE mktime 
-    // FUNCTION ISN'T AVAILABLE. parse_date IS DEPENDENT ON IT. I guess a 
-    // mktime function should be defined for CE and build in that configuration
-    // then the parse_date function could be built for CE too
-#if !defined(WINCE)
     *start = parse_date(buf, 1);
-#endif
     if (*p == '-') {
         p++;
         get_word_sep(buf, sizeof(buf), "-", &p);
-#if !defined(WINCE)
-        // CS - SEE ABOVE FOR REASONS THIS IS #defined OUT ^^^^
         *end = parse_date(buf, 1);
-#endif
     }
 //    av_log(NULL, AV_LOG_DEBUG, "Range Start: %lld\n", *start);
 //    av_log(NULL, AV_LOG_DEBUG, "Range End: %lld\n", *end);

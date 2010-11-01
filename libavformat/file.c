@@ -31,14 +31,6 @@
 #include <stdlib.h>
 #include "os_support.h"
 
-#ifdef CONFIG_WINCE
-# ifdef lseek
-# undef lseek
-# endif
-
-# define lseek(f,p,w) _lseek((f), (p), (w))
-#endif /* CONFIG_WINCE */
-
 /* standard file protocol */
 
 static int file_open(URLContext *h, const char *filename, int flags)
