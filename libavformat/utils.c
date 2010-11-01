@@ -3589,39 +3589,3 @@ int ff_url_join(char *str, int size, const char *proto,
     }
     return strlen(str);
 }
-
-char * av_strlwr( char *str )
-{
-    if( str != NULL )
-    {
-        int     strLen = (int)strlen( str );
-        int     pos = 0;
-
-        while( pos < strLen )
-        {
-            str[pos] = (char)tolower( str[pos] );
-
-            pos++;
-        }
-    }
-
-    return str;
-}
-
-char * av_strupr( char *str )
-{
-    if( str != NULL )
-    {
-        int     strLen = (int)strlen( str );
-        int     pos = 0;
-
-        while( pos < strLen )
-        {
-            str[pos] = (char)toupper( str[pos] );
-
-            pos++;
-        }
-    }
-
-    return str;
-}
