@@ -296,7 +296,7 @@ OBJS-$(CONFIG_YUV4MPEGPIPE_DEMUXER)      += yuv4mpeg.o
 OBJS-$(CONFIG_LIBNUT_DEMUXER)            += libnut.o riff.o
 OBJS-$(CONFIG_LIBNUT_MUXER)              += libnut.o riff.o
 OBJS-$(CONFIG_LIBPARREADER_DEMUXER)      += libpar.o
-#OBJS-$(CONFIG_LIBPARREADER_MUXER)        += libpar.o
+#OBJS-$(CONFIG_LIBPARREADER_MUXER)       += libpar.o
 
 # protocols I/O
 OBJS+= avio.o aviobuf.o
@@ -319,9 +319,9 @@ OBJS-$(CONFIG_RTP_PROTOCOL)              += rtpproto.o
 OBJS-$(CONFIG_TCP_PROTOCOL)              += tcp.o
 OBJS-$(CONFIG_UDP_PROTOCOL)              += udp.o
 
-OBJS-$(CONFIG_DSPIC_DEMUXER)			 += ds.o dspic.o
-OBJS-$(CONFIG_ADPIC_DEMUXER)			 += jfif_img.o adpic.o
-OBJS-$(CONFIG_ADAUDIO_DEMUXER)			 += adaudio.o
+OBJS-$(CONFIG_DSPIC_DEMUXER)             += ds.o dspic.o
+OBJS-$(CONFIG_ADPIC_DEMUXER)             += jfif_img.o adpic.o
+OBJS-$(CONFIG_ADAUDIO_DEMUXER)           += adaudio.o
 OBJS-$(CONFIG_DS_PROTOCOL)               += dsenc.o ds.o
 OBJS-$(CONFIG_NETVU_PROTOCOL)            += httpauth.o netvu.o
 

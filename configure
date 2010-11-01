@@ -893,7 +893,7 @@ CONFIG_LIST="
     libopencore_amrwb
     libopencv
     libopenjpeg
-	libparreader
+    libparreader
     librtmp
     libschroedinger
     libspeex

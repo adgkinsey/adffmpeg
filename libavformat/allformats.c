@@ -221,14 +221,14 @@ void av_register_all(void)
     REGISTER_DEMUXER  (XA, xa);
     REGISTER_DEMUXER  (YOP, yop);
     REGISTER_MUXDEMUX (YUV4MPEGPIPE, yuv4mpegpipe);
-	
-	REGISTER_DEMUXER  (ADAUDIO, adaudio);
-	REGISTER_DEMUXER  (ADPIC, adpic);
-	REGISTER_DEMUXER  (DSPIC, dspic);
+
+    REGISTER_DEMUXER  (ADAUDIO, adaudio);
+    REGISTER_DEMUXER  (ADPIC, adpic);
+    REGISTER_DEMUXER  (DSPIC, dspic);
 
     /* external libraries */
     REGISTER_MUXDEMUX (LIBNUT, libnut);
-	REGISTER_DEMUXER  (LIBPARREADER, libparreader);
+    REGISTER_DEMUXER  (LIBPARREADER, libparreader);
 
     /* protocols */
     REGISTER_PROTOCOL (CONCAT, concat);
@@ -249,7 +249,7 @@ void av_register_all(void)
     REGISTER_PROTOCOL (RTP, rtp);
     REGISTER_PROTOCOL (TCP, tcp);
     REGISTER_PROTOCOL (UDP, udp);
-	
-	REGISTER_PROTOCOL (DS, ds);
-	REGISTER_PROTOCOL (NETVU, netvu);
+
+    REGISTER_PROTOCOL (DS, ds);
+    REGISTER_PROTOCOL (NETVU, netvu);
 }
