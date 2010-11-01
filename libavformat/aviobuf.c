@@ -353,8 +353,7 @@ static void fill_buffer(ByteIOContext *s)
     if (len <= 0) {
         /* do not modify buffer if EOF reached so that a seek back can
            be done without rereading data */
-		if(len!=-2)
-			s->eof_reached = 1;
+		s->eof_reached = 1;
         if(len<0)
             s->error= len;
     } else {
@@ -423,8 +422,7 @@ int get_buffer(ByteIOContext *s, unsigned char *buf, int size)
                 if (len <= 0) {
                     /* do not modify buffer if EOF reached so that a seek back can
                     be done without rereading data */
-                    if(len!=-2)
-                        s->eof_reached = 1;
+                    s->eof_reached = 1;
 
                     if(len<0)
                         s->error= len;

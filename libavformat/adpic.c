@@ -26,6 +26,8 @@
 	---------------------------------------------------------------------------
 */
 
+#include <strings.h>
+
 #include "avformat.h"
 #include "libavutil/bswap.h"
 
@@ -650,23 +652,23 @@ static int process_line( char *line, int *line_count, int *dataType, int *size, 
 
         if (!strcmp(tag, "Content-type")) {
             /* Work out what type we actually have */
-            if( strcmp( av_strlwr(p), MIME_TYPE_JPEG ) == 0 )
+            if( strcasecmp(p, MIME_TYPE_JPEG ) == 0 )
             {
                 *dataType = DATA_JFIF;
             }
-            else if( memcmp( av_strlwr(p), MIME_TYPE_MP4, strlen(MIME_TYPE_MP4) ) == 0 ) /* Or if it starts image/mp4  - this covers all the supported mp4 variations (i and p frames) */
+            else if( strncasecmp(p, MIME_TYPE_MP4, strlen(MIME_TYPE_MP4) ) == 0 ) /* Or if it starts image/mp4  - this covers all the supported mp4 variations (i and p frames) */
             {
                 *dataType = DATA_MPEG4P; /* P for now - as they are both processed the same subsequently, this is sufficient */
             }
-            else if( strcmp( av_strlwr(p), MIME_TYPE_TEXT ) == 0 )
+            else if( strcasecmp(p, MIME_TYPE_TEXT ) == 0 )
             {
                 *dataType = DATA_PLAINTEXT;
             }
-            else if( strcmp( av_strlwr(p), MIME_TYPE_LAYOUT ) == 0 )
+            else if( strcasecmp(p, MIME_TYPE_LAYOUT ) == 0 )
             {
                 *dataType = DATA_LAYOUT;
             }
-            else if( memcmp( av_strlwr(p), MIME_TYPE_ADPCM, strlen(MIME_TYPE_ADPCM) ) == 0 )
+            else if( strncasecmp(p, MIME_TYPE_ADPCM, strlen(MIME_TYPE_ADPCM) ) == 0 )
             {
                 *dataType = DATA_AUDIO_ADPCM;
 
@@ -983,7 +985,7 @@ static int adpicFindTag(const char *Tag, ByteIOContext *pb, int MaxLookAhead)
                     *q = '\0';
 	                q = buffer;
 
-					if(strcmp(av_strlwr(buffer), Tag)==0)
+					if(strcasecmp(buffer, Tag)==0)
 					{ 
 						return 1;
 					}

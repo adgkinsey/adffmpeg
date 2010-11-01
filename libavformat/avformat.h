@@ -1440,9 +1440,6 @@ int av_interleave_packet_per_dts(AVFormatContext *s, AVPacket *out,
  */
 int av_write_trailer(AVFormatContext *s);
 
-char * av_strlwr( char *str );
-char * av_strupr( char *str );
-
 void dump_format(AVFormatContext *ic,
                  int index,
                  const char *url,

@@ -7,7 +7,6 @@
 #pragma warning(disable : 4996)
 #endif /* WIN32 */
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "avformat.h"
@@ -417,7 +416,7 @@ static char *CreateUserPassword( const char *Username, const char *Password )
             userPassword[strlen(Username) + strlen(Password)] = '\0';
 
             /* Now convert it to uppercase */
-            av_strupr( userPassword );
+            strupr( userPassword );
         }
     }
 
@@ -457,7 +456,7 @@ char * EncryptPasswordString( char * Username, char * Password, long Timestamp, 
     if( canContinue )
     {
         snprintf(Source, 128, "%08X",(int)Timestamp);
-        av_strlcat(Source, av_strupr(EncPassword), 128);
+        av_strlcat(Source, strupr(EncPassword), 128);
 
         GetFingerPrint( TransmittedData, Source, (unsigned int)strlen(Source), MacAddress );
         TransmittedData[32] = '\0';

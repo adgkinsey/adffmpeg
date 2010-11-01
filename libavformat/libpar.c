@@ -401,8 +401,12 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
     int64_t seconds = 0;
     AVStream *strm = NULL;
     AVRational secondsTB = {1,1};
-	
+	char libVer[128];
+    
 
+    parReader_version(libVer, sizeof(libVer));
+    av_log(avf, AV_LOG_INFO, "ParReader library version: %s\n", libVer);
+    
 	p->frameInfo.frameBufferSize = MAX_FRAMEBUFFER_SIZE;
 	p->frameInfo.frameBuffer = av_malloc(p->frameInfo.frameBufferSize);
 	

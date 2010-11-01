@@ -3783,38 +3783,3 @@ void ff_parse_key_value(const char *str, ff_parse_key_val_cb callback_get_buf,
     }
 }
 
-char * av_strlwr( char *str )
-{
-    if( str != NULL )
-    {
-        int     strLen = (int)strlen( str );
-        int     pos = 0;
-
-        while( pos < strLen )
-        {
-            str[pos] = (char)tolower( str[pos] );
-
-            pos++;
-        }
-    }
-
-    return str;
-}
-
-char * av_strupr( char *str )
-{
-    if( str != NULL )
-    {
-        int     strLen = (int)strlen( str );
-        int     pos = 0;
-
-        while( pos < strLen )
-        {
-            str[pos] = (char)toupper( str[pos] );
-
-            pos++;
-        }
-    }
-
-    return str;
-}
