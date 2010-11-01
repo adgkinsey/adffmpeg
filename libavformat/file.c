@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include "os_support.h"
 
+
 /* standard file protocol */
 
 static int file_read(URLContext *h, unsigned char *buf, int size)
