@@ -46,21 +46,47 @@ static void parreaderLogger(int level, const char *format, va_list args);
 const unsigned int MAX_FRAMEBUFFER_SIZE = 256 * 1024;
 
 
-//static int par_write_header(AVFormatContext * avf)
-//{
-//	//PARContext *p = avf->priv_data;
-//	return 0;
-//}
-//static int par_write_packet(AVFormatContext * avf, AVPacket * pkt)
-//{
-//	//PARContext *p = avf->priv_data;
-//	return 0;
-//}
-//static int par_write_trailer(AVFormatContext * avf)
-//{
-//	//PARContext *p = avf->priv_data;
-//	return 0;
-//}
+static int par_write_header(AVFormatContext *avf)
+{
+	PARContext *p = avf->priv_data;
+    p->frameInfo.parData = parReader_initWritePartition(avf->filename, -1);
+	return 0;
+}
+
+static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
+{
+    const AVRational parTimeBase = (AVRational){1, 1000};
+    static int64_t timeOffset = 0;
+	PARContext *p = avf->priv_data;
+    int64_t parTime;
+    AVStream *stream = avf->streams[pkt->stream_index];
+    int written = 0;
+    
+    p->frameInfo.frameBufferSize = pkt->size + parReader_getPicStructSize();
+    if (timeOffset == 0)  {
+        if (avf->timestamp > 0)
+            timeOffset = avf->timestamp * 1000;
+        else if (pkt->pts == 0)
+            timeOffset = 1288702396000LL;
+    }
+    parTime = av_rescale_q(pkt->pts, stream->time_base, parTimeBase);
+    parTime = parTime + timeOffset;
+    
+    if (stream->codec->codec_id == CODEC_ID_MJPEG)
+        p->frameInfo.frameBuffer = parReader_jpegToIMAGE(pkt->data, parTime, pkt->stream_index);
+    else
+        ;
+    written = parReader_writePartition(p->frameInfo.parData, &p->frameInfo);
+    
+	return written;
+}
+
+static int par_write_trailer(AVFormatContext *avf)
+{
+	PARContext *p = avf->priv_data;
+    parReader_closeWritePartition(p->frameInfo.parData);
+	return 0;
+}
 
 void libpar_packet_destroy(struct AVPacket *packet)
 {
@@ -593,19 +619,19 @@ static void parreaderLogger(int level, const char *format, va_list args)
     av_vlog(NULL, av_log_level, format, args);
 }
 
-//AVOutputFormat libparreader_muxer = {
-//    "libpar",
-//    "AD-Holdings PAR format",
-//    "video/adhbinary",
-//    "par",
-//    sizeof(PARContext),
-//    CODEC_ID_MJPEG,
-//    CODEC_ID_MPEG4,
-//    par_write_header,
-//    par_write_packet,
-//    par_write_trailer,
-//    .flags = AVFMT_GLOBALHEADER,
-//};
+AVOutputFormat libparreader_muxer = {
+    .name           = "libpar",
+    .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings PAR format"),
+    .mime_type      = "video/adhbinary",
+    .extensions     = "par",
+    .priv_data_size = sizeof(PARContext),
+    .audio_codec    = CODEC_ID_ADPCM_ADH,
+    .video_codec    = CODEC_ID_MJPEG,
+    .write_header   = par_write_header,
+    .write_packet   = par_write_packet,
+    .write_trailer  = par_write_trailer,
+    .flags          = AVFMT_GLOBALHEADER,
+};
 
 AVInputFormat libparreader_demuxer = {
     .name           = "libpar",

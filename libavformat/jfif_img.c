@@ -14,7 +14,7 @@ calc_q_tables()
 
 */
 
-#include "libavformat/internal.h"
+#include "internal.h"
 #include "libavutil/bswap.h"
 
 #include "jfif_img.h"
