@@ -55,14 +55,15 @@ static int par_write_header(AVFormatContext *avf)
 
 static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
 {
-    const AVRational parTimeBase = (AVRational){1, 1000};
+    static const AVRational parTimeBase = {1, 1000};
     static int64_t timeOffset = 0;
 	PARContext *p = avf->priv_data;
     int64_t parTime;
+    int picHeaderSize = parReader_getPicStructSize();
     AVStream *stream = avf->streams[pkt->stream_index];
     int written = 0;
     
-    p->frameInfo.frameBufferSize = pkt->size + parReader_getPicStructSize();
+    p->frameInfo.frameBufferSize = pkt->size + picHeaderSize;
     if (timeOffset == 0)  {
         if (avf->timestamp > 0)
             timeOffset = avf->timestamp * 1000;
@@ -74,8 +75,27 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
     
     if (stream->codec->codec_id == CODEC_ID_MJPEG)
         p->frameInfo.frameBuffer = parReader_jpegToIMAGE(pkt->data, parTime, pkt->stream_index);
-    else
-        ;
+    else  {
+        void *hdr;
+        uint8_t *ptr;
+        int parFormat;
+        if (stream->codec->codec_id == CODEC_ID_MPEG4)
+            parFormat = FRAME_FORMAT_MPEG4_411;
+        else
+            parFormat = FRAME_FORMAT_H264_I;
+        hdr = parReader_generatePicHeader(pkt->stream_index, 
+                                          parFormat, 
+                                          pkt->size, 
+                                          parTime,
+                                          "", 
+                                          stream->codec->width, 
+                                          stream->codec->height
+                                          );
+        ptr = av_malloc(p->frameInfo.frameBufferSize);
+        p->frameInfo.frameBuffer = ptr;
+        memcpy(ptr, hdr, picHeaderSize);
+        memcpy(ptr + picHeaderSize, pkt->data, pkt->size);
+    }
     written = parReader_writePartition(p->frameInfo.parData, &p->frameInfo);
     
 	return written;
