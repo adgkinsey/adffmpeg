@@ -32,7 +32,19 @@ typedef struct {
     ParFrameInfo frameInfo;
     int fileChanged;
     int frameCached;
-} PARContext;
+} PARDecContext;
+
+typedef struct {
+    char name[64];
+    int camera;
+    int64_t startTime;
+} PAREncStreamContext;
+
+typedef struct {
+    ParFrameInfo frameInfo;
+    PAREncStreamContext stream[MAX_STREAMS];
+    int picHeaderSize;
+} PAREncContext;
 
 
 void libpar_packet_destroy(struct AVPacket *packet);
@@ -48,62 +60,106 @@ const unsigned int MAX_FRAMEBUFFER_SIZE = 256 * 1024;
 
 static int par_write_header(AVFormatContext *avf)
 {
-	PARContext *p = avf->priv_data;
+	PAREncContext *p = avf->priv_data;
+    p->picHeaderSize = parReader_getPicStructSize();
+    
     p->frameInfo.parData = parReader_initWritePartition(avf->filename, -1);
-	return 0;
+    
+    if (p->frameInfo.parData)
+        return 0;
+    else
+        return AVERROR(EIO);
 }
 
 static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
 {
     static const AVRational parTimeBase = {1, 1000};
-    static int64_t timeOffset = 0;
-	PARContext *p = avf->priv_data;
+	PAREncContext *p = avf->priv_data;
+    PAREncStreamContext *ps = &(p->stream[pkt->stream_index]);
+    AVMetadataTag *tag = NULL;
     int64_t parTime;
-    int picHeaderSize = parReader_getPicStructSize();
     AVStream *stream = avf->streams[pkt->stream_index];
+    void *hdr;
+    uint8_t *ptr;
+    int parFormat;
     int written = 0;
     
-    p->frameInfo.frameBufferSize = pkt->size + picHeaderSize;
-    if (timeOffset == 0)  {
+    if (ps->camera < 1)  {
+        do  {
+            tag = av_metadata_get(stream->metadata, "", tag, 0);
+            if (tag)  {
+                if (strcasecmp(tag->key, "title") == 0)
+                    strncpy(ps->name, tag->value, sizeof(ps->name));
+                else if (strcasecmp(tag->key, "date") == 0)
+                    ps->startTime = 0;
+                else if (strcasecmp(tag->key, "camera") == 0)
+                    sscanf(tag->value, "%d", &(ps->camera));
+            }
+        } while (tag);
+        
+        if (ps->camera < 1)
+            ps->camera = pkt->stream_index + 1;
+        if (strlen(ps->name) == 0)
+            snprintf(ps->name, sizeof(ps->name), "Camera %d", sizeof(ps->camera));
+    }
+    
+    // PAR files have timestamps that are in UTC, not elapsed time
+    // So if the pts we have been given is the latter we need to
+    // add an offset to convert it to the former
+    if ( (pkt->pts == 0) && (ps->startTime == 0) )  {
         if (avf->timestamp > 0)
-            timeOffset = avf->timestamp * 1000;
-        else if (pkt->pts == 0)
-            timeOffset = 1288702396000LL;
+            ps->startTime = avf->timestamp * 1000;
+        else
+            ps->startTime = 1288702396000LL;
     }
     parTime = av_rescale_q(pkt->pts, stream->time_base, parTimeBase);
-    parTime = parTime + timeOffset;
+    if (parTime < ps->startTime)
+        parTime = parTime + ps->startTime;
     
-    if (stream->codec->codec_id == CODEC_ID_MJPEG)
-        p->frameInfo.frameBuffer = parReader_jpegToIMAGE(pkt->data, parTime, pkt->stream_index);
-    else  {
-        void *hdr;
-        uint8_t *ptr;
-        int parFormat;
-        if (stream->codec->codec_id == CODEC_ID_MPEG4)
-            parFormat = FRAME_FORMAT_MPEG4_411;
-        else
-            parFormat = FRAME_FORMAT_H264_I;
-        hdr = parReader_generatePicHeader(pkt->stream_index, 
-                                          parFormat, 
-                                          pkt->size, 
-                                          parTime,
-                                          "", 
-                                          stream->codec->width, 
-                                          stream->codec->height
-                                          );
-        ptr = av_malloc(p->frameInfo.frameBufferSize);
-        p->frameInfo.frameBuffer = ptr;
-        memcpy(ptr, hdr, picHeaderSize);
-        memcpy(ptr + picHeaderSize, pkt->data, pkt->size);
+    //if (stream->codec->codec_id == CODEC_ID_MJPEG)  {
+    //    p->frameInfo.frameBuffer = parReader_jpegToIMAGE(pkt->data, parTime, pkt->stream_index);
+    //}
+    
+    if (stream->codec->codec_id == CODEC_ID_MJPEG)  {
+        parFormat = FRAME_FORMAT_JPEG_411;
     }
+    else if (stream->codec->codec_id == CODEC_ID_MPEG4)
+    {
+        if (pkt->flags & AV_PKT_FLAG_KEY)
+            parFormat = FRAME_FORMAT_MPEG4_411_GOV_I;
+        else
+            parFormat = FRAME_FORMAT_MPEG4_411_GOV_P;
+    }
+    else  {
+        if (pkt->flags & AV_PKT_FLAG_KEY)
+            parFormat = FRAME_FORMAT_H264_I;
+        else
+            parFormat = FRAME_FORMAT_H264_P;
+    }
+        
+    hdr = parReader_generatePicHeader(ps->camera, 
+                                      parFormat, 
+                                      pkt->size, 
+                                      parTime,
+                                      ps->name, 
+                                      stream->codec->width, 
+                                      stream->codec->height
+                                      );
+    p->frameInfo.frameBufferSize = pkt->size + p->picHeaderSize;
+    ptr = av_malloc(p->frameInfo.frameBufferSize);
+    p->frameInfo.frameBuffer = ptr;
+    memcpy(ptr, hdr, p->picHeaderSize);
+    memcpy(ptr + p->picHeaderSize, pkt->data, pkt->size);
     written = parReader_writePartition(p->frameInfo.parData, &p->frameInfo);
+    av_free(ptr);
+    parReader_freePicHeader(hdr);
     
 	return written;
 }
 
 static int par_write_trailer(AVFormatContext *avf)
 {
-	PARContext *p = avf->priv_data;
+	PAREncContext *p = avf->priv_data;
     parReader_closeWritePartition(p->frameInfo.parData);
 	return 0;
 }
@@ -283,8 +339,8 @@ AVStream* createStream(AVFormatContext * avf,
 
 void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 {
-    PARContext *avfp = avf->priv_data;
-    ParFrameInfo *fi = &avfp->frameInfo;
+    PARDecContext *ctxt = avf->priv_data;
+    ParFrameInfo *fi = &ctxt->frameInfo;
     LibparFrameExtra *pktExt = NULL;
     ParFrameInfo *pktFI = NULL;
 
@@ -352,32 +408,32 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 
         // Save frameBufferSize as it's about to be overwritten by memcpy
         int fbs = pktFI->frameBufferSize;
-        memcpy(pktFI, &(avfp->frameInfo), sizeof(ParFrameInfo));
+        memcpy(pktFI, fi, sizeof(ParFrameInfo));
         pktFI->frameBufferSize = fbs;
         pktFI->frameBuffer = av_malloc(fbs);
         if (NULL == pktFI->frameBuffer)  {
             pkt->size = 0;
             return;
         }
-        memcpy(pktFI->frameBuffer, avfp->frameInfo.frameBuffer, fbs);
+        memcpy(pktFI->frameBuffer, fi->frameBuffer, fbs);
         pktFI->frameData = NULL;
     }
 
-    if (avfp->frameInfo.imageTime > 0)  {
-        pkt->pts = avfp->frameInfo.imageTime;
+    if (fi->imageTime > 0)  {
+        pkt->pts = fi->imageTime;
         pkt->pts *= 1000ULL;
-        pkt->pts += avfp->frameInfo.imageMS;
+        pkt->pts += fi->imageMS;
     }
-    else if (avfp->frameInfo.indexTime > 0)  {
-        pkt->pts = avfp->frameInfo.indexTime;
+    else if (fi->indexTime > 0)  {
+        pkt->pts = fi->indexTime;
         pkt->pts *= 1000ULL;
-        pkt->pts += avfp->frameInfo.indexMS;
+        pkt->pts += fi->indexMS;
     }
     else  {
         pkt->pts = AV_NOPTS_VALUE;
     }
 
-    avfp->frameCached = 0;
+    ctxt->frameCached = 0;
 }
 
 static int par_probe(AVProbeData *p)
@@ -397,7 +453,7 @@ static int par_probe(AVProbeData *p)
 static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
 {
     int res, siz;
-    PARContext *p = avf->priv_data;
+    PARDecContext *p = avf->priv_data;
     char **filelist;
     int seqLen;
     int64_t seconds = 0;
@@ -489,7 +545,7 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
 
 static int par_read_packet(AVFormatContext * avf, AVPacket * pkt)
 {
-    PARContext *p = avf->priv_data;
+    PARDecContext *p = avf->priv_data;
 
     int siz = 0;
     int fileChanged = 0;
@@ -523,7 +579,7 @@ static int par_read_packet(AVFormatContext * avf, AVPacket * pkt)
 static int par_read_seek(AVFormatContext *avf, int stream,
                          int64_t target, int flags)
 {
-    PARContext *p = avf->priv_data;
+    PARDecContext *p = avf->priv_data;
     int siz = 0;
     AVStream *st = avf->streams[stream];
     int streamId = st->id;
@@ -611,7 +667,7 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 
 static int par_read_close(AVFormatContext * avf)
 {
-    PARContext *p = avf->priv_data;
+    PARDecContext *p = avf->priv_data;
     av_free(p->frameInfo.frameBuffer);
     return 0;
 }
@@ -644,7 +700,7 @@ AVOutputFormat libparreader_muxer = {
     .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings PAR format"),
     .mime_type      = "video/adhbinary",
     .extensions     = "par",
-    .priv_data_size = sizeof(PARContext),
+    .priv_data_size = sizeof(PAREncContext),
     .audio_codec    = CODEC_ID_ADPCM_ADH,
     .video_codec    = CODEC_ID_MJPEG,
     .write_header   = par_write_header,
@@ -656,7 +712,7 @@ AVOutputFormat libparreader_muxer = {
 AVInputFormat libparreader_demuxer = {
     .name           = "libpar",
     .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings PAR format"),
-    .priv_data_size = sizeof(PARContext),
+    .priv_data_size = sizeof(PARDecContext),
     .read_probe     = par_probe,
     .read_header    = par_read_header,
     .read_packet    = par_read_packet,
