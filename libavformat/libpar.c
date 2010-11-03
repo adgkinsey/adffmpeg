@@ -23,6 +23,7 @@
 #include <parreader.h>
 
 #include "avformat.h"
+#include "internal.h"
 #include "libavutil/bswap.h"
 #include "libpar.h"
 
@@ -42,6 +43,7 @@ typedef struct {
 
 typedef struct {
     ParFrameInfo frameInfo;
+    PAREncStreamContext master;
     PAREncStreamContext stream[MAX_STREAMS];
     int picHeaderSize;
 } PAREncContext;
@@ -51,6 +53,7 @@ void libpar_packet_destroy(struct AVPacket *packet);
 AVStream* createStream(AVFormatContext * avf,
                        const ParFrameInfo *frameInfo);
 void createPacket(AVFormatContext * avf, AVPacket *packet, int siz, int fChang);
+void importMetadata(const AVMetadataTag *tag, PAREncStreamContext *ps);
 
 static void parreaderLogger(int level, const char *format, va_list args);
 
@@ -58,10 +61,32 @@ static void parreaderLogger(int level, const char *format, va_list args);
 const unsigned int MAX_FRAMEBUFFER_SIZE = 256 * 1024;
 
 
+void importMetadata(const AVMetadataTag *tag, PAREncStreamContext *ps)
+{
+    struct tm timeval = {0};
+    
+    if (strcasecmp(tag->key, "title") == 0)
+        strncpy(ps->name, tag->value, sizeof(ps->name));
+    else if (strcasecmp(tag->key, "date") == 0)  {
+        small_strptime(tag->value, "%Y-%m-%d %H:%M", &timeval);
+        ps->startTime = mktime(&timeval);
+        ps->startTime *= 1000;
+    }
+    else if (strcasecmp(tag->key, "camera") == 0)
+        sscanf(tag->value, "%d", &(ps->camera));
+}
+
 static int par_write_header(AVFormatContext *avf)
 {
 	PAREncContext *p = avf->priv_data;
+    AVMetadataTag *tag = NULL;
+    
     p->picHeaderSize = parReader_getPicStructSize();
+    do  {
+        tag = av_metadata_get(avf->metadata, "", tag, AV_METADATA_IGNORE_SUFFIX);
+        if (tag)
+            importMetadata(tag, &(p->master));
+    } while (tag);
     
     p->frameInfo.parData = parReader_initWritePartition(avf->filename, -1);
     
@@ -85,16 +110,14 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
     int written = 0;
     
     if (ps->camera < 1)  {
+        // Copy over the values from the file data first
+        *ps = p->master;
+        
+        // Now check if there are stream-specific values
         do  {
-            tag = av_metadata_get(stream->metadata, "", tag, 0);
-            if (tag)  {
-                if (strcasecmp(tag->key, "title") == 0)
-                    strncpy(ps->name, tag->value, sizeof(ps->name));
-                else if (strcasecmp(tag->key, "date") == 0)
-                    ps->startTime = 0;
-                else if (strcasecmp(tag->key, "camera") == 0)
-                    sscanf(tag->value, "%d", &(ps->camera));
-            }
+            tag = av_metadata_get(stream->metadata, "", tag, AV_METADATA_IGNORE_SUFFIX);
+            if (tag)
+                importMetadata(tag, ps);
         } while (tag);
         
         if (ps->camera < 1)
