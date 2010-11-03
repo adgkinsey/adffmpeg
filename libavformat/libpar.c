@@ -107,6 +107,7 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
     void *hdr;
     uint8_t *ptr;
     int parFormat;
+    int64_t srcTime = pkt->pts;
     int written = 0;
     
     if (ps->camera < 1)  {
@@ -123,19 +124,21 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
         if (ps->camera < 1)
             ps->camera = pkt->stream_index + 1;
         if (strlen(ps->name) == 0)
-            snprintf(ps->name, sizeof(ps->name), "Camera %d", sizeof(ps->camera));
+            snprintf(ps->name, sizeof(ps->name), "Camera %d", ps->camera);
     }
     
     // PAR files have timestamps that are in UTC, not elapsed time
     // So if the pts we have been given is the latter we need to
     // add an offset to convert it to the former
-    if ( (pkt->pts == 0) && (ps->startTime == 0) )  {
+    if (srcTime < 0)
+        srcTime = pkt->dts;
+    if ( (srcTime == 0) && (ps->startTime == 0) )  {
         if (avf->timestamp > 0)
             ps->startTime = avf->timestamp * 1000;
         else
             ps->startTime = 1288702396000LL;
     }
-    parTime = av_rescale_q(pkt->pts, stream->time_base, parTimeBase);
+    parTime = av_rescale_q(srcTime, stream->time_base, parTimeBase);
     if (parTime < ps->startTime)
         parTime = parTime + ps->startTime;
     
