@@ -227,7 +227,6 @@ AVStream* createStream(AVFormatContext * avf,
     streamId = frameInfo->channel;
     st = av_new_stream(avf, streamId);
 
-    st->filename = av_strdup(avf->filename);
     st->nb_frames = 0;
     st->start_time = frameInfo->indexTime * 1000 + frameInfo->indexMS;
 
@@ -469,7 +468,7 @@ static int par_probe(AVProbeData *p)
         return 0;
 
     first4 = *((unsigned long *)p->buf);
-    first4 = le2me_32(first4);
+    first4 = av_le2ne32(first4);
     if (first4 == 0x00524150)
         return AVPROBE_SCORE_MAX;
     else
