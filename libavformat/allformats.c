@@ -228,7 +228,7 @@ void av_register_all(void)
 
     /* external libraries */
     REGISTER_MUXDEMUX (LIBNUT, libnut);
-    REGISTER_DEMUXER  (LIBPARREADER, libparreader);
+    REGISTER_MUXDEMUX (LIBPARREADER, libparreader);
 
     /* protocols */
     REGISTER_PROTOCOL (CONCAT, concat);

@@ -22,11 +22,9 @@
 #define AVFORMAT_LIBPAR_H
 
 #include <parreader_types.h>
-#include "ds_exports.h"
 
 
 typedef struct {
-	FrameData *dsFrameData;
 	int indexInfoCount;
 	ParFrameInfo *frameInfo;
 	ParKeyValuePair *indexInfo;
