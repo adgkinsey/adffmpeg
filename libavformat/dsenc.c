@@ -108,6 +108,7 @@ static unsigned char hex_val (char *char2);
 static void MD5Print(char* FingerPrint, int size, unsigned char * digest);
 static void GetFingerPrint(char* FingerPrint, char* Source, unsigned int Length, char *cpublic_key);
 
+#if !defined(_WIN32)
 static char* strupr(char *theString)
 {
     int ii;
@@ -117,6 +118,7 @@ static char* strupr(char *theString)
     }
     return theString;
 }
+#endif
 
 //---------------------------------------------------------------------------
 
