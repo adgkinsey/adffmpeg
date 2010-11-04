@@ -30,6 +30,7 @@
 
 #include "avformat.h"
 #include "libavutil/bswap.h"
+#include "libavutil/avstring.h"
 
 #include "adpic.h"
 #include "jfif_img.h"
@@ -44,10 +45,15 @@ enum data_type { DATA_JPEG, DATA_JFIF, DATA_MPEG4I, DATA_MPEG4P, DATA_AUDIO_ADPC
 #define DATA_PLAINTEXT              (MAX_DATA_TYPE + 1)   /* This value is only used internally within the library DATA_PLAINTEXT blocks should not be exposed to the client */
 
 
+typedef enum NetvuTransferType  {
+	NetvuMIME, 
+	NetvuBinary, 
+	NetvuMinimal
+}NetvuTransferType;
+
 typedef struct {
-	int isMIME;
+	NetvuTransferType netvuSubProtocol;
     int utc_offset;
-    int isBinary;
 } AdpicContext;
 
 
@@ -95,7 +101,7 @@ typedef struct _minimal_audio_header	// PRC 002
 }MinimalAudioHeader;
 
 
-static AdpicContext* lastProbedCtxt;
+static AdpicContext* lastProbedCtxt = NULL;
 
 
 static void pic_network2host(NetVuImageData *pic)
@@ -180,10 +186,11 @@ static int adpic_probe(AVProbeData *p)
     //11 DATA_H264P, 
     //12 DATA_XML_INFO
 	
-	if (lastProbedCtxt)
+	if (lastProbedCtxt)  {
 		av_free(lastProbedCtxt);
-		
-	lastProbedCtxt = av_malloc(sizeof(*lastProbedCtxt));
+		lastProbedCtxt = NULL;
+	}
+	
     
 	if ((p->buf[DATA_TYPE] <= DATA_XML_INFO) && (p->buf[DATA_CHANNEL] <= 32))  {
 		unsigned long dataSize = (p->buf[DATA_SIZE_BYTE_0] << 24) + 
@@ -191,8 +198,12 @@ static int adpic_probe(AVProbeData *p)
 								 (p->buf[DATA_SIZE_BYTE_2] << 8 ) + 
 								 p->buf[DATA_SIZE_BYTE_3];
 		if (dataSize <= 0xFFFF)  {
-			lastProbedCtxt->isBinary = TRUE;
-			lastProbedCtxt->isMIME = FALSE;
+			lastProbedCtxt = av_malloc(sizeof(*lastProbedCtxt));
+			if ( (p->buf[DATA_TYPE] == DATA_MINIMAL_MPEG4) || (p->buf[DATA_TYPE] == DATA_MINIMAL_AUDIO_ADPCM) )
+				lastProbedCtxt->netvuSubProtocol = NetvuMinimal;
+			else
+				lastProbedCtxt->netvuSubProtocol = NetvuBinary;
+			lastProbedCtxt->utc_offset = 0;
 			return AVPROBE_SCORE_MAX;
 		}
 	}
@@ -219,8 +230,9 @@ static int adpic_probe(AVProbeData *p)
         /* Good start, Now check whether we have the start of a MIME boundary separator */
         if( adpic_is_valid_separator( &p->buf[server_adjustment], p->buf_size - server_adjustment ) > 0 )
         {
-			lastProbedCtxt->isBinary = FALSE;
-			lastProbedCtxt->isMIME = TRUE;
+			lastProbedCtxt = av_malloc(sizeof(*lastProbedCtxt));
+			lastProbedCtxt->netvuSubProtocol = NetvuMIME;
+			lastProbedCtxt->utc_offset = 0;
             return AVPROBE_SCORE_MAX;
         }
     }
@@ -294,18 +306,24 @@ static int adpic_read_header(AVFormatContext *s, AVFormatParameters *ap)
 
 	s->ctx_flags |= AVFMTCTX_NOHEADER;
 	
-	if (urlContext && urlContext->is_streamed)
-		netvu = urlContext->priv_data;
+	if (urlContext && urlContext->is_streamed)  {
+		if ( av_stristart(urlContext->filename, "netvu://", NULL) == 1)
+			netvu = urlContext->priv_data;
+	}
 	
 	if (netvu)  {
-		if (adpicContext)  {
-			adpicContext->utc_offset	= netvu->utc_offset;
-			adpicContext->isBinary		= netvu->isBinary;
-			if (netvu->boundry)
-				adpicContext->isMIME		= TRUE;
+		adpicContext->utc_offset	= netvu->utc_offset;
+		if (netvu->isBinary)  {
+			if (lastProbedCtxt && (lastProbedCtxt->netvuSubProtocol == NetvuMinimal))
+				adpicContext->netvuSubProtocol = NetvuMinimal;
 			else
-				adpicContext->isMIME		= FALSE;
+				adpicContext->netvuSubProtocol = NetvuBinary;
 		}
+		else if (netvu->boundry)
+			adpicContext->netvuSubProtocol = NetvuMIME;
+		else
+			adpicContext->netvuSubProtocol = NetvuMIME;
+		
 		av_metadata_set2(&s->metadata, "server",		netvu->server, 		0);
 		av_metadata_set2(&s->metadata, "content",		netvu->content, 	0);
 		av_metadata_set2(&s->metadata, "resolution",	netvu->resolution, 	0);
@@ -315,7 +333,7 @@ static int adpic_read_header(AVFormatContext *s, AVFormatParameters *ap)
 		av_metadata_set2(&s->metadata, "site_id",		netvu->site_id, 	0);
 		//av_metadata_set2(&s->metadata, "boundry",		netvu->boundry, 	0);
 	}
-	else if (lastProbedCtxt) {
+	else if (lastProbedCtxt)  {
 		*adpicContext = *lastProbedCtxt;
 		av_free(lastProbedCtxt);
 		lastProbedCtxt = NULL;
@@ -1077,7 +1095,7 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     //if ( ((adpkt[0] == 9) && (adpkt[2] == 0) && (adpkt[3] == 0)) || 
     //     ((adpkt[0] >= 0 && adpkt[0] <= 7) && (adpkt[2] == 0) && (adpkt[3] == 0)) ||
     //     ((adpkt[0] >= 0 && adpkt[0] <= 7) && (adpkt[2] == 0) && (adpkt[3] == 1))    )
-    if(adpicContext->isBinary)
+    if ( (adpicContext->netvuSubProtocol == NetvuBinary) || (adpicContext->netvuSubProtocol == NetvuMinimal) )
     {
         // Get info out of the separator
 	    memcpy(&size, &adpkt[DATA_SIZE_BYTE_0], 4);
@@ -1326,7 +1344,7 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         case DATA_H264P:
 	    {
             /* We have to parse the data for this frame differently depending on whether we're getting a MIME or binary stream */
-            if( TRUE == adpicContext->isMIME )
+            if( adpicContext->netvuSubProtocol == NetvuMIME )
             {
                 int mimeBlockType = 0;
 
@@ -1526,7 +1544,7 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         // CS - Support for ADPCM frames
         case DATA_AUDIO_ADPCM:
         {
-            if( FALSE == adpicContext->isMIME )
+            if( adpicContext->netvuSubProtocol != NetvuMIME )
             {
                 // Get the fixed size portion of the audio header
                 if( (n = adpic_get_buffer( pb, (unsigned char*)audio_data, sizeof(NetVuAudioData) - 4 )) != sizeof(NetVuAudioData) - 4 )
