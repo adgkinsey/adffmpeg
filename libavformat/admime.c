@@ -579,18 +579,13 @@ static int admime_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     long                    extra = 0;
     int                     errorVal = ADPIC_UNKNOWN_ERROR;
     FrameType               currentFrameType = FrameTypeUnknown;
-    unsigned char *         restore;
     char *                  ptr;
     int                     manual_size = FALSE;
     //int loop = 0;
     
-    pb->buf_ptr -= SEPARATOR_SIZE;
-    restore = pb->buf_ptr;
    
     if(adpic_parse_mime_header( pb, &data_type, &size, &extra ) != 0 )
     {
-        pb->buf_ptr=restore;
-
         //NOTE Invalid mime header howeve some times the header is missing and then there is a valid image
         if( (pb->buf_ptr[0] == 0xff) && (pb->buf_ptr[1] == 0xD8))
         {
@@ -635,7 +630,6 @@ static int admime_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 goto cleanup;
             }
 
-            pb->buf_ptr = restore;
             n = get_buffer(pb, pkt->data, BuffSize);
                 
             if(!found)
