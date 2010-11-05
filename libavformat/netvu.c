@@ -546,7 +546,6 @@ static int netvu_close(URLContext *h)
     if( s->boundry )
         av_free( s->boundry );
 
-    av_free(s);
     return ret;
 }
 
