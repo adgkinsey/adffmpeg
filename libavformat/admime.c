@@ -158,83 +158,47 @@ static const char *     MIME_TYPE_ADPCM = "audio/adpcm";
 static const char *     MIME_TYPE_LAYOUT = "data/layout";
 
 /****************************************************************************************************************
- * Function: adpic_probe
+ * Function: admime_probe
  * Desc: used to identify the stream as an ad stream 
  * Params: 
  * Return:
  *  AVPROBE_SCORE_MAX if this straem is identifide as a ad stream 0 if not 
  ****************************************************************************************************************/
 
-static int adpic_probe(AVProbeData *p)
+static int admime_probe(AVProbeData *p)
 {
-    if (p->buf_size <= 6)
+    int server_adjustment = 0;
+    
+    if (p->buf_size <= sizeof(MIME_BOUNDARY_PREFIX1))
         return 0;
 
-    // CS - There is no way this scheme of identification is strong enough. Probably should attempt
-    // to parse a full frame out of the probedata buffer
-    //0 DATA_JPEG, 
-    //1 DATA_JFIF, 
-    //2 DATA_MPEG4I, 
-    //3 DATA_MPEG4P, 
-    //4 DATA_AUDIO_ADPCM, 
-    //5 DATA_AUDIO_RAW, 
-    //6 DATA_MINIMAL_MPEG4, 
-    //7 DATA_MINIMAL_AUDIO_ADPCM, 
-    //8 DATA_LAYOUT, 
-    //9 DATA_INFO, 
-    //10 DATA_H264I, 
-    //11 DATA_H264P, 
-    //12 DATA_XML_INFO
-	
 	if (lastProbedCtxt)  {
 		av_free(lastProbedCtxt);
 		lastProbedCtxt = NULL;
 	}
-	
     
-	if ((p->buf[DATA_TYPE] <= DATA_XML_INFO) && (p->buf[DATA_CHANNEL] <= 32))  {
-		unsigned long dataSize = (p->buf[DATA_SIZE_BYTE_0] << 24) + 
-								 (p->buf[DATA_SIZE_BYTE_1] << 16) + 
-								 (p->buf[DATA_SIZE_BYTE_2] << 8 ) + 
-								 p->buf[DATA_SIZE_BYTE_3];
-		if (dataSize <= 0xFFFF)  {
-			lastProbedCtxt = av_malloc(sizeof(*lastProbedCtxt));
-			if ( (p->buf[DATA_TYPE] == DATA_MINIMAL_MPEG4) || (p->buf[DATA_TYPE] == DATA_MINIMAL_AUDIO_ADPCM) )
-				lastProbedCtxt->netvuSubProtocol = NetvuMinimal;
-			else
-				lastProbedCtxt->netvuSubProtocol = NetvuBinary;
-			lastProbedCtxt->utc_offset = 0;
-			return AVPROBE_SCORE_MAX;
-		}
-	}
-    else
+    // This is nasty but it's got to go here as we don't want to try and deal with fixes for certain server nuances in the HTTP layer.
+    // DS 2 servers seem to end their HTTP header section with the byte sequence, 0x0d, 0x0a, 0x0d, 0x0a, 0x0a
+    // Eco 9 server ends its HTTP headers section with the sequence,              0x0d, 0x0a, 0x0d, 0x0a, 0x0d, 0x0a
+    // Both of which are incorrect. We'll try and detect these cases here and make adjustments to the buffers so that a standard validation
+    // routine can be called...
+    // DS2 detection
+    if( p->buf[0] == 0x0a )
     {
-        int server_adjustment = 0;
+        server_adjustment = 1;
+    }
+    else if( p->buf[0] == 0x0d &&  p->buf[1] == 0x0a )  // Eco 9 detection
+    {
+        server_adjustment = 2;
+    }
 
-        // This is nasty but it's got to go here as we don't want to try and deal with fixes for certain server nuances in the HTTP layer.
-        // DS 2 servers seem to end their HTTP header section with the byte sequence, 0x0d, 0x0a, 0x0d, 0x0a, 0x0a
-        // Eco 9 server ends its HTTP headers section with the sequence,              0x0d, 0x0a, 0x0d, 0x0a, 0x0d, 0x0a
-        // Both of which are incorrect. We'll try and detect these cases here and make adjustments to the buffers so that a standard validation
-        // routine can be called...
-        // DS2 detection
-        if( p->buf[0] == 0x0a )
-        {
-            server_adjustment = 1;
-        }
-        else if( p->buf[0] == 0x0d &&  p->buf[1] == 0x0a )  // Eco 9 detection
-        {
-            server_adjustment = 2;
-        }
-
-
-        /* Good start, Now check whether we have the start of a MIME boundary separator */
-        if( adpic_is_valid_separator( &p->buf[server_adjustment], p->buf_size - server_adjustment ) > 0 )
-        {
-			lastProbedCtxt = av_malloc(sizeof(*lastProbedCtxt));
-			lastProbedCtxt->netvuSubProtocol = NetvuMIME;
-			lastProbedCtxt->utc_offset = 0;
-            return AVPROBE_SCORE_MAX;
-        }
+    /* Good start, Now check whether we have the start of a MIME boundary separator */
+    if( adpic_is_valid_separator( &p->buf[server_adjustment], p->buf_size - server_adjustment ) > 0 )
+    {
+        lastProbedCtxt = av_malloc(sizeof(*lastProbedCtxt));
+        lastProbedCtxt->netvuSubProtocol = NetvuMIME;
+        lastProbedCtxt->utc_offset = 0;
+        return AVPROBE_SCORE_MAX;
     }
 
     return 0;
@@ -1822,11 +1786,11 @@ static int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size)
 }
 
 
-AVInputFormat adpic_demuxer = {
-    .name           = "adpic",
-    .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings video format"), 
+AVInputFormat admime_demuxer = {
+    .name           = "admime",
+    .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings video format (MIME)"), 
 	.priv_data_size = sizeof(AdpicContext),
-    .read_probe     = adpic_probe,
+    .read_probe     = admime_probe,
     .read_header    = adpic_read_header,
     .read_packet    = adpic_read_packet,
     .read_close     = adpic_read_close,

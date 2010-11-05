@@ -158,14 +158,14 @@ static const char *     MIME_TYPE_ADPCM = "audio/adpcm";
 static const char *     MIME_TYPE_LAYOUT = "data/layout";
 
 /****************************************************************************************************************
- * Function: adpic_probe
+ * Function: adbinary_probe
  * Desc: used to identify the stream as an ad stream 
  * Params: 
  * Return:
  *  AVPROBE_SCORE_MAX if this straem is identifide as a ad stream 0 if not 
  ****************************************************************************************************************/
 
-static int adpic_probe(AVProbeData *p)
+static int adbinary_probe(AVProbeData *p)
 {
     if (p->buf_size <= 6)
         return 0;
@@ -190,7 +190,6 @@ static int adpic_probe(AVProbeData *p)
 		av_free(lastProbedCtxt);
 		lastProbedCtxt = NULL;
 	}
-	
     
 	if ((p->buf[DATA_TYPE] <= DATA_XML_INFO) && (p->buf[DATA_CHANNEL] <= 32))  {
 		unsigned long dataSize = (p->buf[DATA_SIZE_BYTE_0] << 24) + 
@@ -207,35 +206,6 @@ static int adpic_probe(AVProbeData *p)
 			return AVPROBE_SCORE_MAX;
 		}
 	}
-    else
-    {
-        int server_adjustment = 0;
-
-        // This is nasty but it's got to go here as we don't want to try and deal with fixes for certain server nuances in the HTTP layer.
-        // DS 2 servers seem to end their HTTP header section with the byte sequence, 0x0d, 0x0a, 0x0d, 0x0a, 0x0a
-        // Eco 9 server ends its HTTP headers section with the sequence,              0x0d, 0x0a, 0x0d, 0x0a, 0x0d, 0x0a
-        // Both of which are incorrect. We'll try and detect these cases here and make adjustments to the buffers so that a standard validation
-        // routine can be called...
-        // DS2 detection
-        if( p->buf[0] == 0x0a )
-        {
-            server_adjustment = 1;
-        }
-        else if( p->buf[0] == 0x0d &&  p->buf[1] == 0x0a )  // Eco 9 detection
-        {
-            server_adjustment = 2;
-        }
-
-
-        /* Good start, Now check whether we have the start of a MIME boundary separator */
-        if( adpic_is_valid_separator( &p->buf[server_adjustment], p->buf_size - server_adjustment ) > 0 )
-        {
-			lastProbedCtxt = av_malloc(sizeof(*lastProbedCtxt));
-			lastProbedCtxt->netvuSubProtocol = NetvuMIME;
-			lastProbedCtxt->utc_offset = 0;
-            return AVPROBE_SCORE_MAX;
-        }
-    }
 
     return 0;
 }
@@ -1822,11 +1792,11 @@ static int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size)
 }
 
 
-AVInputFormat adpic_demuxer = {
-    .name           = "adpic",
-    .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings video format"), 
+AVInputFormat adbinary_demuxer = {
+    .name           = "adbinary",
+    .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings video format (binary)"), 
 	.priv_data_size = sizeof(AdpicContext),
-    .read_probe     = adpic_probe,
+    .read_probe     = adbinary_probe,
     .read_header    = adpic_read_header,
     .read_packet    = adpic_read_packet,
     .read_close     = adpic_read_close,
