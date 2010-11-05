@@ -1157,21 +1157,17 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		        }
 
                 pb->buf_ptr = restore;
-                n=get_buffer(pb, pkt->data, BuffSize);
+                n = get_buffer(pb, pkt->data, BuffSize);
                     
                 if(!found)
                 {
                     //end of image not found in buffer to read further 
-                    ptr = pkt->data;
-
-                  
-                    ch = ch1 = 0;
-                    i=0;
-                    while(!(ch==0xFF && ch1==0xD9) && (pb->buf_ptr < pb->buf_end))
+                    for( i = 0, ch = 0, ch1 = 0, ptr = pkt->data; 
+                         !(ch==0xFF && ch1==0xD9) && 
+                         (pb->buf_ptr < pb->buf_end) && 
+                         (i < pkt->size);
+                         i++, ptr++)
                     {
-                        i++;
-                        ptr++;
-
                         ch = ch1;
                         ch1 = *ptr;
                     }
@@ -1181,21 +1177,6 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             }
             else
             { 
-
-                //FILE* fpw = fopen("c:\\adpicLog.txt", "a");
-                //fprintf(fpw, "Start of log\n");
-
-                //for(loop=0; loop<10; loop++)
-                //{
-                //    fprintf(fpw, "%c", pb->buf_ptr[loop]);
-                //    fflush(fpw);   
-                //}
-                //fprintf(fpw, "\nEnd of log\n");
-
-                //fflush(fpw);
-                //fclose(fpw); 
-
-
                 errorVal = ADPIC_PARSE_MIME_HEADER_ERROR;
                 goto cleanup;
             }
