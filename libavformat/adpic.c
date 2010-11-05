@@ -1663,7 +1663,7 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 			if (video_data->session_time > 0)  {
 				pkt->pts = video_data->session_time;
 				pkt->pts *= 1000ULL;
-				pkt->pts += video_data->milliseconds & 0x03FF;
+				pkt->pts += video_data->milliseconds % 1000;
 			}
 			else
 				pkt->pts = AV_NOPTS_VALUE;
@@ -1682,7 +1682,7 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 			if (audio_data->seconds > 0)  {
 				pkt->pts = audio_data->seconds;
 				pkt->pts *= 1000ULL;
-				pkt->pts += audio_data->msecs & 0x03FF;
+				pkt->pts += audio_data->msecs % 1000;
 			}
 			else
 				pkt->pts = AV_NOPTS_VALUE;
