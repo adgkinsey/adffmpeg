@@ -212,7 +212,8 @@ void av_register_all(void)
     REGISTER_MUXDEMUX (YUV4MPEGPIPE, yuv4mpegpipe);
 	
 	REGISTER_DEMUXER  (ADAUDIO, adaudio);
-	REGISTER_DEMUXER  (ADPIC, adpic);
+	REGISTER_DEMUXER  (ADMIME, admime);
+    REGISTER_DEMUXER  (ADBINARY, adbinary);
 	REGISTER_DEMUXER  (DSPIC, dspic);
 
     /* external libraries */
