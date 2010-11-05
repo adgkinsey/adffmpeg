@@ -937,7 +937,7 @@ static int process_mp4data_line( char *line, int line_count, NetVuImageData *vid
 static int adpicSkipInfoList(ByteIOContext * pb)
 {
 	int  ch;
-	char *restore;
+	unsigned char *restore;
 	restore = pb->buf_ptr;
 	
 	if(adpicFindTag("infolist", pb, 0))
@@ -1045,7 +1045,7 @@ static int adpic_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     long                    extra = 0;
     int                     errorVal = ADPIC_UNKNOWN_ERROR;
     FrameType               currentFrameType = FrameTypeUnknown;
-    char *                  restore;
+    unsigned char *         restore;
     char *                  ptr;
     int                     manual_size = FALSE;
 	int                     result = 0;
