@@ -219,6 +219,7 @@ AVStream* createStream(AVFormatContext * avf,
     char textbuffer[128];
     int w, h;
     int streamId = -1;
+    int fc = 0;
     AVStream * st = NULL;
 
     if ( (NULL == avf) || (NULL == frameInfo) || (NULL == frameInfo->frameBuffer) )
@@ -227,7 +228,8 @@ AVStream* createStream(AVFormatContext * avf,
     streamId = frameInfo->channel;
     st = av_new_stream(avf, streamId);
 
-    st->nb_frames = 0;
+    parReader_getIndexData(frameInfo, NULL, &fc, NULL, NULL);
+    st->nb_frames = fc;
     st->start_time = frameInfo->indexTime * 1000 + frameInfo->indexMS;
 
     if (parReader_frameIsVideo(frameInfo))  {
@@ -588,13 +590,13 @@ static int par_read_packet(AVFormatContext * avf, AVPacket * pkt)
         return AVERROR_EOF;
     }
 
+    if (fileChanged)
+        parReader_getFilename(&p->frameInfo, avf->filename, sizeof(avf->filename));
+
     if ( (siz == 0) || (NULL == p->frameInfo.frameData) )  {
         p->frameCached = 0;
         return AVERROR(EAGAIN);
     }
-
-    if (fileChanged)
-        parReader_getFilename(&p->frameInfo, avf->filename, sizeof(avf->filename));
 
     createPacket(avf, pkt, siz, fileChanged);
 
@@ -630,7 +632,7 @@ static int par_read_seek(AVFormatContext *avf, int stream,
             }
             else  {
                 p->dispSet.timestamp = target / 1000LL;
-                p->dispSet.millisecs = target & 0x03FF;
+                p->dispSet.millisecs = target % 1000;
             }
         }
 
