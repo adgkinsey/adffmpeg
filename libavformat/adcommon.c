@@ -22,6 +22,7 @@
 #include "libavutil/bswap.h"
 #include "libavutil/avstring.h"
 #include "adpic.h"
+#include "jfif_img.h"
 #include "netvu.h"
 
  
@@ -36,6 +37,8 @@ int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
 			netvu = urlContext->priv_data;
 	}
 	if (netvu)  {
+        char temp[12];
+        
         if (utcOffset)
             *utcOffset = netvu->utc_offset;
 		av_metadata_set2(&s->metadata, "server",		netvu->server, 		0);
@@ -46,13 +49,15 @@ int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
 		av_metadata_set2(&s->metadata, "pps",			netvu->pps, 		0);
 		av_metadata_set2(&s->metadata, "site_id",		netvu->site_id, 	0);
 		//av_metadata_set2(&s->metadata, "boundry",		netvu->boundry, 	0);
+        snprintf(temp, sizeof(temp), "%d", netvu->utc_offset);
+        av_metadata_set2(&s->metadata, "timezone",		temp,               0);
 	}
     
     s->ctx_flags |= AVFMTCTX_NOHEADER;
     return 0;
 }
 
-void adpic_network2host(NetVuImageData *pic)
+void ad_network2host(NetVuImageData *pic)
 {
 	pic->version				= be2me_32(pic->version);
 	pic->mode					= be2me_32(pic->mode);
@@ -291,20 +296,20 @@ AVStream * ad_get_data_stream( struct AVFormatContext *s )
 	return st;
 }
 
-int adpic_new_packet(AVPacket *pkt, int size)
+int ad_new_packet(AVPacket *pkt, int size)
 {
     int     retVal = av_new_packet( pkt, size );
 
     if( retVal >= 0 )
     {
         // Give the packet its own destruct function
-        pkt->destruct = adpic_release_packet;
+        pkt->destruct = ad_release_packet;
     }
 
     return retVal;
 }
 
-void adpic_release_packet( AVPacket *pkt )
+void ad_release_packet( AVPacket *pkt )
 {
     if( pkt != NULL )
     {
@@ -346,7 +351,7 @@ void adpic_release_packet( AVPacket *pkt )
     }
 }
 
-int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size)
+int ad_get_buffer(ByteIOContext *s, unsigned char *buf, int size)
 {
     int TotalDataRead = 0;
     int DataReadThisTime = 0;
@@ -370,4 +375,246 @@ int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size)
     }
 
     return TotalDataRead;
+}
+
+int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb, 
+                    AVPacket *pkt, 
+                    NetVuImageData *video_data, char **text_data)
+{
+    int header_size;
+    char jfif[2048], *ptr;
+    int n, errorVal = 0;
+    int status;
+    
+    // Read the pic structure
+    if ((n=ad_get_buffer(pb, (unsigned char*)video_data, sizeof (NetVuImageData))) != sizeof (NetVuImageData))
+    {
+        av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading pic struct, expected %d, read %d\n", sizeof (NetVuImageData), n);
+        errorVal = ADPIC_JPEG_IMAGE_DATA_READ_ERROR;
+        return errorVal;
+    }
+    // Endian convert if necessary
+    ad_network2host(video_data);
+    if (!pic_version_valid(video_data->version))
+    {
+        av_log(s, AV_LOG_ERROR, "ADPIC: invalid pic version 0x%08X\n", video_data->version);
+        errorVal = ADPIC_JPEG_PIC_VERSION_ERROR;
+        return errorVal;
+    }
+    
+    /* Get the additional text block */
+    *text_data = av_malloc( video_data->start_offset + 1 );
+    if( *text_data == NULL )
+    {
+        av_log(s, AV_LOG_ERROR, "ADPIC: text_data allocation failed (%d bytes)", video_data->start_offset + 1);
+        errorVal = ADPIC_JPEG_ALOCATE_TEXT_BLOCK_ERROR;
+        return errorVal;
+    }
+
+    /* Copy the additional text block */
+    if( (n = ad_get_buffer( pb, *text_data, video_data->start_offset )) != video_data->start_offset )
+    {
+        av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading start_offset data, expected %d, read %d\n", video_data->start_offset, n);
+        errorVal = ADPIC_JPEG_READ_TEXT_BLOCK_ERROR;
+        return errorVal;
+    }
+
+    /* CS - somtimes the buffer seems to end with a NULL terminator, other times it doesn't. I'm adding a NULL temrinator here regardless */
+    (*text_data)[video_data->start_offset] = '\0';
+
+    // Use the pic struct to build a JFIF header 
+    if ((header_size = build_jpeg_header( jfif, video_data, FALSE, 2048))<=0)
+    {
+        av_log(s, AV_LOG_ERROR, "ADPIC: ad_read_packet, build_jpeg_header failed\n");
+        errorVal = ADPIC_JPEG_HEADER_ERROR;
+        return errorVal;
+    }
+    // We now know the packet size required for the image, allocate it.
+    if ((status = ad_new_packet(pkt, header_size+video_data->size+2))<0) // PRC 003
+    {
+        av_log(s, AV_LOG_ERROR, "ADPIC: DATA_JPEG ad_new_packet %d failed, status %d\n", header_size+video_data->size+2, status);
+        errorVal = ADPIC_JPEG_NEW_PACKET_ERROR;
+        return errorVal;
+    }
+    ptr = pkt->data;
+    // Copy the JFIF header into the packet
+    memcpy(ptr, jfif, header_size);
+    ptr += header_size;
+    // Now get the compressed JPEG data into the packet
+    // Read the pic structure
+    if ((n=ad_get_buffer(pb, ptr, video_data->size)) != video_data->size)
+    {
+        av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading pic body, expected %d, read %d\n", video_data->size, n);
+        errorVal = ADPIC_JPEG_READ_BODY_ERROR;
+        return errorVal;
+    }
+    ptr += video_data->size;
+    // Add the EOI marker
+    *ptr++ = 0xff;
+    *ptr++ = 0xd9;
+    
+    return errorVal;
+}
+
+int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb, 
+                    AVPacket *pkt, int manual_size, int size, 
+                    NetVuImageData *video_data, char **text_data)
+{
+    int n, status, errorVal = 0;
+    
+    if(!manual_size)
+    {
+        if ((status = ad_new_packet(pkt, size))<0) // PRC 003
+        {
+            av_log(s, AV_LOG_ERROR, "ADPIC: DATA_JFIF ad_new_packet %d failed, status %d\n", size, status);
+            errorVal = ADPIC_JFIF_NEW_PACKET_ERROR;
+            return errorVal;
+        }
+
+        if ((n=ad_get_buffer(pb, pkt->data, size)) != size)
+        {
+            av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading jfif image, expected %d, read %d\n", size, n);
+            errorVal = ADPIC_JFIF_GET_BUFFER_ERROR;
+            return errorVal;
+        }
+    }
+    if ( parse_jfif_header( pkt->data, video_data, size, NULL, NULL, NULL, TRUE, text_data ) <= 0)
+    {
+        av_log(s, AV_LOG_ERROR, "ADPIC: ad_read_packet, parse_jfif_header failed\n");
+        errorVal = ADPIC_JFIF_MANUAL_SIZE_ERROR;
+        return errorVal;
+    }
+    return errorVal;
+}
+
+int ad_read_info(AVFormatContext *s, ByteIOContext *pb, 
+                    AVPacket *pkt, int size)
+{
+    int n, status, errorVal = 0;
+
+    // Allocate a new packet
+    if( (status = ad_new_packet( pkt, size )) < 0 )
+    {
+        errorVal = ADPIC_INFO_NEW_PACKET_ERROR;
+        return errorVal;
+    }
+
+    // Get the data
+    if( (n = ad_get_buffer( pb, pkt->data, size)) != size )
+    {
+        errorVal = ADPIC_INFO_GET_BUFFER_ERROR;
+        return errorVal;
+    }
+    return errorVal;
+}
+
+int ad_read_layout(AVFormatContext *s, ByteIOContext *pb, 
+                      AVPacket *pkt, int size)
+{
+    int n, status, errorVal = 0;
+
+    // Allocate a new packet
+    if( (status = ad_new_packet( pkt, size )) < 0 )
+    {
+        errorVal = ADPIC_LAYOUT_NEW_PACKET_ERROR;
+        return errorVal;
+    }
+
+    // Get the data
+    if( (n = ad_get_buffer( pb, pkt->data, size)) != size )
+    {
+        errorVal = ADPIC_LAYOUT_GET_BUFFER_ERROR;
+        return errorVal;
+    }
+    return errorVal;
+}
+
+int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt, 
+                      FrameType currentFrameType, void *data, char *text_data)
+{
+    int       errorVal   = 0;
+    AVStream  *st        = NULL;
+    FrameData *frameData = NULL;
+    
+    if( currentFrameType == NetVuVideo )
+    {
+	    // At this point We have a legal pic structure which we use to determine 
+	    // which codec stream to use
+        NetVuImageData *video_data = (NetVuImageData *)data;
+	    if ( (st = ad_get_stream( s, video_data)) == NULL )
+	    {
+            av_log(s, AV_LOG_ERROR, "ADPIC: ad_read_packet, failed get_stream for video\n");
+            errorVal = ADPIC_GET_STREAM_ERROR;
+		    return errorVal;
+	    }
+		else  {
+			if (video_data->session_time > 0)  {
+				pkt->pts = video_data->session_time;
+				pkt->pts *= 1000ULL;
+				pkt->pts += video_data->milliseconds % 1000;
+			}
+			else
+				pkt->pts = AV_NOPTS_VALUE;
+		}
+    }
+    else if( currentFrameType == NetVuAudio )
+    {
+        // Get the audio stream
+        NetVuAudioData *audio_data = (NetVuAudioData *)data;
+        if ( (st = ad_get_audio_stream( s, audio_data )) == NULL )
+        {
+            av_log(s, AV_LOG_ERROR, "ADPIC: ad_read_packet, failed get_stream for audio\n");
+            errorVal = ADPIC_GET_AUDIO_STREAM_ERROR;
+		    return errorVal;
+        }
+		else  {
+			if (audio_data->seconds > 0)  {
+				pkt->pts = audio_data->seconds;
+				pkt->pts *= 1000ULL;
+				pkt->pts += audio_data->msecs % 1000;
+			}
+			else
+				pkt->pts = AV_NOPTS_VALUE;
+		}
+    }
+    else if( currentFrameType == NetVuDataInfo || currentFrameType == NetVuDataLayout )
+    {
+        // Get or create a data stream
+        if ( (st = ad_get_data_stream( s )) == NULL )
+        {
+            errorVal = ADPIC_GET_INFO_LAYOUT_STREAM_ERROR;
+            return errorVal;
+        }
+    }
+
+    pkt->stream_index = st->index;
+
+    frameData = av_malloc(sizeof(FrameData));
+
+    if( frameData == NULL )
+        return errorVal;
+
+    frameData->additionalData = NULL;
+    frameData->frameType = currentFrameType;
+
+    if ( (frameData->frameType == NetVuVideo) || (frameData->frameType == NetVuAudio) )
+        frameData->frameData = data;
+    else if( frameData->frameType == NetVuDataInfo || frameData->frameType == NetVuDataLayout )        // Data info
+        frameData->frameData = NULL;
+    else  // Shouldn't really get here...
+    {
+        frameData->frameType = FrameTypeUnknown;
+        frameData->frameData = NULL;
+    }
+
+    if( (frameData->frameType == NetVuAudio || frameData->frameType == NetVuVideo) && text_data != NULL )
+    {
+        frameData->additionalData = text_data;
+    }
+
+    pkt->priv = frameData;
+
+	pkt->duration = 0;
+
+    return(ADPIC_NO_ERROR);
 }
