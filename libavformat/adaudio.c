@@ -27,7 +27,7 @@ static int adaudio_probe(AVProbeData *p)
         )
        )
     {
-        return 100;
+        return AVPROBE_SCORE_MAX;
     }
 
     return 0;
