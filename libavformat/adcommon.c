@@ -22,9 +22,6 @@
  #include "libavutil/bswap.h"
  #include "adpic.h"
 
-
-#define TEMP_BUFFER_SIZE        1024
- 
  
 void adpic_network2host(NetVuImageData *pic)
 {
@@ -265,95 +262,6 @@ AVStream * ad_get_data_stream( struct AVFormatContext *s )
 	return st;
 }
 
-int adpicSkipInfoList(ByteIOContext * pb)
-{
-	int  ch;
-	unsigned char *restore;
-	restore = pb->buf_ptr;
-	
-	if(adpicFindTag("infolist", pb, 0))
-	{
-		if(adpicFindTag("/infolist", pb, (4*1024)))
-		{ 
-			ch = url_fgetc(pb);
-			if(ch==0x0D)//'/r'
-			{ 
-                ch = url_fgetc(pb);
-				if(ch==0x0A)//'/n'
-				{
-					ch = url_fgetc(pb);
-					return 1; 
-				}
-			}
-		}
-	}
-	else
-	{ 
-		pb->buf_ptr = restore; 
-		return 0;
-	}
-
-	return -1;
-}
-
-int adpicFindTag(const char *Tag, ByteIOContext *pb, int MaxLookAhead)
-{
-	//NOTE Looks for the folowing pattern "<infoList>" at the begining of the 
-	//     buffer return 1 if its found and 0 if not
-
-    int                         LookAheadPos = 0;
-    unsigned char               buffer[TEMP_BUFFER_SIZE];
-    unsigned char               *q = buffer;
-    int                         ch;
-	int                         endOfTag = 0;
-    
-    if(MaxLookAhead<0)
-	{ MaxLookAhead = 0; }
-
-	for(LookAheadPos=0; LookAheadPos<=MaxLookAhead; LookAheadPos++) 
-    {
-		endOfTag = 0;
-        ch = url_fgetc( pb );
-
-        if (ch < 0)
-        { return 0; }
-
-        if (ch == '<' )
-		{			
-			while(endOfTag==0)
-			{
-				ch = url_fgetc( pb );
-
-                if (ch < 0)
-                { return 0; }
-
-				if(ch == '>')
-				{
-					endOfTag = 1;
-                    *q = '\0';
-	                q = buffer;
-
-					if(strcasecmp(buffer, Tag)==0)
-					{ 
-						return 1;
-					}
-					else
-					{ 
-						endOfTag = 1; 
-					}
-				}
-				else
-				{
-					if ((q - buffer) < sizeof(buffer) - 1)
-			        { *q++ = ch; }
-				}
-			}
-		}
-    }
- 
-	return 0;
-}
-
 int adpic_new_packet(AVPacket *pkt, int size)
 {
     int     retVal = av_new_packet( pkt, size );
@@ -420,10 +328,6 @@ int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size)
     //get data while ther is no time out and we still need data
     while(TotalDataRead < size && retrys<RetryBoundry)
     {
-		// This shouldn't happen, but sometimes does for some reason, needs investigation
-		if (s->buf_ptr >= s->buf_end)
-			break;
-		
         DataReadThisTime += get_buffer(s, buf, (size-TotalDataRead));
 
         //if we retreave some data keep trying untill we get the required data or we have mutch longer time out 
