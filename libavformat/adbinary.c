@@ -23,17 +23,21 @@
 
 #include "avformat.h"
 #include "libavutil/bswap.h"
-#include "libavutil/avstring.h"
+//#include "libavutil/avstring.h"
 
 #include "adpic.h"
 #include "jfif_img.h"
-#include "netvu.h"
+//#include "netvu.h"
 #include "ds_exports.h"
 
 
 static void audioheader_network2host( NetVuAudioData *hdr );
+static int skipInfoList(ByteIOContext * pb);
+static int findTag(const char *tag, ByteIOContext *pb, int lookAhead, int *read);
 
 
+#define TEMP_BUFFER_SIZE        1024
+ 
 #define BINARY_PUSH_MIME_STR    "video/adhbinary"
 
 /* These are the data types that are supported by the DS2 video servers. */
@@ -127,32 +131,9 @@ static int adbinary_read_close(AVFormatContext *s)
 
 static int adbinary_read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
-	AdbinaryContext*   adpicContext = s->priv_data;
-	ByteIOContext*	pb = s->pb;
-	URLContext*		urlContext = pb->opaque;
-	NetvuContext*	netvu = NULL;
-
-
-	s->ctx_flags |= AVFMTCTX_NOHEADER;
-	
-	if (urlContext && urlContext->is_streamed)  {
-		if ( av_stristart(urlContext->filename, "netvu://", NULL) == 1)
-			netvu = urlContext->priv_data;
-	}
-	
-	if (netvu)  {
-		adpicContext->utc_offset	= netvu->utc_offset;
-		av_metadata_set2(&s->metadata, "server",		netvu->server, 		0);
-		av_metadata_set2(&s->metadata, "content",		netvu->content, 	0);
-		av_metadata_set2(&s->metadata, "resolution",	netvu->resolution, 	0);
-		av_metadata_set2(&s->metadata, "compression",	netvu->compression, 0);
-		av_metadata_set2(&s->metadata, "rate",			netvu->rate, 		0);
-		av_metadata_set2(&s->metadata, "pps",			netvu->pps, 		0);
-		av_metadata_set2(&s->metadata, "site_id",		netvu->site_id, 	0);
-		//av_metadata_set2(&s->metadata, "boundry",		netvu->boundry, 	0);
-	}
-					
-	return 0;
+	AdbinaryContext *adpicContext = s->priv_data;
+    s->ctx_flags |= AVFMTCTX_NOHEADER;
+    return ad_read_header(s, ap, &adpicContext->utc_offset);
 }
 
 static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
@@ -177,19 +158,19 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     // First read the 6 byte separator
 	if ((n=get_buffer(pb, &adpkt[0], SEPARATOR_SIZE)) != SEPARATOR_SIZE)
 	{
-        if(pb->eof_reached)
+        if(url_feof(pb))
         {
             errorVal = ADPIC_END_OF_STREAM;
         }
         else
         {
-		    //logger(LOG_DEBUG,"ADPIC: short of data reading seperator, expected %d, read %d\n", SEPARATOR_SIZE, n);
+            av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading seperator, expected %d, read %d\n", SEPARATOR_SIZE, n);
             errorVal = ADPIC_READ_6_BYTE_SEPARATOR_ERROR;
         }
 		goto cleanup;
 	}
 
-	result = adpicSkipInfoList(pb);
+	result = skipInfoList(pb);
 	if(result<0)
 	{
 		errorVal = ADPIC_FAILED_TO_PARSE_INFOLIST;
@@ -199,13 +180,13 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 	{
 		if ((n=get_buffer(pb, &adpkt[0], SEPARATOR_SIZE)) != SEPARATOR_SIZE)
 		{
-			if(pb->eof_reached)
+			if(url_feof(pb))
 			{
 				errorVal = ADPIC_END_OF_STREAM;
 			}
 			else
 			{
-				//logger(LOG_DEBUG,"ADPIC: short of data reading seperator, expected %d, read %d\n", SEPARATOR_SIZE, n);
+                av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading seperator, expected %d, read %d\n", SEPARATOR_SIZE, n);
 				errorVal = ADPIC_READ_6_BYTE_SEPARATOR_ERROR;
 			}
 			goto cleanup;
@@ -263,7 +244,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		    // Read the pic structure
 		    if ((n=adpic_get_buffer(pb, (unsigned char*)video_data, sizeof (NetVuImageData))) != sizeof (NetVuImageData))
 		    {
-			    //logger(LOG_DEBUG,"ADPIC: short of data reading pic struct, expected %d, read %d\n", sizeof (NetVuImageData), n);
+                av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading pic struct, expected %d, read %d\n", sizeof (NetVuImageData), n);
                 errorVal = ADPIC_JPEG_IMAGE_DATA_READ_ERROR;
 			    goto cleanup;
 		    }
@@ -271,7 +252,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		    adpic_network2host(video_data);
 		    if (!pic_version_valid(video_data->version))
 		    {
-			    //logger(LOG_DEBUG,"ADPIC: invalid pic version 0x%08X\n", video_data->version);
+                av_log(s, AV_LOG_ERROR, "ADPIC: invalid pic version 0x%08X\n", video_data->version);
                 errorVal = ADPIC_JPEG_PIC_VERSION_ERROR;
 			    goto cleanup;
 		    }
@@ -287,7 +268,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		    /* Copy the additional text block */
 		    if( (n = adpic_get_buffer( pb, text_data, video_data->start_offset )) != video_data->start_offset )
 		    {
-			    //logger(LOG_DEBUG,"ADPIC: short of data reading start_offset data, expected %d, read %d\n", size, n);
+                av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading start_offset data, expected %d, read %d\n", size, n);
                 errorVal = ADPIC_JPEG_READ_TEXT_BLOCK_ERROR;
 			    goto cleanup;
 		    }
@@ -298,7 +279,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		    // Use the pic struct to build a JFIF header 
 		    if ((header_size = build_jpeg_header( jfif, video_data, FALSE, 2048))<=0)
 		    {
-			    //logger(LOG_DEBUG,"ADPIC: adbinary_read_packet, build_jpeg_header failed\n");
+                av_log(s, AV_LOG_ERROR, "ADPIC: adbinary_read_packet, build_jpeg_header failed\n");
                 errorVal = ADPIC_JPEG_HEADER_ERROR;
 			    goto cleanup;
 		    }
@@ -316,7 +297,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		    // Read the pic structure
 		    if ((n=adpic_get_buffer(pb, ptr, video_data->size)) != video_data->size)
 		    {
-			    //logger(LOG_DEBUG,"ADPIC: short of data reading pic body, expected %d, read %d\n", video_data->size, n);
+                av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading pic body, expected %d, read %d\n", video_data->size, n);
                 errorVal = ADPIC_JPEG_READ_BODY_ERROR;
 			    goto cleanup;
 		    }
@@ -333,21 +314,21 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             {
 		        if ((status = adpic_new_packet(pkt, size))<0) // PRC 003
 		        {
-			        //logger(LOG_DEBUG,"ADPIC: DATA_JFIF adpic_new_packet %d failed, status %d\n", size, status);
+                    av_log(s, AV_LOG_ERROR, "ADPIC: DATA_JFIF adpic_new_packet %d failed, status %d\n", size, status);
                     errorVal = ADPIC_JFIF_NEW_PACKET_ERROR;
 			        goto cleanup;
 		        }
 
 		        if ((n=adpic_get_buffer(pb, pkt->data, size)) != size)
 		        {
-			        //logger(LOG_DEBUG,"ADPIC: short of data reading jfif image, expected %d, read %d\n", size, n);
+                    av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading jfif image, expected %d, read %d\n", size, n);
                     errorVal = ADPIC_JFIF_GET_BUFFER_ERROR;
 			        goto cleanup;
 		        }
             }
 		    if ( parse_jfif_header( pkt->data, video_data, size, NULL, NULL, NULL, TRUE, &text_data ) <= 0)
 		    {
-			    //logger(LOG_DEBUG,"ADPIC: adbinary_read_packet, parse_jfif_header failed\n");
+                av_log(s, AV_LOG_ERROR, "ADPIC: adbinary_read_packet, parse_jfif_header failed\n");
                 errorVal = ADPIC_JFIF_MANUAL_SIZE_ERROR;
 			    goto cleanup;
 		    }
@@ -361,14 +342,14 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 	    {
             if ((n=adpic_get_buffer(pb, (unsigned char*)video_data, sizeof (NetVuImageData))) != sizeof (NetVuImageData))
             {
-                //logger(LOG_DEBUG,"ADPIC: short of data reading pic struct, expected %d, read %d\n", sizeof (NetVuImageData), n);
+                av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading pic struct, expected %d, read %d\n", sizeof (NetVuImageData), n);
                 errorVal = ADPIC_MPEG4_GET_BUFFER_ERROR;
                 goto cleanup;
             }
             adpic_network2host(video_data);
             if (!pic_version_valid(video_data->version))
             {
-                //logger(LOG_DEBUG,"ADPIC: invalid pic version 0x%08X\n", video_data->version);
+                av_log(s, AV_LOG_ERROR, "ADPIC: invalid pic version 0x%08X\n", video_data->version);
                 errorVal = ADPIC_MPEG4_PIC_VERSION_VALID_ERROR;
                 goto cleanup;
             }
@@ -385,7 +366,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             /* Copy the additional text block */
             if( (n = adpic_get_buffer( pb, text_data, video_data->start_offset )) != video_data->start_offset )
             {
-                //logger(LOG_DEBUG,"ADPIC: short of data reading start_offset data, expected %d, read %d\n", size, n);
+                av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading start_offset data, expected %d, read %d\n", size, n);
                 errorVal = ADPIC_MPEG4_GET_TEXT_BUFFER_ERROR;
                 goto cleanup;
             }
@@ -395,13 +376,13 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 
             if ((status = adpic_new_packet(pkt, video_data->size))<0) // PRC 003
             {
-                //logger(LOG_DEBUG,"ADPIC: DATA_MPEG4 adpic_new_packet %d failed, status %d\n", video_data->size, status);
+                av_log(s, AV_LOG_ERROR, "ADPIC: DATA_MPEG4 adpic_new_packet %d failed, status %d\n", video_data->size, status);
                 errorVal = ADPIC_MPEG4_NEW_PACKET_ERROR;
                 goto cleanup;
             }
             if ((n=adpic_get_buffer(pb, pkt->data, video_data->size)) != video_data->size)
             {
-                //logger(LOG_DEBUG,"ADPIC: short of data reading pic body, expected %d, read %d\n", video_data->size, n);
+                av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading pic body, expected %d, read %d\n", video_data->size, n);
                 errorVal = ADPIC_MPEG4_PIC_BODY_ERROR;
                 goto cleanup;
             }
@@ -580,7 +561,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 
         default:
         {
-	        //logger(LOG_DEBUG,"ADPIC: adbinary_read_packet, No handler for data_type=%d\n", data_type );
+            av_log(s, AV_LOG_WARNING, "ADPIC: adbinary_read_packet, No handler for data_type=%d\n", data_type );
             errorVal = ADPIC_DEFAULT_ERROR;
 	        goto cleanup;
         }
@@ -594,7 +575,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 	    // which codec stream to use
 	    if ( (st = ad_get_stream( s, video_data)) == NULL )
 	    {
-		    //logger(LOG_DEBUG,"ADPIC: adbinary_read_packet, failed get_stream for video\n");
+            av_log(s, AV_LOG_ERROR, "ADPIC: adbinary_read_packet, failed get_stream for video\n");
             errorVal = ADPIC_GET_STREAM_ERROR;
 		    goto cleanup;
 	    }
@@ -613,7 +594,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         // Get the audio stream
         if ( (st = ad_get_audio_stream( s, audio_data )) == NULL )
         {
-		    //logger(LOG_DEBUG,"ADPIC: adbinary_read_packet, failed get_stream for audio\n");
+            av_log(s, AV_LOG_ERROR, "ADPIC: adbinary_read_packet, failed get_stream for audio\n");
             errorVal = ADPIC_GET_AUDIO_STREAM_ERROR;
 		    goto cleanup;
         }
@@ -691,6 +672,91 @@ cleanup:
     }
 
 	return errorVal;
+}
+
+static int skipInfoList(ByteIOContext * pb)
+{
+	int  ch;
+    int read = 0;
+	
+	if(findTag("infolist", pb, 0, &read))
+	{
+		if(findTag("/infolist", pb, (4*1024), &read))
+		{ 
+			ch = url_fgetc(pb);
+			if(ch==0x0D)//'/r'
+			{ 
+                ch = url_fgetc(pb);
+				if(ch==0x0A)//'/n'
+				{
+					ch = url_fgetc(pb);
+					return 1; 
+				}
+			}
+		}
+	}
+	else
+	{ 
+		url_fseek(pb, -read, SEEK_CUR);
+		return 0;
+	}
+
+	return -1;
+}
+
+static int findTag(const char *tag, ByteIOContext *pb, int lookAhead, int *read)
+{
+	//NOTE Looks for the folowing pattern "<infoList>" at the begining of the 
+	//     buffer return 1 if its found and 0 if not
+
+    int                         LookAheadPos = 0;
+    unsigned char               buffer[TEMP_BUFFER_SIZE];
+    unsigned char               *q = buffer;
+    int                         ch;
+	int                         endOfTag = 0;
+    
+    if(lookAhead < 0)
+        lookAhead = 0;
+
+	for(LookAheadPos=0; LookAheadPos <= lookAhead; LookAheadPos++)  {
+		endOfTag = 0;
+        ch = url_fgetc( pb );
+        ++(*read);
+        
+        if (ch < 0)
+        { return 0; }
+
+        if (ch == '<' )
+		{			
+			while(endOfTag==0)
+			{
+				ch = url_fgetc( pb );
+                ++(*read);
+
+                if (ch < 0)
+                { return 0; }
+
+				if(ch == '>')
+				{
+					endOfTag = 1;
+                    *q = '\0';
+	                q = buffer;
+
+					if(strcasecmp(buffer, tag)==0)
+						return 1;
+					else
+						endOfTag = 1; 
+				}
+				else
+				{
+					if ((q - buffer) < sizeof(buffer) - 1)
+			        { *q++ = ch; }
+				}
+			}
+		}
+    }
+ 
+	return 0;
 }
 
 

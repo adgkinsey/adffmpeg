@@ -33,12 +33,11 @@ enum tx_type { TX_MIME, TX_MIME_NV, TX_STREAM, TX_MINIMAL_STREAM };
 enum pkt_offsets { DATA_TYPE, DATA_CHANNEL, DATA_SIZE_BYTE_0 , DATA_SIZE_BYTE_1 , DATA_SIZE_BYTE_2 , DATA_SIZE_BYTE_3, SEPARATOR_SIZE };
 
 
+int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset);
 void adpic_network2host(NetVuImageData *pic);
 AVStream * ad_get_stream(struct AVFormatContext *s, NetVuImageData *pic);
 AVStream * ad_get_audio_stream(struct AVFormatContext *s, NetVuAudioData* audioHeader);
 AVStream * ad_get_data_stream(struct AVFormatContext *s);
-int adpicSkipInfoList(ByteIOContext * pb);
-int adpicFindTag(const char *Tag, ByteIOContext *pb, int MaxLookAhead);
 int adpic_new_packet(AVPacket *pkt, int size);
 void adpic_release_packet( AVPacket *pkt );
 int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size);
