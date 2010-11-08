@@ -29,5 +29,4 @@ typedef struct {
     char* boundry;
 
     int utc_offset;
-    int isBinary;
 } NetvuContext;

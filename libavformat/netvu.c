@@ -263,11 +263,6 @@ static void netvu_parse_content_type_header( char * p, NetvuContext *s )
     *p = '\0';
     p++;
     copy_value_to_field( value, &s->content );
-
-    if( strstr(s->content, "adhbinary")!=NULL)
-    {s->isBinary=1;}
-    else
-    {s->isBinary=0;}
     
     while( *p != '\0' && finishedContentHeader != 1)
     {
