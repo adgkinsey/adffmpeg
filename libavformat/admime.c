@@ -734,6 +734,9 @@ static int admime_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             audio_data->mode = extra;
             audio_data->seconds = 0;
             audio_data->msecs = 0;
+            audio_data->channel = 0;
+            audio_data->sizeOfAdditionalData = 0;
+            audio_data->additionalData = NULL;
 
 		    if( (status = ad_new_packet( pkt, audio_data->sizeOfAudioData )) < 0 )
             {
