@@ -430,8 +430,6 @@ int get_buffer(ByteIOContext *s, unsigned char *buf, int size)
                 if (len == 0)
                     break;
             }
-        } else if (len < 0) {
-            len = 0;
         } else {
             memcpy(buf, s->buf_ptr, len);
             buf += len;
