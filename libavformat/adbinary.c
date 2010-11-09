@@ -168,12 +168,12 @@ static int adbinary_probe(AVProbeData *p)
         }
         else if (dataType == DATA_LAYOUT)  {
             // Need a stronger test for this
-            return AVPROBE_SCORE_MAX;
+            return AVPROBE_SCORE_MAX / 4 + 1;
         }
         else if (dataType == DATA_INFO)  {
             // Need a stronger test for this
             // Payload is a type byte followed by a string
-            return AVPROBE_SCORE_MAX;
+            return AVPROBE_SCORE_MAX / 4 + 1;
         }
         else if (dataType == DATA_XML_INFO)  {
             const char *infoString = "<infoList>";
