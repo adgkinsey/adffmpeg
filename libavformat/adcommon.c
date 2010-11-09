@@ -349,7 +349,7 @@ void ad_release_packet( AVPacket *pkt )
     }
 }
 
-int ad_get_buffer(ByteIOContext *s, unsigned char *buf, int size)
+int ad_get_buffer(ByteIOContext *s, uint8_t *buf, int size)
 {
     int TotalDataRead = 0;
     int DataReadThisTime = 0;
@@ -362,11 +362,10 @@ int ad_get_buffer(ByteIOContext *s, unsigned char *buf, int size)
     {
         DataReadThisTime += get_buffer(s, buf, (size-TotalDataRead));
 
-        //if we retreave some data keep trying untill we get the required data or we have mutch longer time out 
+        // if we retreave some data keep trying until we get the required data 
+        // or we have much longer time out 
         if(DataReadThisTime>0 && RetryBoundry<1000)
-        {
             RetryBoundry += 10;   
-        }
 
         TotalDataRead += DataReadThisTime;
         retrys++;

@@ -56,7 +56,7 @@ AVStream * ad_get_audio_stream(struct AVFormatContext *s, NetVuAudioData* audioH
 AVStream * ad_get_data_stream(struct AVFormatContext *s);
 int ad_new_packet(AVPacket *pkt, int size);
 void ad_release_packet( AVPacket *pkt );
-int ad_get_buffer(ByteIOContext *s, unsigned char *buf, int size);
+int ad_get_buffer(ByteIOContext *s, uint8_t *buf, int size);
 int initADData(int data_type, FrameType *frameType, 
                NetVuImageData **vidDat, NetVuAudioData **audDat);
 int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb, 
