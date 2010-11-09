@@ -33,20 +33,22 @@
 #define TRUE 1
 #endif
 
-enum pkt_offsets { DATA_TYPE, DATA_CHANNEL, 
-                   DATA_SIZE_BYTE_0, DATA_SIZE_BYTE_1, 
-                   DATA_SIZE_BYTE_2, DATA_SIZE_BYTE_3, 
-                   SEPARATOR_SIZE };
+enum pkt_offsets { DATA_TYPE, DATA_CHANNEL,
+                   DATA_SIZE_BYTE_0, DATA_SIZE_BYTE_1,
+                   DATA_SIZE_BYTE_2, DATA_SIZE_BYTE_3,
+                   SEPARATOR_SIZE
+                 };
 
 /// These are the data types that are supported by the DS2 video servers
-enum data_type { DATA_JPEG, DATA_JFIF, 
-                 DATA_MPEG4I, DATA_MPEG4P, 
-                 DATA_AUDIO_ADPCM, DATA_AUDIO_RAW, 
-                 DATA_MINIMAL_MPEG4, DATA_MINIMAL_AUDIO_ADPCM, 
-                 DATA_LAYOUT, DATA_INFO, 
-                 DATA_H264I, DATA_H264P, 
-                 DATA_XML_INFO, 
-                 MAX_DATA_TYPE };
+enum data_type { DATA_JPEG, DATA_JFIF,
+                 DATA_MPEG4I, DATA_MPEG4P,
+                 DATA_AUDIO_ADPCM, DATA_AUDIO_RAW,
+                 DATA_MINIMAL_MPEG4, DATA_MINIMAL_AUDIO_ADPCM,
+                 DATA_LAYOUT, DATA_INFO,
+                 DATA_H264I, DATA_H264P,
+                 DATA_XML_INFO,
+                 MAX_DATA_TYPE
+               };
 
 
 int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset);
@@ -57,20 +59,20 @@ AVStream * ad_get_data_stream(struct AVFormatContext *s);
 int ad_new_packet(AVPacket *pkt, int size);
 void ad_release_packet( AVPacket *pkt );
 int ad_get_buffer(ByteIOContext *s, uint8_t *buf, int size);
-int initADData(int data_type, FrameType *frameType, 
+int initADData(int data_type, FrameType *frameType,
                NetVuImageData **vidDat, NetVuAudioData **audDat);
-int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb, 
-                    AVPacket *pkt, 
-                    NetVuImageData *video_data, char **text_data);
-int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb, 
-                    AVPacket *pkt, int manual_size, int size, 
-                    NetVuImageData *video_data, char **text_data);
-int ad_read_info(AVFormatContext *s, ByteIOContext *pb, 
-                    AVPacket *pkt, int size);
-int ad_read_layout(AVFormatContext *s, ByteIOContext *pb, 
-                      AVPacket *pkt, int size);
-int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt, 
-                      FrameType currentFrameType, void *data, char *text_data);
+int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
+                 AVPacket *pkt,
+                 NetVuImageData *video_data, char **text_data);
+int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb,
+                 AVPacket *pkt, int manual_size, int size,
+                 NetVuImageData *video_data, char **text_data);
+int ad_read_info(AVFormatContext *s, ByteIOContext *pb,
+                 AVPacket *pkt, int size);
+int ad_read_layout(AVFormatContext *s, ByteIOContext *pb,
+                   AVPacket *pkt, int size);
+int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
+                   FrameType currentFrameType, void *data, char *text_data);
 
 
 #define PIC_REVISION 1
@@ -90,7 +92,7 @@ int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
 #define PIC_MODE_H264J           8
 
 
-//AD pic error codes 
+//AD pic error codes
 #define ADPIC_NO_ERROR                              0
 #define ADPIC_ERROR                                 -200            //used to offset ad pic errors so that adpic can be identified as the origon of the error
 
@@ -113,8 +115,8 @@ int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
 #define ADPIC_JFIF_GET_BUFFER_ERROR                 ADPIC_ERROR + -15
 #define ADPIC_JFIF_MANUAL_SIZE_ERROR                ADPIC_ERROR + -16
 
-#define ADPIC_MPEG4_MIME_NEW_PACKET_ERROR           ADPIC_ERROR + -17    
-#define ADPIC_MPEG4_MIME_GET_BUFFER_ERROR           ADPIC_ERROR + -18 
+#define ADPIC_MPEG4_MIME_NEW_PACKET_ERROR           ADPIC_ERROR + -17
+#define ADPIC_MPEG4_MIME_GET_BUFFER_ERROR           ADPIC_ERROR + -18
 #define ADPIC_MPEG4_MIME_PARSE_HEADER_ERROR         ADPIC_ERROR + -19
 #define ADPIC_MPEG4_MIME_PARSE_TEXT_DATA_ERROR      ADPIC_ERROR + -20
 #define ADPIC_MPEG4_MIME_GET_TEXT_BUFFER_ERROR      ADPIC_ERROR + -21
