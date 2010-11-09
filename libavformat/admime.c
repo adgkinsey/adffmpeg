@@ -41,6 +41,12 @@ static int process_mp4data_line(char *line, int line_count,
                                 NetVuImageData *vidDat, struct tm *time, 
                                 char ** txtDat );
 static int is_valid_separator( unsigned char * buf, int bufLen );
+static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb, 
+                        AVPacket *pkt, int size, long *extra, 
+                        NetVuImageData *vidDat, char **txtDat);
+static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb, 
+                        AVPacket *pkt, int size, long extra, 
+                        NetVuAudioData *audDat);
 static int handleInvalidMime(AVFormatContext *s, ByteIOContext *pb, 
                              AVPacket *pkt, int *data_type, 
                              int *size, int *imgLoaded);
@@ -110,13 +116,11 @@ static int admime_probe(AVProbeData *p)
  ******************************************************************************/
 static int is_valid_separator( unsigned char * buf, int bufLen )
 {
-    int is_valid = 0;
-
     if( buf == NULL )
-        return is_valid;
+        return FALSE;
     
     if( bufLen < strlen(BOUNDARY_PREFIX1) + strlen(BOUNDARY_SUFFIX) )
-        return is_valid;
+        return FALSE;
     
     if( (strncmp(buf, BOUNDARY_PREFIX1, strlen(BOUNDARY_PREFIX1)) == 0) ||
         (strncmp(buf, BOUNDARY_PREFIX2, strlen(BOUNDARY_PREFIX2)) == 0) ||
@@ -139,15 +143,12 @@ static int is_valid_separator( unsigned char * buf, int bufLen )
             if( (b - buf) + strlen(BOUNDARY_SUFFIX)  <= bufLen )
             {
                 if( strncmp(b, BOUNDARY_SUFFIX, strlen(BOUNDARY_SUFFIX)) == 0 )
-                {
-                    is_valid = 1; // Flag so that we can adjust the parser later
-                    return AVPROBE_SCORE_MAX;
-                }
+                    return TRUE;
             }
         }
     }
 
-    return is_valid;
+    return FALSE;
 }
 
 static int admime_read_close(AVFormatContext *s)
@@ -192,9 +193,7 @@ static int parse_mime_header(ByteIOContext *pb,
                     return err;
 
                 if( err == 0 )
-                {
                     return 0;
-                }
                 lineCount++;
             }
 
@@ -206,7 +205,6 @@ static int parse_mime_header(ByteIOContext *pb,
                 *q++ = ch;
         }
     }
-
    
     return 1;
 }
@@ -267,9 +265,7 @@ static int process_line(char *line, int *line_count, int *dataType,
         if (!strcmp(tag, "Content-type")) {
             // Work out what type we actually have
             if( strcasecmp(p, MIME_TYPE_JPEG ) == 0 )
-            {
                 *dataType = DATA_JFIF;
-            }
             // Or if it starts image/mp4 - this covers all the supported mp4 
             // variations (i and p frames)
             else if(strncasecmp(p, MIME_TYPE_MP4, strlen(MIME_TYPE_MP4) ) == 0)
@@ -278,17 +274,11 @@ static int process_line(char *line, int *line_count, int *dataType,
                 *dataType = DATA_MPEG4P; 
             }
             else if( strcasecmp(p, MIME_TYPE_TEXT ) == 0 )
-            {
                 *dataType = DATA_PLAINTEXT;
-            }
             else if( strcasecmp(p, MIME_TYPE_LAYOUT ) == 0 )
-            {
                 *dataType = DATA_LAYOUT;
-            }
             else if( strcasecmp(p, MIME_TYPE_XML ) == 0 )
-            {
                 *dataType = DATA_XML_INFO;
-            }
             else if(strncasecmp(p, MIME_TYPE_ADPCM, strlen(MIME_TYPE_ADPCM))==0)
             {
                 *dataType = DATA_AUDIO_ADPCM;
@@ -322,7 +312,6 @@ static int process_line(char *line, int *line_count, int *dataType,
                 if( *p != '\0' )
                     *p = '\0';
 
-                // p pointing at the rate
                 *extra = strtol(tag, NULL, 10);
 
                 // Map the rate to a RTP payload value for consistancy - 
@@ -471,8 +460,10 @@ static int process_mp4data_line( char *line, int line_count,
     else if( !memcmp( tag, "Date", strlen( "Date" ) ) )
     {
 		sscanf( p, "%d/%d/%d", &time->tm_mday, &time->tm_mon, &time->tm_year );
-		//time->tm_year -= 1900; // Windows uses 1900, not 1970
-		//time->tm_mon--;
+#ifdef _WIN32
+		time->tm_year -= 1900; // Windows uses 1900, not 1970
+#endif
+		time->tm_mon--;
 
         if( time->tm_sec != 0 || time->tm_min != 0 || time->tm_hour != 0 )
             vidDat->session_time = mktime( time );
@@ -485,17 +476,11 @@ static int process_mp4data_line( char *line, int line_count,
             vidDat->session_time = mktime( time );
     }
     else if( !memcmp( tag, "MSec", strlen( "MSec" ) ) )
-    {
         vidDat->milliseconds = strtol(p, NULL, 10);
-    }
     else if( !memcmp( tag, "Locale", strlen( "Locale" ) ) )
-    {
         memcpy( vidDat->locale, p, FFMIN( MAX_NAME_LEN, strlen(p) ) );
-    }
     else if( !memcmp( tag, "UTCoffset", strlen( "UTCoffset" ) ) )
-    {
         vidDat->utc_offset = strtol(p, NULL, 10);
-    }
     else
     {
         // Any lines that aren't part of the pic struct, 
@@ -531,173 +516,67 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     NetVuImageData *        vidDat = NULL;
     char *                  txtDat = NULL;
     int                     data_type = MAX_DATA_TYPE;
-    int                     n, size = -1;
-    int                     status;
+    int                     size = -1;
     long                    extra = 0;
     int                     errorVal = ADPIC_UNKNOWN_ERROR;
     FrameType               frameType = FrameTypeUnknown;
     int                     imgLoaded = FALSE;
     
-   
     if(parse_mime_header( pb, &data_type, &size, &extra ) != 0 )  {
         errorVal = handleInvalidMime(s, pb, pkt, &data_type, &size, &imgLoaded);
-        if (errorVal < 0)
-            goto cleanup;
+        if (errorVal < 0)  {
+            if( vidDat != NULL )
+                av_free(vidDat);
+            return errorVal;
+        }
     }
 
     // Prepare for video or audio read
     errorVal = initADData(data_type, &frameType, &vidDat, &audDat);
     if (errorVal < 0)
-        goto cleanup;
+        return errorVal;
 
     // Proceed based on the type of data in this frame
     switch(data_type)
     {
         case DATA_JPEG:
             errorVal = ad_read_jpeg(s, pb, pkt, vidDat, &txtDat);
-            if (errorVal < 0)
-                goto cleanup;
             break;
-
         case DATA_JFIF:
 	        errorVal = ad_read_jfif(s, pb, pkt, imgLoaded, size, vidDat, &txtDat);
-            if (errorVal < 0)
-                goto cleanup;
             break;
-
         case DATA_MPEG4I:
         case DATA_MPEG4P:
         case DATA_H264I:
         case DATA_H264P:
-	    {
-            int mimeBlockType = 0;
-            
-            // Fields are set manually from MIME data with these types so need
-            // to set everything to zero initially in case some values aren't
-            // available
-            memset(vidDat, 0, sizeof(NetVuImageData));
-
-            // Allocate a new packet to hold the frame's image data
-            if( (status = ad_new_packet( pkt, size )) < 0 )
-            {
-                errorVal = ADPIC_MPEG4_MIME_NEW_PACKET_ERROR;
-                goto cleanup;
-            }
-
-            // Now read the frame data into the packet
-            if( (n = ad_get_buffer( pb, pkt->data, size )) != size )
-            {
-                errorVal = ADPIC_MPEG4_MIME_GET_BUFFER_ERROR;
-                goto cleanup;
-            }
-
-            // Now we should have a text block following this which contains the
-            // frame data that we can place in a _image_data struct
-            if(  parse_mime_header( pb, &mimeBlockType, &size, &extra ) != 0 )
-            {
-                errorVal = ADPIC_MPEG4_MIME_PARSE_HEADER_ERROR;
-                goto cleanup;
-            }
-
-            // Validate the data type and then extract the text buffer
-            if( mimeBlockType == DATA_PLAINTEXT )
-            {
-                unsigned char *         textBuffer = av_malloc( size );
-
-                if( textBuffer != NULL )
-                {
-                    if( (n = ad_get_buffer( pb, textBuffer, size )) == size )
-                    {
-                        // Now parse the text buffer and populate the 
-                        // _image_data struct
-                        if( parse_mp4_text_data( textBuffer, size, vidDat, &txtDat ) != 0 )
-                        {
-                            errorVal = ADPIC_MPEG4_MIME_PARSE_TEXT_DATA_ERROR;
-                            av_free( textBuffer );
-                            goto cleanup;
-                        }
-                        vidDat->vid_format = PIC_MODE_MPEG4_411;
-                    }
-                    else
-                    {
-                        av_free( textBuffer );
-                        errorVal = ADPIC_MPEG4_MIME_GET_TEXT_BUFFER_ERROR;
-                        goto cleanup;
-                    }
-
-                    av_free( textBuffer );
-                }
-                else
-                {
-                    errorVal = ADPIC_MPEG4_MIME_ALOCATE_TEXT_BUFFER_ERROR;
-                    goto cleanup;
-                }
-            }
-	    }	
-	    break;
-
-        // CS - Support for ADPCM frames
+            errorVal = ad_read_mpeg(s, pb, pkt, size, &extra, vidDat, &txtDat);
+            break;
         case DATA_AUDIO_ADPCM:
-        {
-            // No presentation information is sent with audio frames in a mime 
-            // stream so there's not a lot we can do here other than ensure the 
-            // struct contains the size of the audio data
-            audDat->sizeOfAudioData = size;
-            audDat->mode = extra;
-            audDat->seconds = 0;
-            audDat->msecs = 0;
-            audDat->channel = 0;
-            audDat->sizeOfAdditionalData = 0;
-            audDat->additionalData = NULL;
-
-		    if( (status = ad_new_packet(pkt, audDat->sizeOfAudioData)) < 0 )
-            {
-                errorVal = ADPIC_AUDIO_ADPCM_MIME_NEW_PACKET_ERROR;
-			    goto cleanup;
-            }
-
-            // Now get the actual audio data
-            if( (n = ad_get_buffer( pb, pkt->data, audDat->sizeOfAudioData)) != audDat->sizeOfAudioData )
-            { 
-                errorVal = ADPIC_AUDIO_ADPCM_MIME_GET_BUFFER_ERROR;
-                goto cleanup;
-            }
-        }
-        break;
-
+            errorVal = ad_read_audio(s, pb, pkt, size, extra, audDat);
+            break;
         case DATA_INFO:
         case DATA_XML_INFO:
             errorVal = ad_read_info(s, pb, pkt, size);
-            if (errorVal < 0)
-                goto cleanup;
             break;
-
         case DATA_LAYOUT:
             errorVal = ad_read_layout(s, pb, pkt, size);
-            if (errorVal < 0)
-                goto cleanup;
             break;
-
         default:
         {
-            av_log(s, AV_LOG_WARNING, "ADPIC: admime_read_packet, "
-                                      "No handler for data_type=%d\n", data_type);
+            av_log(s, AV_LOG_WARNING, "admime_read_packet: No handler for "
+                                      "data_type=%d\n", data_type);
             errorVal = ADPIC_DEFAULT_ERROR;
-	        goto cleanup;
         }
         break;
-		
     }
 
-    if (frameType == NetVuAudio)
-        errorVal = ad_read_packet(s, pb, pkt, frameType, audDat, txtDat);
-    else
-        errorVal = ad_read_packet(s, pb, pkt, frameType, vidDat, txtDat);
-    
-
-cleanup:
-    if( errorVal < 0 )
-    {
+    if (errorVal >= 0)  {
+        if (frameType == NetVuAudio)
+            errorVal = ad_read_packet(s, pb, pkt, frameType, audDat, txtDat);
+        else
+            errorVal = ad_read_packet(s, pb, pkt, frameType, vidDat, txtDat);
+    }
+    else  {
         // If there was an error, release any memory that has been allocated
         if( vidDat != NULL )
             av_free( vidDat );
@@ -710,6 +589,102 @@ cleanup:
     }
 
 	return errorVal;
+}
+
+static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb, 
+                        AVPacket *pkt, int size, long *extra, 
+                        NetVuImageData *vidDat, char **txtDat)
+{
+    int errorVal = 0;
+    int mimeBlockType = 0;
+    
+    // Fields are set manually from MIME data with these types so need
+    // to set everything to zero initially in case some values aren't
+    // available
+    memset(vidDat, 0, sizeof(NetVuImageData));
+
+    // Allocate a new packet to hold the frame's image data
+    if( ad_new_packet(pkt, size) < 0 )
+    {
+        errorVal = ADPIC_MPEG4_MIME_NEW_PACKET_ERROR;
+        return errorVal;
+    }
+
+    // Now read the frame data into the packet
+    if( ad_get_buffer( pb, pkt->data, size ) != size )
+    {
+        errorVal = ADPIC_MPEG4_MIME_GET_BUFFER_ERROR;
+        return errorVal;
+    }
+
+    // Now we should have a text block following this which contains the
+    // frame data that we can place in a _image_data struct
+    if(  parse_mime_header( pb, &mimeBlockType, &size, extra ) != 0 )
+    {
+        errorVal = ADPIC_MPEG4_MIME_PARSE_HEADER_ERROR;
+        return errorVal;
+    }
+
+    // Validate the data type and then extract the text buffer
+    if( mimeBlockType == DATA_PLAINTEXT )
+    {
+        unsigned char *         textBuffer = av_malloc( size );
+
+        if( textBuffer != NULL )
+        {
+            if( ad_get_buffer( pb, textBuffer, size ) == size )
+            {
+                // Now parse the text buffer and populate the 
+                // _image_data struct
+                if( parse_mp4_text_data(textBuffer, size, vidDat, txtDat ) != 0)
+                {
+                    errorVal = ADPIC_MPEG4_MIME_PARSE_TEXT_DATA_ERROR;
+                    av_free( textBuffer );
+                    return errorVal;
+                }
+                vidDat->vid_format = PIC_MODE_MPEG4_411;
+            }
+            else
+            {
+                av_free( textBuffer );
+                errorVal = ADPIC_MPEG4_MIME_GET_TEXT_BUFFER_ERROR;
+                return errorVal;
+            }
+
+            av_free( textBuffer );
+        }
+        else
+        {
+            errorVal = ADPIC_MPEG4_MIME_ALOCATE_TEXT_BUFFER_ERROR;
+            return errorVal;
+        }
+    }
+    return errorVal;
+}
+
+static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb, 
+                        AVPacket *pkt, int size, long extra, 
+                        NetVuAudioData *audDat)
+{
+    // No presentation information is sent with audio frames in a mime 
+    // stream so there's not a lot we can do here other than ensure the 
+    // struct contains the size of the audio data
+    audDat->sizeOfAudioData = size;
+    audDat->mode = extra;
+    audDat->seconds = 0;
+    audDat->msecs = 0;
+    audDat->channel = 0;
+    audDat->sizeOfAdditionalData = 0;
+    audDat->additionalData = NULL;
+
+    if (ad_new_packet(pkt, size) < 0)
+        return(ADPIC_AUDIO_ADPCM_MIME_NEW_PACKET_ERROR);
+
+    // Now get the actual audio data
+    if (ad_get_buffer( pb, pkt->data, size) != size)
+        return(ADPIC_AUDIO_ADPCM_MIME_GET_BUFFER_ERROR);
+    
+    return 0;
 }
 
 /**

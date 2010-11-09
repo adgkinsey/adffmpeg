@@ -315,10 +315,7 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
     *text_data = av_malloc( video_data->start_offset + 1 );
 
     if( *text_data == NULL )
-    {
-        errorVal = ADPIC_MPEG4_ALOCATE_TEXT_BUFFER_ERROR;
-        return errorVal;
-    }
+        return ADPIC_MPEG4_ALOCATE_TEXT_BUFFER_ERROR;
 
     // Copy the additional text block
     if( (n = ad_get_buffer( pb, *text_data, video_data->start_offset )) != video_data->start_offset )
@@ -359,25 +356,20 @@ static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
     memset(video_data, 0, sizeof(NetVuImageData));
     video_data->session_time  = get_be32(pb);
     video_data->milliseconds  = get_be16(pb);
-    if ( url_ferror(pb) || (video_data->session_time == 0) )  {
-        errorVal = ADPIC_MPEG4_MINIMAL_GET_BUFFER_ERROR;
-        return errorVal;
-    }
+    if ( url_ferror(pb) || (video_data->session_time == 0) )
+        return ADPIC_MPEG4_MINIMAL_GET_BUFFER_ERROR;
     video_data->cam = channel;
     video_data->utc_offset = adpicContext->utc_offset;
     video_data->vid_format = PIC_MODE_MPEG4_411;
     snprintf(video_data->title, TITLE_LENGTH, "Camera %d", video_data->cam);
 
     // Now get the main frame data into a new packet
-    if( ad_new_packet(pkt, dataSize) < 0 )  {
-        errorVal = ADPIC_MPEG4_MINIMAL_NEW_PACKET_ERROR;
-        return errorVal;
-    }
+    if( ad_new_packet(pkt, dataSize) < 0 )
+        return ADPIC_MPEG4_MINIMAL_NEW_PACKET_ERROR;
 
-    if( ad_get_buffer(pb, pkt->data, dataSize) != dataSize )  {
-        errorVal = ADPIC_MPEG4_MINIMAL_NEW_PACKET_ERROR2;
-        return errorVal;
-    }
+    if( ad_get_buffer(pb, pkt->data, dataSize) != dataSize )
+        return ADPIC_MPEG4_MINIMAL_NEW_PACKET_ERROR2;
+    
     return errorVal;
 }
 
@@ -389,10 +381,7 @@ static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
     // Get the fixed size portion of the audio header
     size = sizeof(NetVuAudioData) - sizeof(unsigned char *);
     if( (n = ad_get_buffer( pb, (unsigned char*)data, size)) != size)
-    {
-        errorVal = ADPIC_AUDIO_ADPCM_GET_BUFFER_ERROR;
-        return errorVal;
-    }
+        return ADPIC_AUDIO_ADPCM_GET_BUFFER_ERROR;
 
     // endian fix it...
     audioheader_network2host(data);
@@ -402,34 +391,21 @@ static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
     {
         data->additionalData = av_malloc( data->sizeOfAdditionalData );
         if( data->additionalData == NULL )
-        {
-            errorVal = ADPIC_AUDIO_ADPCM_ALOCATE_ADITIONAL_ERROR;
-            return errorVal;
-        }
-
-        //ASSERT(data->additionalData);
+            return ADPIC_AUDIO_ADPCM_ALOCATE_ADITIONAL_ERROR;
 
         if( (n = ad_get_buffer( pb, data->additionalData, data->sizeOfAdditionalData )) != data->sizeOfAdditionalData )
-        {
-            errorVal = ADPIC_AUDIO_ADPCM_GET_BUFFER_ERROR2;
-            return errorVal;
-        }
+            return ADPIC_AUDIO_ADPCM_GET_BUFFER_ERROR2;
     }
     else
         data->additionalData = NULL;
 
     if( (status = ad_new_packet( pkt, data->sizeOfAudioData )) < 0 )
-    {
-        errorVal = ADPIC_AUDIO_ADPCM_MIME_NEW_PACKET_ERROR;
-        return errorVal;
-    }
+        return ADPIC_AUDIO_ADPCM_MIME_NEW_PACKET_ERROR;
 
     // Now get the actual audio data
     if( (n = ad_get_buffer( pb, pkt->data, data->sizeOfAudioData)) != data->sizeOfAudioData )
-    { 
-        errorVal = ADPIC_AUDIO_ADPCM_MIME_GET_BUFFER_ERROR;
-        return errorVal;
-    }
+        return ADPIC_AUDIO_ADPCM_MIME_GET_BUFFER_ERROR;
+    
     return errorVal;
 }
 
@@ -444,23 +420,16 @@ static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb,
     data->seconds = get_be32(pb);
     data->msecs = get_be16(pb);
     data->mode = get_be16(pb);
-    if ( url_ferror(pb) || (data->seconds == 0) )  {
-        errorVal = ADPIC_MINIMAL_AUDIO_ADPCM_GET_BUFFER_ERROR;
-        return errorVal;
-    }
+    if ( url_ferror(pb) || (data->seconds == 0) )
+        return ADPIC_MINIMAL_AUDIO_ADPCM_GET_BUFFER_ERROR;
 
     // Now get the main frame data into a new packet
     if( (status = ad_new_packet( pkt, dataSize )) < 0 )
-    {
-        errorVal = ADPIC_MINIMAL_AUDIO_ADPCM_NEW_PACKET_ERROR;
-        return errorVal;
-    }
+        return ADPIC_MINIMAL_AUDIO_ADPCM_NEW_PACKET_ERROR;
 
     if( (n = ad_get_buffer( pb, pkt->data, dataSize )) != dataSize )
-    {
-        errorVal = ADPIC_MINIMAL_AUDIO_ADPCM_GET_BUFFER_ERROR2;
-        return errorVal;
-    }
+        return ADPIC_MINIMAL_AUDIO_ADPCM_GET_BUFFER_ERROR2;
+    
     return errorVal;
 }
 
