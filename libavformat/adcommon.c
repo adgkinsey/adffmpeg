@@ -377,6 +377,45 @@ int ad_get_buffer(ByteIOContext *s, unsigned char *buf, int size)
     return TotalDataRead;
 }
 
+int initADData(int data_type, FrameType *frameType, 
+               NetVuImageData **vidDat, NetVuAudioData **audDat)
+{
+    int errorVal = 0;
+    
+    if( (data_type == DATA_JPEG)          || (data_type == DATA_JFIF)   || 
+        (data_type == DATA_MPEG4I)        || (data_type == DATA_MPEG4P) ||
+        (data_type == DATA_H264I)         || (data_type == DATA_H264P)  ||
+        (data_type == DATA_MINIMAL_MPEG4)                               )
+    {
+        *frameType = NetVuVideo;
+        *vidDat = av_malloc( sizeof(NetVuImageData) );
+        if( *vidDat == NULL )
+        {
+            errorVal = ADPIC_NETVU_IMAGE_DATA_ERROR;
+            return errorVal;
+        }
+    }
+    else if ( (data_type == DATA_AUDIO_ADPCM) || 
+              (data_type == DATA_MINIMAL_AUDIO_ADPCM) )
+    {
+        *frameType = NetVuAudio;
+        *audDat = av_malloc( sizeof(NetVuAudioData) );
+        if( *audDat == NULL )
+        {
+            errorVal = ADPIC_NETVU_AUDIO_DATA_ERROR;
+            return errorVal;
+        }
+    }
+    else if ( (data_type == DATA_INFO) || (data_type == DATA_XML_INFO) )
+        *frameType = NetVuDataInfo;
+    else if( data_type == DATA_LAYOUT )
+        *frameType = NetVuDataLayout;
+    else
+        *frameType = FrameTypeUnknown;
+    
+    return errorVal;
+}
+
 int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb, 
                     AVPacket *pkt, 
                     NetVuImageData *video_data, char **text_data)
@@ -457,12 +496,12 @@ int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
 }
 
 int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb, 
-                    AVPacket *pkt, int manual_size, int size, 
-                    NetVuImageData *video_data, char **text_data)
+                 AVPacket *pkt, int imgLoaded, int size, 
+                 NetVuImageData *video_data, char **text_data)
 {
     int n, status, errorVal = 0;
     
-    if(!manual_size)
+    if(!imgLoaded)
     {
         if ((status = ad_new_packet(pkt, size))<0) // PRC 003
         {
@@ -487,6 +526,12 @@ int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb,
     return errorVal;
 }
 
+/**
+ * Data info extraction. A DATA_INFO frame simply contains a 
+ * type byte followed by a text block. Due to its simplicity, we'll 
+ * just extract the whole block into the AVPacket's data structure and 
+ * let the client deal with checking its type and parsing its text
+ */
 int ad_read_info(AVFormatContext *s, ByteIOContext *pb, 
                     AVPacket *pkt, int size)
 {

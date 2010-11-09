@@ -31,11 +31,19 @@
 #define DATA_PLAINTEXT          (MAX_DATA_TYPE + 1)   
 
 
-static int ad_parse_mime_header( ByteIOContext *pb, int *dataType, int *size, long *extra );
-static int process_line( char *line, int* line_count, int *dataType, int *size, long *extra );
-static int ad_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, NetVuImageData *video_data, char **additionalTextData );
-static int process_mp4data_line( char *line, int line_count, NetVuImageData *video_data, struct tm *time, char ** additionalText );
-static int ad_is_valid_separator( unsigned char * buf, int bufLen );
+static int parse_mime_header( ByteIOContext *pb, 
+                              int *dataType, int *size, long *extra );
+static int process_line( char *line, int* line_count, int *dataType, 
+                         int *size, long *extra );
+static int parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, 
+                                NetVuImageData *vidDat, char **txtDat );
+static int process_mp4data_line(char *line, int line_count, 
+                                NetVuImageData *vidDat, struct tm *time, 
+                                char ** txtDat );
+static int is_valid_separator( unsigned char * buf, int bufLen );
+static int handleInvalidMime(AVFormatContext *s, ByteIOContext *pb, 
+                             AVPacket *pkt, int *data_type, 
+                             int *size, int *imgLoaded);
 
 
 static const char *     BOUNDARY_PREFIX1 = "--0plm(";
@@ -45,22 +53,22 @@ static const char *     BOUNDARY_PREFIX4 = "ÍÍÍplm(";
 static const char *     BOUNDARY_PREFIX5 = "ÍÍÍÍlm(";
 static const char *     BOUNDARY_PREFIX6 = "ÍÍÍÍÍm(";
 static const char *     BOUNDARY_PREFIX7 = "/r--0plm(";
+static const char *     BOUNDARY_SUFFIX  = ":Server-Push:Boundary-String)1qaz";
 
-static const char *     BOUNDARY_SUFFIX = ":Server-Push:Boundary-String)1qaz";
-static const char *     MIME_TYPE_JPEG = "image/jpeg";
-static const char *     MIME_TYPE_MP4  = "image/admp4";
-static const char *     MIME_TYPE_TEXT = "text/plain";
-static const char *     MIME_TYPE_ADPCM = "audio/adpcm";
+static const char *     MIME_TYPE_JPEG   = "image/jpeg";
+static const char *     MIME_TYPE_MP4    = "image/admp4";
+static const char *     MIME_TYPE_TEXT   = "text/plain";
+static const char *     MIME_TYPE_XML    = "text/xml";
+static const char *     MIME_TYPE_ADPCM  = "audio/adpcm";
 static const char *     MIME_TYPE_LAYOUT = "data/layout";
 
-/****************************************************************************************************************
+/*******************************************************************************
  * Function: admime_probe
  * Desc: used to identify the stream as an ad stream 
  * Params: 
  * Return:
  *  AVPROBE_SCORE_MAX if this straem is identifide as a ad stream 0 if not 
- ****************************************************************************************************************/
-
+ ******************************************************************************/
 static int admime_probe(AVProbeData *p)
 {
     int offset = 0;
@@ -84,16 +92,14 @@ static int admime_probe(AVProbeData *p)
         offset = 2;
 
     // Now check whether we have the start of a MIME boundary separator
-    if( ad_is_valid_separator( &p->buf[offset], p->buf_size - offset ) > 0 )
-    {
+    if( is_valid_separator( &p->buf[offset], p->buf_size - offset ) > 0 )
         return AVPROBE_SCORE_MAX;
-    }
 
     return 0;
 }
 
 /*******************************************************************************
- * Function: ad_is_valid_separator
+ * Function: is_valid_separator
  * Desc: Validates a multipart MIME boundary separator against the convention 
  *       used by NetVu video servers
  * Params: 
@@ -102,7 +108,7 @@ static int admime_probe(AVProbeData *p)
  * Return:
  *  1 if boundary separator is valid, 0 if not
  ******************************************************************************/
-static int ad_is_valid_separator( unsigned char * buf, int bufLen )
+static int is_valid_separator( unsigned char * buf, int bufLen )
 {
     int is_valid = 0;
 
@@ -132,7 +138,7 @@ static int ad_is_valid_separator( unsigned char * buf, int bufLen )
         {
             if( (b - buf) + strlen(BOUNDARY_SUFFIX)  <= bufLen )
             {
-                if( strncmp( b, BOUNDARY_SUFFIX, strlen(BOUNDARY_SUFFIX) ) == 0 )
+                if( strncmp(b, BOUNDARY_SUFFIX, strlen(BOUNDARY_SUFFIX)) == 0 )
                 {
                     is_valid = 1; // Flag so that we can adjust the parser later
                     return AVPROBE_SCORE_MAX;
@@ -155,17 +161,17 @@ static int admime_read_header(AVFormatContext *s, AVFormatParameters *ap)
 	return ad_read_header(s, ap, NULL);
 }
 
-static int ad_parse_mime_header( ByteIOContext *pb, int *dataType, int *size, long *extra )
+static int parse_mime_header(ByteIOContext *pb, 
+                             int *dataType, int *size, long *extra)
 {
     unsigned char               buffer[TEMP_BUFFER_SIZE];
     unsigned char *             q = NULL;
     int                         ch, err, lineCount = 0;
 
     q = buffer;
-    /* Try and parse the header */
+    // Try and parse the header
     for(;;) 
     {
-        /* ch = get_byte(pb); */
         ch = url_fgetc( pb );
 
         if (ch < 0)
@@ -173,17 +179,13 @@ static int ad_parse_mime_header( ByteIOContext *pb, int *dataType, int *size, lo
 
         if (ch == '\n') 
         {
-            /* process line */
+            // process line
             if (q > buffer && q[-1] == '\r')
                 q--;
             *q = '\0';
 
-            //#ifdef DEBUG
-            //    printf("header='%s'\n", buffer);
-            //#endif
-
             err = process_line( buffer, &lineCount, dataType, size, extra );
-            /* First line contains a \n */
+            // First line contains a \n
             if( !(err == 0 && lineCount == 0) )
             {
                 if( err < 0 )
@@ -209,42 +211,41 @@ static int ad_parse_mime_header( ByteIOContext *pb, int *dataType, int *size, lo
     return 1;
 }
 
-static int process_line( char *line, int *line_count, int *dataType, int *size, long *extra )
+static int process_line(char *line, int *line_count, int *dataType, 
+                        int *size, long *extra )
 {
     char        *tag, *p = NULL;
     int         http_code = 0;
 
-    /* end of header */
+    // end of header
     if (line[0] == '\0')
         return 0;
 
     p = line;
 
-    //NOTE the boundry string is missing some times so check for the HTTP header and scip to line 1
-    if(*line_count == 0 && 'H' == *(p) && 'T' == *(p+1) && 'T' == *(p+2) && 'P' == *(p+3))
-    {
+    // The boundry string is missing sometimes so check for the HTTP header 
+    // and skip to line 1
+    if(*line_count==0 && 'H'==*(p) && 'T'==*(p+1) && 'T'==*(p+2) && 'P'==*(p+3))
         *line_count = 1;
-    }
 
-    /* The first valid line will be the boundary string - validate this here */
+    // The first valid line will be the boundary string - validate this here
     if( *line_count == 0 )
     {
-        if( ad_is_valid_separator( p, strlen(p) ) == FALSE )
+        if( is_valid_separator( p, strlen(p) ) == FALSE )
             return -1;
     }
-    else if( *line_count == 1 ) /* The second line will contain the HTTP status code */
+    else if( *line_count == 1 ) // Second line will contain the HTTP status code
     {
         while (!isspace(*p) && *p != '\0')
             p++;
         while (isspace(*p))
             p++;
         http_code = strtol(p, NULL, 10);
-        //#ifdef DEBUG
-        //        printf("http_code=%d\n", http_code);
-        //#endif
     } 
-    else /* Any other line we are just looking for particular headers - if we find them, we fill in the appropriate output data */
+    else 
     {
+        // Any other line we are just looking for particular headers 
+        // if we find them, we fill in the appropriate output data
         while (*p != '\0' && *p != ':')
             p++;
         if (*p != ':')
@@ -257,23 +258,24 @@ static int process_line( char *line, int *line_count, int *dataType, int *size, 
             p++;
 
         if (!strcmp(tag, "Content-length")) {
-            *size = strtol(p, NULL, 10); /* Get the size */
+            *size = strtol(p, NULL, 10);
 
             if( size == 0 )
                 return -1;
         }
 
         if (!strcmp(tag, "Content-type")) {
-            /* Work out what type we actually have */
+            // Work out what type we actually have
             if( strcasecmp(p, MIME_TYPE_JPEG ) == 0 )
             {
                 *dataType = DATA_JFIF;
             }
             // Or if it starts image/mp4 - this covers all the supported mp4 
             // variations (i and p frames)
-            else if( strncasecmp(p, MIME_TYPE_MP4, strlen(MIME_TYPE_MP4) ) == 0 )
+            else if(strncasecmp(p, MIME_TYPE_MP4, strlen(MIME_TYPE_MP4) ) == 0)
             {
-                *dataType = DATA_MPEG4P; /* P for now - as they are both processed the same subsequently, this is sufficient */
+                // P for now - as they are both processed the same subsequently
+                *dataType = DATA_MPEG4P; 
             }
             else if( strcasecmp(p, MIME_TYPE_TEXT ) == 0 )
             {
@@ -283,11 +285,16 @@ static int process_line( char *line, int *line_count, int *dataType, int *size, 
             {
                 *dataType = DATA_LAYOUT;
             }
-            else if( strncasecmp(p, MIME_TYPE_ADPCM, strlen(MIME_TYPE_ADPCM) ) == 0 )
+            else if( strcasecmp(p, MIME_TYPE_XML ) == 0 )
+            {
+                *dataType = DATA_XML_INFO;
+            }
+            else if(strncasecmp(p, MIME_TYPE_ADPCM, strlen(MIME_TYPE_ADPCM))==0)
             {
                 *dataType = DATA_AUDIO_ADPCM;
 
-                // If we find audio in a mime header, we need to extract the mode out. The header takes the form,
+                // If we find audio in a mime header, we need to extract the 
+                // mode out. The header takes the form,
                 // Content-Type: audio/adpcm;rate=<mode>
                 while (*p != '\0' && *p != ';')
                     p++;
@@ -316,7 +323,7 @@ static int process_line( char *line, int *line_count, int *dataType, int *size, 
                     *p = '\0';
 
                 // p pointing at the rate
-                *extra = strtol(tag, NULL, 10); /* convert the rate string into a long */
+                *extra = strtol(tag, NULL, 10);
 
                 // Map the rate to a RTP payload value for consistancy - 
                 // the other audio headers contain mode values in this format
@@ -342,7 +349,8 @@ static int process_line( char *line, int *line_count, int *dataType, int *size, 
     return 1;
 }
 
-static int ad_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, NetVuImageData *video_data, char **additionalTextData )
+static int parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, 
+                                NetVuImageData *vidDat, char **txtDat )
 {
     unsigned char               buffer[TEMP_BUFFER_SIZE];
     int                         ch, err;
@@ -353,7 +361,7 @@ static int ad_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, N
 
     memset( &time, 0, sizeof(struct tm) );
 
-    /* Try and parse the header */
+    // Try and parse the header
     q = buffer;
     for(;;) {
         ch = *currentChar++;
@@ -363,12 +371,12 @@ static int ad_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, N
 
         if (ch == '\n') 
         {
-            /* process line */
+            // process line
             if (q > buffer && q[-1] == '\r')
                 q--;
             *q = '\0';
 
-            err = process_mp4data_line( buffer, lineCount, video_data, &time, additionalTextData );
+            err = process_mp4data_line(buffer, lineCount, vidDat, &time, txtDat);
 
             if( err < 0 )
                 return err;
@@ -376,40 +384,31 @@ static int ad_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, N
             if( err == 0 )
                 return 0;
 
-            /* Check we're not at the end of the buffer. If the following statement is true and we haven't encountered an error then we've finished parsing the buffer */
+            // Check we're not at the end of the buffer. If the following 
+            // statement is true and we haven't encountered an error then we've 
+            // finished parsing the buffer
             if( err == 1 )
             {
-                /* CS - Not particularly happy with this code but it seems there's little consistency in the way these buffers end. This block catches all of those
-                   variations. The variations that indicate the end of a MP4 MIME text block are:
-
-                   1. The amount of buffer parsed successfully is equal to the total buffer size
-
-                   2. The buffer ends with two NULL characters
-
-                   3. The buffer ends with the sequence \r\n\0
-                */
+                // Not particularly happy with this code but it seems there's 
+                // little consistency in the way these buffers end. This block 
+                // catches all of those variations. The variations that indicate
+                // the end of a MP4 MIME text block are:
+                //
+                // 1. The amount of buffer parsed successfully is equal to the 
+                //    total buffer size
+                //
+                // 2. The buffer ends with two NULL characters
+                //
+                // 3. The buffer ends with the sequence \r\n\0
 
                 if( currentChar - mp4TextData == bufferSize )
                     return 0;
 
-                /* CS - I *think* lines should end either when we've processed all the buffer OR it's padded with 0s */
-                /* Is detection of a NULL character here sufficient? */
+                // CS - I *think* lines should end either when we've processed 
+                // all the buffer OR it's padded with 0s
+                // Is detection of a NULL character here sufficient?
                 if( *currentChar == '\0' )
                     return 0;
-
-/* The following code is how the original implementation was. See the comment above for indications of the buffer endings I've seen. I've since then seen one that ends
-   \r\n\0\0\0. Some server code just dumping a memory buffer perhaps and therefore leaving padding bytes in? */
-#if 0
-                /* CS - This is horrible but has to go in as there are discrepancies between servers. Some servers appended two 0 bytes after the last \r\n which screws up the generic line extraction routine.
-                   This code catches that case and returns as appropriate */
-                /* Actually, I don't think the above statement is true, more likely that the discrepancy is between packets ^ */
-                if( currentChar - mp4TextData == bufferSize - 2 && *currentChar == '\0' && *(currentChar+1) == '\0' )
-                    return 0;
-
-                /* CS - Another variation on the end of buffer - This one detects the case where the buffer is terminated with the sequence \r\n\0*/
-                if( currentChar - mp4TextData == bufferSize - 1 && *currentChar == '\0' && *(currentChar-1) == '\n' && *(currentChar-2) == '\r' )
-                    return 0;
-#endif
             }
 
             lineCount++;
@@ -425,12 +424,14 @@ static int ad_parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize, N
     return 1;
 }
 
-static int process_mp4data_line( char *line, int line_count, NetVuImageData *video_data, struct tm *time, char ** additionalText )
+static int process_mp4data_line( char *line, int line_count, 
+                                 NetVuImageData *vidDat, struct tm *time, 
+                                 char ** txtDat )
 {
     char        *tag = NULL, *p = NULL;
     int         lineLen = 0;
 
-    /* end of header */
+    // end of header
     if (line[0] == '\0')
         return 0;
 
@@ -442,13 +443,10 @@ static int process_mp4data_line( char *line, int line_count, NetVuImageData *vid
     if (*p != ':')
         return 1;
 
-    /* *p = '\0';          CS - Removing this additional of NULL terminator so that whole string can be copied later with ease 
-                           subsequent string operations have been changed to memory ops to remove the dependency on NULL temrinator */
-
     tag = line;
     p++;
 
-    while( *p != '\0' && *p == ' '  )  /* While the current char is a space */
+    while( *p != '\0' && *p == ' '  )  // While the current char is a space
         p++;
 
     if (*p == '\0')
@@ -457,7 +455,7 @@ static int process_mp4data_line( char *line, int line_count, NetVuImageData *vid
     {
         char * temp = p;
 
-        /* Get the length of the rest of the line */
+        // Get the length of the rest of the line
         while( *temp != '\0' )
             temp++;
 
@@ -465,196 +463,104 @@ static int process_mp4data_line( char *line, int line_count, NetVuImageData *vid
     }
 
     if( !memcmp( tag, "Number", strlen( "Number" ) ) )
-    {
-        video_data->cam = strtol(p, NULL, 10); /* Get the camera number */
-    }
+        vidDat->cam = strtol(p, NULL, 10);
     else if( !memcmp( tag, "Name", strlen( "Name" ) ) )
-    {
-        memcpy( video_data->title, p, FFMIN( TITLE_LENGTH, strlen(p) ) );
-    }
+        memcpy( vidDat->title, p, FFMIN( TITLE_LENGTH, strlen(p) ) );
     else if( !memcmp( tag, "Version", strlen( "Version" ) ) )
-    {
-        video_data->version = strtol(p, NULL, 10); /* Get the version number */
-    }
+        vidDat->version = strtol(p, NULL, 10);
     else if( !memcmp( tag, "Date", strlen( "Date" ) ) )
     {
 		sscanf( p, "%d/%d/%d", &time->tm_mday, &time->tm_mon, &time->tm_year );
-		time->tm_year -= 1900; /* Windows uses 1900, not 1970 */
-		time->tm_mon--;
+		//time->tm_year -= 1900; // Windows uses 1900, not 1970
+		//time->tm_mon--;
 
         if( time->tm_sec != 0 || time->tm_min != 0 || time->tm_hour != 0 )
-            video_data->session_time = mktime( time );
+            vidDat->session_time = mktime( time );
     }
     else if( !memcmp( tag, "Time", strlen( "Time" ) ) )
     {
         sscanf( p, "%d:%d:%d", &time->tm_hour, &time->tm_min, &time->tm_sec );
 
         if( time->tm_year != 0 )
-            video_data->session_time = mktime( time );
+            vidDat->session_time = mktime( time );
     }
     else if( !memcmp( tag, "MSec", strlen( "MSec" ) ) )
     {
-        video_data->milliseconds = strtol(p, NULL, 10); /* Get the millisecond offset */
+        vidDat->milliseconds = strtol(p, NULL, 10);
     }
     else if( !memcmp( tag, "Locale", strlen( "Locale" ) ) )
     {
-        /* Get the locale */
-        memcpy( video_data->locale, p, FFMIN( MAX_NAME_LEN, strlen(p) ) );
+        memcpy( vidDat->locale, p, FFMIN( MAX_NAME_LEN, strlen(p) ) );
     }
     else if( !memcmp( tag, "UTCoffset", strlen( "UTCoffset" ) ) )
     {
-        video_data->utc_offset = strtol(p, NULL, 10); /* Get the timezone */
+        vidDat->utc_offset = strtol(p, NULL, 10);
     }
     else
     {
-        /* Any lines that aren't part of the pic struct, tag onto the additional text block */
-        if( additionalText != NULL && lineLen > 0 )
+        // Any lines that aren't part of the pic struct, 
+        // tag onto the additional text block
+        if( txtDat != NULL && lineLen > 0 )
         {
 #define LINE_END_LEN        3
             int             strLen  = 0;
             const char      lineEnd[LINE_END_LEN] = { '\r', '\n', '\0' };
 
-            /* Get the length of the existing text block if it exists */
-            if( *additionalText != NULL )
-                strLen = strlen( *additionalText );
+            // Get the length of the existing text block if it exists
+            if( *txtDat != NULL )
+                strLen = strlen( *txtDat );
 
-            /* Ok, now allocate some space to hold the new string */
-            *additionalText = av_realloc( *additionalText, strLen + lineLen + LINE_END_LEN );
+            // Ok, now allocate some space to hold the new string
+            *txtDat = av_realloc(*txtDat, strLen + lineLen + LINE_END_LEN);
 
-            /* Copy the line into the text block */
-            memcpy( &(*additionalText)[strLen], line, lineLen );
+            // Copy the line into the text block
+            memcpy( &(*txtDat)[strLen], line, lineLen );
 
-            /* Add a NULL terminator */
-            memcpy( &(*additionalText)[strLen + lineLen], lineEnd, LINE_END_LEN );
+            // Add a NULL terminator
+            memcpy( &(*txtDat)[strLen + lineLen], lineEnd, LINE_END_LEN );
         }
     }
 
     return 1;
 }
 
-static int admime_read_packet(struct AVFormatContext *s, AVPacket *pkt)
+static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     ByteIOContext *         pb = s->pb;
-    NetVuAudioData *        audio_data = NULL;
-    NetVuImageData *        video_data = NULL;
-    char *                  text_data = NULL;
+    NetVuAudioData *        audDat = NULL;
+    NetVuImageData *        vidDat = NULL;
+    char *                  txtDat = NULL;
     int                     data_type = MAX_DATA_TYPE;
     int                     n, size = -1;
     int                     status;
-    int                     BuffSize;
-    int                     found = FALSE;
-    //char                    scratch[1024];
     long                    extra = 0;
     int                     errorVal = ADPIC_UNKNOWN_ERROR;
-    FrameType               currentFrameType = FrameTypeUnknown;
-    int                     manual_size = FALSE;
-    //int loop = 0;
+    FrameType               frameType = FrameTypeUnknown;
+    int                     imgLoaded = FALSE;
     
    
-    if(ad_parse_mime_header( pb, &data_type, &size, &extra ) != 0 )
-    {
-        //NOTE Invalid mime header however sometimes the header is missing 
-        // and then there is a valid image
-        int chkByte1 = url_fgetc(pb);
-        int chkByte2 = url_fgetc(pb);
-        if( (chkByte1 == 0xff) && (chkByte2 == 0xD8))
-        {
-            int read = 2;
-            uint8_t *imageData = av_malloc(MAX_IMAGE_SIZE);
-            imageData[0] = chkByte1;
-            imageData[1] = chkByte2;
-            
-            //Set the data type
-            data_type = DATA_JFIF;
-
-            //look ahead through the buffer for end of image
-            for (; !found && !url_feof(pb) && !url_ferror(pb); read++)
-            {
-                if (read >= MAX_IMAGE_SIZE)  {
-                    errorVal = ADPIC_PARSE_MIME_HEADER_ERROR;
-                    av_free(imageData);
-                    goto cleanup;
-                }
-                
-                chkByte1 = chkByte2;
-                chkByte2 = url_fgetc( pb );
-                if (chkByte2 < 0)
-                    break;
-                imageData[read] = chkByte2;
-                if(chkByte1==0xFF && chkByte2==0xD9)
-                    found = TRUE;
-            }
-
-            BuffSize = read;
-            if ((status = ad_new_packet(pkt, BuffSize))<0) // PRC 003
-            {
-                av_log(s, AV_LOG_ERROR, "ADPIC: DATA_JFIF ad_new_packet %d failed, status %d\n", size, status);
-                errorVal = ADPIC_NEW_PACKET_ERROR;
-                goto cleanup;
-            }
-            
-            memcpy(pkt->data, imageData, BuffSize);
-            av_free(imageData);
-            size = BuffSize;
-            manual_size = TRUE;
-        }
-        else
-        { 
-            errorVal = ADPIC_PARSE_MIME_HEADER_ERROR;
+    if(parse_mime_header( pb, &data_type, &size, &extra ) != 0 )  {
+        errorVal = handleInvalidMime(s, pb, pkt, &data_type, &size, &imgLoaded);
+        if (errorVal < 0)
             goto cleanup;
-        }
     }
 
     // Prepare for video or audio read
-    if( data_type == DATA_JPEG || data_type == DATA_JFIF || 
-        data_type == DATA_MPEG4I || data_type == DATA_MPEG4P || 
-        data_type == DATA_MINIMAL_MPEG4 || 
-        data_type == DATA_H264I || data_type == DATA_H264P )
-    {
-        currentFrameType = NetVuVideo;
-
-        video_data = av_malloc( sizeof(NetVuImageData) );
-
-        if( video_data == NULL )
-        {
-            errorVal = ADPIC_NETVU_IMAGE_DATA_ERROR;
-            goto cleanup;
-        }
-    }
-    else if( data_type == DATA_AUDIO_ADPCM || 
-             data_type == DATA_MINIMAL_AUDIO_ADPCM )
-    {
-        currentFrameType = NetVuAudio;
-
-        audio_data = av_malloc( sizeof(NetVuAudioData) );
-
-        if( audio_data == NULL )
-        {
-            errorVal = ADPIC_NETVU_AUDIO_DATA_ERROR;
-            goto cleanup;
-        }
-    }
-    else if( data_type == DATA_INFO )
-    {
-        currentFrameType = NetVuDataInfo;
-    }
-    else if( data_type == DATA_LAYOUT )
-    {
-        currentFrameType = NetVuDataLayout;
-    }
+    errorVal = initADData(data_type, &frameType, &vidDat, &audDat);
+    if (errorVal < 0)
+        goto cleanup;
 
     // Proceed based on the type of data in this frame
     switch(data_type)
     {
         case DATA_JPEG:
-            errorVal = ad_read_jpeg(s, pb, pkt, video_data, &text_data);
+            errorVal = ad_read_jpeg(s, pb, pkt, vidDat, &txtDat);
             if (errorVal < 0)
                 goto cleanup;
             break;
 
         case DATA_JFIF:
-	        errorVal = ad_read_jfif(s, pb, pkt, manual_size, size, 
-                                       video_data, &text_data);
+	        errorVal = ad_read_jfif(s, pb, pkt, imgLoaded, size, vidDat, &txtDat);
             if (errorVal < 0)
                 goto cleanup;
             break;
@@ -665,29 +571,35 @@ static int admime_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         case DATA_H264P:
 	    {
             int mimeBlockType = 0;
+            
+            // Fields are set manually from MIME data with these types so need
+            // to set everything to zero initially in case some values aren't
+            // available
+            memset(vidDat, 0, sizeof(NetVuImageData));
 
-            /* Allocate a new packet to hold the frame's image data */
+            // Allocate a new packet to hold the frame's image data
             if( (status = ad_new_packet( pkt, size )) < 0 )
             {
                 errorVal = ADPIC_MPEG4_MIME_NEW_PACKET_ERROR;
                 goto cleanup;
             }
 
-            /* Now read the frame data into the packet */
+            // Now read the frame data into the packet
             if( (n = ad_get_buffer( pb, pkt->data, size )) != size )
             {
                 errorVal = ADPIC_MPEG4_MIME_GET_BUFFER_ERROR;
                 goto cleanup;
             }
 
-            /* Now we should have a text block following this which contains the frame data that we can place in a _image_data struct */
-            if(  ad_parse_mime_header( pb, &mimeBlockType, &size, &extra ) != 0 )
+            // Now we should have a text block following this which contains the
+            // frame data that we can place in a _image_data struct
+            if(  parse_mime_header( pb, &mimeBlockType, &size, &extra ) != 0 )
             {
                 errorVal = ADPIC_MPEG4_MIME_PARSE_HEADER_ERROR;
                 goto cleanup;
             }
 
-            /* Validate the data type and then extract the text buffer */
+            // Validate the data type and then extract the text buffer
             if( mimeBlockType == DATA_PLAINTEXT )
             {
                 unsigned char *         textBuffer = av_malloc( size );
@@ -696,16 +608,15 @@ static int admime_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 {
                     if( (n = ad_get_buffer( pb, textBuffer, size )) == size )
                     {
-                        /* Now parse the text buffer and populate the _image_data struct */
-                        if( ad_parse_mp4_text_data( textBuffer, size, video_data, &text_data ) != 0 )
+                        // Now parse the text buffer and populate the 
+                        // _image_data struct
+                        if( parse_mp4_text_data( textBuffer, size, vidDat, &txtDat ) != 0 )
                         {
                             errorVal = ADPIC_MPEG4_MIME_PARSE_TEXT_DATA_ERROR;
                             av_free( textBuffer );
                             goto cleanup;
                         }
-
-                        /* Remember to set the format so that the right codec is loaded for this stream */
-                        video_data->vid_format = PIC_MODE_MPEG4_411;
+                        vidDat->vid_format = PIC_MODE_MPEG4_411;
                     }
                     else
                     {
@@ -728,24 +639,25 @@ static int admime_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         // CS - Support for ADPCM frames
         case DATA_AUDIO_ADPCM:
         {
-            /* No presentation information is sent with audio frames in a mime stream so there's not a lot we can do here other than
-               ensure the struct contains the size of the audio data */
-            audio_data->sizeOfAudioData = size;
-            audio_data->mode = extra;
-            audio_data->seconds = 0;
-            audio_data->msecs = 0;
-            audio_data->channel = 0;
-            audio_data->sizeOfAdditionalData = 0;
-            audio_data->additionalData = NULL;
+            // No presentation information is sent with audio frames in a mime 
+            // stream so there's not a lot we can do here other than ensure the 
+            // struct contains the size of the audio data
+            audDat->sizeOfAudioData = size;
+            audDat->mode = extra;
+            audDat->seconds = 0;
+            audDat->msecs = 0;
+            audDat->channel = 0;
+            audDat->sizeOfAdditionalData = 0;
+            audDat->additionalData = NULL;
 
-		    if( (status = ad_new_packet( pkt, audio_data->sizeOfAudioData )) < 0 )
+		    if( (status = ad_new_packet(pkt, audDat->sizeOfAudioData)) < 0 )
             {
                 errorVal = ADPIC_AUDIO_ADPCM_MIME_NEW_PACKET_ERROR;
 			    goto cleanup;
             }
 
             // Now get the actual audio data
-            if( (n = ad_get_buffer( pb, pkt->data, audio_data->sizeOfAudioData)) != audio_data->sizeOfAudioData )
+            if( (n = ad_get_buffer( pb, pkt->data, audDat->sizeOfAudioData)) != audDat->sizeOfAudioData )
             { 
                 errorVal = ADPIC_AUDIO_ADPCM_MIME_GET_BUFFER_ERROR;
                 goto cleanup;
@@ -753,10 +665,8 @@ static int admime_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         }
         break;
 
-        // CS - Data info extraction. A DATA_INFO frame simply contains a type byte followed by a text block. Due to its simplicity,
-        // we'll just extract the whole block into the AVPacket's data structure and let the client deal with checking its type and
-        // parsing its text
         case DATA_INFO:
+        case DATA_XML_INFO:
             errorVal = ad_read_info(s, pb, pkt, size);
             if (errorVal < 0)
                 goto cleanup;
@@ -770,7 +680,8 @@ static int admime_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 
         default:
         {
-            av_log(s, AV_LOG_WARNING, "ADPIC: admime_read_packet, No handler for data_type=%d\n", data_type );
+            av_log(s, AV_LOG_WARNING, "ADPIC: admime_read_packet, "
+                                      "No handler for data_type=%d\n", data_type);
             errorVal = ADPIC_DEFAULT_ERROR;
 	        goto cleanup;
         }
@@ -778,27 +689,92 @@ static int admime_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 		
     }
 
-    if (currentFrameType == NetVuAudio)
-        errorVal = ad_read_packet(s, pb, pkt, currentFrameType, audio_data, text_data);
+    if (frameType == NetVuAudio)
+        errorVal = ad_read_packet(s, pb, pkt, frameType, audDat, txtDat);
     else
-        errorVal = ad_read_packet(s, pb, pkt, currentFrameType, video_data, text_data);
+        errorVal = ad_read_packet(s, pb, pkt, frameType, vidDat, txtDat);
     
 
 cleanup:
     if( errorVal < 0 )
     {
-        /* If there was an error, make sure we release any memory that might have been allocated */
-        if( video_data != NULL )
-            av_free( video_data );
+        // If there was an error, release any memory that has been allocated
+        if( vidDat != NULL )
+            av_free( vidDat );
 
-        if( audio_data != NULL )
-            av_free( audio_data );
+        if( audDat != NULL )
+            av_free( audDat );
 
-        if( text_data != NULL )
-            av_free( text_data );
+        if( txtDat != NULL )
+            av_free( txtDat );
     }
 
 	return errorVal;
+}
+
+/**
+ * Invalid mime header.  However sometimes the header is missing and then there 
+ * is a valid image
+ */
+static int handleInvalidMime(AVFormatContext *s, ByteIOContext *pb, 
+                             AVPacket *pkt, int *data_type, 
+                             int *size, int *imgLoaded)
+{
+    int errorVal = 0;
+    
+    int chkByte1 = url_fgetc(pb);
+    int chkByte2 = url_fgetc(pb);
+    if( (chkByte1 == 0xff) && (chkByte2 == 0xD8))
+    {
+        int status, BuffSize;
+        int found = FALSE;
+        int read = 2;
+        
+        uint8_t *imageData = av_malloc(MAX_IMAGE_SIZE);
+        imageData[0] = chkByte1;
+        imageData[1] = chkByte2;
+        
+        //Set the data type
+        *data_type = DATA_JFIF;
+
+        // Read more data till we find end of image marker
+        for (; !found && !url_feof(pb) && !url_ferror(pb); read++)
+        {
+            if (read >= MAX_IMAGE_SIZE)  {
+                errorVal = ADPIC_PARSE_MIME_HEADER_ERROR;
+                av_free(imageData);
+                return errorVal;
+            }
+            
+            chkByte1 = chkByte2;
+            chkByte2 = url_fgetc( pb );
+            if (chkByte2 < 0)
+                break;
+            imageData[read] = chkByte2;
+            if(chkByte1==0xFF && chkByte2==0xD9)
+                found = TRUE;
+        }
+
+        BuffSize = read;
+        if ((status = ad_new_packet(pkt, BuffSize))<0)
+        {
+            av_log(s, AV_LOG_ERROR, "ADPIC: DATA_JFIF ad_new_packet %d failed, "
+                                    "status %d\n", BuffSize, status);
+            errorVal = ADPIC_NEW_PACKET_ERROR;
+            return errorVal;
+        }
+        
+        memcpy(pkt->data, imageData, BuffSize);
+        av_free(imageData);
+        *size = BuffSize;
+        *imgLoaded = TRUE;
+    }
+    else
+    { 
+        errorVal = ADPIC_PARSE_MIME_HEADER_ERROR;
+        return errorVal;
+    }
+    return errorVal;
 }
 
 
