@@ -25,6 +25,10 @@
 #include "jfif_img.h"
 #include "netvu.h"
 
+
+#define AUDIO_STREAM_ID             1
+#define DATA_STREAM_ID              2
+
  
 int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
 {
@@ -201,39 +205,33 @@ AVStream * ad_get_audio_stream( struct AVFormatContext *s, NetVuAudioData* audio
 			st->codec->time_base = (AVRational){1,1000};
 			
 			switch(audioHeader->mode)  {
-				case(AUD_MODE_AUD_ADPCM_8000):
-				case(AUD_MODE_AUD_L16_8000):
+				case(RTP_PAYLOAD_TYPE_8000HZ_ADPCM):
+				case(RTP_PAYLOAD_TYPE_8000HZ_PCM):
 					st->codec->sample_rate = 8000;
 					break;
-				case(AUD_MODE_AUD_ADPCM_16000):
-				case(AUD_MODE_AUD_L16_16000):
+				case(RTP_PAYLOAD_TYPE_16000HZ_ADPCM):
+				case(RTP_PAYLOAD_TYPE_16000HZ_PCM):
 					st->codec->sample_rate = 16000;
 					break;
-				case(AUD_MODE_AUD_L16_44100):
-				case(AUD_MODE_AUD_ADPCM_44100):
+				case(RTP_PAYLOAD_TYPE_44100HZ_ADPCM):
+				case(RTP_PAYLOAD_TYPE_44100HZ_PCM):
 					st->codec->sample_rate = 441000;
 					break;
-				case(AUD_MODE_AUD_ADPCM_11025):
-				case(AUD_MODE_AUD_L16_11025):
+				case(RTP_PAYLOAD_TYPE_11025HZ_ADPCM):
+				case(RTP_PAYLOAD_TYPE_11025HZ_PCM):
 					st->codec->sample_rate = 11025;
 					break;
-				case(AUD_MODE_AUD_ADPCM_22050):
-				case(AUD_MODE_AUD_L16_22050):
+				case(RTP_PAYLOAD_TYPE_22050HZ_ADPCM):
+				case(RTP_PAYLOAD_TYPE_22050HZ_PCM):
 					st->codec->sample_rate = 22050;
 					break;
-				case(AUD_MODE_AUD_ADPCM_32000):
-				case(AUD_MODE_AUD_L16_32000):
+				case(RTP_PAYLOAD_TYPE_32000HZ_ADPCM):
+				case(RTP_PAYLOAD_TYPE_32000HZ_PCM):
 					st->codec->sample_rate = 32000;
 					break;
-				case(AUD_MODE_AUD_ADPCM_48000):
-				case(AUD_MODE_AUD_L16_48000):
+				case(RTP_PAYLOAD_TYPE_48000HZ_ADPCM):
+				case(RTP_PAYLOAD_TYPE_48000HZ_PCM):
 					st->codec->sample_rate = 48000;
-					break;
-				case(AUD_MODE_AUD_L16_12000):
-					st->codec->sample_rate = 12000;
-					break;
-				case(AUD_MODE_AUD_L16_24000):
-					st->codec->sample_rate = 24000;
 					break;
 				default:
 					st->codec->sample_rate = 8000;
