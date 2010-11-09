@@ -26,38 +26,36 @@
 
 
 static void audioheader_network2host( NetVuAudioData *hdr );
-static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb, 
-                        AVPacket *pkt, 
+static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
+                        AVPacket *pkt,
                         NetVuImageData *video_data, char **text_data);
-static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb, 
-                                AVPacket *pkt, int size, int channel, 
+static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
+                                AVPacket *pkt, int size, int channel,
                                 NetVuImageData *video_data, char **text_data);
-static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb, 
+static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
                          AVPacket *pkt, int size, NetVuAudioData *data);
-static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb, 
+static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb,
                                  AVPacket *pkt, int size, NetVuAudioData *data);
-                         
+
 
 typedef struct {
     int utc_offset;
 } AdbinaryContext;
 
-/** The following structure is used to extract 6 bytes from the incoming 
- * stream. It needs therefore to be aligned on a 2 byte boundary. 
+/** The following structure is used to extract 6 bytes from the incoming
+ * stream. It needs therefore to be aligned on a 2 byte boundary.
  * Not sure whether this solution is portable though
  */
-typedef struct _minimal_video_header	// PRC 002
-{
-	uint32_t            t;
-	unsigned short      ms;
-}MinimalVideoHeader;
+typedef struct _minimal_video_header {	// PRC 002
+    uint32_t            t;
+    unsigned short      ms;
+} MinimalVideoHeader;
 
-typedef struct _minimal_audio_header	// PRC 002
-{
-	uint32_t t;
-	unsigned short ms;
-	unsigned short mode;
-}MinimalAudioHeader;
+typedef struct _minimal_audio_header {	// PRC 002
+    uint32_t t;
+    unsigned short ms;
+    unsigned short mode;
+} MinimalAudioHeader;
 
 
 static void audioheader_network2host( NetVuAudioData *hdr )
@@ -73,36 +71,35 @@ static void audioheader_network2host( NetVuAudioData *hdr )
 
 /*******************************************************************************
  * Function: adbinary_probe
- * Desc: used to identify the stream as an ad stream 
- * Params: 
+ * Desc: used to identify the stream as an ad stream
+ * Params:
  * Return:
- *  AVPROBE_SCORE_MAX if this straem is identifide as a ad stream 0 if not 
+ *  AVPROBE_SCORE_MAX if this straem is identifide as a ad stream 0 if not
  ******************************************************************************/
 static int adbinary_probe(AVProbeData *p)
 {
     int dataType;
     unsigned char *dataPtr;
     unsigned long dataSize;
-    
+
     if (p->buf_size <= SEPARATOR_SIZE)
         return 0;
-    
-    dataSize =  (p->buf[DATA_SIZE_BYTE_0] << 24) + 
-				(p->buf[DATA_SIZE_BYTE_1] << 16) + 
-				(p->buf[DATA_SIZE_BYTE_2] << 8 ) + 
-				(p->buf[DATA_SIZE_BYTE_3]);
+
+    dataSize =  (p->buf[DATA_SIZE_BYTE_0] << 24) +
+                (p->buf[DATA_SIZE_BYTE_1] << 16) +
+                (p->buf[DATA_SIZE_BYTE_2] << 8 ) +
+                (p->buf[DATA_SIZE_BYTE_3]);
     // Frames should not be larger than 2MB
     if (dataSize > 0x200000)
         return 0;
-    
+
     dataType = p->buf[DATA_TYPE];
     dataPtr = &p->buf[SEPARATOR_SIZE];
-    
-	if ((dataType <= DATA_XML_INFO) && (p->buf[DATA_CHANNEL] <= 32))  {
+
+    if ((dataType <= DATA_XML_INFO) && (p->buf[DATA_CHANNEL] <= 32))  {
         if ( (dataType == DATA_JPEG)  ||
-             (dataType == DATA_MPEG4I) || (dataType == DATA_MPEG4P) || 
-             (dataType == DATA_H264I)  || (dataType == DATA_H264P)  )
-        {
+             (dataType == DATA_MPEG4I) || (dataType == DATA_MPEG4P) ||
+             (dataType == DATA_H264I)  || (dataType == DATA_H264P)  ) {
             if (p->buf_size >= (SEPARATOR_SIZE + sizeof(NetVuImageData)) )  {
                 NetVuImageData test;
                 memcpy(&test, dataPtr, sizeof(NetVuImageData));
@@ -113,7 +110,7 @@ static int adbinary_probe(AVProbeData *p)
         }
         else if (dataType == DATA_JFIF)  {
             unsigned char *dataPtr = &p->buf[SEPARATOR_SIZE];
-            if ( (*dataPtr == 0xFF) && (*(dataPtr+1) == 0xD8) )
+            if ( (*dataPtr == 0xFF) && (*(dataPtr + 1) == 0xD8) )
                 return AVPROBE_SCORE_MAX;
         }
         else if (dataType == DATA_AUDIO_ADPCM)  {
@@ -160,8 +157,7 @@ static int adbinary_probe(AVProbeData *p)
                      (test.mode == RTP_PAYLOAD_TYPE_22050HZ_PCM)   ||
                      (test.mode == RTP_PAYLOAD_TYPE_32000HZ_PCM)   ||
                      (test.mode == RTP_PAYLOAD_TYPE_44100HZ_PCM)   ||
-                     (test.mode == RTP_PAYLOAD_TYPE_48000HZ_PCM)   )
-                {
+                     (test.mode == RTP_PAYLOAD_TYPE_48000HZ_PCM)   ) {
                     return AVPROBE_SCORE_MAX;
                 }
             }
@@ -183,19 +179,14 @@ static int adbinary_probe(AVProbeData *p)
                     return AVPROBE_SCORE_MAX;
             }
         }
-	}
+    }
 
-    return 0;
-}
-
-static int adbinary_read_close(AVFormatContext *s)
-{
     return 0;
 }
 
 static int adbinary_read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
-	AdbinaryContext *adpicContext = s->priv_data;
+    AdbinaryContext *adpicContext = s->priv_data;
     s->ctx_flags |= AVFMTCTX_NOHEADER;
     return ad_read_header(s, ap, &adpicContext->utc_offset);
 }
@@ -209,7 +200,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     int                     data_type, data_channel, size;
     int                     errorVal = 0;
     FrameType               frameType;
-    
+
     // First read the 6 byte separator
     data_type    = get_byte(pb);
     data_channel = get_byte(pb);
@@ -217,21 +208,19 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     if (size == 0)  {
         if(url_feof(pb))
             errorVal = ADPIC_END_OF_STREAM;
-        else
-        {
-            av_log(s, AV_LOG_ERROR, "adbinary_read_packet: Reading separator, " 
-                                    "errorcode %d\n", url_ferror(pb));
+        else {
+            av_log(s, AV_LOG_ERROR, "adbinary_read_packet: Reading separator, "
+                   "errorcode %d\n", url_ferror(pb));
             errorVal = ADPIC_READ_6_BYTE_SEPARATOR_ERROR;
         }
-		return errorVal;
+        return errorVal;
     }
 
     // Prepare for video or audio read
     errorVal = initADData(data_type, &frameType, &vidDat, &audDat);
     if (errorVal >= 0)  {
         // Proceed based on the type of data in this frame
-        switch(data_type)
-        {
+        switch(data_type) {
             case DATA_JPEG:
                 errorVal = ad_read_jpeg(s, pb, pkt, vidDat, &txtDat);
                 break;
@@ -245,7 +234,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 errorVal = ad_read_mpeg(s, pb, pkt, vidDat, &txtDat);
                 break;
             case DATA_MINIMAL_MPEG4:
-                errorVal = ad_read_mpeg_minimal(s, pb, pkt, size, data_channel, 
+                errorVal = ad_read_mpeg_minimal(s, pb, pkt, size, data_channel,
                                                 vidDat, &txtDat);
                 break;
             case DATA_MINIMAL_AUDIO_ADPCM:
@@ -263,13 +252,13 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 break;
             default:
                 av_log(s, AV_LOG_WARNING, "adbinary_read_packet: "
-                                          "No handler for data_type = "
-                                          "%d\n", data_type);
+                       "No handler for data_type = "
+                       "%d\n", data_type);
                 errorVal = ADPIC_DEFAULT_ERROR;
                 break;
         }
     }
-    
+
     if (errorVal >= 0)  {
         if (frameType == NetVuAudio)
             errorVal = ad_read_packet(s, pb, pkt, frameType, audDat, txtDat);
@@ -288,24 +277,28 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             av_free( txtDat );
     }
 
-	return errorVal;
+    return errorVal;
 }
 
-static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb, 
-                        AVPacket *pkt, 
+static int adbinary_read_close(AVFormatContext *s)
+{
+    return 0;
+}
+
+static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
+                        AVPacket *pkt,
                         NetVuImageData *video_data, char **text_data)
 {
+    static const int headerSize = sizeof(NetVuImageData);
     int n, status, errorVal = 0;
-    
-    if ((n=ad_get_buffer(pb, (unsigned char*)video_data, sizeof (NetVuImageData))) != sizeof (NetVuImageData))
-    {
+
+    if ((n = ad_get_buffer(pb, (uint8_t *)video_data, headerSize)) != headerSize) {
         av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading pic struct, expected %d, read %d\n", sizeof (NetVuImageData), n);
         errorVal = ADPIC_MPEG4_GET_BUFFER_ERROR;
         return errorVal;
     }
     ad_network2host(video_data);
-    if (!pic_version_valid(video_data->version))
-    {
+    if (!pic_version_valid(video_data->version)) {
         av_log(s, AV_LOG_ERROR, "ADPIC: invalid pic version 0x%08X\n", video_data->version);
         errorVal = ADPIC_MPEG4_PIC_VERSION_VALID_ERROR;
         return errorVal;
@@ -318,25 +311,22 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
         return ADPIC_MPEG4_ALOCATE_TEXT_BUFFER_ERROR;
 
     // Copy the additional text block
-    if( (n = ad_get_buffer( pb, *text_data, video_data->start_offset )) != video_data->start_offset )
-    {
+    if( (n = ad_get_buffer( pb, *text_data, video_data->start_offset )) != video_data->start_offset ) {
         av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading start_offset data, expected %d, read %d\n", video_data->start_offset, n);
         errorVal = ADPIC_MPEG4_GET_TEXT_BUFFER_ERROR;
         return errorVal;
     }
 
-    // Somtimes the buffer seems to end with a NULL terminator, 
+    // Somtimes the buffer seems to end with a NULL terminator,
     // other times it doesn't.  Adding a NULL terminator here regardless
     (*text_data)[video_data->start_offset] = '\0';
 
-    if ((status = ad_new_packet(pkt, video_data->size))<0) // PRC 003
-    {
+    if ((status = ad_new_packet(pkt, video_data->size)) < 0) { // PRC 003
         av_log(s, AV_LOG_ERROR, "ADPIC: DATA_MPEG4 ad_new_packet %d failed, status %d\n", video_data->size, status);
         errorVal = ADPIC_MPEG4_NEW_PACKET_ERROR;
         return errorVal;
     }
-    if ((n=ad_get_buffer(pb, pkt->data, video_data->size)) != video_data->size)
-    {
+    if ((n = ad_get_buffer(pb, pkt->data, video_data->size)) != video_data->size) {
         av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading pic body, expected %d, read %d\n", video_data->size, n);
         errorVal = ADPIC_MPEG4_PIC_BODY_ERROR;
         return errorVal;
@@ -344,8 +334,8 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
     return errorVal;
 }
 
-static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb, 
-                                AVPacket *pkt, int size, int channel, 
+static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
+                                AVPacket *pkt, int size, int channel,
                                 NetVuImageData *video_data, char **text_data)
 {
     AdbinaryContext* adpicContext = s->priv_data;
@@ -369,15 +359,15 @@ static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
 
     if( ad_get_buffer(pb, pkt->data, dataSize) != dataSize )
         return ADPIC_MPEG4_MINIMAL_NEW_PACKET_ERROR2;
-    
+
     return errorVal;
 }
 
-static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb, 
+static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
                          AVPacket *pkt, int size, NetVuAudioData *data)
 {
     int n, status, errorVal = 0;
-    
+
     // Get the fixed size portion of the audio header
     size = sizeof(NetVuAudioData) - sizeof(unsigned char *);
     if( (n = ad_get_buffer( pb, (unsigned char*)data, size)) != size)
@@ -387,8 +377,7 @@ static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
     audioheader_network2host(data);
 
     // Now get the additional bytes
-    if( data->sizeOfAdditionalData > 0 )
-    {
+    if( data->sizeOfAdditionalData > 0 ) {
         data->additionalData = av_malloc( data->sizeOfAdditionalData );
         if( data->additionalData == NULL )
             return ADPIC_AUDIO_ADPCM_ALOCATE_ADITIONAL_ERROR;
@@ -405,11 +394,11 @@ static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
     // Now get the actual audio data
     if( (n = ad_get_buffer( pb, pkt->data, data->sizeOfAudioData)) != data->sizeOfAudioData )
         return ADPIC_AUDIO_ADPCM_MIME_GET_BUFFER_ERROR;
-    
+
     return errorVal;
 }
 
-static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb, 
+static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb,
                                  AVPacket *pkt, int size, NetVuAudioData *data)
 {
     int dataSize = size - sizeof(MinimalAudioHeader);
@@ -429,15 +418,15 @@ static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb,
 
     if( (n = ad_get_buffer( pb, pkt->data, dataSize )) != dataSize )
         return ADPIC_MINIMAL_AUDIO_ADPCM_GET_BUFFER_ERROR2;
-    
+
     return errorVal;
 }
 
 
 AVInputFormat adbinary_demuxer = {
     .name           = "adbinary",
-    .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings video format (binary)"), 
-	.priv_data_size = sizeof(AdbinaryContext),
+    .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings video format (binary)"),
+    .priv_data_size = sizeof(AdbinaryContext),
     .read_probe     = adbinary_probe,
     .read_header    = adbinary_read_header,
     .read_packet    = adbinary_read_packet,
