@@ -46,6 +46,9 @@
 #define DS_RESOLUTION_MED                           1
 #define DS_RESOLUTION_LOW                           0
 
+
+#define SET_FLAG_ZONE_UNKNOWN(flags)    ((flags) |= 0x80)
+
 /* -------------------------------------- Structures/types -------------------------------------- */
 typedef struct _dsContext {
     URLContext *        TCPContext; /* Context of the underlying TCP network connection */

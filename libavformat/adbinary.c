@@ -39,13 +39,9 @@ static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb,
 
 
 typedef struct {
-    int utc_offset;
+    int utc_offset;     ///< Only used in minimal video case
 } AdbinaryContext;
 
-/** The following structure is used to extract 6 bytes from the incoming
- * stream. It needs therefore to be aligned on a 2 byte boundary.
- * Not sure whether this solution is portable though
- */
 typedef struct _minimal_video_header {	// PRC 002
     uint32_t            t;
     unsigned short      ms;
@@ -69,13 +65,9 @@ static void audioheader_network2host( NetVuAudioData *hdr )
     hdr->msecs					= be2me_32(hdr->msecs);
 }
 
-/*******************************************************************************
- * Function: adbinary_probe
- * Desc: used to identify the stream as an ad stream
- * Params:
- * Return:
- *  AVPROBE_SCORE_MAX if this straem is identifide as a ad stream 0 if not
- ******************************************************************************/
+/**
+ * Identify if the stream as an AD binary stream
+ */
 static int adbinary_probe(AVProbeData *p)
 {
     int dataType;
@@ -285,6 +277,9 @@ static int adbinary_read_close(AVFormatContext *s)
     return 0;
 }
 
+/**
+ * MPEG4 or H264 video frame with a Netvu header
+ */
 static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
                         AVPacket *pkt,
                         NetVuImageData *video_data, char **text_data)
@@ -334,6 +329,9 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
     return errorVal;
 }
 
+/**
+ * MPEG4 or H264 video frame with a minimal header
+ */
 static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
                                 AVPacket *pkt, int size, int channel,
                                 NetVuImageData *video_data, char **text_data)
@@ -363,6 +361,9 @@ static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
     return errorVal;
 }
 
+/**
+ * Audio frame with a Netvu header
+ */
 static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
                          AVPacket *pkt, int size, NetVuAudioData *data)
 {
@@ -398,6 +399,9 @@ static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
     return errorVal;
 }
 
+/**
+ * Audio frame with a minimal header
+ */
 static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb,
                                  AVPacket *pkt, int size, NetVuAudioData *data)
 {

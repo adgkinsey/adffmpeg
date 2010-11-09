@@ -223,7 +223,7 @@ AVStream* createStream(AVFormatContext * avf,
     int fc = 0;
     AVStream * st = NULL;
 
-    if ( (NULL == avf) || (NULL == frameInfo) || (NULL == frameInfo->frameBuffer) )
+    if ((NULL==avf) || (NULL==frameInfo) || (NULL==frameInfo->frameBuffer))
         return NULL;
 
     streamId = frameInfo->channel;
@@ -541,9 +541,8 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
     if (1 == seqLen)  {
         int frameNumber, frameCount;
         unsigned long start, end;
-        if (parReader_getIndexData(&p->frameInfo, &frameNumber, &frameCount, &start, &end))  {
+        if (parReader_getIndexData(&p->frameInfo, &frameNumber, &frameCount, &start, &end))
             seconds = end - start;
-        }
     }
     else  {
         int res, frameNumber, frameCount;

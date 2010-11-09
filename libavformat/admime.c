@@ -68,13 +68,9 @@ static const char *     MIME_TYPE_XML    = "text/xml";
 static const char *     MIME_TYPE_ADPCM  = "audio/adpcm";
 static const char *     MIME_TYPE_LAYOUT = "data/layout";
 
-/*******************************************************************************
- * Function: admime_probe
- * Desc: used to identify the stream as an ad stream
- * Params:
- * Return:
- *  AVPROBE_SCORE_MAX if this straem is identifide as a ad stream 0 if not
- ******************************************************************************/
+/**
+ * Identify if the stream as an AD MIME stream
+ */
 static int admime_probe(AVProbeData *p)
 {
     int offset = 0;
@@ -104,16 +100,14 @@ static int admime_probe(AVProbeData *p)
     return 0;
 }
 
-/*******************************************************************************
- * Function: is_valid_separator
- * Desc: Validates a multipart MIME boundary separator against the convention
- *       used by NetVu video servers
- * Params:
- *   buf - Buffer containing the boundary separator
- *   bufLen - Size of the buffer
- * Return:
- *  1 if boundary separator is valid, 0 if not
- ******************************************************************************/
+/**
+ * Validates a multipart MIME boundary separator against the convention used by
+ * NetVu video servers
+ * 
+ * \param buf Buffer containing the boundary separator
+ * \param bufLen Size of the buffer
+ * \return 1 if boundary separator is valid, 0 if not
+ */
 static int is_valid_separator( unsigned char * buf, int bufLen )
 {
     if( buf == NULL )
@@ -158,6 +152,9 @@ static int admime_read_header(AVFormatContext *s, AVFormatParameters *ap)
     return ad_read_header(s, ap, NULL);
 }
 
+/**
+ * Read and process MIME header information
+ */
 static int parse_mime_header(ByteIOContext *pb,
                              int *dataType, int *size, long *extra)
 {
@@ -202,6 +199,9 @@ static int parse_mime_header(ByteIOContext *pb,
     return 1;
 }
 
+/**
+ * Parse a line of MIME data
+ */
 static int process_line(char *line, int *line_count, int *dataType,
                         int *size, long *extra )
 {
@@ -326,6 +326,9 @@ static int process_line(char *line, int *line_count, int *dataType,
     return 1;
 }
 
+/**
+ * Parse MIME data that is sent after each MPEG video frame
+ */
 static int parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize,
                                 NetVuImageData *vidDat, char **txtDat )
 {
@@ -398,6 +401,9 @@ static int parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize,
     return 1;
 }
 
+/**
+ * Parse a line of MIME data for MPEG video frames
+ */
 static int process_mp4data_line( char *line, int line_count,
                                  NetVuImageData *vidDat, struct tm *time,
                                  char ** txtDat )
@@ -569,6 +575,9 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     return errorVal;
 }
 
+/**
+ * MPEG4 or H264 video frame with a MIME trailer
+ */
 static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
                         AVPacket *pkt, int size, long *extra,
                         NetVuImageData *vidDat, char **txtDat)
@@ -631,6 +640,9 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
     return errorVal;
 }
 
+/**
+ * Audio frame
+ */
 static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
                          AVPacket *pkt, int size, long extra,
                          NetVuAudioData *audDat)
@@ -657,8 +669,10 @@ static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
 }
 
 /**
- * Invalid mime header.  However sometimes the header is missing and then there
- * is a valid image
+ * Invalid mime header.
+ * 
+ * However sometimes the header is missing and then there is a valid image so 
+ * try and parse a frame out anyway.
  */
 static int handleInvalidMime(AVFormatContext *s, ByteIOContext *pb,
                              AVPacket *pkt, int *data_type,
