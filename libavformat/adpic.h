@@ -81,6 +81,8 @@ int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
 #define PIC_VERSION (MIN_PIC_VERSION + PIC_REVISION)
 #define pic_version_valid(v) ( ( (v)>=MIN_PIC_VERSION ) && ( (v)<=MAX_PIC_VERSION ) )
 
+#define AUD_VERSION 0x00ABCDEF
+
 #define PIC_MODE_JPEG_422        0
 #define PIC_MODE_JPEG_411        1
 #define PIC_MODE_MPEG4_411       2

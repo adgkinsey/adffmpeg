@@ -110,7 +110,7 @@ static int adbinary_probe(AVProbeData *p)
                 NetVuAudioData test;
                 memcpy(&test, dataPtr, sizeof(NetVuAudioData));
                 audioheader_network2host(&test);
-                if (test.version == 0x00ABCDEF)
+                if (test.version == AUD_VERSION)
                     return AVPROBE_SCORE_MAX;
             }
         }
