@@ -45,23 +45,21 @@ static void netvu_parse_content_type_header(char * p, NetvuContext *nv)
     //strip the content-type from the headder
     value = p;
     while((*p != ';') && (*p != '\0'))
-    {
         p++;
-    }
 
 	if(*p == '\0')
-	{ finishedContentHeader = 1; }
+        finishedContentHeader = 1;
 
     *p = '\0';
     p++;
     copy_value_to_field( value, &nv->hdrs[NETVU_CONTENT] );
     
-    while( *p != '\0' && finishedContentHeader != 1)
-    {
-        while(isspace(*p))p++; /* Skip whitespace */
+    while( *p != '\0' && finishedContentHeader != 1)  {
+        while(isspace(*p))
+            p++; // Skip whitespace
         name = p;
 
-        /* Now we get attributes in <name>=<value> pairs */
+        // Now we get attributes in <name>=<value> pairs
         while (*p != '\0' && *p != '=')
             p++;
 
@@ -76,19 +74,16 @@ static void netvu_parse_content_type_header(char * p, NetvuContext *nv)
         while (*p != '\0' && *p != ';')
             p++;
 
-        if (*p == ';')
-        {
+        if (*p == ';')  {
             *p = '\0';
             p++;
         }
 
-        /* Strip any "s off */
-        if( strlen(value) > 0 )
-        {
+        // Strip any "s off
+        if( strlen(value) > 0 )  {
             int ii;
             
-            if( *value == '"' && *(value + strlen(value) - 1) == '"' )
-            {
+            if( *value == '"' && *(value + strlen(value) - 1) == '"' )  {
                 *(value + strlen(value) - 1) = '\0';
                 value += 1;
             }
@@ -120,11 +115,10 @@ static void processLine(char *line, NetvuContext *nv)
     while (isspace(*p))
         p++;
     
-    if (!strcmp (tag, nv->hdrNames[NETVU_CONTENT])) {
+    if (!strcmp (tag, nv->hdrNames[NETVU_CONTENT]))
         netvu_parse_content_type_header(p, nv);
-    } else if(!strcmp(tag, nv->hdrNames[NETVU_SERVER])) {
+    else if(!strcmp(tag, nv->hdrNames[NETVU_SERVER]))
         copy_value_to_field( p, &nv->hdrs[NETVU_SERVER]);
-    }
 }
 
 static int netvu_open(URLContext *h, const char *uri, int flags)
@@ -185,13 +179,6 @@ static int netvu_read(URLContext *h, uint8_t *buf, int size)
     return url_read(nv->hd, buf, size);
 }
 
-/* used only when posting data */
-static int netvu_write(URLContext *h, const uint8_t *buf, int size)
-{
-    NetvuContext *s = h->priv_data;
-    return url_write(s->hd, buf, size);
-}
-
 static int netvu_close(URLContext *h)
 {
     NetvuContext *s = h->priv_data;
@@ -218,7 +205,7 @@ URLProtocol netvu_protocol = {
     "netvu",
     netvu_open,
     netvu_read,
-    netvu_write,
+    NULL,
 	netvu_seek,
     netvu_close,
     .priv_data_size = sizeof(NetvuContext),
