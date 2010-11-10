@@ -679,11 +679,11 @@ static int handleInvalidMime(AVFormatContext *s, ByteIOContext *pb,
     int chkByte1 = url_fgetc(pb);
     int chkByte2 = url_fgetc(pb);
     if( (chkByte1 == 0xff) && (chkByte2 == 0xD8)) {
-        int status, BuffSize;
+        int status;
         int found = FALSE;
         int read = 2;
 
-        uint8_t *imageData = av_malloc(MAX_IMAGE_SIZE);
+        uint8_t *imageData[MAX_IMAGE_SIZE];
         imageData[0] = chkByte1;
         imageData[1] = chkByte2;
 
@@ -694,7 +694,6 @@ static int handleInvalidMime(AVFormatContext *s, ByteIOContext *pb,
         for (; !found && !url_feof(pb) && !url_ferror(pb); read++) {
             if (read >= MAX_IMAGE_SIZE)  {
                 errorVal = ADPIC_PARSE_MIME_HEADER_ERROR;
-                av_free(imageData);
                 return errorVal;
             }
 
@@ -707,22 +706,19 @@ static int handleInvalidMime(AVFormatContext *s, ByteIOContext *pb,
                 found = TRUE;
         }
 
-        BuffSize = read;
-        if ((status = ad_new_packet(pkt, BuffSize)) < 0) {
-            av_log(s, AV_LOG_ERROR, "ADPIC: DATA_JFIF ad_new_packet %d failed, "
-                   "status %d\n", BuffSize, status);
+        *size = read;
+        if ((status = ad_new_packet(pkt, *size)) < 0) {
+            av_log(s, AV_LOG_ERROR, "handleInvalidMime: ad_new_packet (size %d)"
+                                    " failed, status %d\n", *size, status);
             errorVal = ADPIC_NEW_PACKET_ERROR;
             return errorVal;
         }
 
-        memcpy(pkt->data, imageData, BuffSize);
-        av_free(imageData);
-        *size = BuffSize;
+        memcpy(pkt->data, imageData, *size);
         *imgLoaded = TRUE;
     }
     else {
-        errorVal = ADPIC_PARSE_MIME_HEADER_ERROR;
-        return errorVal;
+        return ADPIC_PARSE_MIME_HEADER_ERROR;
     }
     return errorVal;
 }

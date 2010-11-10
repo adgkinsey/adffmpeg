@@ -28,10 +28,10 @@
 static void audioheader_network2host( NetVuAudioData *hdr );
 static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
                         AVPacket *pkt,
-                        NetVuImageData *video_data, char **text_data);
+                        NetVuImageData *vidDat, char **text_data);
 static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
                                 AVPacket *pkt, int size, int channel,
-                                NetVuImageData *video_data, char **text_data);
+                                NetVuImageData *vidDat, char **text_data);
 static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
                          AVPacket *pkt, int size, NetVuAudioData *data);
 static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb,
@@ -282,47 +282,54 @@ static int adbinary_read_close(AVFormatContext *s)
  */
 static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
                         AVPacket *pkt,
-                        NetVuImageData *video_data, char **text_data)
+                        NetVuImageData *vidDat, char **text_data)
 {
-    static const int headerSize = sizeof(NetVuImageData);
+    static const int hdrSize = sizeof(NetVuImageData);
     int n, status, errorVal = 0;
 
-    if ((n = ad_get_buffer(pb, (uint8_t *)video_data, headerSize)) != headerSize) {
-        av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading pic struct, expected %d, read %d\n", sizeof (NetVuImageData), n);
+    if ((n = ad_get_buffer(pb, (uint8_t *)vidDat, hdrSize)) != hdrSize) {
+        av_log(s, AV_LOG_ERROR, "ad_read_mpeg: short of data reading header, "
+                                "expected %d, read %d\n", 
+               sizeof (NetVuImageData), n);
         errorVal = ADPIC_MPEG4_GET_BUFFER_ERROR;
         return errorVal;
     }
-    ad_network2host(video_data);
-    if (!pic_version_valid(video_data->version)) {
-        av_log(s, AV_LOG_ERROR, "ADPIC: invalid pic version 0x%08X\n", video_data->version);
+    ad_network2host(vidDat);
+    if (!pic_version_valid(vidDat->version)) {
+        av_log(s, AV_LOG_ERROR, "ad_read_mpeg: invalid pic version 0x%08X\n", 
+               vidDat->version);
         errorVal = ADPIC_MPEG4_PIC_VERSION_VALID_ERROR;
         return errorVal;
     }
 
     // Get the additional text block
-    *text_data = av_malloc( video_data->start_offset + 1 );
+    *text_data = av_malloc( vidDat->start_offset + 1 );
 
     if( *text_data == NULL )
         return ADPIC_MPEG4_ALOCATE_TEXT_BUFFER_ERROR;
 
     // Copy the additional text block
-    if( (n = ad_get_buffer( pb, *text_data, video_data->start_offset )) != video_data->start_offset ) {
-        av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading start_offset data, expected %d, read %d\n", video_data->start_offset, n);
+    if( (n = ad_get_buffer( pb, *text_data, vidDat->start_offset )) != vidDat->start_offset ) {
+        av_log(s, AV_LOG_ERROR, "ad_read_mpeg: short of data reading text, "
+                                "expected %d, read %d\n", 
+               vidDat->start_offset, n);
         errorVal = ADPIC_MPEG4_GET_TEXT_BUFFER_ERROR;
         return errorVal;
     }
 
     // Somtimes the buffer seems to end with a NULL terminator,
     // other times it doesn't.  Adding a NULL terminator here regardless
-    (*text_data)[video_data->start_offset] = '\0';
+    (*text_data)[vidDat->start_offset] = '\0';
 
-    if ((status = ad_new_packet(pkt, video_data->size)) < 0) { // PRC 003
-        av_log(s, AV_LOG_ERROR, "ADPIC: DATA_MPEG4 ad_new_packet %d failed, status %d\n", video_data->size, status);
+    if ((status = ad_new_packet(pkt, vidDat->size)) < 0) { // PRC 003
+        av_log(s, AV_LOG_ERROR, "ad_read_mpeg: ad_new_packet (size %d) failed, "
+                                "status %d\n", vidDat->size, status);
         errorVal = ADPIC_MPEG4_NEW_PACKET_ERROR;
         return errorVal;
     }
-    if ((n = ad_get_buffer(pb, pkt->data, video_data->size)) != video_data->size) {
-        av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading pic body, expected %d, read %d\n", video_data->size, n);
+    if ((n = ad_get_buffer(pb, pkt->data, vidDat->size)) != vidDat->size) {
+        av_log(s, AV_LOG_ERROR, "ad_read_mpeg: short of data reading mpeg, "
+                                "expected %d, read %d\n", vidDat->size, n);
         errorVal = ADPIC_MPEG4_PIC_BODY_ERROR;
         return errorVal;
     }
@@ -334,24 +341,24 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
  */
 static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
                                 AVPacket *pkt, int size, int channel,
-                                NetVuImageData *video_data, char **text_data)
+                                NetVuImageData *vidDat, char **text_data)
 {
     AdbinaryContext* adpicContext = s->priv_data;
     int              dataSize     = size - sizeof(MinimalVideoHeader);
     int              errorVal     = 0;
 
     // Get the minimal video header and copy into generic video data structure
-    memset(video_data, 0, sizeof(NetVuImageData));
-    video_data->session_time  = get_be32(pb);
-    video_data->milliseconds  = get_be16(pb);
+    memset(vidDat, 0, sizeof(NetVuImageData));
+    vidDat->session_time  = get_be32(pb);
+    vidDat->milliseconds  = get_be16(pb);
     get_be16(pb);   // Pad out to sizeof(MinimalVideoHeader)
     
-    if ( url_ferror(pb) || (video_data->session_time == 0) )
+    if ( url_ferror(pb) || (vidDat->session_time == 0) )
         return ADPIC_MPEG4_MINIMAL_GET_BUFFER_ERROR;
-    video_data->cam = channel;
-    video_data->utc_offset = adpicContext->utc_offset;
-    video_data->vid_format = PIC_MODE_MPEG4_411;
-    snprintf(video_data->title, TITLE_LENGTH, "Camera %d", video_data->cam + 1);
+    vidDat->cam = channel;
+    vidDat->utc_offset = adpicContext->utc_offset;
+    vidDat->vid_format = PIC_MODE_MPEG4_411;
+    snprintf(vidDat->title, TITLE_LENGTH, "Camera %d", vidDat->cam + 1);
 
     // Now get the main frame data into a new packet
     if( ad_new_packet(pkt, dataSize) < 0 )
