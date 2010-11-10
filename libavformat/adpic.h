@@ -1,19 +1,23 @@
-// $HDR$
-//$Log:  126589: adpic.h 
-//
-//    Rev 1.0    30/11/2006 08:12:34  pcolbran
-// Decoder for AD format streams
-/* ------------------------------------------------------------------------
-*   Module name : adpic.h
-*   Description : header file
-*	Author  :
-*  ------------------------------------------------------------------------
-   Version Initials   Date      Comments
-   ------------------------------------------------------------------------
-
-	001		PRC		24/11/06	Initial creation 
-   ------------------------------------------------------------------------
-*/
+/*
+ * Type information and function prototypes for common AD-Holdings demuxer code
+ * Copyright (c) 2006-2010 AD-Holdings plc
+ *
+ * This file is part of FFmpeg.
+ *
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * FFmpeg is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ */
 
 #ifndef __ADPIC_H__
 #define __ADPIC_H__
@@ -29,34 +33,53 @@
 #define TRUE 1
 #endif
 
-enum tx_type { TX_MIME, TX_MIME_NV, TX_STREAM, TX_MINIMAL_STREAM };
-enum pkt_offsets { DATA_TYPE, DATA_CHANNEL, DATA_SIZE_BYTE_0 , DATA_SIZE_BYTE_1 , DATA_SIZE_BYTE_2 , DATA_SIZE_BYTE_3, SEPARATOR_SIZE };
+enum pkt_offsets { DATA_TYPE, DATA_CHANNEL,
+                   DATA_SIZE_BYTE_0, DATA_SIZE_BYTE_1,
+                   DATA_SIZE_BYTE_2, DATA_SIZE_BYTE_3,
+                   SEPARATOR_SIZE
+                 };
+
+/// These are the data types that are supported by the DS2 video servers
+enum data_type { DATA_JPEG, DATA_JFIF,
+                 DATA_MPEG4I, DATA_MPEG4P,
+                 DATA_AUDIO_ADPCM, DATA_AUDIO_RAW,
+                 DATA_MINIMAL_MPEG4, DATA_MINIMAL_AUDIO_ADPCM,
+                 DATA_LAYOUT, DATA_INFO,
+                 DATA_H264I, DATA_H264P,
+                 DATA_XML_INFO,
+                 MAX_DATA_TYPE
+               };
 
 
-void adpic_network2host(NetVuImageData *pic);
+int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset);
+void ad_network2host(NetVuImageData *pic);
 AVStream * ad_get_stream(struct AVFormatContext *s, NetVuImageData *pic);
 AVStream * ad_get_audio_stream(struct AVFormatContext *s, NetVuAudioData* audioHeader);
 AVStream * ad_get_data_stream(struct AVFormatContext *s);
-int adpicSkipInfoList(ByteIOContext * pb);
-int adpicFindTag(const char *Tag, ByteIOContext *pb, int MaxLookAhead);
-int adpic_new_packet(AVPacket *pkt, int size);
-void adpic_release_packet( AVPacket *pkt );
-int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size);
+int ad_new_packet(AVPacket *pkt, int size);
+void ad_release_packet( AVPacket *pkt );
+int ad_get_buffer(ByteIOContext *s, uint8_t *buf, int size);
+int initADData(int data_type, FrameType *frameType,
+               NetVuImageData **vidDat, NetVuAudioData **audDat);
+int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
+                 AVPacket *pkt,
+                 NetVuImageData *video_data, char **text_data);
+int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb,
+                 AVPacket *pkt, int manual_size, int size,
+                 NetVuImageData *video_data, char **text_data);
+int ad_read_info(AVFormatContext *s, ByteIOContext *pb,
+                 AVPacket *pkt, int size);
+int ad_read_layout(AVFormatContext *s, ByteIOContext *pb,
+                   AVPacket *pkt, int size);
+int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
+                   FrameType currentFrameType, void *data, char *text_data);
 
 
-#define PIC_REVISION 1	// JCB 016
-
+#define PIC_REVISION 1
 #define MIN_PIC_VERSION 0xDECADE10
 #define MAX_PIC_VERSION (MIN_PIC_VERSION + PIC_REVISION)
-
-//#define PIC_VERSION (MIN_PIC_VERSION + PIC_REVISION)
 #define PIC_VERSION (MIN_PIC_VERSION + PIC_REVISION)
-
 #define pic_version_valid(v) ( ( (v)>=MIN_PIC_VERSION ) && ( (v)<=MAX_PIC_VERSION ) )
-
-#define AUDIO_STREAM_ID             1
-#define DATA_STREAM_ID              2
-
 
 #define PIC_MODE_JPEG_422        0
 #define PIC_MODE_JPEG_411        1
@@ -68,29 +91,10 @@ int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size);
 #define PIC_MODE_H264P           7
 #define PIC_MODE_H264J           8
 
-#define AUD_MODE_AUD_RAW		   1 // historical - reserved RTP payload type
-#define AUD_MODE_AUD_ADPCM		   2 // historical - reserved RTP payload type
-#define AUD_MODE_AUD_ADPCM_8000	   5 
-#define AUD_MODE_AUD_ADPCM_16000   6 
-#define AUD_MODE_AUD_L16_44100	  11 
-#define AUD_MODE_AUD_ADPCM_11025  16 
-#define AUD_MODE_AUD_ADPCM_22050  17 
-#define AUD_MODE_AUD_ADPCM_32000  96 
-#define AUD_MODE_AUD_ADPCM_44100  97 
-#define AUD_MODE_AUD_ADPCM_48000  98 
-#define AUD_MODE_AUD_L16_8000	 100 
-#define AUD_MODE_AUD_L16_11025	 101 
-#define AUD_MODE_AUD_L16_16000	 102 
-#define AUD_MODE_AUD_L16_22050	 103 
-#define AUD_MODE_AUD_L16_32000	 104 
-#define AUD_MODE_AUD_L16_48000	 105 
-#define AUD_MODE_AUD_L16_12000	 106 
-#define AUD_MODE_AUD_L16_24000	 107 
 
-
-//AD pic error codes 
+//AD pic error codes
 #define ADPIC_NO_ERROR                              0
-#define ADPIC_ERROR                                 -200            //used to offset ad pic errors so that adpic can be identifyed as the origon of the error
+#define ADPIC_ERROR                                 -200            //used to offset ad pic errors so that adpic can be identified as the origon of the error
 
 #define ADPIC_UNKNOWN_ERROR                         ADPIC_ERROR + -1 //AVERROR_UNKNOWN     // (-200 + -1) unknown error 
 #define ADPIC_READ_6_BYTE_SEPARATOR_ERROR           ADPIC_ERROR + -2
@@ -111,8 +115,8 @@ int adpic_get_buffer(ByteIOContext *s, unsigned char *buf, int size);
 #define ADPIC_JFIF_GET_BUFFER_ERROR                 ADPIC_ERROR + -15
 #define ADPIC_JFIF_MANUAL_SIZE_ERROR                ADPIC_ERROR + -16
 
-#define ADPIC_MPEG4_MIME_NEW_PACKET_ERROR           ADPIC_ERROR + -17    
-#define ADPIC_MPEG4_MIME_GET_BUFFER_ERROR           ADPIC_ERROR + -18 
+#define ADPIC_MPEG4_MIME_NEW_PACKET_ERROR           ADPIC_ERROR + -17
+#define ADPIC_MPEG4_MIME_GET_BUFFER_ERROR           ADPIC_ERROR + -18
 #define ADPIC_MPEG4_MIME_PARSE_HEADER_ERROR         ADPIC_ERROR + -19
 #define ADPIC_MPEG4_MIME_PARSE_TEXT_DATA_ERROR      ADPIC_ERROR + -20
 #define ADPIC_MPEG4_MIME_GET_TEXT_BUFFER_ERROR      ADPIC_ERROR + -21

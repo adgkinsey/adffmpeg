@@ -1,3 +1,24 @@
+/*
+ * Demuxer for AD-Holdings Digital Sprite stream format
+ * Copyright (c) 2006-2010 AD-Holdings plc
+ *
+ * This file is part of FFmpeg.
+ *
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * FFmpeg is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ */
+
 #include "avformat.h"
 #include "libavcodec/avcodec.h"
 #include "libavutil/bswap.h"
@@ -62,10 +83,8 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
         return retVal;
 
     /* Validate the header */
-    if( header.magicNumber == DSPacketHeaderMagicNumber )
-    {
-        if( header.messageType == TCP_SRV_NUDGE )
-        {
+    if( header.magicNumber == DSPacketHeaderMagicNumber ) {
+        if( header.messageType == TCP_SRV_NUDGE ) {
             frameType = DMNudge;
 
             /* Read any extra bytes then try again */
@@ -77,8 +96,7 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
             if( get_buffer( ioContext, pkt->data, dataSize ) != dataSize )
                 return AVERROR_IO;
         }
-        else if( header.messageType == TCP_SRV_IMG_DATA )
-        {
+        else if( header.messageType == TCP_SRV_IMG_DATA ) {
             frameType = DMVideo;
 
             /* This should be followed by a jfif image */
@@ -106,8 +124,7 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
         return AVERROR_IO;
 
     /* Now create a wrapper to hold this frame's data which we'll store in the packet's private member field */
-    if( (frameData = av_malloc( sizeof(FrameData) )) != NULL )
-    {
+    if( (frameData = av_malloc( sizeof(FrameData) )) != NULL ) {
         frameData->frameType = frameType;
         frameData->frameData = videoFrameData;
         frameData->additionalData = NULL;
@@ -136,79 +153,73 @@ static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize )
     unsigned short              length, marker;
     int                         sos = FALSE;
 
-	i = 0;
-	while( ((unsigned char)data[i] != 0xff) && (i < dataSize) )
-		i++;
+    i = 0;
+    while( ((unsigned char)data[i] != 0xff) && (i < dataSize) )
+        i++;
 
-	if ( (unsigned char) data[++i] != 0xd8)
-		return NULL;  /* Bad SOI */
+    if ( (unsigned char) data[++i] != 0xd8)
+        return NULL;  /* Bad SOI */
 
-	i++;
+    i++;
 
-	while( !sos && (i < dataSize) )
-	{
-		memcpy(&marker, &data[i], 2 );
-		i+= 2;
-		memcpy(&length, &data[i], 2 );
-		i+= 2;
-		marker = av_be2ne16(marker);
-		length = av_be2ne16(length);
+    while( !sos && (i < dataSize) ) {
+        memcpy(&marker, &data[i], 2 );
+        i += 2;
+        memcpy(&length, &data[i], 2 );
+        i += 2;
+        marker = av_be2ne16(marker);
+        length = av_be2ne16(length);
 
-		switch (marker)
-		{
-		case 0xffe0 :	// APP0
-            {
+        switch (marker) {
+            case 0xffe0 : {	// APP0
                 /* Have a little look at the data in this block, see if it's what we're looking for */
-                if( memcmp( &data[i], DSApp0Identifier, strlen(DSApp0Identifier) ) == 0 )
-                {
+                if( memcmp( &data[i], DSApp0Identifier, strlen(DSApp0Identifier) ) == 0 ) {
                     int         offset = i;
 
-                    if( (frameData = av_mallocz( sizeof(DMImageData) )) != NULL )
-                    {
+                    if( (frameData = av_mallocz( sizeof(DMImageData) )) != NULL ) {
                         /* Extract the values into a data structure */
-                        if( ExtractDSFrameData( &data[offset], frameData ) < 0 )
-                        {
+                        if( ExtractDSFrameData( &data[offset], frameData ) < 0 ) {
                             av_free( frameData );
                             return NULL;
                         }
                     }
                 }
 
-			    i += length - 2;
+                i += length - 2;
             }
-			break;
+            break;
 
-		case 0xffdb :	// Q table
-			i += length-2;
-			break;
+            case 0xffdb :	// Q table
+                i += length - 2;
+                break;
 
-		case 0xffc0 :	// SOF
-			i += length-2;
-			break;
+            case 0xffc0 :	// SOF
+                i += length - 2;
+                break;
 
-		case 0xffc4 :	// Huffman table
-			i += length-2;
-			break;
+            case 0xffc4 :	// Huffman table
+                i += length - 2;
+                break;
 
-		case 0xffda :	// SOS
-			i += length-2;
-			sos = TRUE;
-			break;
+            case 0xffda :	// SOS
+                i += length - 2;
+                sos = TRUE;
+                break;
 
-		case 0xffdd :	// DRI
-			i += length-2;
-			break;
+            case 0xffdd :	// DRI
+                i += length - 2;
+                break;
 
-		case 0xfffe :	// Comment
-			i += length-2;
-			break;
+            case 0xfffe :	// Comment
+                i += length - 2;
+                break;
 
-		default :
-            /* Unknown marker encountered, better just skip past it */
-			i += length-2;	// JCB 026 skip past the unknown field
-			break;
-		}
-	}
+            default :
+                /* Unknown marker encountered, better just skip past it */
+                i += length - 2;	// JCB 026 skip past the unknown field
+                break;
+        }
+    }
 
     return frameData;
 }
@@ -218,8 +229,7 @@ static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData )
     int         retVal = AVERROR_IO;
     int         bufIdx = 0;
 
-    if( buffer != NULL )
-    {
+    if( buffer != NULL ) {
         memcpy( frameData->identifier, &buffer[bufIdx], ID_LENGTH );
         bufIdx += ID_LENGTH;
 
@@ -322,44 +332,39 @@ static AVStream * GetStream( struct AVFormatContext *s, int camera, int width, i
     int                 i, found;
     AVStream *          stream = NULL;
 
-	found = FALSE;
+    found = FALSE;
 
     /* Generate the ID for this codec */
-	taggedID = (codecType<<31) | ((camera-1)<<24) | ((width>>4)<<12) | ((height>>4)<<0);
+    taggedID = (codecType << 31) | ((camera - 1) << 24) | ((width >> 4) << 12) | ((height >> 4) << 0);
 
-	for( i = 0; i < s->nb_streams; i++ )
-	{
-		stream = s->streams[i];
-		if( stream->id == taggedID )
-		{
-			found = TRUE;
-			break;
-		}
-	}
+    for( i = 0; i < s->nb_streams; i++ ) {
+        stream = s->streams[i];
+        if( stream->id == taggedID ) {
+            found = TRUE;
+            break;
+        }
+    }
 
-	if( !found )
-	{ 
-		stream = av_new_stream( s, taggedID );
+    if( !found ) {
+        stream = av_new_stream( s, taggedID );
 
-		if( stream )
-		{
-		    stream->codec->codec_type = CODEC_TYPE_VIDEO;
-		    stream->codec->codec_id = codecID;
-			stream->codec->width = width;
-			stream->codec->height = height;
-			stream->index = i;
-		}
-	}
+        if( stream ) {
+            stream->codec->codec_type = CODEC_TYPE_VIDEO;
+            stream->codec->codec_id = codecID;
+            stream->codec->width = width;
+            stream->codec->height = height;
+            stream->index = i;
+        }
+    }
 
-	return stream;
+    return stream;
 }
 
 static int dspic_new_packet(AVPacket *pkt, int size)
 {
     int     retVal = av_new_packet( pkt, size );
 
-    if( retVal >= 0 )
-    {
+    if( retVal >= 0 ) {
         // Give the packet its own destruct function
         pkt->destruct = dspic_release_packet;
     }
@@ -369,22 +374,18 @@ static int dspic_new_packet(AVPacket *pkt, int size)
 
 static void dspic_release_packet( AVPacket *pkt )
 {
-    if (pkt != NULL)
-    {
-        if (pkt->priv != NULL)
-        {
+    if (pkt != NULL) {
+        if (pkt->priv != NULL) {
             // Have a look what type of frame we have and then delete anything inside as appropriate
             FrameData *     frameData = (FrameData *)pkt->priv;
 
             // Nothing else has nested allocs so just delete the frameData if it exists
-            if( frameData->frameData != NULL )
-            {
+            if( frameData->frameData != NULL ) {
                 av_free( frameData->frameData );
                 frameData->frameData = NULL;
             }
 
-            if( frameData->additionalData != NULL )
-            {
+            if( frameData->additionalData != NULL ) {
                 av_free( frameData->additionalData );
                 frameData->additionalData = NULL;
             }
@@ -401,7 +402,7 @@ static void dspic_release_packet( AVPacket *pkt )
 
 AVInputFormat dspic_demuxer = {
     .name           = "dspic",
-    .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings Digital-Sprite format"), 
+    .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings Digital-Sprite format"),
     .read_probe     = dspicProbe,
     .read_header    = dspicReadHeader,
     .read_packet    = dspicReadPacket,
