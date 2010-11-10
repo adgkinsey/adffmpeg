@@ -24,6 +24,8 @@
 
 #include "avio.h"
 
+size_t ff_http_get_headers(URLContext *h, char *headers, int bufferSize);
+
 /**
  * Set custom HTTP headers.
  * A trailing CRLF ("\r\n") is required for custom headers.

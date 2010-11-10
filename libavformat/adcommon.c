@@ -34,27 +34,24 @@ int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
 {
     ByteIOContext*	    pb = s->pb;
     URLContext*		    urlContext = pb->opaque;
-    NetvuContext*	    netvu = NULL;
+    NetvuContext*	    nv = NULL;
 
     if (urlContext && urlContext->is_streamed)  {
         if ( av_stristart(urlContext->filename, "netvu://", NULL) == 1)
-            netvu = urlContext->priv_data;
+            nv = urlContext->priv_data;
     }
-    if (netvu)  {
+    if (nv)  {
+        int ii;
         char temp[12];
 
         if (utcOffset)
-            *utcOffset = netvu->utc_offset;
-        av_metadata_set2(&s->metadata, "server",		netvu->server, 		0);
-        av_metadata_set2(&s->metadata, "content",		netvu->content, 	0);
-        av_metadata_set2(&s->metadata, "resolution",	netvu->resolution, 	0);
-        av_metadata_set2(&s->metadata, "compression",	netvu->compression, 0);
-        av_metadata_set2(&s->metadata, "rate",			netvu->rate, 		0);
-        av_metadata_set2(&s->metadata, "pps",			netvu->pps, 		0);
-        av_metadata_set2(&s->metadata, "site_id",		netvu->site_id, 	0);
-        //av_metadata_set2(&s->metadata, "boundry",		netvu->boundry, 	0);
-        snprintf(temp, sizeof(temp), "%d", netvu->utc_offset);
-        av_metadata_set2(&s->metadata, "timezone",		temp,               0);
+            *utcOffset = nv->utc_offset;
+        
+        for(ii = 0; ii < NETVU_MAX_HEADERS; ii++)  {
+            av_metadata_set2(&s->metadata, nv->hdrNames[ii], nv->hdrs[ii], 0);
+        }
+        snprintf(temp, sizeof(temp), "%d", nv->utc_offset);
+        av_metadata_set2(&s->metadata, "timezone",    temp,               0);
     }
 
     s->ctx_flags |= AVFMTCTX_NOHEADER;

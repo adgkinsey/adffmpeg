@@ -63,6 +63,13 @@ static const AVClass httpcontext_class = {
 static int http_connect(URLContext *h, const char *path, const char *hoststr,
                         const char *auth, int *new_location);
 
+
+size_t ff_http_get_headers(URLContext *h, char *headers, int bufferSize)
+{
+    HTTPContext *s = h->priv_data;
+    return av_strlcpy(headers, s->headers, bufferSize);
+}
+
 void ff_http_set_headers(URLContext *h, const char *headers)
 {
     HTTPContext *s = h->priv_data;
@@ -356,6 +363,8 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
         if (http_get_line(s, line, sizeof(line)) < 0)
             return AVERROR(EIO);
 
+        av_strlcat(s->headers, line, sizeof(s->headers));
+        av_strlcat(s->headers, "\n", sizeof(s->headers));
         dprintf(NULL, "header='%s'\n", line);
 
         err = process_line(h, line, s->line_count, new_location);
