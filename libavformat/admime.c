@@ -683,7 +683,7 @@ static int handleInvalidMime(AVFormatContext *s, ByteIOContext *pb,
         int found = FALSE;
         int read = 2;
 
-        uint8_t *imageData[MAX_IMAGE_SIZE];
+        uint8_t imageData[MAX_IMAGE_SIZE];
         imageData[0] = chkByte1;
         imageData[1] = chkByte2;
 
