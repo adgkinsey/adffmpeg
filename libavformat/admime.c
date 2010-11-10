@@ -141,11 +141,6 @@ static int is_valid_separator( unsigned char * buf, int bufLen )
     return FALSE;
 }
 
-static int admime_read_close(AVFormatContext *s)
-{
-    return 0;
-}
-
 static int admime_read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
     s->ctx_flags |= AVFMTCTX_NOHEADER;
@@ -562,6 +557,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     }
     else  {
         // If there was an error, release any memory that has been allocated
+        av_log(s, AV_LOG_DEBUG, "admime_read_packet: Error %d\n", errorVal);
         if( vidDat != NULL )
             av_free( vidDat );
 
@@ -729,6 +725,11 @@ static int handleInvalidMime(AVFormatContext *s, ByteIOContext *pb,
         return errorVal;
     }
     return errorVal;
+}
+
+static int admime_read_close(AVFormatContext *s)
+{
+    return 0;
 }
 
 

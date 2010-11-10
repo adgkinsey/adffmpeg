@@ -87,7 +87,7 @@ void ad_network2host(NetVuImageData *pic)
 }
 
 
-AVStream * ad_get_stream(struct AVFormatContext *s, NetVuImageData *pic)
+AVStream * ad_get_stream(AVFormatContext *s, NetVuImageData *pic)
 {
     int xres = pic->format.target_pixels;
     int yres = pic->format.target_lines;
@@ -119,7 +119,9 @@ AVStream * ad_get_stream(struct AVFormatContext *s, NetVuImageData *pic)
             break;
 
         default:
-            //logger(LOG_DEBUG,"ADPIC: get_stream, unrecognised vid_format %d\n", pic->vid_format);
+            av_log(s, AV_LOG_WARNING, 
+                   "ad_get_stream: unrecognised vid_format %d\n", 
+                   pic->vid_format);
             return NULL;
     }
     found = FALSE;
@@ -154,13 +156,9 @@ AVStream * ad_get_stream(struct AVFormatContext *s, NetVuImageData *pic)
             }
 
             // Use milliseconds as the time base
-            st->r_frame_rate = (AVRational) {
-                1, 1000
-            };
+            st->r_frame_rate = (AVRational) { 1, 1000 };
             av_set_pts_info(st, 32, 1, 1000);
-            st->codec->time_base = (AVRational) {
-                1, 1000
-            };
+            st->codec->time_base = (AVRational) { 1, 1000 };
 
             av_metadata_set2(&st->metadata, "title", pic->title, 0);
             snprintf(textbuffer, sizeof(textbuffer), "%d", pic->cam);
@@ -170,7 +168,7 @@ AVStream * ad_get_stream(struct AVFormatContext *s, NetVuImageData *pic)
     return st;
 }
 
-AVStream * ad_get_audio_stream( struct AVFormatContext *s, NetVuAudioData* audioHeader )
+AVStream * ad_get_audio_stream( AVFormatContext *s, NetVuAudioData* audioHeader )
 {
     int id;
     int i, found;
@@ -199,13 +197,9 @@ AVStream * ad_get_audio_stream( struct AVFormatContext *s, NetVuAudioData* audio
             // Should probably fill in other known values here. Like bit rate etc.
 
             // Use milliseconds as the time base
-            st->r_frame_rate = (AVRational) {
-                1, 1000
-            };
+            st->r_frame_rate = (AVRational) { 1, 1000 };
             av_set_pts_info(st, 32, 1, 1000);
-            st->codec->time_base = (AVRational) {
-                1, 1000
-            };
+            st->codec->time_base = (AVRational) { 1, 1000 };
 
             switch(audioHeader->mode)  {
                 case(RTP_PAYLOAD_TYPE_8000HZ_ADPCM):
@@ -249,47 +243,42 @@ AVStream * ad_get_audio_stream( struct AVFormatContext *s, NetVuAudioData* audio
     return st;
 }
 
-/****************************************************************************************************************
- * Function: get_data_stream
- * Desc: Returns the data stream for associated with the current connection. If there isn't one already, a new
- *       one will be created and added to the AVFormatContext passed in
- * Params:
- *   s - Pointer to AVFormatContext associated with the active connection
- * Return:
- *  Pointer to the data stream on success, NULL on failure
- ****************************************************************************************************************/
-AVStream * ad_get_data_stream( struct AVFormatContext *s )
+/**
+ * Returns the data stream associated with the current connection.
+ * 
+ * If there isn't one already, a new one will be created and added to the 
+ * AVFormatContext passed in.
+ * 
+ * \param s Pointer to AVFormatContext
+ * \return Pointer to the data stream on success, NULL on failure
+ */
+AVStream * ad_get_data_stream( AVFormatContext *s )
 {
-    int id;
-    int i, found;
+    int id = DATA_STREAM_ID;
+    int i, found = FALSE;
     AVStream *st;
 
-    found = FALSE;
-
-    id = DATA_STREAM_ID;
-
-    for( i = 0; i < s->nb_streams; i++ ) {
+    for( i = 0; i < s->nb_streams && !found; i++ ) {
         st = s->streams[i];
-        if( st->id == id ) {
+        if( st->id == id )
             found = TRUE;
-            break;
-        }
     }
 
-    // Did we find our audio stream? If not, create a new one
+    // Did we find our data stream? If not, create a new one
     if( !found ) {
         st = av_new_stream( s, id );
         if (st) {
             st->codec->codec_type = CODEC_TYPE_DATA;
-            st->codec->codec_id = 0;
-            st->codec->channels = 0;
-            st->codec->block_align = 0;
-            // Should probably fill in other known values here. Like bit rate, sample rate, num channels, etc
-
+            st->codec->codec_id = CODEC_ID_TEXT;
+            
+            // Use milliseconds as the time base
+            st->r_frame_rate = (AVRational) { 1, 1000 };
+            av_set_pts_info(st, 32, 1, 1000);
+            st->codec->time_base = (AVRational) { 1, 1000 };
+            
             st->index = i;
         }
     }
-
     return st;
 }
 
@@ -590,15 +579,14 @@ int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
     else if( currentFrameType == NetVuDataInfo || currentFrameType == NetVuDataLayout ) {
         // Get or create a data stream
         if ( (st = ad_get_data_stream( s )) == NULL ) {
+            av_log(s, AV_LOG_ERROR, "ADPIC: ad_read_packet, failed ad_get_data_stream for packet\n");
             errorVal = ADPIC_GET_INFO_LAYOUT_STREAM_ERROR;
             return errorVal;
         }
     }
 
     pkt->stream_index = st->index;
-
     frameData = av_malloc(sizeof(FrameData));
-
     if( frameData == NULL )
         return errorVal;
 
@@ -614,13 +602,11 @@ int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
         frameData->frameData = NULL;
     }
 
-    if( (frameData->frameType == NetVuAudio || frameData->frameType == NetVuVideo) && text_data != NULL ) {
+    if((frameData->frameType==NetVuAudio || frameData->frameType==NetVuVideo) && text_data != NULL )
         frameData->additionalData = text_data;
-    }
 
     pkt->priv = frameData;
-
     pkt->duration = 0;
 
-    return(ADPIC_NO_ERROR);
+    return 0;
 }
