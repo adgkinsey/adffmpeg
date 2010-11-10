@@ -344,12 +344,14 @@ static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
     memset(video_data, 0, sizeof(NetVuImageData));
     video_data->session_time  = get_be32(pb);
     video_data->milliseconds  = get_be16(pb);
+    get_be16(pb);   // Pad out to sizeof(MinimalVideoHeader)
+    
     if ( url_ferror(pb) || (video_data->session_time == 0) )
         return ADPIC_MPEG4_MINIMAL_GET_BUFFER_ERROR;
     video_data->cam = channel;
     video_data->utc_offset = adpicContext->utc_offset;
     video_data->vid_format = PIC_MODE_MPEG4_411;
-    snprintf(video_data->title, TITLE_LENGTH, "Camera %d", video_data->cam);
+    snprintf(video_data->title, TITLE_LENGTH, "Camera %d", video_data->cam + 1);
 
     // Now get the main frame data into a new packet
     if( ad_new_packet(pkt, dataSize) < 0 )
