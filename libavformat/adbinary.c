@@ -119,9 +119,9 @@ static int adbinary_probe(AVProbeData *p)
             return 0;
         }
         else if (dataType == DATA_MINIMAL_MPEG4)  {
-            if (p->buf_size >= (SEPARATOR_SIZE + sizeof(MinimalVideoHeader)) ) {
+            if (p->buf_size >= (SEPARATOR_SIZE + 6) ) {
                 MinimalVideoHeader test;
-                memcpy(&test, dataPtr, sizeof(MinimalVideoHeader));
+                memcpy(&test, dataPtr, 6);
                 test.t  = av_be2ne32(test.t);
                 // If timestamp is between 1980 and 2020 then accept it
                 if ( (test.t > 315532800) && (test.t < 1577836800) )
@@ -159,9 +159,10 @@ static int adbinary_probe(AVProbeData *p)
             return AVPROBE_SCORE_MAX / 4 + 1;
         }
         else if (dataType == DATA_INFO)  {
-            // Need a stronger test for this
-            // Payload is a type byte followed by a string
-            return AVPROBE_SCORE_MAX / 4 + 1;
+            if (memcmp(dataPtr + 1, "SITE", 4) == 0)
+                return AVPROBE_SCORE_MAX;
+            else
+                return AVPROBE_SCORE_MAX / 4 + 1;
         }
         else if (dataType == DATA_XML_INFO)  {
             const char *infoString = "<infoList>";
@@ -344,21 +345,21 @@ static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
                                 NetVuImageData *vidDat, char **text_data)
 {
     AdbinaryContext* adpicContext = s->priv_data;
-    int              dataSize     = size - sizeof(MinimalVideoHeader);
+    int              dataSize     = size - 6;
     int              errorVal     = 0;
 
     // Get the minimal video header and copy into generic video data structure
     memset(vidDat, 0, sizeof(NetVuImageData));
     vidDat->session_time  = get_be32(pb);
     vidDat->milliseconds  = get_be16(pb);
-    get_be16(pb);   // Pad out to sizeof(MinimalVideoHeader)
     
     if ( url_ferror(pb) || (vidDat->session_time == 0) )
         return ADPIC_MPEG4_MINIMAL_GET_BUFFER_ERROR;
-    vidDat->cam = channel;
+    vidDat->version = PIC_VERSION;
+    vidDat->cam = channel + 1;
     vidDat->utc_offset = adpicContext->utc_offset;
     vidDat->vid_format = PIC_MODE_MPEG4_411;
-    snprintf(vidDat->title, TITLE_LENGTH, "Camera %d", vidDat->cam + 1);
+    snprintf(vidDat->title, TITLE_LENGTH, "Camera %d", vidDat->cam);
 
     // Now get the main frame data into a new packet
     if( ad_new_packet(pkt, dataSize) < 0 )
