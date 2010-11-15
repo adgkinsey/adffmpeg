@@ -26,21 +26,12 @@
 #include "jfif_img.h"
 #include "adpic.h"
 
-static int commentAppend(char **buf, int count, int max, const char *format, ...);
 static int find_q(unsigned char *qy);
 static void parse_comment( char *text, int text_len, NetVuImageData *pic, 
                            char **additionalText );
 static void calcQtabs(void);
 
 
-#if HAVE_BIGENDIAN
-#define host2network16(x)
-#else
-#define host2network16(x) ((void)(x=av_bswap16(x)))
-#endif
-
-
-/* JCB 004 start */
 static const char comment_version[] = "Version: 00.02\r\n";
 static const char comment_version_0_1[] = "Version: 00.01\r\n";
 static const char camera_title[] = "Name: ";
@@ -55,7 +46,6 @@ static const char active_detectors[] = "Active-detectors: ";
 static const char script_msg[] = "Comments: ";
 static const char time_zone[] = "Locale: ";
 static const char utc_offset[] = "UTCoffset: ";
-static char comment_msg[256];
 
 static const uint8_t jfif_header[] = {
     0xFF, 0xD8,                     // SOI
@@ -64,9 +54,9 @@ static const uint8_t jfif_header[] = {
                                     // this field, but excluding preceding)
     0x4A, 0x46, 0x49, 0x46, 0x00,   // ID string 'JFIF\0'
     0x01, 0x02,                     // version
-    0x02,                           // bits per type
-    0x00, 0x32,                     // X density
-    0x00, 0x19,                     // Y density
+    0x02,                           // density units (0 - none, 1 - PPI, 2 - PPCM)
+    0x00, 0x19,                     // X density
+    0x00, 0x32,                     // Y density
     0x00,                           // X thumbnail size
     0x00,                           // Y thumbnail size
 };
@@ -143,9 +133,6 @@ static const unsigned char sos_header[] = {
     0xFF, 0xDA, 0x00, 0x0c, 0x03, 0x01, 0x00, 0x02, 
     0x11, 0x03, 0x11, 0x00, 0x3F, 0x00
 };
-static const unsigned char soc_header[] = {
-    0xFF, 0xFE, 0x00, 0x00
-};
 
 unsigned short Yvis[64] = {
      16,  11,  12,  14,  12,  10,  16,  14,
@@ -175,52 +162,20 @@ static int q_init;
 
 
 /**
- * Append some text to the comment buffer
- * 
- * \param buf Pointer to string buffer
- * \param count Current size of string buffer
- * \param max Maximum size of string buffer
- * \param format Printf format specifier
- * \return Size of string *buf, or zero if exceeded max
- */
-static int commentAppend(char **buf, int count, int max, const char *format, ...)
-{
-    char line[128];
-    va_list args;
-    
-    va_start(args, format);
-    count += vsnprintf(line, 128, format, args);
-    va_end(args);
-    
-    if (count > max)
-        return 0;
-    else  {
-        strcpy(*buf, line);
-        *buf += count;
-    }
-    return count;
-}
-
-/**
  * Build the correct JFIF headers & tables for the supplied image data
  * 
  * \param jfif Pointer to output buffer
  * \param pic  Pointer to NetVuImageData - includes Q factors, image size, 
  *             mode etc.
- * \param add_comment Flag to control addition of comment
- * \param max Maximum size of compressed image
+ * \param max  Maximum size of header
  * \return Total bytes in the JFIF image
  */
-unsigned int build_jpeg_header(void *jfif, NetVuImageData *pic, int add_comment, 
-                               unsigned int max)
+unsigned int build_jpeg_header(void *jfif, NetVuImageData *pic, unsigned int max)
 {
     volatile unsigned int count;
-    unsigned int comment_length;
     unsigned short    us1;
     char  *bufptr = jfif;
-    char *comment_header;
     char sof_copy[sizeof(sof_422_header)];
-    char *txt;
 
 
     if (!q_init) {
@@ -235,51 +190,6 @@ unsigned int build_jpeg_header(void *jfif, NetVuImageData *pic, int add_comment,
 
     memcpy(bufptr, jfif_header, sizeof(jfif_header));
     bufptr += sizeof(jfif_header);
-
-    // Now add the variable length comments
-    if (add_comment) {
-        if ((count + + sizeof(soc_header) + strlen(comment_version)) > max)
-            return 0;
-        comment_header = bufptr + 2;
-        memcpy(bufptr, soc_header, sizeof(soc_header));
-        bufptr += sizeof(soc_header);
-        strcpy(bufptr, comment_version);
-        bufptr += strlen(comment_version);
-
-        count = commentAppend(&bufptr, count, max, "%s%d\r\n", camera_number, pic->cam);
-        count = commentAppend(&bufptr, count, max, "%s%s\r\n", camera_title, pic->title);
-        if (pic->alarm[0])
-            count = commentAppend(&bufptr, count, max, "%s%s\r\n", alarm_comment, pic->alarm);
-        if (pic->alm_bitmask)
-            count = commentAppend(&bufptr, count, max, "%s%08X\r\n", active_alarms, pic->alm_bitmask);
-        if (pic->alm_bitmask_hi)
-            count = commentAppend(&bufptr, count, max, "%s%08X\r\n", active_detectors, pic->alm_bitmask_hi);
-        if (comment_msg[0])
-            count = commentAppend(&bufptr, count, max, "%s%s\r\n", script_msg, comment_msg);
-        count = commentAppend(&bufptr, count, max, "%s", image_date);
-        count = commentAppend(&bufptr, count, max, "%d/%m/%Y\r\n", localtime((const time_t*)&pic->session_time));
-        count = commentAppend(&bufptr, count, max, "%s", image_time);
-        count = commentAppend(&bufptr, count, max, "%H:%M:%S\r\n", localtime((const time_t*)&pic->session_time));
-        count = commentAppend(&bufptr, count, max, "%s", image_ms);
-        count = commentAppend(&bufptr, count, max, "%u\r\n", pic->milliseconds % 1000 );
-        count = commentAppend(&bufptr, count, max, "%s%s\r\n", time_zone, pic->locale);
-        count = commentAppend(&bufptr, count, max, "%s%d\r\n", utc_offset, pic->utc_offset);
-
-        if (pic->start_offset > 0) {
-            txt = (char *)&pic[1];
-            count += pic->start_offset;
-            if (count > max)
-                return 0;
-            else {
-                strncpy(bufptr, txt, pic->start_offset);
-                bufptr += pic->start_offset;
-            }
-        }
-
-        comment_length = bufptr - comment_header;
-        *comment_header++ = comment_length >> 8;
-        *comment_header++ = comment_length & 0xff;
-    }
     
     // Q tables and markers
     count += 138;
@@ -306,13 +216,13 @@ unsigned int build_jpeg_header(void *jfif, NetVuImageData *pic, int add_comment,
         unsigned short targ;
         char *ptr1, *ptr2;
         memcpy(sof_copy, (pic->vid_format == PIC_MODE_JPEG_411) ? sof_411_header : sof_422_header, sizeof( sof_copy ) );
-        targ = be2me_16(pic->format.target_pixels); // Byte swap from native to big-endian
+        targ = av_be2ne16(pic->format.target_pixels); // Byte swap from native to big-endian
         ptr1 = (char *)&targ;
         ptr2 = &sof_copy[7];
         *ptr2++ = *ptr1++;
         *ptr2 = *ptr1;
 
-        targ = be2me_16(pic->format.target_lines); // Byte swap from native to big-endian
+        targ = av_be2ne16(pic->format.target_lines); // Byte swap from native to big-endian
         ptr1 = (char *)&targ;
         ptr2 = &sof_copy[5];
         *ptr2++ = *ptr1++;
@@ -327,10 +237,8 @@ unsigned int build_jpeg_header(void *jfif, NetVuImageData *pic, int add_comment,
         memcpy(bufptr, sos_header, sizeof(sos_header));
         bufptr += sizeof(sos_header);
     }
-    if (count > max)
-        return 0;
 
-    return count;
+    return bufptr - (char*)jfif;
 }
 
 /**
@@ -418,18 +326,15 @@ static int find_q(unsigned char *qy)
 /**
  * Analyses a JFIF header and fills out a NetVuImageData structure with the info
  * 
- * \param data		input buffer
+ * \param data		        Input buffer
  * \param pic				NetVuImageData structure
- * \param imglength			total length of input buffer
- * \param qy		pointer for luma   Q table
- * \param qc		pointer for chroma Q table
- * \param site				pointer to site_id string
- * \param decode_comment		TRUE to try to parse any comment in the header
+ * \param imglength			Total length of input buffer
+ * \param additionalText    Buffer in which is placed text from the JFIF comment
+ *                          that doesn't have a specific field in NetVuImageData
  * \return Length of JFIF header in bytes
  */
 int parse_jfif_header(unsigned char *data, NetVuImageData *pic, int imglength, 
-                      unsigned char **qy, unsigned char **qc, char *site, 
-                      int decode_comment, char **additionalText )
+                      char **additionalText )
 {
     int i, sos = FALSE;
     unsigned short length, marker;
@@ -438,12 +343,6 @@ int parse_jfif_header(unsigned char *data, NetVuImageData *pic, int imglength,
                                "0x%02X, imglength=%d\n", 
                                data[0], data[1], imglength);
     memset(pic, 0, sizeof(*pic));
-    if (qc)
-        *qc  = NULL;
-    if (qy)
-        *qy = NULL;
-    if (site)
-        *site = 0;
     pic->version = PIC_VERSION;
     pic->factor = -1;
     pic->start_offset = 0;
@@ -484,15 +383,8 @@ int parse_jfif_header(unsigned char *data, NetVuImageData *pic, int imglength,
                 break;
             case 0xffdb :	// Q table
                 av_log(NULL, AV_LOG_DEBUG, "parse_jfif_header: found Q table marker, length = %d, Table no = %d\n", length, data[i] );
-                if (data[i]) { // PRC 029
-                    if (qc)
-                        *qc = &data[i+1];
-                }
-                else {
+                if (!data[i])
                     pic->factor =  find_q(&data[i+1]);
-                    if (qy)
-                        *qy = &data[i+1];
-                }
                 i += length - 2;
                 break;
             case 0xffc0 :	// SOF
@@ -526,8 +418,7 @@ int parse_jfif_header(unsigned char *data, NetVuImageData *pic, int imglength,
                 break;
             case 0xfffe :	// Comment
                 av_log(NULL, AV_LOG_DEBUG, "parse_jfif_header: found Comment marker, length = %d\n", length );
-                if (decode_comment)
-                    parse_comment( (char *)&data[i], length - 2, pic, additionalText );
+                parse_comment((char *)&data[i], length - 2, pic, additionalText);
                 i += length - 2;
                 break;
             default :
