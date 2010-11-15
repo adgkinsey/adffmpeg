@@ -181,16 +181,17 @@ static int netvu_read(URLContext *h, uint8_t *buf, int size)
 
 static int netvu_close(URLContext *h)
 {
-    NetvuContext *s = h->priv_data;
+    NetvuContext *nv = h->priv_data;
     int i, ret = 0;
 
-    if (s->hd)
-    	ret = url_close(s->hd);
+    if (nv->hd)
+    	ret = url_close(nv->hd);
 
     for (i = 0; i < NETVU_MAX_HEADERS; i++)  {
-        if (s->hdrs[i])
-            av_free(s->hdrs[i]);
+        if (nv->hdrs[i])
+            av_free(nv->hdrs[i]);
     }
+    av_free(nv);
 
     return ret;
 }

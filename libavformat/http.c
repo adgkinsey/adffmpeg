@@ -357,6 +357,7 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
         return 0;
     }
     s->chunksize = -1;
+    s->headers[0] = '\0';
 
     /* wait for header */
     for(;;) {
