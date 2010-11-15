@@ -434,7 +434,7 @@ int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
     (*text_data)[textSize] = '\0';
 
     // Use the NetVuImageData struct to build a JFIF header
-    if ((hdrSize = build_jpeg_header( jfif, video_data, FALSE, 2048)) <= 0)  {
+    if ((hdrSize = build_jpeg_header( jfif, video_data, 2048)) <= 0)  {
         av_log(s, AV_LOG_ERROR, "ad_read_jpeg: build_jpeg_header failed\n");
         return ADPIC_JPEG_HEADER_ERROR;
     }
@@ -482,7 +482,7 @@ int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb,
             return errorVal;
         }
     }
-    if ( parse_jfif_header( pkt->data, video_data, size, NULL, NULL, NULL, TRUE, text_data ) <= 0) {
+    if ( parse_jfif_header( pkt->data, video_data, size, text_data ) <= 0) {
         av_log(s, AV_LOG_ERROR, "ADPIC: ad_read_packet, parse_jfif_header failed\n");
         errorVal = ADPIC_JFIF_MANUAL_SIZE_ERROR;
         return errorVal;
