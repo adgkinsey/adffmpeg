@@ -522,7 +522,7 @@ Force video tag/fourcc.
 @item -qphist
 Show QP histogram.
 @item -vbsf @var{bitstream_filter}
-Bitstream filters available are "dump_extra", "remove_extra", "noise", "h264_mp4toannexb", "imxdump", "mjpegadump".
+Bitstream filters available are "dump_extra", "remove_extra", "noise", "h264_mp4toannexb", "imxdump", "mjpegadump", "mjpeg2jpeg".
 @example
 ffmpeg -i h264.mp4 -vcodec copy -vbsf h264_mp4toannexb -an out.h264
 @end example
@@ -630,6 +630,10 @@ of the output file:
 @example
 ffmpeg -i in.ogg -map_meta_data 0:0,s0 out.mp3
 @end example
+@item -map_chapters @var{outfile}:@var{infile}
+Copy chapters from @var{infile} to @var{outfile}. If no chapter mapping is specified,
+then chapters are copied from the first input file with at least one chapter to all
+output files. Use a negative file index to disable any chapter copying.
 @item -debug
 Print specific debug info.
 @item -benchmark
@@ -937,6 +941,7 @@ file to which you want to add them.
 @include indevs.texi
 @include outdevs.texi
 @include protocols.texi
+@include bitstream_filters.texi
 @include filters.texi
 
 @ignore

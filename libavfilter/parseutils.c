@@ -183,13 +183,25 @@ static int color_table_compare(const void *lhs, const void *rhs)
 
 #define ALPHA_SEP '@'
 
-int av_parse_color(uint8_t *rgba_color, const char *color_string, void *log_ctx)
+int av_parse_color(uint8_t *rgba_color, const char *color_string, int slen,
+                   void *log_ctx)
 {
     char *tail, color_string2[128];
     const ColorEntry *entry;
-    av_strlcpy(color_string2, color_string, sizeof(color_string2));
+    int len, hex_offset = 0;
+
+    if (color_string[0] == '#') {
+        hex_offset = 1;
+    } else if (!strncmp(color_string, "0x", 2))
+        hex_offset = 2;
+
+    if (slen < 0)
+        slen = strlen(color_string);
+    av_strlcpy(color_string2, color_string + hex_offset,
+               FFMIN(slen-hex_offset+1, sizeof(color_string2)));
     if ((tail = strchr(color_string2, ALPHA_SEP)))
         *tail++ = 0;
+    len = strlen(color_string2);
     rgba_color[3] = 255;
 
     if (!strcasecmp(color_string2, "random") || !strcasecmp(color_string2, "bikeshed")) {
@@ -198,16 +210,16 @@ int av_parse_color(uint8_t *rgba_color, const char *color_string, void *log_ctx)
         rgba_color[1] = rgba >> 16;
         rgba_color[2] = rgba >> 8;
         rgba_color[3] = rgba;
-    } else if (!strncmp(color_string2, "0x", 2)) {
+    } else if (hex_offset ||
+               strspn(color_string2, "0123456789ABCDEFabcdef") == len) {
         char *tail;
-        int len = strlen(color_string2);
         unsigned int rgba = strtoul(color_string2, &tail, 16);
 
-        if (*tail || (len != 8 && len != 10)) {
+        if (*tail || (len != 6 && len != 8)) {
             av_log(log_ctx, AV_LOG_ERROR, "Invalid 0xRRGGBB[AA] color string: '%s'\n", color_string2);
             return AVERROR(EINVAL);
         }
-        if (len == 10) {
+        if (len == 8) {
             rgba_color[3] = rgba;
             rgba >>= 8;
         }
@@ -233,11 +245,7 @@ int av_parse_color(uint8_t *rgba_color, const char *color_string, void *log_ctx)
         if (!strncmp(alpha_string, "0x", 2)) {
             alpha = strtoul(alpha_string, &tail, 16);
         } else {
-            alpha = strtoul(alpha_string, &tail, 10);
-            if (*tail) {
-                double d = strtod(alpha_string, &tail);
-                alpha = d * 255;
-            }
+            alpha = 255 * strtod(alpha_string, &tail);
         }
 
         if (tail == alpha_string || *tail || alpha > 255) {
@@ -280,6 +288,10 @@ int main(void)
             "0xffXXee",
             "0xfoobar",
             "0xffffeeeeeeee",
+            "#ff0000",
+            "#ffXX00",
+            "ff0000",
+            "ffXX00",
             "red@foo",
             "random@10",
             "0xff0000@1.0",
@@ -299,8 +311,8 @@ int main(void)
 
         av_log_set_level(AV_LOG_DEBUG);
 
-        for (int i = 0;  i < FF_ARRAY_ELEMS(color_names); i++) {
-            if (av_parse_color(rgba, color_names[i], NULL) >= 0)
+        for (i = 0;  i < FF_ARRAY_ELEMS(color_names); i++) {
+            if (av_parse_color(rgba, color_names[i], -1, NULL) >= 0)
                 printf("%s -> R(%d) G(%d) B(%d) A(%d)\n", color_names[i], rgba[0], rgba[1], rgba[2], rgba[3]);
         }
     }

@@ -118,7 +118,7 @@ static int create_filter(AVFilterContext **filt_ctx, AVFilterGraph *ctx, int ind
     }
 
     if ((ret = avfilter_graph_add_filter(ctx, *filt_ctx)) < 0) {
-        avfilter_destroy(*filt_ctx);
+        avfilter_free(*filt_ctx);
         return ret;
     }
 
@@ -294,6 +294,12 @@ static int parse_outputs(const char **buf, AVFilterInOut **curr_inputs,
         AVFilterInOut *match;
 
         AVFilterInOut *input = *curr_inputs;
+        if (!input) {
+            av_log(log_ctx, AV_LOG_ERROR,
+                   "No output pad can be associated to link label '%s'.\n",
+                   name);
+            return AVERROR(EINVAL);
+        }
         *curr_inputs = (*curr_inputs)->next;
 
         if (!name)

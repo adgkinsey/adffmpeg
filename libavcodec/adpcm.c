@@ -352,9 +352,10 @@ static void adpcm_compress_trellis(AVCodecContext *avctx, const short *samples,
         TrellisNode *t = node_buf + frontier*(i&1);
         TrellisNode **u;
         int sample = samples[i*stride];
+        int heap_pos = 0;
         memset(nodes_next, 0, frontier*sizeof(TrellisNode*));
         for(j=0; j<frontier && nodes[j]; j++) {
-            // higher j have higher ssd already, so they're unlikely to use a suboptimal next sample too
+            // higher j have higher ssd already, so they're likely to yield a suboptimal next sample too
             const int range = (j < frontier/2) ? 1 : 0;
             const int step = nodes[j]->step;
             int nidx;
@@ -369,11 +370,11 @@ static void adpcm_compress_trellis(AVCodecContext *avctx, const short *samples,
 #define STORE_NODE(NAME, STEP_INDEX)\
                     int d;\
                     uint32_t ssd;\
+                    int pos;\
+                    TrellisNode *u;\
                     dec_sample = av_clip_int16(dec_sample);\
                     d = sample - dec_sample;\
                     ssd = nodes[j]->ssd + d*d;\
-                    if(nodes_next[frontier-1] && ssd >= nodes_next[frontier-1]->ssd)\
-                        continue;\
                     /* Collapse any two states with the same previous sample value. \
                      * One could also distinguish states by step and by 2nd to last
                      * sample, but the effects of that are negligible. */\
@@ -383,24 +384,36 @@ static void adpcm_compress_trellis(AVCodecContext *avctx, const short *samples,
                             goto next_##NAME;\
                         }\
                     }\
-                    for(k=0; k<frontier; k++) {\
-                        if(!nodes_next[k] || ssd < nodes_next[k]->ssd) {\
-                            TrellisNode *u = nodes_next[frontier-1];\
-                            if(!u) {\
-                                assert(pathn < FREEZE_INTERVAL<<avctx->trellis);\
-                                u = t++;\
-                                u->path = pathn++;\
-                            }\
-                            u->ssd = ssd;\
-                            u->step = STEP_INDEX;\
-                            u->sample2 = nodes[j]->sample1;\
-                            u->sample1 = dec_sample;\
-                            paths[u->path].nibble = nibble;\
-                            paths[u->path].prev = nodes[j]->path;\
-                            memmove(&nodes_next[k+1], &nodes_next[k], (frontier-k-1)*sizeof(TrellisNode*));\
-                            nodes_next[k] = u;\
+                    if (heap_pos < frontier) {\
+                        pos = heap_pos++;\
+                    } else {\
+                        /* Try to replace one of the leaf nodes with the new \
+                         * one, but try a different slot each time. */\
+                        pos = (frontier >> 1) + (heap_pos++ & ((frontier >> 1) - 1));\
+                        if (ssd > nodes_next[pos]->ssd)\
+                            goto next_##NAME;\
+                    }\
+                    u = nodes_next[pos];\
+                    if(!u) {\
+                        assert(pathn < FREEZE_INTERVAL<<avctx->trellis);\
+                        u = t++;\
+                        nodes_next[pos] = u;\
+                        u->path = pathn++;\
+                    }\
+                    u->ssd = ssd;\
+                    u->step = STEP_INDEX;\
+                    u->sample2 = nodes[j]->sample1;\
+                    u->sample1 = dec_sample;\
+                    paths[u->path].nibble = nibble;\
+                    paths[u->path].prev = nodes[j]->path;\
+                    /* Sift the newly inserted node down in the heap to \
+                     * restore the heap property. */\
+                    while (pos > 0) {\
+                        int parent = (pos - 1) >> 1;\
+                        if (nodes_next[parent]->ssd <= ssd)\
                             break;\
-                        }\
+                        FFSWAP(TrellisNode*, nodes_next[parent], nodes_next[pos]);\
+                        pos = parent;\
                     }\
                     next_##NAME:;
                     STORE_NODE(ms, FFMAX(16, (AdaptationTable[nibble] * step) >> 8));
@@ -737,7 +750,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     default:
         break;
     }
-    avctx->sample_fmt = SAMPLE_FMT_S16;
+    avctx->sample_fmt = AV_SAMPLE_FMT_S16;
     return 0;
 }
 
@@ -1773,7 +1786,7 @@ AVCodec name ## _encoder = {                    \
     adpcm_encode_frame,                         \
     adpcm_encode_close,                         \
     NULL,                                       \
-    .sample_fmts = (const enum SampleFormat[]){SAMPLE_FMT_S16,SAMPLE_FMT_NONE}, \
+    .sample_fmts = (const enum AVSampleFormat[]){AV_SAMPLE_FMT_S16,AV_SAMPLE_FMT_NONE}, \
     .long_name = NULL_IF_CONFIG_SMALL(long_name_), \
 };
 #else
