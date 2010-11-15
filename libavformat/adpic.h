@@ -33,12 +33,6 @@
 #define TRUE 1
 #endif
 
-enum pkt_offsets { DATA_TYPE, DATA_CHANNEL,
-                   DATA_SIZE_BYTE_0, DATA_SIZE_BYTE_1,
-                   DATA_SIZE_BYTE_2, DATA_SIZE_BYTE_3,
-                   SEPARATOR_SIZE
-                 };
-
 /// These are the data types that are supported by the DS2 video servers
 enum data_type { DATA_JPEG, DATA_JFIF,
                  DATA_MPEG4I, DATA_MPEG4P,
@@ -53,9 +47,6 @@ enum data_type { DATA_JPEG, DATA_JFIF,
 
 int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset);
 void ad_network2host(NetVuImageData *pic);
-AVStream * ad_get_stream(struct AVFormatContext *s, NetVuImageData *pic);
-AVStream * ad_get_audio_stream(struct AVFormatContext *s, NetVuAudioData* audioHeader);
-AVStream * ad_get_data_stream(struct AVFormatContext *s);
 int ad_new_packet(AVPacket *pkt, int size);
 void ad_release_packet( AVPacket *pkt );
 int ad_get_buffer(ByteIOContext *s, uint8_t *buf, int size);

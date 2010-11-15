@@ -46,7 +46,7 @@ typedef struct _imageData {
     uint32_t version;	            ///<  structure version number */
 
     /// in PIC_REVISION 0 this was the DFT style FULL_HI etc
-    /// in PIC_REVISION 1 this is used to specify AD or JFIF format image amongst other things
+    /// in PIC_REVISION 1 this is used to specify AD or JFIF format image
     int32_t mode;
     int32_t cam;				    ///< camera number
     int32_t vid_format;			    ///< 422 or 411

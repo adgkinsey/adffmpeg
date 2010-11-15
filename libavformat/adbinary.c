@@ -25,6 +25,13 @@
 #include "adpic.h"
 
 
+enum pkt_offsets { DATA_TYPE, DATA_CHANNEL,
+                   DATA_SIZE_BYTE_0, DATA_SIZE_BYTE_1,
+                   DATA_SIZE_BYTE_2, DATA_SIZE_BYTE_3,
+                   SEPARATOR_SIZE
+                 };
+
+
 static void audioheader_network2host( NetVuAudioData *hdr );
 static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
                         AVPacket *pkt,
@@ -179,9 +186,9 @@ static int adbinary_probe(AVProbeData *p)
 
 static int adbinary_read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
-    AdbinaryContext *adpicContext = s->priv_data;
+    AdbinaryContext *adContext = s->priv_data;
     s->ctx_flags |= AVFMTCTX_NOHEADER;
-    return ad_read_header(s, ap, &adpicContext->utc_offset);
+    return ad_read_header(s, ap, &adContext->utc_offset);
 }
 
 static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
