@@ -27,6 +27,7 @@
 #include "network.h"
 #include "os_support.h"
 #include "httpauth.h"
+#include "http.h"
 
 /* XXX: POST protocol is not completely implemented because ffmpeg uses
    only a subset of it. */
@@ -45,12 +46,19 @@ typedef struct {
     int64_t off, filesize;
     char location[URL_SIZE];
     HTTPAuthState auth_state;
+    unsigned char headers[BUFFER_SIZE];
 } HTTPContext;
 
 static int http_connect(URLContext *h, const char *path, const char *hoststr,
                         const char *auth, int *new_location);
 static int http_write(URLContext *h, uint8_t *buf, int size);
 
+
+size_t ff_http_get_headers(URLContext *h, char *headers, int bufferSize)
+{
+    HTTPContext *s = h->priv_data;
+    return av_strlcpy(headers, s->headers, bufferSize);
+}
 
 /* return non zero if error */
 static int http_open_cnx(URLContext *h)
@@ -293,12 +301,15 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
         s->chunksize = 0;
         return 0;
     }
+    s->headers[0] = '\0';
 
     /* wait for header */
     for(;;) {
         if (http_get_line(s, line, sizeof(line)) < 0)
             return AVERROR(EIO);
 
+        av_strlcat(s->headers, line, sizeof(s->headers));
+        av_strlcat(s->headers, "\n", sizeof(s->headers));
         dprintf(NULL, "header='%s'\n", line);
 
         err = process_line(h, line, s->line_count, new_location);
