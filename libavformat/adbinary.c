@@ -31,7 +31,6 @@ enum pkt_offsets { DATA_TYPE, DATA_CHANNEL,
                    SEPARATOR_SIZE
                  };
 
-
 static void audioheader_network2host( NetVuAudioData *hdr );
 static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
                         AVPacket *pkt,
@@ -108,9 +107,11 @@ static int adbinary_probe(AVProbeData *p)
             }
         }
         else if (dataType == DATA_JFIF)  {
-            unsigned char *dataPtr = &p->buf[SEPARATOR_SIZE];
-            if ( (*dataPtr == 0xFF) && (*(dataPtr + 1) == 0xD8) )
-                return AVPROBE_SCORE_MAX;
+            if (p->buf_size >= (SEPARATOR_SIZE + 2) )  {
+                unsigned char *dataPtr = &p->buf[SEPARATOR_SIZE];
+                if ( (*dataPtr == 0xFF) && (*(dataPtr + 1) == 0xD8) )
+                    return AVPROBE_SCORE_MAX;
+            }
         }
         else if (dataType == DATA_AUDIO_ADPCM)  {
             if (p->buf_size >= (SEPARATOR_SIZE + sizeof(NetVuAudioData)) )  {
@@ -166,17 +167,21 @@ static int adbinary_probe(AVProbeData *p)
             return AVPROBE_SCORE_MAX / 4 + 1;
         }
         else if (dataType == DATA_INFO)  {
-            if (memcmp(dataPtr + 1, "SITE", 4) == 0)
-                return AVPROBE_SCORE_MAX;
-            else
-                return AVPROBE_SCORE_MAX / 4 + 1;
+            if (p->buf_size >= (SEPARATOR_SIZE + 5) )  {
+                if (memcmp(dataPtr + 1, "SITE", 4) == 0)
+                    return AVPROBE_SCORE_MAX;
+                else
+                    return AVPROBE_SCORE_MAX / 4 + 1;
+            }
         }
         else if (dataType == DATA_XML_INFO)  {
             const char *infoString = "<infoList>";
-            int infoStringLen = strlen(infoString);
-            if (p->buf_size >= (SEPARATOR_SIZE + infoStringLen) )  {
-                if (strncasecmp(dataPtr, infoString, infoStringLen) == 0)
-                    return AVPROBE_SCORE_MAX;
+            if (p->buf_size >= (SEPARATOR_SIZE + strlen(infoString)) )  {
+                int infoStringLen = strlen(infoString);
+                if (p->buf_size >= (SEPARATOR_SIZE + infoStringLen) )  {
+                    if (strncasecmp(dataPtr, infoString, infoStringLen) == 0)
+                        return AVPROBE_SCORE_MAX;
+                }
             }
         }
     }
@@ -245,6 +250,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 break;
             case DATA_INFO:
             case DATA_XML_INFO:
+                // May want to handle INFO and XML_INFO separately in future
                 errorVal = ad_read_info(s, pb, pkt, size);
                 break;
             case DATA_LAYOUT:
@@ -351,7 +357,7 @@ static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
                                 AVPacket *pkt, int size, int channel,
                                 NetVuImageData *vidDat, char **text_data)
 {
-    AdbinaryContext* adpicContext = s->priv_data;
+    AdbinaryContext* adContext = s->priv_data;
     int              dataSize     = size - 6;
     int              errorVal     = 0;
 
@@ -364,7 +370,7 @@ static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
         return ADPIC_MPEG4_MINIMAL_GET_BUFFER_ERROR;
     vidDat->version = PIC_VERSION;
     vidDat->cam = channel + 1;
-    vidDat->utc_offset = adpicContext->utc_offset;
+    vidDat->utc_offset = adContext->utc_offset;
     vidDat->vid_format = PIC_MODE_MPEG4_411;
     snprintf(vidDat->title, TITLE_LENGTH, "Camera %d", vidDat->cam);
 
