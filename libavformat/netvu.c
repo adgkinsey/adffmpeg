@@ -235,10 +235,10 @@ static int process_line(URLContext *h, char *line, int line_count,
             ff_http_auth_handle_header(&s->auth_state, tag, p);
         } else if (!strcmp (tag, "Authentication-Info")) {
             ff_http_auth_handle_header(&s->auth_state, tag, p);
-        } else if (!strcmp (tag, "Content-type")) {
+        } else if (!strcmp (tag, s->hdrNames[NETVU_CONTENT])) {
             netvu_parse_content_type_header( p, s );
-        } else if(!strcmp(tag, "Server")) {
-			copy_value_to_field( p, &s->server);
+        } else if(!strcmp(tag, s->hdrNames[NETVU_SERVER])) {
+			copy_value_to_field( p, &s->hdrs[NETVU_SERVER]);
 		}
     }
     return 1;
@@ -262,7 +262,7 @@ static void netvu_parse_content_type_header( char * p, NetvuContext *s )
 
     *p = '\0';
     p++;
-    copy_value_to_field( value, &s->content );
+    copy_value_to_field( value, &s->hdrs[NETVU_CONTENT] );
     
     while( *p != '\0' && finishedContentHeader != 1)
     {
@@ -293,27 +293,21 @@ static void netvu_parse_content_type_header( char * p, NetvuContext *s )
         /* Strip any "s off */
         if( strlen(value) > 0 )
         {
+            int ii;
+            
             if( *value == '"' && *(value + strlen(value) - 1) == '"' )
             {
                 *(value + strlen(value) - 1) = '\0';
                 value += 1;
             }
 
-			/* Copy the attribute into the relevant field */
-			if( strcmp( name, "resolution" ) == 0 )
-				copy_value_to_field( value, &s->resolution);
-			if( strcmp( name, "compression" ) == 0 )
-				copy_value_to_field( value, &s->compression);
-			if( strcmp( name, "rate" ) == 0 )
-				copy_value_to_field( value, &s->rate);
-			if( strcmp( name, "pps" ) == 0 )
-				copy_value_to_field( value, &s->pps);
-			if( strcmp( name, "utc_offset" ) == 0 )
+			// Copy the attribute into the relevant field
+            for(ii = 0; ii < NETVU_MAX_HEADERS; ii++)  {
+                if( strcmp(name, s->hdrNames[ii] ) == 0 )
+                    copy_value_to_field(value, &s->hdrs[ii]);
+            }
+            if(strcmp(name, "utc_offset") == 0)
 				s->utc_offset = atoi(value);
-			if( strcmp( name, "site_id" ) == 0 )
-				copy_value_to_field( value, &s->site_id);
-			if( strcmp( name, "boundary" ) == 0 )
-				copy_value_to_field( value, &s->boundry);
 		}
     }
 }
@@ -322,7 +316,7 @@ static void copy_value_to_field( const char *value, char **dest )
 {
     if( *dest != NULL )
         av_free( *dest );
-
+    
     *dest = av_malloc( strlen(value) + 1 );
     strcpy( *dest, value );
     (*dest)[strlen(value)] = '\0';
@@ -337,6 +331,14 @@ static int netvu_connect(URLContext *h, const char *path, const char *hoststr,
     char *authstr = NULL;
     int64_t off = s->off;
 
+    s->hdrNames[NETVU_SERVER]      = "Server";
+    s->hdrNames[NETVU_CONTENT]     = "Content-type";
+    s->hdrNames[NETVU_RESOLUTION]  = "resolution";
+    s->hdrNames[NETVU_COMPRESSION] = "compression";
+    s->hdrNames[NETVU_RATE]        = "rate";
+    s->hdrNames[NETVU_PPS]         = "pps";
+    s->hdrNames[NETVU_SITE_ID]     = "site_id";
+    s->hdrNames[NETVU_BOUNDARY]    = "boundary";
 
     /* send http header */
     post = h->flags & URL_WRONLY;
@@ -379,7 +381,7 @@ static int netvu_connect(URLContext *h, const char *path, const char *hoststr,
     /* wait for header */
     for(;;) {
         if (netvu_get_line(s, line, sizeof(line)) < 0)
-            return AVERROR(EIO);
+        return AVERROR(EIO);
 
         dprintf(NULL, "header='%s'\n", line);
 
@@ -461,14 +463,14 @@ static int netvu_write(URLContext *h, uint8_t *buf, int size)
         if ((ret = url_write(s->hd, temp, strlen(temp))) < 0 ||
             (ret = url_write(s->hd, buf, size)) < 0 ||
             (ret = url_write(s->hd, crlf, sizeof(crlf) - 1)) < 0)
-            return ret;
+    return ret;
     }
     return size;
 }
 
 static int netvu_close(URLContext *h)
 {
-    int ret = 0;
+    int i, ret = 0;
     char footer[] = "0\r\n\r\n";
     NetvuContext *s = h->priv_data;
 
@@ -480,30 +482,10 @@ static int netvu_close(URLContext *h)
 
     url_close(s->hd);
 	
-    if( s->server )
-		av_free( s->server );
-
-    if( s->content )
-        av_free( s->content );
-
-    /* Make sure we release any memory that may have been allocated to store authentication info */
-    if( s->resolution )
-        av_free( s->resolution );
-
-    if( s->compression )
-        av_free( s->compression );
-
-    if( s->rate )
-        av_free( s->rate );
-
-    if( s->pps )
-        av_free( s->pps );
-
-    if( s->site_id )
-        av_free( s->site_id );
-
-    if( s->boundry )
-        av_free( s->boundry );
+    for (i = 0; i < NETVU_MAX_HEADERS; i++)  {
+        if (s->hdrs[i])
+            av_free(s->hdrs[i]);
+    }
 
     av_free(s);
     return ret;

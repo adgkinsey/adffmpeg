@@ -7,8 +7,19 @@
 #define URL_SIZE    4096
 #define MAX_REDIRECTS 8
 
+enum NetvuHeaders { NETVU_SERVER = 0, 
+                    NETVU_CONTENT, 
+                    NETVU_RESOLUTION, 
+                    NETVU_COMPRESSION, 
+                    NETVU_RATE, 
+                    NETVU_PPS, 
+                    NETVU_SITE_ID, 
+                    NETVU_BOUNDARY, 
+                    NETVU_MAX_HEADERS
+                    };
 
 typedef struct {
+    const AVClass *class;
     URLContext *hd;
     unsigned char buffer[BUFFER_SIZE], *buf_ptr, *buf_end;
     int line_count;
@@ -18,15 +29,7 @@ typedef struct {
     char location[URL_SIZE];
     HTTPAuthState auth_state;
 
-    /* BMOJ - added to hold utc_offset from header */
-	char* server;
-    char* content;
-    char* resolution;
-    char* compression;
-    char* rate;
-    char* pps;
-    char* site_id;
-    char* boundry;
-
+    char* hdrs[NETVU_MAX_HEADERS];
+    const char* hdrNames[NETVU_MAX_HEADERS];
     int utc_offset;
 } NetvuContext;

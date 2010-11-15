@@ -25,6 +25,13 @@
 #include "adpic.h"
 
 
+enum pkt_offsets { DATA_TYPE, DATA_CHANNEL,
+                   DATA_SIZE_BYTE_0, DATA_SIZE_BYTE_1,
+                   DATA_SIZE_BYTE_2, DATA_SIZE_BYTE_3,
+                   SEPARATOR_SIZE
+                 };
+
+
 static void audioheader_network2host( NetVuAudioData *hdr );
 static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
                         AVPacket *pkt,
@@ -88,90 +95,89 @@ static int adbinary_probe(AVProbeData *p)
     dataType = p->buf[DATA_TYPE];
     dataPtr = &p->buf[SEPARATOR_SIZE];
 
-    if ((dataType > DATA_XML_INFO) || (p->buf[DATA_CHANNEL] > 32))
-        return 0;
-    
-    if ( (dataType == DATA_JPEG)  ||
-         (dataType == DATA_MPEG4I) || (dataType == DATA_MPEG4P) ||
-         (dataType == DATA_H264I)  || (dataType == DATA_H264P)  ) {
-        if (p->buf_size >= (SEPARATOR_SIZE + sizeof(NetVuImageData)) )  {
-            NetVuImageData test;
-            memcpy(&test, dataPtr, sizeof(NetVuImageData));
-            ad_network2host(&test);
-            if (pic_version_valid(test.version))
+    if ((dataType <= DATA_XML_INFO) && (p->buf[DATA_CHANNEL] <= 32))  {
+        if ( (dataType == DATA_JPEG)  ||
+             (dataType == DATA_MPEG4I) || (dataType == DATA_MPEG4P) ||
+             (dataType == DATA_H264I)  || (dataType == DATA_H264P)  ) {
+            if (p->buf_size >= (SEPARATOR_SIZE + sizeof(NetVuImageData)) )  {
+                NetVuImageData test;
+                memcpy(&test, dataPtr, sizeof(NetVuImageData));
+                ad_network2host(&test);
+                if (pic_version_valid(test.version))
+                    return AVPROBE_SCORE_MAX;
+            }
+        }
+        else if (dataType == DATA_JFIF)  {
+            unsigned char *dataPtr = &p->buf[SEPARATOR_SIZE];
+            if ( (*dataPtr == 0xFF) && (*(dataPtr + 1) == 0xD8) )
                 return AVPROBE_SCORE_MAX;
         }
-    }
-    else if (dataType == DATA_JFIF)  {
-        unsigned char *dataPtr = &p->buf[SEPARATOR_SIZE];
-        if ( (*dataPtr == 0xFF) && (*(dataPtr + 1) == 0xD8) )
-            return AVPROBE_SCORE_MAX;
-    }
-    else if (dataType == DATA_AUDIO_ADPCM)  {
-        if (p->buf_size >= (SEPARATOR_SIZE + sizeof(NetVuAudioData)) )  {
-            NetVuAudioData test;
-            memcpy(&test, dataPtr, sizeof(NetVuAudioData));
-            audioheader_network2host(&test);
-            if (test.version == 0x00ABCDEF)
-                return AVPROBE_SCORE_MAX;
+        else if (dataType == DATA_AUDIO_ADPCM)  {
+            if (p->buf_size >= (SEPARATOR_SIZE + sizeof(NetVuAudioData)) )  {
+                NetVuAudioData test;
+                memcpy(&test, dataPtr, sizeof(NetVuAudioData));
+                audioheader_network2host(&test);
+                if (test.version == AUD_VERSION)
+                    return AVPROBE_SCORE_MAX;
+            }
         }
-    }
-    else if (dataType == DATA_AUDIO_RAW)  {
-        // We don't handle this format
-        return 0;
-    }
-    else if (dataType == DATA_MINIMAL_MPEG4)  {
-        if (p->buf_size >= (SEPARATOR_SIZE + 6) ) {
-            MinimalVideoHeader test;
-            memcpy(&test, dataPtr, 6);
+        else if (dataType == DATA_AUDIO_RAW)  {
+            // We don't handle this format
+            return 0;
+        }
+        else if (dataType == DATA_MINIMAL_MPEG4)  {
+            if (p->buf_size >= (SEPARATOR_SIZE + 6) ) {
+                MinimalVideoHeader test;
+                memcpy(&test, dataPtr, 6);
             test.t  = be2me_32(test.t);
-            // If timestamp is between 1980 and 2020 then accept it
-            if ( (test.t > 315532800) && (test.t < 1577836800) )
-                return AVPROBE_SCORE_MAX;
+                // If timestamp is between 1980 and 2020 then accept it
+                if ( (test.t > 315532800) && (test.t < 1577836800) )
+                    return AVPROBE_SCORE_MAX;
+            }
         }
-    }
-    else if (dataType == DATA_MINIMAL_AUDIO_ADPCM)  {
-        if (p->buf_size >= (SEPARATOR_SIZE + sizeof(MinimalAudioHeader)) )  {
-            MinimalAudioHeader test;
-            memcpy(&test, dataPtr, sizeof(MinimalAudioHeader));
+        else if (dataType == DATA_MINIMAL_AUDIO_ADPCM)  {
+            if (p->buf_size >= (SEPARATOR_SIZE + sizeof(MinimalAudioHeader)) ) {
+                MinimalAudioHeader test;
+                memcpy(&test, dataPtr, sizeof(MinimalAudioHeader));
             test.t     = be2me_32(test.t);
             test.ms    = be2me_16(test.ms);
             test.mode  = be2me_16(test.mode);
 
-            if ( (test.mode == RTP_PAYLOAD_TYPE_8000HZ_ADPCM)  ||
-                 (test.mode == RTP_PAYLOAD_TYPE_11025HZ_ADPCM) ||
-                 (test.mode == RTP_PAYLOAD_TYPE_16000HZ_ADPCM) ||
-                 (test.mode == RTP_PAYLOAD_TYPE_22050HZ_ADPCM) ||
-                 (test.mode == RTP_PAYLOAD_TYPE_32000HZ_ADPCM) ||
-                 (test.mode == RTP_PAYLOAD_TYPE_44100HZ_ADPCM) ||
-                 (test.mode == RTP_PAYLOAD_TYPE_48000HZ_ADPCM) ||
-                 (test.mode == RTP_PAYLOAD_TYPE_8000HZ_PCM)    ||
-                 (test.mode == RTP_PAYLOAD_TYPE_11025HZ_PCM)   ||
-                 (test.mode == RTP_PAYLOAD_TYPE_16000HZ_PCM)   ||
-                 (test.mode == RTP_PAYLOAD_TYPE_22050HZ_PCM)   ||
-                 (test.mode == RTP_PAYLOAD_TYPE_32000HZ_PCM)   ||
-                 (test.mode == RTP_PAYLOAD_TYPE_44100HZ_PCM)   ||
-                 (test.mode == RTP_PAYLOAD_TYPE_48000HZ_PCM)   )   {
-                return AVPROBE_SCORE_MAX;
+                if ( (test.mode == RTP_PAYLOAD_TYPE_8000HZ_ADPCM)  ||
+                     (test.mode == RTP_PAYLOAD_TYPE_11025HZ_ADPCM) ||
+                     (test.mode == RTP_PAYLOAD_TYPE_16000HZ_ADPCM) ||
+                     (test.mode == RTP_PAYLOAD_TYPE_22050HZ_ADPCM) ||
+                     (test.mode == RTP_PAYLOAD_TYPE_32000HZ_ADPCM) ||
+                     (test.mode == RTP_PAYLOAD_TYPE_44100HZ_ADPCM) ||
+                     (test.mode == RTP_PAYLOAD_TYPE_48000HZ_ADPCM) ||
+                     (test.mode == RTP_PAYLOAD_TYPE_8000HZ_PCM)    ||
+                     (test.mode == RTP_PAYLOAD_TYPE_11025HZ_PCM)   ||
+                     (test.mode == RTP_PAYLOAD_TYPE_16000HZ_PCM)   ||
+                     (test.mode == RTP_PAYLOAD_TYPE_22050HZ_PCM)   ||
+                     (test.mode == RTP_PAYLOAD_TYPE_32000HZ_PCM)   ||
+                     (test.mode == RTP_PAYLOAD_TYPE_44100HZ_PCM)   ||
+                     (test.mode == RTP_PAYLOAD_TYPE_48000HZ_PCM)   ) {
+                    return AVPROBE_SCORE_MAX;
+                }
             }
         }
-    }
-    else if (dataType == DATA_LAYOUT)  {
-        // Need a stronger test for this
-        return AVPROBE_SCORE_MAX / 4 + 1;
-    }
-    else if (dataType == DATA_INFO)  {
-        if (memcmp(dataPtr + 1, "SITE", 4) == 0)
-            return AVPROBE_SCORE_MAX;
-        else
+        else if (dataType == DATA_LAYOUT)  {
+            // Need a stronger test for this
             return AVPROBE_SCORE_MAX / 4 + 1;
-    }
-    else if (dataType == DATA_XML_INFO)  {
-        const char *infoString = "<infoList>";
-        int infoStringLen = strlen(infoString);
-        if (p->buf_size >= (SEPARATOR_SIZE + infoStringLen) )  {
-            if (strncasecmp(dataPtr, infoString, infoStringLen) == 0)
+        }
+        else if (dataType == DATA_INFO)  {
+            if (memcmp(dataPtr + 1, "SITE", 4) == 0)
                 return AVPROBE_SCORE_MAX;
+            else
+                return AVPROBE_SCORE_MAX / 4 + 1;
+        }
+        else if (dataType == DATA_XML_INFO)  {
+            const char *infoString = "<infoList>";
+            int infoStringLen = strlen(infoString);
+            if (p->buf_size >= (SEPARATOR_SIZE + infoStringLen) )  {
+                if (strncasecmp(dataPtr, infoString, infoStringLen) == 0)
+                    return AVPROBE_SCORE_MAX;
+            }
         }
     }
 
@@ -180,9 +186,9 @@ static int adbinary_probe(AVProbeData *p)
 
 static int adbinary_read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
-    AdbinaryContext *adpicContext = s->priv_data;
+    AdbinaryContext *adContext = s->priv_data;
     s->ctx_flags |= AVFMTCTX_NOHEADER;
-    return ad_read_header(s, ap, &adpicContext->utc_offset);
+    return ad_read_header(s, ap, &adContext->utc_offset);
 }
 
 static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
