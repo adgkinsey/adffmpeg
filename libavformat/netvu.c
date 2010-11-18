@@ -191,7 +191,6 @@ static int netvu_close(URLContext *h)
         if (nv->hdrs[i])
             av_free(nv->hdrs[i]);
     }
-    av_free(nv);
 
     return ret;
 }
