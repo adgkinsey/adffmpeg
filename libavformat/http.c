@@ -49,6 +49,7 @@ typedef struct {
     HTTPAuthState auth_state;
     unsigned char headers[BUFFER_SIZE];
     int willclose;          /**< Set if the server correctly handles Connection: close and will close the connection after feeding us the content. */
+    unsigned char response_headers[BUFFER_SIZE];
 } HTTPContext;
 
 #define OFFSET(x) offsetof(HTTPContext, x)
@@ -67,7 +68,7 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
 size_t ff_http_get_headers(URLContext *h, char *headers, int bufferSize)
 {
     HTTPContext *s = h->priv_data;
-    return av_strlcpy(headers, s->headers, bufferSize);
+    return av_strlcpy(headers, s->response_headers, bufferSize);
 }
 
 void ff_http_set_headers(URLContext *h, const char *headers)
@@ -357,15 +358,15 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
         return 0;
     }
     s->chunksize = -1;
-    s->headers[0] = '\0';
+    s->response_headers[0] = '\0';
 
     /* wait for header */
     for(;;) {
         if (http_get_line(s, line, sizeof(line)) < 0)
             return AVERROR(EIO);
 
-        av_strlcat(s->headers, line, sizeof(s->headers));
-        av_strlcat(s->headers, "\n", sizeof(s->headers));
+        av_strlcat(s->response_headers, line, sizeof(s->response_headers));
+        av_strlcat(s->response_headers, "\n", sizeof(s->response_headers));
         dprintf(NULL, "header='%s'\n", line);
 
         err = process_line(h, line, s->line_count, new_location);
