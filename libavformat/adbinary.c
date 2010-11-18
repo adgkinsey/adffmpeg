@@ -204,7 +204,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     char *                  txtDat = NULL;
     int                     data_type, data_channel, size;
     int                     errorVal = 0;
-    FrameType               frameType;
+    ADFrameType             frameType;
 
     // First read the 6 byte separator
     data_type    = get_byte(pb);

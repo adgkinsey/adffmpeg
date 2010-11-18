@@ -302,13 +302,13 @@ int ad_new_packet(AVPacket *pkt, int size)
 
 void ad_release_packet( AVPacket *pkt )
 {
-    FrameData *frameData;
+    ADFrameData *frameData;
     
     if ( (pkt == NULL) || (pkt->priv == NULL) )
         return;
         
     // Have a look what type of frame we have and then free as appropriate
-    frameData = (FrameData *)pkt->priv;
+    frameData = (ADFrameData *)pkt->priv;
 
     if( frameData->frameType == NetVuAudio ) {
         NetVuAudioData *audioHeader = (NetVuAudioData *)frameData->frameData;
@@ -351,7 +351,7 @@ int ad_get_buffer(ByteIOContext *s, uint8_t *buf, int size)
     return TotalDataRead;
 }
 
-int initADData(int data_type, FrameType *frameType,
+int initADData(int data_type, ADFrameType *frameType,
                NetVuImageData **vidDat, NetVuAudioData **audDat)
 {
     int errorVal = 0;
@@ -535,11 +535,11 @@ int ad_read_layout(AVFormatContext *s, ByteIOContext *pb,
 }
 
 int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
-                   FrameType frameType, void *data, char *text_data)
+                   ADFrameType frameType, void *data, char *text_data)
 {
-    int       errorVal   = 0;
-    AVStream  *st        = NULL;
-    FrameData *frameData = NULL;
+    int         errorVal   = 0;
+    AVStream    *st        = NULL;
+    ADFrameData *frameData = NULL;
 
     if (frameType == NetVuVideo)  {
         // At this point We have a legal NetVuImageData structure which we use 
@@ -587,7 +587,7 @@ int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
     }
 
     pkt->stream_index = st->index;
-    frameData = av_malloc(sizeof(FrameData));
+    frameData = av_malloc(sizeof(*frameData));
     if( frameData == NULL )
         return errorVal;
 

@@ -75,8 +75,8 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
     int                     dataSize = 0;
     DMImageData *           videoFrameData = NULL;
     AVStream *              stream = NULL;
-    FrameData *             frameData = NULL;
-    FrameType               frameType = FrameTypeUnknown;
+    ADFrameData *           frameData = NULL;
+    ADFrameType             frameType = FrameTypeUnknown;
 
     /* Attempt to read in a network message header */
     if( (retVal = ReadNetworkMessageHeader( ioContext, &header )) != 0 )
@@ -124,7 +124,7 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
         return AVERROR_IO;
 
     /* Now create a wrapper to hold this frame's data which we'll store in the packet's private member field */
-    if( (frameData = av_malloc( sizeof(FrameData) )) != NULL ) {
+    if( (frameData = av_malloc( sizeof(ADFrameData) )) != NULL ) {
         frameData->frameType = frameType;
         frameData->frameData = videoFrameData;
         frameData->additionalData = NULL;
@@ -377,7 +377,7 @@ static void dspic_release_packet( AVPacket *pkt )
     if (pkt != NULL) {
         if (pkt->priv != NULL) {
             // Have a look what type of frame we have and then delete anything inside as appropriate
-            FrameData *     frameData = (FrameData *)pkt->priv;
+            ADFrameData *   frameData = (ADFrameData *)pkt->priv;
 
             // Nothing else has nested allocs so just delete the frameData if it exists
             if( frameData->frameData != NULL ) {

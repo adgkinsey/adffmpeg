@@ -500,7 +500,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     int                     size = -1;
     long                    extra = 0;
     int                     errorVal = ADPIC_UNKNOWN_ERROR;
-    FrameType               frameType = FrameTypeUnknown;
+    ADFrameType             frameType = FrameTypeUnknown;
     int                     imgLoaded = FALSE;
 
     if(parse_mime_header( pb, &data_type, &size, &extra ) != 0 )  {
