@@ -25,6 +25,10 @@
 #define __DM_ENCRYPTION_ROUTINES_H__
 //---------------------------------------------------------------------------
 
-char * EncryptPasswordString( char * Username, char * Password, long Timestamp, char * MacAddress, long RemoteApplicationVersion );
+char * EncryptPasswordString(const char * Username, 
+                             const char * Password, 
+                             long Timestamp, 
+                             const char * MacAddress, 
+                             long RemoteApplicationVersion );
 
 #endif /* __DM_ENCRYPTION_ROUTINES_H__ */

@@ -23,17 +23,15 @@
 #include "libavcodec/avcodec.h"
 #include "libavutil/bswap.h"
 #include "ds.h"
+#include "adpic.h"
 
 static int dspicProbe( AVProbeData *p );
 static int dspicReadHeader( AVFormatContext *s, AVFormatParameters *ap );
-static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt );
+static int dspicReadPacket( AVFormatContext *s, AVPacket *pkt );
 static int dspicReadClose( AVFormatContext *s );
-static AVStream * GetStream( struct AVFormatContext *s, int camera, int width, int height );
 static int ReadNetworkMessageHeader( ByteIOContext *context, MessageHeader *header );
 static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize );
 static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData );
-static int dspic_new_packet(AVPacket *pkt, int size);
-static void dspic_release_packet( AVPacket *pkt );
 
 
 static const long       DSPacketHeaderMagicNumber = DS_HEADER_MAGIC_NUMBER;
@@ -57,7 +55,7 @@ static int dspicProbe( AVProbeData *p )
     magicNumber = av_be2ne32(magicNumber);
 
     if( magicNumber == DSPacketHeaderMagicNumber )
-        return 100;
+        return AVPROBE_SCORE_MAX;
 
     return 0;
 }
@@ -67,7 +65,7 @@ static int dspicReadHeader( AVFormatContext *s, AVFormatParameters *ap )
     return 0;
 }
 
-static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
+static int dspicReadPacket( AVFormatContext *s, AVPacket *pkt )
 {
     ByteIOContext *         ioContext = s->pb;
     int                     retVal = 0;
@@ -75,8 +73,8 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
     int                     dataSize = 0;
     DMImageData *           videoFrameData = NULL;
     AVStream *              stream = NULL;
-    FrameData *             frameData = NULL;
-    FrameType               frameType = FrameTypeUnknown;
+    ADFrameData *           frameData = NULL;
+    ADFrameType             frameType = FrameTypeUnknown;
 
     /* Attempt to read in a network message header */
     if( (retVal = ReadNetworkMessageHeader( ioContext, &header )) != 0 )
@@ -90,7 +88,7 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
             /* Read any extra bytes then try again */
             dataSize = header.length - (SIZEOF_MESSAGE_HEADER_IO - sizeof(unsigned long));
 
-            if( (retVal = dspic_new_packet( pkt, dataSize )) < 0 )
+            if( (retVal = ad_new_packet( pkt, dataSize )) < 0 )
                 return retVal;
 
             if( get_buffer( ioContext, pkt->data, dataSize ) != dataSize )
@@ -103,7 +101,7 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
             dataSize = header.length - (SIZEOF_MESSAGE_HEADER_IO - sizeof(unsigned long));
 
             /* Allocate packet data large enough for what we have */
-            if( (retVal = dspic_new_packet( pkt, dataSize )) < 0 )
+            if( (retVal = ad_new_packet( pkt, dataSize )) < 0 )
                 return retVal;
 
             /* Read the jfif data out of the buffer */
@@ -116,7 +114,7 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
 
             /* if( audioFrameData != NULL ) frameType |= DS1_PACKET_TYPE_AUDIO; */
 
-            if( (stream = GetStream( s, 0, 0, 0 )) == NULL )
+            if ( (stream = ad_get_stream(s, 0, 0, 1, PIC_MODE_JPEG_422, NULL)) == NULL )
                 return AVERROR_IO;
         }
     }
@@ -124,7 +122,7 @@ static int dspicReadPacket( struct AVFormatContext *s, AVPacket *pkt )
         return AVERROR_IO;
 
     /* Now create a wrapper to hold this frame's data which we'll store in the packet's private member field */
-    if( (frameData = av_malloc( sizeof(FrameData) )) != NULL ) {
+    if( (frameData = av_malloc( sizeof(*frameData) )) != NULL ) {
         frameData->frameType = frameType;
         frameData->frameData = videoFrameData;
         frameData->additionalData = NULL;
@@ -291,112 +289,20 @@ static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData )
 
 static int ReadNetworkMessageHeader( ByteIOContext *context, MessageHeader *header )
 {
-    /* Read the header in a piece at a time... */
-    if( get_buffer( context, (uint8_t *)&header->magicNumber, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
-
-    if( get_buffer( context, (uint8_t *)&header->length, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
-
-    if( get_buffer( context, (uint8_t *)&header->channelID, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
-
-    if( get_buffer( context, (uint8_t *)&header->sequence, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
-
-    if( get_buffer( context, (uint8_t *)&header->messageVersion, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
-
-    if( get_buffer( context, (uint8_t *)&header->checksum, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
-
-    if( get_buffer( context, (uint8_t *)&header->messageType, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
-
-    /* Now adjust the endianess */
-    NToHMessageHeader( header );
-
+    // Read the header in a piece at a time...
+    header->magicNumber = get_be32(context);
+    header->length = get_be32(context);
+    header->channelID = get_be32(context);
+    header->sequence = get_be32(context);
+    header->messageVersion = get_be32(context);
+    header->checksum = get_be32(context);
+    header->messageType = get_be32(context);
     return 0;
 }
 
 static int dspicReadClose( AVFormatContext *s )
 {
     return 0;
-}
-
-static AVStream * GetStream( struct AVFormatContext *s, int camera, int width, int height )
-{
-    int                 codecType = 0;
-    int                 codecID = CODEC_ID_MJPEG;
-    int                 taggedID;
-    int                 i, found;
-    AVStream *          stream = NULL;
-
-    found = FALSE;
-
-    /* Generate the ID for this codec */
-    taggedID = (codecType << 31) | ((camera - 1) << 24) | ((width >> 4) << 12) | ((height >> 4) << 0);
-
-    for( i = 0; i < s->nb_streams; i++ ) {
-        stream = s->streams[i];
-        if( stream->id == taggedID ) {
-            found = TRUE;
-            break;
-        }
-    }
-
-    if( !found ) {
-        stream = av_new_stream( s, taggedID );
-
-        if( stream ) {
-            stream->codec->codec_type = CODEC_TYPE_VIDEO;
-            stream->codec->codec_id = codecID;
-            stream->codec->width = width;
-            stream->codec->height = height;
-            stream->index = i;
-        }
-    }
-
-    return stream;
-}
-
-static int dspic_new_packet(AVPacket *pkt, int size)
-{
-    int     retVal = av_new_packet( pkt, size );
-
-    if( retVal >= 0 ) {
-        // Give the packet its own destruct function
-        pkt->destruct = dspic_release_packet;
-    }
-
-    return retVal;
-}
-
-static void dspic_release_packet( AVPacket *pkt )
-{
-    if (pkt != NULL) {
-        if (pkt->priv != NULL) {
-            // Have a look what type of frame we have and then delete anything inside as appropriate
-            FrameData *     frameData = (FrameData *)pkt->priv;
-
-            // Nothing else has nested allocs so just delete the frameData if it exists
-            if( frameData->frameData != NULL ) {
-                av_free( frameData->frameData );
-                frameData->frameData = NULL;
-            }
-
-            if( frameData->additionalData != NULL ) {
-                av_free( frameData->additionalData );
-                frameData->additionalData = NULL;
-            }
-        }
-
-        av_free( pkt->priv );
-        pkt->priv = NULL;
-
-        // Now use the default routine to release the rest of the packet's resources
-        av_destruct_packet( pkt );
-    }
 }
 
 

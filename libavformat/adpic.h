@@ -48,9 +48,8 @@ enum data_type { DATA_JPEG, DATA_JFIF,
 int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset);
 void ad_network2host(NetVuImageData *pic);
 int ad_new_packet(AVPacket *pkt, int size);
-void ad_release_packet( AVPacket *pkt );
 int ad_get_buffer(ByteIOContext *s, uint8_t *buf, int size);
-int initADData(int data_type, FrameType *frameType,
+int initADData(int data_type, ADFrameType *frameType,
                NetVuImageData **vidDat, NetVuAudioData **audDat);
 int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
                  AVPacket *pkt,
@@ -63,7 +62,9 @@ int ad_read_info(AVFormatContext *s, ByteIOContext *pb,
 int ad_read_layout(AVFormatContext *s, ByteIOContext *pb,
                    AVPacket *pkt, int size);
 int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
-                   FrameType currentFrameType, void *data, char *text_data);
+                   ADFrameType currentFrameType, void *data, char *text_data);
+AVStream * ad_get_stream(AVFormatContext *s, int w, int h, int cam, int format, 
+                         const char *title);
 
 
 #define PIC_REVISION 1

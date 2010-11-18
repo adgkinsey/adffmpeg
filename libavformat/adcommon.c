@@ -30,9 +30,10 @@
 #define DATA_STREAM_ID              2
 
 
-AVStream * ad_get_stream(AVFormatContext *s, NetVuImageData *pic);
+AVStream * netvu_get_stream(AVFormatContext *s, NetVuImageData *pic);
 AVStream * ad_get_audio_stream(AVFormatContext *s, NetVuAudioData* audioHeader);
 AVStream * ad_get_data_stream(AVFormatContext *s);
+void ad_release_packet(AVPacket *pkt);
 
 
 int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
@@ -88,17 +89,28 @@ void ad_network2host(NetVuImageData *pic)
     pic->format.line_offset		= av_be2ne16(pic->format.line_offset);
 }
 
-
-AVStream * ad_get_stream(AVFormatContext *s, NetVuImageData *pic)
+AVStream * netvu_get_stream(AVFormatContext *s, NetVuImageData *p)
 {
-    int xres = pic->format.target_pixels;
-    int yres = pic->format.target_lines;
+    AVStream *stream = ad_get_stream(s, 
+                                     p->format.target_pixels, 
+                                     p->format.target_lines, 
+                                     p->cam, 
+                                     p->vid_format, 
+                                     p->title);
+    /// \todo HACK FIXME!!!
+    stream->start_time = p->session_time * 1000LL + p->milliseconds;
+    av_metadata_set2(&stream->metadata, "date", "2010-11-16 16:21Z", 0);
+    return stream;
+}
+
+AVStream * ad_get_stream(AVFormatContext *s, int w, int h, int cam, int format, const char *title)
+{
     int codec_type, codec_id, id;
     int i, found;
     char textbuffer[4];
     AVStream *st;
 
-    switch(pic->vid_format) {
+    switch(format) {
         case PIC_MODE_JPEG_422:
         case PIC_MODE_JPEG_411:
             codec_id = CODEC_ID_MJPEG;
@@ -123,14 +135,14 @@ AVStream * ad_get_stream(AVFormatContext *s, NetVuImageData *pic)
         default:
             av_log(s, AV_LOG_WARNING, 
                    "ad_get_stream: unrecognised vid_format %d\n", 
-                   pic->vid_format);
+                   format);
             return NULL;
     }
     
     id = (codec_type << 31)     | 
-         ((pic->cam - 1) << 24) | 
-         ((xres >> 4) << 12)    | 
-         ((yres >> 4) << 0);
+         ((cam - 1) << 24) | 
+         ((w >> 4) << 12)    | 
+         ((h >> 4) << 0);
     
     found = FALSE;
     for (i = 0; i < s->nb_streams; i++) {
@@ -145,31 +157,26 @@ AVStream * ad_get_stream(AVFormatContext *s, NetVuImageData *pic)
         if (st) {
             st->codec->codec_type = CODEC_TYPE_VIDEO;
             st->codec->codec_id = codec_id;
-            st->codec->width = pic->format.target_pixels;
-            st->codec->height = pic->format.target_lines;
+            st->codec->width = w;
+            st->codec->height = h;
             st->index = i;
 
             // Set pixel aspect ratio, display aspect is (sar * width / height)
             // May get overridden by codec
-            if( (st->codec->width  > 360) && (st->codec->height <= 480) )  {
-                st->sample_aspect_ratio = (AVRational) {
-                    1, 2
-                };
-            }
-            else  {
-                st->sample_aspect_ratio = (AVRational) {
-                    1, 1
-                };
-            }
+            if( (st->codec->width  > 360) && (st->codec->height <= 480) )
+                st->sample_aspect_ratio = (AVRational) { 1, 2 };
+            else
+                st->sample_aspect_ratio = (AVRational) { 1, 1 };
 
             // Use milliseconds as the time base
             st->r_frame_rate = (AVRational) { 1, 1000 };
             av_set_pts_info(st, 32, 1, 1000);
             st->codec->time_base = (AVRational) { 1, 1000 };
 
-            av_metadata_set2(&st->metadata, "title", pic->title, 0);
-            snprintf(textbuffer, sizeof(textbuffer), "%d", pic->cam);
-            av_metadata_set2(&st->metadata, "camera", textbuffer, 0);
+            if (title)
+                av_metadata_set2(&st->metadata, "title", title, 0);
+            snprintf(textbuffer, sizeof(textbuffer), "%d", cam);
+            av_metadata_set2(&st->metadata, "track", textbuffer, 0);
         }
     }
     return st;
@@ -302,13 +309,13 @@ int ad_new_packet(AVPacket *pkt, int size)
 
 void ad_release_packet( AVPacket *pkt )
 {
-    FrameData *frameData;
+    ADFrameData *frameData;
     
     if ( (pkt == NULL) || (pkt->priv == NULL) )
         return;
         
     // Have a look what type of frame we have and then free as appropriate
-    frameData = (FrameData *)pkt->priv;
+    frameData = (ADFrameData *)pkt->priv;
 
     if( frameData->frameType == NetVuAudio ) {
         NetVuAudioData *audioHeader = (NetVuAudioData *)frameData->frameData;
@@ -351,7 +358,7 @@ int ad_get_buffer(ByteIOContext *s, uint8_t *buf, int size)
     return TotalDataRead;
 }
 
-int initADData(int data_type, FrameType *frameType,
+int initADData(int data_type, ADFrameType *frameType,
                NetVuImageData **vidDat, NetVuAudioData **audDat)
 {
     int errorVal = 0;
@@ -434,7 +441,7 @@ int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
     (*text_data)[textSize] = '\0';
 
     // Use the NetVuImageData struct to build a JFIF header
-    if ((hdrSize = build_jpeg_header( jfif, video_data, FALSE, 2048)) <= 0)  {
+    if ((hdrSize = build_jpeg_header( jfif, video_data, 2048)) <= 0)  {
         av_log(s, AV_LOG_ERROR, "ad_read_jpeg: build_jpeg_header failed\n");
         return ADPIC_JPEG_HEADER_ERROR;
     }
@@ -482,8 +489,8 @@ int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb,
             return errorVal;
         }
     }
-    if ( parse_jfif_header( pkt->data, video_data, size, NULL, NULL, NULL, TRUE, text_data ) <= 0) {
-        av_log(s, AV_LOG_ERROR, "ADPIC: ad_read_packet, parse_jfif_header failed\n");
+    if ( parse_jfif(s, pkt->data, video_data, size, text_data ) <= 0) {
+        av_log(s, AV_LOG_ERROR, "ADPIC: ad_read_packet, parse_jfif failed\n");
         errorVal = ADPIC_JFIF_MANUAL_SIZE_ERROR;
         return errorVal;
     }
@@ -535,17 +542,17 @@ int ad_read_layout(AVFormatContext *s, ByteIOContext *pb,
 }
 
 int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
-                   FrameType frameType, void *data, char *text_data)
+                   ADFrameType frameType, void *data, char *text_data)
 {
-    int       errorVal   = 0;
-    AVStream  *st        = NULL;
-    FrameData *frameData = NULL;
+    int         errorVal   = 0;
+    AVStream    *st        = NULL;
+    ADFrameData *frameData = NULL;
 
     if (frameType == NetVuVideo)  {
         // At this point We have a legal NetVuImageData structure which we use 
         // to determine which codec stream to use
         NetVuImageData *video_data = (NetVuImageData *)data;
-        if ( (st = ad_get_stream( s, video_data)) == NULL ) {
+        if ( (st = netvu_get_stream( s, video_data)) == NULL ) {
             av_log(s, AV_LOG_ERROR, "ad_read_packet: Failed get_stream for video\n");
             errorVal = ADPIC_GET_STREAM_ERROR;
             return errorVal;
@@ -575,7 +582,6 @@ int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
             }
             else
                 pkt->pts = AV_NOPTS_VALUE;
-            pkt->dts = pkt->pts;
         }
     }
     else if( frameType == NetVuDataInfo || frameType == NetVuDataLayout ) {
@@ -587,7 +593,7 @@ int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
     }
 
     pkt->stream_index = st->index;
-    frameData = av_malloc(sizeof(FrameData));
+    frameData = av_malloc(sizeof(*frameData));
     if( frameData == NULL )
         return errorVal;
 

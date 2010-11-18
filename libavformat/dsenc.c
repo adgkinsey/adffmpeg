@@ -19,14 +19,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-
-//#include <vcl.h>
-//#pragma hdrstop
-#if !defined(__MINGW32__) && defined(WIN32)  /* MSVC specific */
-#pragma warning(disable : 4995)
-#pragma warning(disable : 4996)
-#endif /* WIN32 */
-
 #include <stdlib.h>
 #include <string.h>
 #include "avformat.h"
@@ -54,7 +46,8 @@
 
 
 /* POINTER defines a generic pointer type */
-typedef unsigned char *POINTER;
+typedef unsigned char *       POINTER;
+typedef const unsigned char * CPOINTER;
 
 /* UINT2 defines a two byte word */
 typedef unsigned short int UINT2;
@@ -117,15 +110,15 @@ Rotation is separate from addition to prevent recomputation.
 #define VIEWER_VERSION_104_001                      0x00104001
 
 
-static void MD5Init(MD5_CTX * context, unsigned char *pub_key);
-static void MD5Update(MD5_CTX* context, unsigned char* input, unsigned int inputLen);
+static void MD5Init(MD5_CTX * context, const unsigned char *pub_key);
+static void MD5Update(MD5_CTX* context, const unsigned char* input, unsigned int inputLen);
 static void MD5Final(unsigned char * digest, MD5_CTX * context);
-static void MD5Transform(UINT4 * state, unsigned char * block);
-static void Encode(unsigned char * output, UINT4 * input, unsigned int len);
-static void Decode(UINT4 * output, unsigned char * input, unsigned int len);
-static unsigned char hex_val (char *char2);
-static void MD5Print(char* FingerPrint, int size, unsigned char * digest);
-static void GetFingerPrint(char* FingerPrint, char* Source, unsigned int Length, char *cpublic_key);
+static void MD5Transform(UINT4 * state, const unsigned char * block);
+static void Encode(unsigned char * output, const UINT4 * input, unsigned int len);
+static void Decode(UINT4 * output, const unsigned char * input, unsigned int len);
+static unsigned char hex_val (const char *char2);
+static void MD5Print(char* FingerPrint, int size, const unsigned char * digest);
+static void GetFingerPrint(char* FingerPrint, const char* Source, unsigned int Length, const char *cpublic_key);
 
 #if !defined(_WIN32)
 static char* strupr(char *theString)
@@ -152,7 +145,7 @@ static unsigned char PADDING[64] = {
 
 
 /* MD5 initialization. Begins an MD5 operation, writing a new context. */
-static void MD5Init(MD5_CTX * context, unsigned char *pub_key)
+static void MD5Init(MD5_CTX * context, const unsigned char *pub_key)
 {
     context->count[0] = context->count[1] = 0;
     /* Load magic initialization constants.*/
@@ -176,7 +169,7 @@ static void MD5Init(MD5_CTX * context, unsigned char *pub_key)
   operation, processing another message block, and updating the
   context.
  */
-static void MD5Update(MD5_CTX* context, unsigned char* input, unsigned int inputLen)
+static void MD5Update(MD5_CTX* context, const unsigned char* input, unsigned int inputLen)
 {
     unsigned int i, index, partLen;
 
@@ -193,7 +186,7 @@ static void MD5Update(MD5_CTX* context, unsigned char* input, unsigned int input
 
     /* Transform as many times as possible */
     if (inputLen >= partLen) {
-        memcpy((POINTER)&context->buffer[index], (POINTER)input, partLen);
+        memcpy((POINTER)&context->buffer[index], (CPOINTER)input, partLen);
         MD5Transform (context->state, context->buffer);
 
         for (i = partLen; i + 63 < inputLen; i += 64)
@@ -207,7 +200,7 @@ static void MD5Update(MD5_CTX* context, unsigned char* input, unsigned int input
 
     /* Buffer remaining input */
     if (inputLen > i)
-        memcpy((POINTER)&context->buffer[index], (POINTER)&input[i], inputLen - i);
+        memcpy((POINTER)&context->buffer[index], (CPOINTER)&input[i], inputLen - i);
 }
 
 /* MD5 finalization. Ends an MD5 message-digest operation, writing the
@@ -238,7 +231,7 @@ static void MD5Final(unsigned char * digest, MD5_CTX * context)
 
 
 /* MD5 basic transformation. Transforms state based on block */
-static void MD5Transform(UINT4 * state, unsigned char * block)
+static void MD5Transform(UINT4 * state, const unsigned char * block)
 {
     UINT4 a = state[0], b = state[1], c = state[2], d = state[3], x[16];
 
@@ -326,7 +319,7 @@ static void MD5Transform(UINT4 * state, unsigned char * block)
 }
 
 /* Encodes input (UINT4) into output (unsigned char). Assumes len is a multiple of 4 */
-static void Encode(unsigned char * output, UINT4 * input, unsigned int len)
+static void Encode(unsigned char * output, const UINT4 *input, unsigned int len)
 {
     unsigned int i, j;
 
@@ -342,7 +335,7 @@ static void Encode(unsigned char * output, UINT4 * input, unsigned int len)
 /* Decodes input (unsigned char) into output (UINT4). Assumes len is
   a multiple of 4.
  */
-static void Decode(UINT4 * output, unsigned char * input, unsigned int len)
+static void Decode(UINT4 * output, const unsigned char *input, unsigned int len)
 {
     unsigned int i, j;
 
@@ -354,7 +347,7 @@ static void Decode(UINT4 * output, unsigned char * input, unsigned int len)
     }
 }
 
-static unsigned char hex_val (char *char2)
+static unsigned char hex_val (const char *char2)
 {
     unsigned long	ret_val ;
     if (char2[0] > '9')
@@ -371,7 +364,7 @@ static unsigned char hex_val (char *char2)
 }
 
 // Main Function to get a finger print
-static void GetFingerPrint(char* FingerPrint, char* Source, unsigned int Length, char *cpublic_key)
+static void GetFingerPrint(char* FingerPrint, const char* Source, unsigned int Length, const char *cpublic_key)
 {
     MD5_CTX context;
     unsigned char digest[16];
@@ -390,7 +383,7 @@ static void GetFingerPrint(char* FingerPrint, char* Source, unsigned int Length,
     else
         MD5Init (&context, NULL);
 
-    MD5Update (&context, (unsigned char*)Source, Length);
+    MD5Update (&context, (const unsigned char*)Source, Length);
     MD5Final (digest, &context);
 
 
@@ -402,7 +395,7 @@ static void GetFingerPrint(char* FingerPrint, char* Source, unsigned int Length,
 
 
 /* Prints a message digest in hexadecimal */
-static void MD5Print(char* FingerPrint, int size, unsigned char * digest)
+static void MD5Print(char* FingerPrint, int size, const unsigned char * digest)
 {
     unsigned int i;
 
@@ -444,7 +437,11 @@ static char *CreateUserPassword( const char *Username, const char *Password )
     return userPassword;
 }
 
-char * EncryptPasswordString( char * Username, char * Password, long Timestamp, char * MacAddress, long RemoteApplicationVersion )
+char * EncryptPasswordString(const char * Username, 
+                             const char * Password, 
+                             long Timestamp, 
+                             const char * MacAddress, 
+                             long RemoteApplicationVersion )
 {
     // Encrypt Password
     char        EncPassword[33];
@@ -487,8 +484,3 @@ char * EncryptPasswordString( char * Username, char * Password, long Timestamp, 
 
     return EncryptedPassword;
 }
-
-#if !defined(__MINGW32__) && defined(WIN32)  /* MSVC specific */
-#pragma warning(default : 4996)
-#pragma warning(default : 4995)
-#endif /* defined(__MINGW32__) && defined(WIN32) */

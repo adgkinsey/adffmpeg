@@ -29,42 +29,39 @@ extern "C" {
 #include <stdint.h>
 
 
-#define TITLE_LENGTH 30
-#define MAX_NAME_LEN 30
-
-
-/* Image collection parameters (for Brooktree decoder collection setup) */
 typedef struct {
-    uint16_t src_pixels;		///< Input image size (horizontal)
-    uint16_t src_lines;		    ///<  Input image size (vertical)
-    uint16_t target_pixels;	    ///<  Output image size (horizontal)
-    uint16_t target_lines;	    ///<  Output image size (vertical)
-    uint16_t pixel_offset;	    ///<  Image start offset (horizontal)
-    uint16_t line_offset;		///<  Image start offset (vertical)
-} Picture;
-typedef struct _imageData {
-    uint32_t version;	            ///<  structure version number */
+    uint16_t src_pixels;        ///< Input image size (horizontal)
+    uint16_t src_lines;         ///< Input image size (vertical)
+    uint16_t target_pixels;     ///< Output image size (horizontal)
+    uint16_t target_lines;      ///< Output image size (vertical)
+    uint16_t pixel_offset;      ///< Image start offset (horizontal)
+    uint16_t line_offset;       ///< Image start offset (vertical)
+} NetVuPicture;
 
-    /// in PIC_REVISION 0 this was the DFT style FULL_HI etc
-    /// in PIC_REVISION 1 this is used to specify AD or JFIF format image
+typedef struct {
+    uint32_t version;                ///<  structure version number */
+
+    /** mode: in PIC_REVISION 0 this was the DFT style FULL_HI etc
+     *        in PIC_REVISION 1 this is used to specify AD or JFIF format image
+     */
     int32_t mode;
-    int32_t cam;				    ///< camera number
-    int32_t vid_format;			    ///< 422 or 411
-    uint32_t start_offset;	        ///< start of picture PRC 007
-    int32_t size;				    ///< size of image
-    int32_t max_size;			    ///< maximum size allowed
-    int32_t target_size;		    ///< size wanted for compression JCB 004
-    int32_t factor;				    ///< Q factor
-    uint32_t alm_bitmask_hi;		///< High 32 bits of the alarm bitmask
-    int32_t status;				    ///< status of last action performed on picture
-    uint32_t session_time;	        ///< playback time of image  JCB 002
-    uint32_t milliseconds;	        ///< sub-second count for playback speed control JCB 005  PRC 009
-    char res[3+1];			        ///< picture size JCB 004
-    char title[TITLE_LENGTH+1];		///< JCB 003 camera title
-    char alarm[TITLE_LENGTH+1];		///< JCB 003 alarm text - title, comment etc
-    Picture format;					///< NOTE: Do not assign to a pointer due to CW-alignment
-    char locale[MAX_NAME_LEN];	    ///< JCB 006
-    int32_t utc_offset;				///< JCB 006
+    int32_t cam;                ///< camera number
+    int32_t vid_format;         ///< 422 or 411
+    uint32_t start_offset;      ///< start of picture
+    int32_t size;               ///< size of image
+    int32_t max_size;           ///< maximum size allowed
+    int32_t target_size;        ///< size wanted for compression
+    int32_t factor;             ///< Q factor
+    uint32_t alm_bitmask_hi;    ///< High 32 bits of the alarm bitmask
+    int32_t status;             ///< status of last action performed on picture
+    uint32_t session_time;      ///< playback time of image
+    uint32_t milliseconds;      ///< sub-second count for playback speed control
+    char res[4];                ///< picture size
+    char title[31];             ///< camera title
+    char alarm[31];             ///< alarm text - title, comment etc
+    NetVuPicture format;        ///< NOTE: Do not assign to a pointer due to CW-alignment
+    char locale[30];            ///< Timezone name
+    int32_t utc_offset;         ///< Timezone difference in minutes
     uint32_t alm_bitmask;
 } NetVuImageData;
 
@@ -112,15 +109,19 @@ typedef enum _frameType {
     NetVuDataInfo,
     NetVuDataLayout,
     RTPAudio
-} FrameType;
+} ADFrameType;
 
-/* This is the data structure that the ffmpeg parser fills in as part of the parsing routines. It will be shared between adpic and dspic so that our clients
-   can be compatible with either stream more easily */
-typedef struct _framedata {
-    FrameType           frameType;      /* Type of frame we have. See FrameType enum for supported types */
-    void *              frameData;      /* Pointer to structure holding the information for the frame. Type determined by the data type field */
-    void *              additionalData; /* CS - Added to hold text data. Not sure I prefer it here but as a first version, it works */
-} FrameData;
+/** This is the data structure that the ffmpeg parser fills in as part of the 
+ * parsing routines. It will be shared between adpic and dspic so that our 
+ * clients can be compatible with either stream more easily
+ */
+typedef struct {
+    /// Type of frame we have. See ADFrameType enum for supported types
+    ADFrameType         frameType;
+    /// Pointer to structure holding the information for the frame. 
+    void *              frameData;
+    void *              additionalData;
+} ADFrameData;
 
 #define RTP_PAYLOAD_TYPE_8000HZ_ADPCM                       5
 #define RTP_PAYLOAD_TYPE_11025HZ_ADPCM                      16

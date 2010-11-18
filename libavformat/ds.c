@@ -209,7 +209,7 @@ static int GetUserAndPassword( const char * auth, char *user, char *password  );
 static int CrackURI( const char *path, int *streamType, int *res, int *cam, time_t *from, time_t *to, int *rate, vcrMode *playMode );
 static int DSReadBuffer( URLContext *h, uint8_t *buffer, int size );
 static int64_t TimeTolong64( time_t time );
-
+static void NToHMessageHeader( MessageHeader *header );
 
 #if HAVE_BIGENDIAN
 #define HTON64(x)
@@ -863,7 +863,7 @@ static int ReadNetworkMessageHeader( URLContext *h, MessageHeader *header )
     return 0;
 }
 
-void NToHMessageHeader( MessageHeader *header )
+static void NToHMessageHeader( MessageHeader *header )
 {
     if( header ) {
         header->magicNumber = av_be2ne32(header->magicNumber);
@@ -1249,7 +1249,7 @@ static int64_t TimeTolong64( time_t time )
 }
 
 
-URLProtocol ds_protocol = {
+URLProtocol dm_protocol = {
     .name                = "dm",
     .url_open            = DSOpen,
     .url_read            = DSRead,

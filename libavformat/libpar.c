@@ -39,6 +39,7 @@ typedef struct {
     char name[64];
     int camera;
     int64_t startTime;
+    int utc_offset;
 } PAREncStreamContext;
 
 typedef struct {
@@ -72,14 +73,17 @@ void importMetadata(const AVMetadataTag *tag, PAREncStreamContext *ps)
         ps->startTime = mktime(&timeval);
         ps->startTime *= 1000;
     }
-    else if (strcasecmp(tag->key, "camera") == 0)
+    else if (strcasecmp(tag->key, "track") == 0)
         sscanf(tag->value, "%d", &(ps->camera));
+    else if (strcasecmp(tag->key, "timezone") == 0)
+        sscanf(tag->value, "%d", &(ps->utc_offset));
 }
 
 static int par_write_header(AVFormatContext *avf)
 {
     PAREncContext *p = avf->priv_data;
     AVMetadataTag *tag = NULL;
+    int ii;
 
     p->picHeaderSize = parReader_getPicStructSize();
     do  {
@@ -88,6 +92,13 @@ static int par_write_header(AVFormatContext *avf)
             importMetadata(tag, &(p->master));
     }
     while (tag);
+    
+    for (ii = 0; ii < avf->nb_streams; ii++)  {
+        AVStream *st = avf->streams[ii];
+        // Set timebase to 1 millisecond, and min frame rate to 1 / timebase
+        av_set_pts_info(st, 32, 1, 1000);
+        st->r_frame_rate = (AVRational) { 1, 1 };
+    }
 
     p->frameInfo.parData = parReader_initWritePartition(avf->filename, -1);
 
@@ -99,7 +110,6 @@ static int par_write_header(AVFormatContext *avf)
 
 static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
 {
-    static const AVRational parTimeBase = {1, 1000};
     PAREncContext *p = avf->priv_data;
     PAREncStreamContext *ps = &(p->stream[pkt->stream_index]);
     AVMetadataTag *tag = NULL;
@@ -107,7 +117,7 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
     AVStream *stream = avf->streams[pkt->stream_index];
     void *hdr;
     uint8_t *ptr;
-    int parFormat;
+    int parFrameFormat;
     int64_t srcTime = pkt->pts;
     int written = 0;
 
@@ -140,37 +150,38 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
         else
             ps->startTime = 1288702396000LL;
     }
-    parTime = av_rescale_q(srcTime, stream->time_base, parTimeBase);
+    parTime = srcTime;
     if (parTime < ps->startTime)
         parTime = parTime + ps->startTime;
 
-    //if (stream->codec->codec_id == CODEC_ID_MJPEG)  {
-    //    p->frameInfo.frameBuffer = parReader_jpegToIMAGE(pkt->data, parTime, pkt->stream_index);
-    //}
-
     if (stream->codec->codec_id == CODEC_ID_MJPEG)  {
-        parFormat = FRAME_FORMAT_JPEG_411;
+        //p->frameInfo.frameBuffer = parReader_jpegToIMAGE(pkt->data, parTime, pkt->stream_index);
+        if ((stream->codec->pix_fmt == PIX_FMT_YUV422P) || (stream->codec->pix_fmt == PIX_FMT_YUVJ422P) )
+            parFrameFormat = FRAME_FORMAT_JPEG_422;
+        else
+            parFrameFormat = FRAME_FORMAT_JPEG_411;
     }
     else if (stream->codec->codec_id == CODEC_ID_MPEG4) {
         if (pkt->flags & AV_PKT_FLAG_KEY)
-            parFormat = FRAME_FORMAT_MPEG4_411_GOV_I;
+            parFrameFormat = FRAME_FORMAT_MPEG4_411_GOV_I;
         else
-            parFormat = FRAME_FORMAT_MPEG4_411_GOV_P;
+            parFrameFormat = FRAME_FORMAT_MPEG4_411_GOV_P;
     }
     else  {
         if (pkt->flags & AV_PKT_FLAG_KEY)
-            parFormat = FRAME_FORMAT_H264_I;
+            parFrameFormat = FRAME_FORMAT_H264_I;
         else
-            parFormat = FRAME_FORMAT_H264_P;
+            parFrameFormat = FRAME_FORMAT_H264_P;
     }
 
     hdr = parReader_generatePicHeader(ps->camera,
-                                      parFormat,
+                                      parFrameFormat,
                                       pkt->size,
                                       parTime,
                                       ps->name,
                                       stream->codec->width,
-                                      stream->codec->height
+                                      stream->codec->height, 
+                                      ps->utc_offset
                                      );
     p->frameInfo.frameBufferSize = pkt->size + p->picHeaderSize;
     ptr = av_malloc(p->frameInfo.frameBufferSize);
@@ -231,7 +242,7 @@ AVStream* createStream(AVFormatContext * avf,
 
     parReader_getIndexData(frameInfo, NULL, &fc, NULL, NULL);
     st->nb_frames = fc;
-    st->start_time = frameInfo->indexTime * 1000 + frameInfo->indexMS;
+    st->start_time = frameInfo->indexTime * 1000LL + frameInfo->indexMS;
 
     if (parReader_frameIsVideo(frameInfo))  {
         st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
@@ -264,27 +275,19 @@ AVStream* createStream(AVFormatContext * avf,
             parReader_getFrameSize(frameInfo, &w, &h);
             st->codec->width = w;
             st->codec->height = h;
-            st->start_time = frameInfo->imageTime * 1000 + frameInfo->imageMS;
+            st->start_time = frameInfo->imageTime * 1000LL + frameInfo->imageMS;
 
             // Set timebase to 1 millisecond, and min frame rate to 1 / timebase
             av_set_pts_info(st, 32, 1, 1000);
-            st->r_frame_rate = (AVRational) {
-                1, 1
-            };
+            st->r_frame_rate = (AVRational) { 1, 1 };
 
             // Set pixel aspect ratio, display aspect is (sar * width / height)
             /// \todo Could set better values here by checking resolutions and
             /// assuming PAL/NTSC aspect
-            if( (w > 360) && (h <= 480) )  {
-                st->sample_aspect_ratio = (AVRational) {
-                    1, 2
-                };
-            }
-            else  {
-                st->sample_aspect_ratio = (AVRational) {
-                    1, 1
-                };
-            }
+            if( (w > 360) && (h <= 480) )
+                st->sample_aspect_ratio = (AVRational) { 1, 2 };
+            else
+                st->sample_aspect_ratio = (AVRational) { 1, 1 };
 
             parReader_getStreamName(frameInfo->frameBuffer,
                                     frameInfo->frameBufferSize,
@@ -296,7 +299,7 @@ AVStream* createStream(AVFormatContext * avf,
             av_metadata_set2(&st->metadata, "date", textbuffer, 0);
 
             snprintf(textbuffer, sizeof(textbuffer), "%d", frameInfo->channel);
-            av_metadata_set2(&st->metadata, "camera", textbuffer, 0);
+            av_metadata_set2(&st->metadata, "track", textbuffer, 0);
         }
     }
     else if (parReader_frameIsAudio(frameInfo))  {
@@ -493,7 +496,7 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
     int64_t seconds = 0;
     AVStream *strm = NULL;
     AVRational secondsTB = {1, 1};
-    char libVer[128];
+    char libVer[128], textbuf[5];
 
 
     parReader_version(libVer, sizeof(libVer));
@@ -565,6 +568,9 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
     // Reading the header opens the file, so ignore this file change notifier
     p->fileChanged = 0;
 
+    snprintf(textbuf, sizeof(textbuf), "%d", parReader_getUTCOffset(&p->frameInfo));
+    av_metadata_set2(&avf->metadata, "timezone", textbuf, 0);
+    
     strm = createStream(avf, &p->frameInfo);
     if (strm)  {
         // Note: Do not set avf->start_time, ffmpeg computes it from AVStream values

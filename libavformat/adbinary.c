@@ -164,14 +164,14 @@ static int adbinary_probe(AVProbeData *p)
         }
         else if (dataType == DATA_LAYOUT)  {
             // Need a stronger test for this
-            return AVPROBE_SCORE_MAX / 4 + 1;
+            return AVPROBE_SCORE_MAX / 2;
         }
         else if (dataType == DATA_INFO)  {
             if (p->buf_size >= (SEPARATOR_SIZE + 5) )  {
                 if (memcmp(dataPtr + 1, "SITE", 4) == 0)
                     return AVPROBE_SCORE_MAX;
                 else
-                    return AVPROBE_SCORE_MAX / 4 + 1;
+                    return AVPROBE_SCORE_MAX / 2;
             }
         }
         else if (dataType == DATA_XML_INFO)  {
@@ -204,7 +204,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     char *                  txtDat = NULL;
     int                     data_type, data_channel, size;
     int                     errorVal = 0;
-    FrameType               frameType;
+    ADFrameType             frameType;
 
     // First read the 6 byte separator
     data_type    = get_byte(pb);
@@ -357,6 +357,7 @@ static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
                                 AVPacket *pkt, int size, int channel,
                                 NetVuImageData *vidDat, char **text_data)
 {
+    static const int titleLen = sizeof(vidDat->title) / sizeof(vidDat->title[0]);
     AdbinaryContext* adContext = s->priv_data;
     int              dataSize     = size - 6;
     int              errorVal     = 0;
@@ -372,7 +373,7 @@ static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
     vidDat->cam = channel + 1;
     vidDat->utc_offset = adContext->utc_offset;
     vidDat->vid_format = PIC_MODE_MPEG4_411;
-    snprintf(vidDat->title, TITLE_LENGTH, "Camera %d", vidDat->cam);
+    snprintf(vidDat->title, titleLen, "Camera %d", vidDat->cam);
 
     // Now get the main frame data into a new packet
     if( ad_new_packet(pkt, dataSize) < 0 )

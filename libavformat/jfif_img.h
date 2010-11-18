@@ -26,7 +26,7 @@
 
 extern unsigned int build_jpeg_header(void *jfif, NetVuImageData *pic,
                                       unsigned int max);
-extern int parse_jfif_header(unsigned char *data, NetVuImageData *pic, 
-                             int imglength, char **additionalText );
+extern int parse_jfif(AVFormatContext *s, unsigned char *data, 
+                      NetVuImageData *pic, int imgSize, char **text);
 
 #endif
