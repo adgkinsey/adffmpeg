@@ -21,7 +21,7 @@
  */
 
 #include "internal.h"
-#include "libavutil/bswap.h"
+#include "libavutil/intreadwrite.h"
 
 #include "jfif_img.h"
 #include "adpic.h"
@@ -216,13 +216,13 @@ unsigned int build_jpeg_header(void *jfif, NetVuImageData *pic, unsigned int max
         unsigned short targ;
         char *ptr1, *ptr2;
         memcpy(sof_copy, (pic->vid_format == PIC_MODE_JPEG_411) ? sof_411_header : sof_422_header, sizeof( sof_copy ) );
-        targ = be2me_16(pic->format.target_pixels); // Byte swap from native to big-endian
+        targ = AV_RB16(&pic->format.target_pixels); // Byte swap from native to big-endian
         ptr1 = (char *)&targ;
         ptr2 = &sof_copy[7];
         *ptr2++ = *ptr1++;
         *ptr2 = *ptr1;
 
-        targ = be2me_16(pic->format.target_lines); // Byte swap from native to big-endian
+        targ = AV_RB16(&pic->format.target_lines); // Byte swap from native to big-endian
         ptr1 = (char *)&targ;
         ptr2 = &sof_copy[5];
         *ptr2++ = *ptr1++;
@@ -317,7 +317,7 @@ static int find_q(unsigned char *qy)
     }
     if (factor == 256) {
         factor = best_factor;
-        av_log(NULL, AV_LOG_ERROR, "parse_jfif_header: Unable to match Q setting %d\n", best_factor );
+        av_log(NULL, AV_LOG_ERROR, "find_q: Unable to match Q setting %d\n", best_factor );
     }
     return factor;
 }
@@ -333,15 +333,14 @@ static int find_q(unsigned char *qy)
  *                          that doesn't have a specific field in NetVuImageData
  * \return Length of JFIF header in bytes
  */
-int parse_jfif_header(unsigned char *data, NetVuImageData *pic, int imglength, 
-                      char **additionalText )
+int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic, 
+               int imgSize, char **text)
 {
     int i, sos = FALSE;
     unsigned short length, marker;
 
-    av_log(NULL, AV_LOG_DEBUG, "parse_jfif_header: leading bytes 0x%02X, "
-                               "0x%02X, imglength=%d\n", 
-                               data[0], data[1], imglength);
+    av_log(s, AV_LOG_DEBUG, "parse_jfif: leading bytes 0x%02X, 0x%02X, length=%d\n", 
+           data[0], data[1], imgSize);
     memset(pic, 0, sizeof(*pic));
     pic->version = PIC_VERSION;
     pic->factor = -1;
@@ -350,15 +349,14 @@ int parse_jfif_header(unsigned char *data, NetVuImageData *pic, int imglength,
 
     if(data[i] != 0xff && data[i+1] != 0xd8) {
         //there is a header so skip it
-        while( ((unsigned char)data[i] != 0xff) && (i < imglength) )
+        while( ((unsigned char)data[i] != 0xff) && (i < imgSize) )
             i++;
         if ( i > 0 )
-            av_log(NULL, AV_LOG_DEBUG, "parse_jfif_header: %d leading bytes\n", i);
+            av_log(s, AV_LOG_DEBUG, "parse_jfif: %d leading bytes\n", i);
 
         i++;
         if ( (unsigned char) data[i] != 0xd8) {
-            av_log(NULL, AV_LOG_ERROR, "parse_jfif_header: incorrect SOI "
-                                       "0xff%02x\n", data[i]);
+            av_log(s, AV_LOG_ERROR, "parse_jfif: incorrect SOI 0xff%02x\n", data[i]);
             return -1;
         }
         i++;
@@ -368,21 +366,30 @@ int parse_jfif_header(unsigned char *data, NetVuImageData *pic, int imglength,
         i += 2;
     }
 
-    while ( !sos && (i < imglength) ) {
-        memcpy(&marker, &data[i], 2 );
+    while ( !sos && (i < imgSize) ) {
+        marker = AV_RB16(&data[i]);
         i += 2;
-        memcpy(&length, &data[i], 2 );
+        length = AV_RB16(&data[i]);
         i += 2;
-        marker = be2me_16(marker);
-        length = be2me_16(length);
 
         switch (marker) {
             case 0xffe0 :	// APP0
-                av_log(NULL, AV_LOG_DEBUG, "parse_jfif_header: found APP0 marker, length = %d\n", length );
+                av_log(s, AV_LOG_DEBUG, "parse_jfif: found APP0 marker, length = %d\n", length );
+                
+                if ((data[i]==0x4A)&&(data[i+1]==0x46)&&(data[i+2]==0x49)&&(data[i+3]==0x46)&&(data[i+4]==0x00))  {
+                    int xdensity = AV_RB16(&data[i+8]);
+                    int ydensity = AV_RB16(&data[i+10]);
+                    if ( xdensity == (ydensity*2) )  {
+                        // Server is sending wrong pixel aspect ratio
+                        // Reverse it
+                        AV_WB16(&data[i+8], ydensity);
+                        AV_WB16(&data[i+10], xdensity);
+                    }
+                }
                 i += length - 2;
                 break;
             case 0xffdb :	// Q table
-                av_log(NULL, AV_LOG_DEBUG, "parse_jfif_header: found Q table marker, length = %d, Table no = %d\n", length, data[i] );
+                av_log(s, AV_LOG_DEBUG, "parse_jfif: found Q table marker, length = %d, Table no = %d\n", length, data[i] );
                 if (!data[i])
                     pic->factor =  find_q(&data[i+1]);
                 i += length - 2;
@@ -399,35 +406,35 @@ int parse_jfif_header(unsigned char *data, NetVuImageData *pic, int imglength,
                     pic->vid_format = PIC_MODE_JPEG_422;
                 }
                 else {
-                    av_log(NULL, AV_LOG_INFO, "parse_jfif_header: Unknown format byte 0x%02X\n", data[i+7]);
+                    av_log(s, AV_LOG_INFO, "parse_jfif: Unknown format byte 0x%02X\n", data[i+7]);
                 }
-                av_log(NULL, AV_LOG_DEBUG, "parse_jfif_header: found SOF marker, length = %d, xres=%d, yres = %d\n", length, pic->format.target_pixels, pic->format.target_lines );
+                av_log(s, AV_LOG_DEBUG, "parse_jfif: found SOF marker, length = %d, xres=%d, yres = %d\n", length, pic->format.target_pixels, pic->format.target_lines );
                 i += length - 2;
                 break;
             case 0xffc4 :	// Huffman table
                 i += length - 2;
                 break;
             case 0xffda :	// SOS
-                av_log(NULL, AV_LOG_DEBUG, "parse_jfif_header: found SOS marker, length = %d\n", length );
+                av_log(s, AV_LOG_DEBUG, "parse_jfif: found SOS marker, length = %d\n", length );
                 i += length - 2;
                 sos = TRUE;
                 break;
             case 0xffdd :	// DRI
-                av_log(NULL, AV_LOG_DEBUG, "parse_jfif_header: found DRI marker, length = %d\n", length );
+                av_log(s, AV_LOG_DEBUG, "parse_jfif: found DRI marker, length = %d\n", length );
                 i += length - 2;
                 break;
             case 0xfffe :	// Comment
-                av_log(NULL, AV_LOG_DEBUG, "parse_jfif_header: found Comment marker, length = %d\n", length );
-                parse_comment((char *)&data[i], length - 2, pic, additionalText);
+                av_log(s, AV_LOG_DEBUG, "parse_jfif: found Comment marker, length = %d\n", length );
+                parse_comment((char *)&data[i], length - 2, pic, text);
                 i += length - 2;
                 break;
             default :
-                av_log(NULL, AV_LOG_INFO, "parse_jfif_header: Unknown marker 0x%04X, next byte = 0x%02X, length = %d\n", marker, data[i], length );
+                av_log(s, AV_LOG_INFO, "parse_jfif: Unknown marker 0x%04X, next byte = 0x%02X, length = %d\n", marker, data[i], length );
                 i += length - 2;	// Skip past the unknown field
                 break;
         }
     }
-    pic->size = imglength - i - 2; 	// 2 bytes for FFD9 PRC 029
+    pic->size = imgSize - i - 2; 	// 2 bytes for FFD9 PRC 029
     return i;
 }
 
@@ -471,7 +478,7 @@ static void parse_comment( char *text, int text_len, NetVuImageData *pic, char *
             sscanf( &result[strlen(camera_number)], "%d", &pic->cam );
         else if( !memcmp( result, image_date, strlen(image_date) ) ) {
             sscanf( &result[strlen(image_date)], "%d/%d/%d", &t.tm_mday, &t.tm_mon, &t.tm_year );
-#ifdef __MINGW32__
+#if defined(_WIN32)
             t.tm_year -= 1900; // Win32 expects tm_year to be years since 1900
 #else
             t.tm_year -= 1970;

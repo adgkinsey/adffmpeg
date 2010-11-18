@@ -29,11 +29,6 @@ extern "C" {
 #include <stdint.h>
 
 
-#define TITLE_LENGTH 30
-#define MAX_NAME_LEN 30
-
-
-/* Image collection parameters (for Brooktree decoder collection setup) */
 typedef struct {
     uint16_t src_pixels;        ///< Input image size (horizontal)
     uint16_t src_lines;         ///< Input image size (vertical)

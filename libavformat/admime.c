@@ -403,6 +403,7 @@ static int process_mp4data_line( char *line, int line_count,
                                  NetVuImageData *vidDat, struct tm *time,
                                  char ** txtDat )
 {
+    static const int titleLen = sizeof(vidDat->title) / sizeof(vidDat->title[0]);
     char        *tag = NULL, *p = NULL;
     int         lineLen = 0;
 
@@ -439,7 +440,7 @@ static int process_mp4data_line( char *line, int line_count,
     if( !memcmp( tag, "Number", strlen( "Number" ) ) )
         vidDat->cam = strtol(p, NULL, 10);
     else if( !memcmp( tag, "Name", strlen( "Name" ) ) )
-        memcpy( vidDat->title, p, FFMIN( TITLE_LENGTH, strlen(p) ) );
+        memcpy( vidDat->title, p, FFMIN( titleLen, strlen(p) ) );
     else if( !memcmp( tag, "Version", strlen( "Version" ) ) )
         vidDat->version = strtol(p, NULL, 10);
     else if( !memcmp( tag, "Date", strlen( "Date" ) ) ) {
@@ -461,7 +462,7 @@ static int process_mp4data_line( char *line, int line_count,
     else if( !memcmp( tag, "MSec", strlen( "MSec" ) ) )
         vidDat->milliseconds = strtol(p, NULL, 10);
     else if( !memcmp( tag, "Locale", strlen( "Locale" ) ) )
-        memcpy( vidDat->locale, p, FFMIN( MAX_NAME_LEN, strlen(p) ) );
+        memcpy( vidDat->locale, p, FFMIN( titleLen, strlen(p) ) );
     else if( !memcmp( tag, "UTCoffset", strlen( "UTCoffset" ) ) )
         vidDat->utc_offset = strtol(p, NULL, 10);
     else {

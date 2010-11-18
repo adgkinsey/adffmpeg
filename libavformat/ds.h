@@ -29,7 +29,7 @@
 
 
 /* -------------------------------------- Structures/types -------------------------------------- */
-typedef enum _controlMessages {
+typedef enum {
     INVALID_MESSAGE_TYPE,            /* 0 */
     TCP_CLI_CONNECT,						/* 1 */    /* Initial connection */
     TCP_SRV_CONNECT_REJECT,				/* 2 */    /* Connection rejected */
@@ -130,9 +130,5 @@ typedef struct _messageHeader {
     long                messageType;
 } MessageHeader;
 #define SIZEOF_MESSAGE_HEADER_IO                28      /* Size in bytes of the MessageHeader structure. Can't use sizeof to read/write one of these to network as structure packing may differ based on platform */
-
-
-/* -------------------------------------- Function declarations -------------------------------------- */
-extern void                 NToHMessageHeader( MessageHeader *header );
 
 #endif /* __DS_H__ */

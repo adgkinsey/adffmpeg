@@ -201,6 +201,12 @@ static int netvu_close(URLContext *h)
     return ret;
 }
 
+static int netvu_write(URLContext *h, const uint8_t *buf, int size)
+{
+    NetvuContext *s = h->priv_data;
+    return url_write(s->hd, buf, size);
+}
+
 static int64_t netvu_seek(URLContext *h, int64_t off, int whence)
 {
     NetvuContext *s = h->priv_data;
@@ -211,7 +217,7 @@ URLProtocol netvu_protocol = {
     "netvu",
     netvu_open,
     netvu_read,
-    NULL,
+    netvu_write,
 	netvu_seek,
     netvu_close,
 };
