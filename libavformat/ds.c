@@ -1249,7 +1249,7 @@ static int64_t TimeTolong64( time_t time )
 }
 
 
-URLProtocol ds_protocol = {
+URLProtocol dm_protocol = {
     "dm",  /* protocol string (i.e. dm://) */
     DSOpen,
     DSRead,
