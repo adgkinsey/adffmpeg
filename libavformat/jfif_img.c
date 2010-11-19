@@ -339,8 +339,8 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic,
     int i, sos = FALSE;
     unsigned short length, marker;
 
-    av_log(s, AV_LOG_DEBUG, "parse_jfif: leading bytes 0x%02X, 0x%02X, length=%d\n", 
-           data[0], data[1], imgSize);
+    //av_log(s, AV_LOG_DEBUG, "parse_jfif: leading bytes 0x%02X, 0x%02X, "
+    //       "length=%d\n", data[0], data[1], imgSize);
     memset(pic, 0, sizeof(*pic));
     pic->version = PIC_VERSION;
     pic->factor = -1;
@@ -351,12 +351,12 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic,
         //there is a header so skip it
         while( ((unsigned char)data[i] != 0xff) && (i < imgSize) )
             i++;
-        if ( i > 0 )
-            av_log(s, AV_LOG_DEBUG, "parse_jfif: %d leading bytes\n", i);
+        //if ( i > 0 )
+        //    av_log(s, AV_LOG_DEBUG, "parse_jfif: %d leading bytes\n", i);
 
         i++;
         if ( (unsigned char) data[i] != 0xd8) {
-            av_log(s, AV_LOG_ERROR, "parse_jfif: incorrect SOI 0xff%02x\n", data[i]);
+            //av_log(s, AV_LOG_ERROR, "parse_jfif: incorrect SOI 0xff%02x\n", data[i]);
             return -1;
         }
         i++;
@@ -374,7 +374,7 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic,
 
         switch (marker) {
             case 0xffe0 :	// APP0
-                av_log(s, AV_LOG_DEBUG, "parse_jfif: found APP0 marker, length = %d\n", length );
+                //av_log(s, AV_LOG_DEBUG, "parse_jfif: found APP0 marker, length = %d\n", length );
                 
                 if ((data[i]==0x4A)&&(data[i+1]==0x46)&&(data[i+2]==0x49)&&(data[i+3]==0x46)&&(data[i+4]==0x00))  {
                     int xdensity = AV_RB16(&data[i+8]);
@@ -389,7 +389,7 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic,
                 i += length - 2;
                 break;
             case 0xffdb :	// Q table
-                av_log(s, AV_LOG_DEBUG, "parse_jfif: found Q table marker, length = %d, Table no = %d\n", length, data[i] );
+                //av_log(s, AV_LOG_DEBUG, "parse_jfif: found Q table marker, length = %d, Table no = %d\n", length, data[i] );
                 if (!data[i])
                     pic->factor =  find_q(&data[i+1]);
                 i += length - 2;
@@ -406,30 +406,33 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic,
                     pic->vid_format = PIC_MODE_JPEG_422;
                 }
                 else {
-                    av_log(s, AV_LOG_INFO, "parse_jfif: Unknown format byte 0x%02X\n", data[i+7]);
+                    //av_log(s, AV_LOG_INFO, "parse_jfif: Unknown format byte 0x%02X\n", data[i+7]);
                 }
-                av_log(s, AV_LOG_DEBUG, "parse_jfif: found SOF marker, length = %d, xres=%d, yres = %d\n", length, pic->format.target_pixels, pic->format.target_lines );
+                //av_log(s, AV_LOG_DEBUG, "parse_jfif: found SOF marker, "
+                //       "length = %d, xres=%d, yres = %d\n", length, 
+                //       pic->format.target_pixels, pic->format.target_lines );
                 i += length - 2;
                 break;
             case 0xffc4 :	// Huffman table
                 i += length - 2;
                 break;
             case 0xffda :	// SOS
-                av_log(s, AV_LOG_DEBUG, "parse_jfif: found SOS marker, length = %d\n", length );
+                //av_log(s, AV_LOG_DEBUG, "parse_jfif: found SOS marker, length = %d\n", length );
                 i += length - 2;
                 sos = TRUE;
                 break;
             case 0xffdd :	// DRI
-                av_log(s, AV_LOG_DEBUG, "parse_jfif: found DRI marker, length = %d\n", length );
+                //av_log(s, AV_LOG_DEBUG, "parse_jfif: found DRI marker, length = %d\n", length );
                 i += length - 2;
                 break;
             case 0xfffe :	// Comment
-                av_log(s, AV_LOG_DEBUG, "parse_jfif: found Comment marker, length = %d\n", length );
+                //av_log(s, AV_LOG_DEBUG, "parse_jfif: found Comment marker, length = %d\n", length );
                 parse_comment((char *)&data[i], length - 2, pic, text);
                 i += length - 2;
                 break;
             default :
-                av_log(s, AV_LOG_INFO, "parse_jfif: Unknown marker 0x%04X, next byte = 0x%02X, length = %d\n", marker, data[i], length );
+                //av_log(s, AV_LOG_INFO, "parse_jfif: Unknown marker 0x%04X, "
+                //       "next byte = 0x%02X, length = %d\n", marker, data[i], length );
                 i += length - 2;	// Skip past the unknown field
                 break;
         }

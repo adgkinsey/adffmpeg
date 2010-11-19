@@ -19,8 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/bswap.h"
 #include "libavutil/avstring.h"
+#include "libavutil/intreadwrite.h"
 #include "adpic.h"
 #include "jfif_img.h"
 #include "netvu.h"
@@ -66,27 +66,27 @@ int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
 
 void ad_network2host(NetVuImageData *pic)
 {
-    pic->version				= be2me_32(pic->version);
-    pic->mode					= be2me_32(pic->mode);
-    pic->cam					= be2me_32(pic->cam);
-    pic->vid_format				= be2me_32(pic->vid_format);
-    pic->start_offset			= be2me_32(pic->start_offset);
-    pic->size					= be2me_32(pic->size);
-    pic->max_size				= be2me_32(pic->max_size);
-    pic->target_size			= be2me_32(pic->target_size);
-    pic->factor					= be2me_32(pic->factor);
-    pic->alm_bitmask_hi			= be2me_32(pic->alm_bitmask_hi);
-    pic->status					= be2me_32(pic->status);
-    pic->session_time			= be2me_32(pic->session_time);
-    pic->milliseconds			= be2me_32(pic->milliseconds);
-    pic->utc_offset				= be2me_32(pic->utc_offset);
-    pic->alm_bitmask			= be2me_32(pic->alm_bitmask);
-    pic->format.src_pixels		= be2me_16(pic->format.src_pixels);
-    pic->format.src_lines		= be2me_16(pic->format.src_lines);
-    pic->format.target_pixels	= be2me_16(pic->format.target_pixels);
-    pic->format.target_lines	= be2me_16(pic->format.target_lines);
-    pic->format.pixel_offset	= be2me_16(pic->format.pixel_offset);
-    pic->format.line_offset		= be2me_16(pic->format.line_offset);
+    pic->version				= AV_RB32(&pic->version);
+    pic->mode					= AV_RB32(&pic->mode);
+    pic->cam					= AV_RB32(&pic->cam);
+    pic->vid_format				= AV_RB32(&pic->vid_format);
+    pic->start_offset			= AV_RB32(&pic->start_offset);
+    pic->size					= AV_RB32(&pic->size);
+    pic->max_size				= AV_RB32(&pic->max_size);
+    pic->target_size			= AV_RB32(&pic->target_size);
+    pic->factor					= AV_RB32(&pic->factor);
+    pic->alm_bitmask_hi			= AV_RB32(&pic->alm_bitmask_hi);
+    pic->status					= AV_RB32(&pic->status);
+    pic->session_time			= AV_RB32(&pic->session_time);
+    pic->milliseconds			= AV_RB32(&pic->milliseconds);
+    pic->utc_offset				= AV_RB32(&pic->utc_offset);
+    pic->alm_bitmask			= AV_RB32(&pic->alm_bitmask);
+    pic->format.src_pixels		= AV_RB16(&pic->format.src_pixels);
+    pic->format.src_lines		= AV_RB16(&pic->format.src_lines);
+    pic->format.target_pixels	= AV_RB16(&pic->format.target_pixels);
+    pic->format.target_lines	= AV_RB16(&pic->format.target_lines);
+    pic->format.pixel_offset	= AV_RB16(&pic->format.pixel_offset);
+    pic->format.line_offset		= AV_RB16(&pic->format.line_offset);
 }
 
 AVStream * netvu_get_stream(AVFormatContext *s, NetVuImageData *p)
@@ -478,19 +478,19 @@ int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb,
 
     if(!imgLoaded) {
         if ((status = ad_new_packet(pkt, size)) < 0) { // PRC 003
-            av_log(s, AV_LOG_ERROR, "ADPIC: DATA_JFIF ad_new_packet %d failed, status %d\n", size, status);
+            av_log(s, AV_LOG_ERROR, "ad_read_jfif: ad_new_packet %d failed, status %d\n", size, status);
             errorVal = ADPIC_JFIF_NEW_PACKET_ERROR;
             return errorVal;
         }
 
         if ((n = ad_get_buffer(pb, pkt->data, size)) != size) {
-            av_log(s, AV_LOG_ERROR, "ADPIC: short of data reading jfif image, expected %d, read %d\n", size, n);
+            av_log(s, AV_LOG_ERROR, "ad_read_jfif: short of data reading jfif image, expected %d, read %d\n", size, n);
             errorVal = ADPIC_JFIF_GET_BUFFER_ERROR;
             return errorVal;
         }
     }
     if ( parse_jfif(s, pkt->data, video_data, size, text_data ) <= 0) {
-        av_log(s, AV_LOG_ERROR, "ADPIC: ad_read_packet, parse_jfif failed\n");
+        av_log(s, AV_LOG_ERROR, "ad_read_jfif: parse_jfif failed\n");
         errorVal = ADPIC_JFIF_MANUAL_SIZE_ERROR;
         return errorVal;
     }
@@ -509,16 +509,13 @@ int ad_read_info(AVFormatContext *s, ByteIOContext *pb,
     int n, status, errorVal = 0;
 
     // Allocate a new packet
-    if( (status = ad_new_packet( pkt, size )) < 0 ) {
-        errorVal = ADPIC_INFO_NEW_PACKET_ERROR;
-        return errorVal;
-    }
+    if( (status = ad_new_packet( pkt, size )) < 0 )
+        return ADPIC_INFO_NEW_PACKET_ERROR;
 
     // Get the data
-    if( (n = ad_get_buffer( pb, pkt->data, size)) != size ) {
-        errorVal = ADPIC_INFO_GET_BUFFER_ERROR;
-        return errorVal;
-    }
+    if( (n = ad_get_buffer( pb, pkt->data, size)) != size )
+        return ADPIC_INFO_GET_BUFFER_ERROR;
+    
     return errorVal;
 }
 
@@ -595,7 +592,7 @@ int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
     pkt->stream_index = st->index;
     frameData = av_malloc(sizeof(*frameData));
     if( frameData == NULL )
-        return errorVal;
+        return ADPIC_NETVU_IMAGE_DATA_ERROR;
 
     frameData->additionalData = NULL;
     frameData->frameType = frameType;

@@ -20,7 +20,7 @@
  */
 
 #include "avformat.h"
-#include "libavutil/bswap.h"
+#include "libavutil/intreadwrite.h"
 
 #include "adpic.h"
 
@@ -62,13 +62,13 @@ typedef struct _minimal_audio_header {	// PRC 002
 
 static void audioheader_network2host( NetVuAudioData *hdr )
 {
-    hdr->version				= be2me_32(hdr->version);
-    hdr->mode					= be2me_32(hdr->mode);
-    hdr->channel				= be2me_32(hdr->channel);
-    hdr->sizeOfAdditionalData	= be2me_32(hdr->sizeOfAdditionalData);
-    hdr->sizeOfAudioData		= be2me_32(hdr->sizeOfAudioData);
-    hdr->seconds				= be2me_32(hdr->seconds);
-    hdr->msecs					= be2me_32(hdr->msecs);
+    hdr->version				= AV_RB32(&hdr->version);
+    hdr->mode					= AV_RB32(&hdr->mode);
+    hdr->channel				= AV_RB32(&hdr->channel);
+    hdr->sizeOfAdditionalData	= AV_RB32(&hdr->sizeOfAdditionalData);
+    hdr->sizeOfAudioData		= AV_RB32(&hdr->sizeOfAudioData);
+    hdr->seconds				= AV_RB32(&hdr->seconds);
+    hdr->msecs					= AV_RB32(&hdr->msecs);
 }
 
 /**
@@ -130,7 +130,7 @@ static int adbinary_probe(AVProbeData *p)
             if (p->buf_size >= (SEPARATOR_SIZE + 6) ) {
                 MinimalVideoHeader test;
                 memcpy(&test, dataPtr, 6);
-            test.t  = be2me_32(test.t);
+                test.t  = AV_RB32(&test.t);
                 // If timestamp is between 1980 and 2020 then accept it
                 if ( (test.t > 315532800) && (test.t < 1577836800) )
                     return AVPROBE_SCORE_MAX;
@@ -140,9 +140,9 @@ static int adbinary_probe(AVProbeData *p)
             if (p->buf_size >= (SEPARATOR_SIZE + sizeof(MinimalAudioHeader)) ) {
                 MinimalAudioHeader test;
                 memcpy(&test, dataPtr, sizeof(MinimalAudioHeader));
-            test.t     = be2me_32(test.t);
-            test.ms    = be2me_16(test.ms);
-            test.mode  = be2me_16(test.mode);
+                test.t     = AV_RB32(&test.t);
+                test.ms    = AV_RB16(&test.ms);
+                test.mode  = AV_RB16(&test.mode);
 
                 if ( (test.mode == RTP_PAYLOAD_TYPE_8000HZ_ADPCM)  ||
                      (test.mode == RTP_PAYLOAD_TYPE_11025HZ_ADPCM) ||
@@ -271,7 +271,8 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         else
             errorVal = ad_read_packet(s, pb, pkt, frameType, vidDat, txtDat);
     }
-    else  {
+    
+    if (errorVal < 0)  {
         // If there was an error, release any memory has been allocated
         if( vidDat != NULL )
             av_free( vidDat );
