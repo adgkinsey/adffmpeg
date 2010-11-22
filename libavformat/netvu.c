@@ -19,11 +19,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <ctype.h>
+#include <string.h>
+
 #include "avformat.h"
-#include "libavutil/avstring.h"
 #include "internal.h"
-#include "netvu.h"
 #include "http.h"
+#include "netvu.h"
 
 
 static void copy_value_to_field(const char *value, char **dest)
@@ -90,10 +92,10 @@ static void netvu_parse_content_type_header(char * p, NetvuContext *nv)
 
 			// Copy the attribute into the relevant field
             for(ii = 0; ii < NETVU_MAX_HEADERS; ii++)  {
-                if( strcmp(name, nv->hdrNames[ii] ) == 0 )
+                if( strcasecmp(name, nv->hdrNames[ii] ) == 0 )
                     copy_value_to_field(value, &nv->hdrs[ii]);
             }
-            if(strcmp(name, "utc_offset") == 0)
+            if(strcasecmp(name, "utc_offset") == 0)
 				nv->utc_offset = atoi(value);
 		}
     }
@@ -115,18 +117,15 @@ static void processLine(char *line, NetvuContext *nv)
     while (isspace(*p))
         p++;
     
-    if (!strcmp (tag, nv->hdrNames[NETVU_CONTENT]))
+    if (!strcasecmp (tag, nv->hdrNames[NETVU_CONTENT]))
         netvu_parse_content_type_header(p, nv);
-    else if(!strcmp(tag, nv->hdrNames[NETVU_SERVER]))
+    else if(!strcasecmp(tag, nv->hdrNames[NETVU_SERVER]))
         copy_value_to_field( p, &nv->hdrs[NETVU_SERVER]);
 }
 
 static int netvu_open(URLContext *h, const char *uri, int flags)
 {
-    char hostname[1024];
-    char auth[1024];
-    char path1[1024];
-    char http[1024];
+    char hostname[1024], auth[1024], path[1024], http[1024];
     int port, err;
     
     NetvuContext *nv = av_mallocz(sizeof(NetvuContext));
@@ -147,10 +146,10 @@ static int netvu_open(URLContext *h, const char *uri, int flags)
     h->is_streamed = 1;
     
     ff_url_split(NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port,
-                 path1, sizeof(path1), uri);
+                 path, sizeof(path), uri);
     if (port < 0)
         port = 80;
-    ff_url_join(http, sizeof(http), "http", auth, hostname, port, "%s", path1);
+    ff_url_join(http, sizeof(http), "http", auth, hostname, port, "%s", path);
     
     err = url_open(&nv->hd, http, URL_RDWR);
     if (err >= 0)  {
@@ -201,23 +200,24 @@ static int netvu_close(URLContext *h)
     return ret;
 }
 
-static int netvu_write(URLContext *h, const uint8_t *buf, int size)
+static int netvu_write(URLContext *h, uint8_t *buf, int size)
 {
-    NetvuContext *s = h->priv_data;
-    return url_write(s->hd, buf, size);
+    NetvuContext *nv = h->priv_data;
+    return url_write(nv->hd, buf, size);
 }
 
 static int64_t netvu_seek(URLContext *h, int64_t off, int whence)
 {
-    NetvuContext *s = h->priv_data;
-    return url_seek(s->hd, off, whence);
+    NetvuContext *nv = h->priv_data;
+    return url_seek(nv->hd, off, whence);
 }
+
 
 URLProtocol netvu_protocol = {
     "netvu",
     netvu_open,
     netvu_read,
     netvu_write,
-	netvu_seek,
+    netvu_seek,
     netvu_close,
 };
