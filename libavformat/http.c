@@ -46,7 +46,7 @@ typedef struct {
     int64_t off, filesize;
     char location[URL_SIZE];
     HTTPAuthState auth_state;
-    unsigned char headers[BUFFER_SIZE];
+    unsigned char response_headers[BUFFER_SIZE];
 } HTTPContext;
 
 static int http_connect(URLContext *h, const char *path, const char *hoststr,
@@ -57,7 +57,7 @@ static int http_write(URLContext *h, uint8_t *buf, int size);
 size_t ff_http_get_headers(URLContext *h, char *headers, int bufferSize)
 {
     HTTPContext *s = h->priv_data;
-    return av_strlcpy(headers, s->headers, bufferSize);
+    return av_strlcpy(headers, s->response_headers, bufferSize);
 }
 
 /* return non zero if error */
@@ -301,15 +301,15 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
         s->chunksize = 0;
         return 0;
     }
-    s->headers[0] = '\0';
+    s->response_headers[0] = '\0';
 
     /* wait for header */
     for(;;) {
         if (http_get_line(s, line, sizeof(line)) < 0)
             return AVERROR(EIO);
 
-        av_strlcat(s->headers, line, sizeof(s->headers));
-        av_strlcat(s->headers, "\n", sizeof(s->headers));
+        av_strlcat(s->response_headers, line, sizeof(s->response_headers));
+        av_strlcat(s->response_headers, "\n", sizeof(s->response_headers));
         dprintf(NULL, "header='%s'\n", line);
 
         err = process_line(h, line, s->line_count, new_location);
