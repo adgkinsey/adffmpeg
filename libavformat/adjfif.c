@@ -23,7 +23,7 @@
 #include "internal.h"
 #include "libavutil/intreadwrite.h"
 
-#include "jfif_img.h"
+#include "adjfif.h"
 #include "adpic.h"
 
 static int find_q(unsigned char *qy);
