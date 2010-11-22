@@ -22,7 +22,7 @@
 #include "libavutil/avstring.h"
 #include "libavutil/intreadwrite.h"
 #include "adpic.h"
-#include "jfif_img.h"
+#include "adjfif.h"
 #include "netvu.h"
 
 

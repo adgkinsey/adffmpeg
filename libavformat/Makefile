@@ -291,8 +291,8 @@ OBJS-$(CONFIG_UDP_PROTOCOL)              += udp.o
 OBJS-$(CONFIG_CONCAT_PROTOCOL)           += concat.o
 
 OBJS-$(CONFIG_DSPIC_DEMUXER)			 += ds.o dspic.o adcommon.o
-OBJS-$(CONFIG_ADMIME_DEMUXER)            += jfif_img.o admime.o adcommon.o
-OBJS-$(CONFIG_ADBINARY_DEMUXER)          += jfif_img.o adbinary.o adcommon.o
+OBJS-$(CONFIG_ADMIME_DEMUXER)            += admime.o adcommon.o adjfif.o
+OBJS-$(CONFIG_ADBINARY_DEMUXER)          += adbinary.o adcommon.o adjfif.o
 OBJS-$(CONFIG_ADAUDIO_DEMUXER)			 += adaudio.o
 OBJS-$(CONFIG_DM_PROTOCOL)               += dsenc.o ds.o
 OBJS-$(CONFIG_NETVU_PROTOCOL)            += netvu.o
