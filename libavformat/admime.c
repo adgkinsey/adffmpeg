@@ -445,11 +445,7 @@ static int process_mp4data_line( char *line, int line_count,
         vidDat->version = strtol(p, NULL, 10);
     else if( !memcmp( tag, "Date", strlen( "Date" ) ) ) {
         sscanf( p, "%d/%d/%d", &time->tm_mday, &time->tm_mon, &time->tm_year );
-#if defined(_WIN32)
-        time->tm_year -= 1900; // Windows uses 1900, not 1970
-#else
-        time->tm_year -= 1970;
-#endif
+        time->tm_year -= 1900;
         time->tm_mon--;
 
         if( time->tm_sec != 0 || time->tm_min != 0 || time->tm_hour != 0 )

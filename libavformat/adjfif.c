@@ -481,11 +481,7 @@ static void parse_comment( char *text, int text_len, NetVuImageData *pic, char *
             sscanf( &result[strlen(camera_number)], "%d", &pic->cam );
         else if( !memcmp( result, image_date, strlen(image_date) ) ) {
             sscanf( &result[strlen(image_date)], "%d/%d/%d", &t.tm_mday, &t.tm_mon, &t.tm_year );
-#if defined(_WIN32)
-            t.tm_year -= 1900; // Win32 expects tm_year to be years since 1900
-#else
-            t.tm_year -= 1970;
-#endif
+            t.tm_year -= 1900;
             t.tm_mon--;
         }
         else if( !memcmp( result, image_time, strlen(image_time) ) )
