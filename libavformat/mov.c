@@ -154,6 +154,7 @@ static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
     case MKTAG(0xa9,'d','a','y'): key = "date";      break;
     case MKTAG(0xa9,'g','e','n'): key = "genre";     break;
     case MKTAG(0xa9,'t','o','o'):
+    case MKTAG(0xa9,'s','w','r'): key = "encoder";   break;
     case MKTAG(0xa9,'e','n','c'): key = "encoder";   break;
     case MKTAG( 'd','e','s','c'): key = "description";break;
     case MKTAG( 'l','d','e','s'): key = "synopsis";  break;
@@ -662,6 +663,16 @@ static int mov_read_moof(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
     return mov_read_default(c, pb, atom);
 }
 
+static void mov_metadata_creation_time(AVMetadata **metadata, time_t time)
+{
+    char buffer[32];
+    if (time) {
+        time -= 2082844800;  /* seconds between 1904-01-01 and Epoch */
+        strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", gmtime(&time));
+        av_metadata_set2(metadata, "creation_time", buffer, 0);
+    }
+}
+
 static int mov_read_mdhd(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
 {
     AVStream *st;
@@ -669,6 +680,7 @@ static int mov_read_mdhd(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
     int version;
     char language[4] = {0};
     unsigned lang;
+    time_t creation_time;
 
     if (c->fc->nb_streams < 1)
         return 0;
@@ -681,12 +693,13 @@ static int mov_read_mdhd(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
 
     get_be24(pb); /* flags */
     if (version == 1) {
-        get_be64(pb);
+        creation_time = get_be64(pb);
         get_be64(pb);
     } else {
-        get_be32(pb); /* creation time */
+        creation_time = get_be32(pb);
         get_be32(pb); /* modification time */
     }
+    mov_metadata_creation_time(&st->metadata, creation_time);
 
     sc->time_scale = get_be32(pb);
     st->duration = (version == 1) ? get_be64(pb) : get_be32(pb); /* duration */
@@ -701,16 +714,18 @@ static int mov_read_mdhd(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
 
 static int mov_read_mvhd(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
 {
+    time_t creation_time;
     int version = get_byte(pb); /* version */
     get_be24(pb); /* flags */
 
     if (version == 1) {
-        get_be64(pb);
+        creation_time = get_be64(pb);
         get_be64(pb);
     } else {
-        get_be32(pb); /* creation time */
+        creation_time = get_be32(pb);
         get_be32(pb); /* modification time */
     }
+    mov_metadata_creation_time(&c->fc->metadata, creation_time);
     c->time_scale = get_be32(pb); /* time scale */
 
     dprintf(c->fc, "time scale = %i\n", c->time_scale);

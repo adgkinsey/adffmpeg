@@ -36,6 +36,7 @@
 #include "libswscale/swscale.h"
 #include "libavcodec/opt.h"
 #include "libavcodec/audioconvert.h"
+#include "libavcore/audioconvert.h"
 #include "libavcore/parseutils.h"
 #include "libavcore/samplefmt.h"
 #include "libavutil/colorspace.h"
@@ -134,6 +135,7 @@ static int nb_stream_maps;
 /* first item specifies output metadata, second is input */
 static AVMetaDataMap (*meta_data_maps)[2] = NULL;
 static int nb_meta_data_maps;
+static int metadata_global_autocopy   = 1;
 static int metadata_streams_autocopy  = 1;
 static int metadata_chapters_autocopy = 1;
 
@@ -1123,7 +1125,7 @@ static void do_video_out(AVFormatContext *s,
             if(vdelta<=-0.6){
                 nb_frames=0;
             }else if(vdelta>0.6)
-            ost->sync_opts= lrintf(sync_ipts);
+                ost->sync_opts= lrintf(sync_ipts);
         }else if (vdelta > 1.1)
             nb_frames = lrintf(vdelta);
 //fprintf(stderr, "vdelta:%f, ost->sync_opts:%"PRId64", ost->sync_ipts:%f nb_frames:%d\n", vdelta, ost->sync_opts, get_sync_ipts(ost), nb_frames);
@@ -2399,6 +2401,15 @@ static int transcode(AVFormatContext **output_files,
             av_metadata_set2(meta[0], mtag->key, mtag->value, AV_METADATA_DONT_OVERWRITE);
     }
 
+    /* copy global metadata by default */
+    if (metadata_global_autocopy) {
+        AVMetadataTag *t = NULL;
+
+        while ((t = av_metadata_get(input_files[0]->metadata, "", t, AV_METADATA_IGNORE_SUFFIX)))
+            for (i = 0; i < nb_output_files; i++)
+                av_metadata_set2(&output_files[i]->metadata, t->key, t->value, AV_METADATA_DONT_OVERWRITE);
+    }
+
     /* copy chapters according to chapter maps */
     for (i = 0; i < nb_chapter_maps; i++) {
         int infile  = chapter_maps[i].in_file;
@@ -2997,6 +3008,8 @@ static void opt_map_meta_data(const char *arg)
     m1->file = strtol(p, &p, 0);
     parse_meta_type(p, &m1->type, &m1->index, &p);
 
+    if (m->type == 'g' || m1->type == 'g')
+        metadata_global_autocopy = 0;
     if (m->type == 's' || m1->type == 's')
         metadata_streams_autocopy = 0;
     if (m->type == 'c' || m1->type == 'c')
@@ -3541,7 +3554,7 @@ static void new_audio_stream(AVFormatContext *oc, int file_idx)
         audio_enc->sample_fmt = audio_sample_fmt;
         audio_enc->sample_rate = audio_sample_rate;
         audio_enc->channel_layout = channel_layout;
-        if (avcodec_channel_layout_num_channels(channel_layout) != audio_channels)
+        if (av_get_channel_layout_nb_channels(channel_layout) != audio_channels)
             audio_enc->channel_layout = 0;
         choose_sample_fmt(st, codec);
         choose_sample_rate(st, codec);

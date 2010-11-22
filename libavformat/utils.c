@@ -339,6 +339,21 @@ int av_get_packet(ByteIOContext *s, AVPacket *pkt, int size)
     return ret;
 }
 
+int av_append_packet(ByteIOContext *s, AVPacket *pkt, int size)
+{
+    int ret;
+    int old_size;
+    if (!pkt->size)
+        return av_get_packet(s, pkt, size);
+    old_size = pkt->size;
+    ret = av_grow_packet(pkt, size);
+    if (ret < 0)
+        return ret;
+    ret = get_buffer(s, pkt->data + old_size, size);
+    av_shrink_packet(pkt, old_size + FFMAX(ret, 0));
+    return ret;
+}
+
 
 int av_filename_number_test(const char *filename)
 {
@@ -2183,7 +2198,8 @@ int av_find_stream_info(AVFormatContext *ic)
             st->codec->frame_size = 0;
             st->codec->channels = 0;
         }
-        if(st->codec->codec_type == AVMEDIA_TYPE_VIDEO){
+        if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO ||
+            st->codec->codec_type == AVMEDIA_TYPE_SUBTITLE) {
 /*            if(!st->time_base.num)
                 st->time_base= */
             if(!st->codec->time_base.num)
