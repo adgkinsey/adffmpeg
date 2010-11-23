@@ -1,5 +1,6 @@
 /*
- * Build a C550 compressed image into a JFIF format
+ * Helper functions for converting between raw JPEG data with 
+ * NetVuImageData header and full JFIF image (and vice-versa)
  *
  * Copyright (c) 2006-2010 AD-Holdings plc
  *
@@ -18,6 +19,12 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ */
+
+/**
+ * @file
+ * Helper functions for converting between raw JPEG data with 
+ * NetVuImageData header and full JFIF image (and vice-versa)
  */
 
 #include "internal.h"

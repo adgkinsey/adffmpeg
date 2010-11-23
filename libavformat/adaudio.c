@@ -19,6 +19,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+/**
+ * @file 
+ * AD-Holdings demuxer for AD audio stream format
+ */
+
 #include "avformat.h"
 #include "ds_exports.h"
 

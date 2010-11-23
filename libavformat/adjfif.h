@@ -1,5 +1,7 @@
 /*
- * AD-Holdings mjpeg function prototypes
+ * Helper functions for converting between raw JPEG data with 
+ * NetVuImageData header and full JFIF image (and vice-versa)
+ * 
  * Copyright (c) 2006-2010 AD-Holdings plc
  *
  * This file is part of FFmpeg.
@@ -19,8 +21,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef __JFIF_IMG__
-#define __JFIF_IMG__
+/**
+ * @file
+ * Helper functions for converting between raw JPEG data with 
+ * NetVuImageData header and full JFIF image (and vice-versa)
+ */
+
+#ifndef AVFORMAT_ADJFIF_H
+#define AVFORMAT_ADJFIF_H
 
 #include "ds_exports.h"
 
