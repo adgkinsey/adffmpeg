@@ -19,8 +19,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef __ADPIC_H__
-#define __ADPIC_H__
+/**
+ * @file 
+ * Type information and function prototypes for common AD-Holdings demuxer code
+ */
+
+#ifndef AVFORMAT_ADPIC_H
+#define AVFORMAT_ADPIC_H
 
 #include "avformat.h"
 #include "ds_exports.h"
@@ -46,7 +51,7 @@ enum data_type { DATA_JPEG, DATA_JFIF,
 
 
 int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset);
-void ad_network2host(NetVuImageData *pic);
+void ad_network2host(NetVuImageData *pic, uint8_t *data);
 int ad_new_packet(AVPacket *pkt, int size);
 int ad_get_buffer(ByteIOContext *s, uint8_t *buf, int size);
 int initADData(int data_type, ADFrameType *frameType,

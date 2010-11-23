@@ -1,5 +1,6 @@
 /*
- * Build a C550 compressed image into a JFIF format
+ * Helper functions for converting between raw JPEG data with 
+ * NetVuImageData header and full JFIF image (and vice-versa)
  *
  * Copyright (c) 2006-2010 AD-Holdings plc
  *
@@ -20,10 +21,16 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+/**
+ * @file
+ * Helper functions for converting between raw JPEG data with 
+ * NetVuImageData header and full JFIF image (and vice-versa)
+ */
+
 #include "internal.h"
 #include "libavutil/intreadwrite.h"
 
-#include "jfif_img.h"
+#include "adjfif.h"
 #include "adpic.h"
 
 static int find_q(unsigned char *qy);
@@ -481,11 +488,7 @@ static void parse_comment( char *text, int text_len, NetVuImageData *pic, char *
             sscanf( &result[strlen(camera_number)], "%d", &pic->cam );
         else if( !memcmp( result, image_date, strlen(image_date) ) ) {
             sscanf( &result[strlen(image_date)], "%d/%d/%d", &t.tm_mday, &t.tm_mon, &t.tm_year );
-#if defined(_WIN32)
-            t.tm_year -= 1900; // Win32 expects tm_year to be years since 1900
-#else
-            t.tm_year -= 1970;
-#endif
+            t.tm_year -= 1900;
             t.tm_mon--;
         }
         else if( !memcmp( result, image_time, strlen(image_time) ) )

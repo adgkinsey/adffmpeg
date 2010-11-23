@@ -19,7 +19,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+/**
+ * @file 
+ * AD-Holdings demuxer for AD stream format (binary)
+ */
+
 #include "avformat.h"
+#include "libavutil/avstring.h"
 #include "libavutil/intreadwrite.h"
 
 #include "adpic.h"
@@ -31,7 +37,7 @@ enum pkt_offsets { DATA_TYPE, DATA_CHANNEL,
                    SEPARATOR_SIZE
                  };
 
-static void audioheader_network2host( NetVuAudioData *hdr );
+static void audioheader_network2host(NetVuAudioData *dst, uint8_t *src);
 static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
                         AVPacket *pkt,
                         NetVuImageData *vidDat, char **text_data);
@@ -48,27 +54,22 @@ typedef struct {
     int utc_offset;     ///< Only used in minimal video case
 } AdbinaryContext;
 
-typedef struct _minimal_video_header {	// PRC 002
-    uint32_t            t;
-    unsigned short      ms;
-} MinimalVideoHeader;
-
-typedef struct _minimal_audio_header {	// PRC 002
+typedef struct  {	// PRC 002
     uint32_t t;
-    unsigned short ms;
-    unsigned short mode;
+    uint16_t ms;
+    uint16_t mode;
 } MinimalAudioHeader;
 
 
-static void audioheader_network2host( NetVuAudioData *hdr )
+static void audioheader_network2host(NetVuAudioData *dst, uint8_t *src)
 {
-    hdr->version				= AV_RB32(&hdr->version);
-    hdr->mode					= AV_RB32(&hdr->mode);
-    hdr->channel				= AV_RB32(&hdr->channel);
-    hdr->sizeOfAdditionalData	= AV_RB32(&hdr->sizeOfAdditionalData);
-    hdr->sizeOfAudioData		= AV_RB32(&hdr->sizeOfAudioData);
-    hdr->seconds				= AV_RB32(&hdr->seconds);
-    hdr->msecs					= AV_RB32(&hdr->msecs);
+    dst->version				= AV_RB32(src);
+    dst->mode					= AV_RB32(src + 4);
+    dst->channel				= AV_RB32(src + 8);
+    dst->sizeOfAdditionalData	= AV_RB32(src + 12);
+    dst->sizeOfAudioData		= AV_RB32(src + 16);
+    dst->seconds				= AV_RB32(src + 20);
+    dst->msecs					= AV_RB32(src + 24);
 }
 
 /**
@@ -76,117 +77,146 @@ static void audioheader_network2host( NetVuAudioData *hdr )
  */
 static int adbinary_probe(AVProbeData *p)
 {
-    int dataType;
+    int score = 0;
     unsigned char *dataPtr;
-    unsigned long dataSize;
+    uint32_t dataSize;
+    int bufferSize = p->buf_size;
+    uint8_t *bufPtr = p->buf;
+    
+    // Netvu protocol can only send adbinary or admime
+    if (av_stristart(p->filename, "netvu://", NULL) == 1)
+        score += AVPROBE_SCORE_MAX / 4;
+    
+    while ((bufferSize >= SEPARATOR_SIZE) && (score < AVPROBE_SCORE_MAX))  {
+        dataSize =  (bufPtr[DATA_SIZE_BYTE_0] << 24) +
+                    (bufPtr[DATA_SIZE_BYTE_1] << 16) +
+                    (bufPtr[DATA_SIZE_BYTE_2] << 8 ) +
+                    (bufPtr[DATA_SIZE_BYTE_3]);
 
-    if (p->buf_size <= SEPARATOR_SIZE)
-        return 0;
-
-    dataSize =  (p->buf[DATA_SIZE_BYTE_0] << 24) +
-                (p->buf[DATA_SIZE_BYTE_1] << 16) +
-                (p->buf[DATA_SIZE_BYTE_2] << 8 ) +
-                (p->buf[DATA_SIZE_BYTE_3]);
-    // Frames should not be larger than 2MB
-    if (dataSize > 0x200000)
-        return 0;
-
-    dataType = p->buf[DATA_TYPE];
-    dataPtr = &p->buf[SEPARATOR_SIZE];
-
-    if ((dataType <= DATA_XML_INFO) && (p->buf[DATA_CHANNEL] <= 32))  {
-        if ( (dataType == DATA_JPEG)  ||
-             (dataType == DATA_MPEG4I) || (dataType == DATA_MPEG4P) ||
-             (dataType == DATA_H264I)  || (dataType == DATA_H264P)  ) {
-            if (p->buf_size >= (SEPARATOR_SIZE + sizeof(NetVuImageData)) )  {
-                NetVuImageData test;
-                memcpy(&test, dataPtr, sizeof(NetVuImageData));
-                ad_network2host(&test);
-                if (pic_version_valid(test.version))
-                    return AVPROBE_SCORE_MAX;
-            }
-        }
-        else if (dataType == DATA_JFIF)  {
-            if (p->buf_size >= (SEPARATOR_SIZE + 2) )  {
-                unsigned char *dataPtr = &p->buf[SEPARATOR_SIZE];
-                if ( (*dataPtr == 0xFF) && (*(dataPtr + 1) == 0xD8) )
-                    return AVPROBE_SCORE_MAX;
-            }
-        }
-        else if (dataType == DATA_AUDIO_ADPCM)  {
-            if (p->buf_size >= (SEPARATOR_SIZE + sizeof(NetVuAudioData)) )  {
-                NetVuAudioData test;
-                memcpy(&test, dataPtr, sizeof(NetVuAudioData));
-                audioheader_network2host(&test);
-                if (test.version == AUD_VERSION)
-                    return AVPROBE_SCORE_MAX;
-            }
-        }
-        else if (dataType == DATA_AUDIO_RAW)  {
-            // We don't handle this format
+        // Maximum of 32 cameras can be connected to a system
+        if (bufPtr[DATA_CHANNEL] > 32)
             return 0;
-        }
-        else if (dataType == DATA_MINIMAL_MPEG4)  {
-            if (p->buf_size >= (SEPARATOR_SIZE + 6) ) {
-                MinimalVideoHeader test;
-                memcpy(&test, dataPtr, 6);
-                test.t  = AV_RB32(&test.t);
-                // If timestamp is between 1980 and 2020 then accept it
-                if ( (test.t > 315532800) && (test.t < 1577836800) )
-                    return AVPROBE_SCORE_MAX;
-            }
-        }
-        else if (dataType == DATA_MINIMAL_AUDIO_ADPCM)  {
-            if (p->buf_size >= (SEPARATOR_SIZE + sizeof(MinimalAudioHeader)) ) {
-                MinimalAudioHeader test;
-                memcpy(&test, dataPtr, sizeof(MinimalAudioHeader));
-                test.t     = AV_RB32(&test.t);
-                test.ms    = AV_RB16(&test.ms);
-                test.mode  = AV_RB16(&test.mode);
+        
+        if (bufPtr[DATA_TYPE] >= MAX_DATA_TYPE)
+            return 0;
+        
+        dataPtr = &bufPtr[SEPARATOR_SIZE];
+        bufferSize -= SEPARATOR_SIZE;
+        
+        switch (bufPtr[DATA_TYPE])  {
+            case(DATA_JPEG):
+            case(DATA_MPEG4I):
+            case(DATA_MPEG4P):
+            case(DATA_H264I):
+            case(DATA_H264P):
+                if (bufferSize >= sizeof(NetVuImageData)) {
+                    NetVuImageData test;
+                    ad_network2host(&test, dataPtr);
+                    if (pic_version_valid(test.version))  {
+                        av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected adbinary packet\n");
+                        score += AVPROBE_SCORE_MAX;
+                    }
+                }
+                break;
+            case(DATA_JFIF):
+                if (bufferSize >= 2)  {
+                    if ( (*dataPtr == 0xFF) && (*(dataPtr + 1) == 0xD8) )  {
+                        av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected adbinary JFIF packet\n");
+                        score += AVPROBE_SCORE_MAX;
+                    }
+                }
+                break;
+            case(DATA_AUDIO_ADPCM):
+                if (bufferSize >= sizeof(NetVuAudioData))  {
+                    NetVuAudioData test;
+                    audioheader_network2host(&test, dataPtr);
+                    if (test.version == AUD_VERSION)  {
+                        av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected adbinary audio packet\n");
+                        score += AVPROBE_SCORE_MAX;
+                    }
+                }
+                break;
+            case(DATA_AUDIO_RAW):
+                // We don't handle this format
+                av_log(NULL, AV_LOG_ERROR, "adbinary_probe: Detected UNSUPPORTED adbinary raw audio packet\n");
+                break;
+            case(DATA_MINIMAL_MPEG4):
+                if (bufferSize >= 10)  {
+                    uint32_t sec  = AV_RB32(dataPtr);
+                    //uint16_t mil  = AV_RB16(dataPtr + 4);
+                    uint32_t vos  = AV_RB32(dataPtr + 6);
+                    // Check for MPEG4 start code in data along with a timestamp
+                    // of 1980 or later.  Crappy test, but there isn't much data
+                    // to go on.  Should be able to use milliseconds <= 1000 but
+                    // servers often send larger values than this, 
+                    // nonsensical as that is
+                    if ((vos >= 0x1B0) && (vos <= 0x1B6) && (sec > 315532800)) {
+                        av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected minimal MPEG4 packet\n");
+                        score += AVPROBE_SCORE_MAX / 4;
+                    }
+                }
+                break;
+            case(DATA_MINIMAL_AUDIO_ADPCM):
+                if (bufferSize >= 8)  {
+                    MinimalAudioHeader test;
+                    test.t     = AV_RB32(dataPtr);
+                    test.ms    = AV_RB16(dataPtr + 4);
+                    test.mode  = AV_RB16(dataPtr + 6);
 
-                if ( (test.mode == RTP_PAYLOAD_TYPE_8000HZ_ADPCM)  ||
-                     (test.mode == RTP_PAYLOAD_TYPE_11025HZ_ADPCM) ||
-                     (test.mode == RTP_PAYLOAD_TYPE_16000HZ_ADPCM) ||
-                     (test.mode == RTP_PAYLOAD_TYPE_22050HZ_ADPCM) ||
-                     (test.mode == RTP_PAYLOAD_TYPE_32000HZ_ADPCM) ||
-                     (test.mode == RTP_PAYLOAD_TYPE_44100HZ_ADPCM) ||
-                     (test.mode == RTP_PAYLOAD_TYPE_48000HZ_ADPCM) ||
-                     (test.mode == RTP_PAYLOAD_TYPE_8000HZ_PCM)    ||
-                     (test.mode == RTP_PAYLOAD_TYPE_11025HZ_PCM)   ||
-                     (test.mode == RTP_PAYLOAD_TYPE_16000HZ_PCM)   ||
-                     (test.mode == RTP_PAYLOAD_TYPE_22050HZ_PCM)   ||
-                     (test.mode == RTP_PAYLOAD_TYPE_32000HZ_PCM)   ||
-                     (test.mode == RTP_PAYLOAD_TYPE_44100HZ_PCM)   ||
-                     (test.mode == RTP_PAYLOAD_TYPE_48000HZ_PCM)   ) {
-                    return AVPROBE_SCORE_MAX;
+                    switch(test.mode)  {
+                        case(RTP_PAYLOAD_TYPE_8000HZ_ADPCM):
+                        case(RTP_PAYLOAD_TYPE_11025HZ_ADPCM):
+                        case(RTP_PAYLOAD_TYPE_16000HZ_ADPCM):
+                        case(RTP_PAYLOAD_TYPE_22050HZ_ADPCM):
+                        case(RTP_PAYLOAD_TYPE_32000HZ_ADPCM):
+                        case(RTP_PAYLOAD_TYPE_44100HZ_ADPCM):
+                        case(RTP_PAYLOAD_TYPE_48000HZ_ADPCM):
+                        case(RTP_PAYLOAD_TYPE_8000HZ_PCM):
+                        case(RTP_PAYLOAD_TYPE_11025HZ_PCM):
+                        case(RTP_PAYLOAD_TYPE_16000HZ_PCM):
+                        case(RTP_PAYLOAD_TYPE_22050HZ_PCM):
+                        case(RTP_PAYLOAD_TYPE_32000HZ_PCM):
+                        case(RTP_PAYLOAD_TYPE_44100HZ_PCM):
+                        case(RTP_PAYLOAD_TYPE_48000HZ_PCM):
+                            av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected minimal audio packet\n");
+                            score += AVPROBE_SCORE_MAX;
+                        default:
+                            return 0;
+                    }
                 }
-            }
-        }
-        else if (dataType == DATA_LAYOUT)  {
-            // Need a stronger test for this
-            return AVPROBE_SCORE_MAX / 2;
-        }
-        else if (dataType == DATA_INFO)  {
-            if (p->buf_size >= (SEPARATOR_SIZE + 5) )  {
-                if (memcmp(dataPtr + 1, "SITE", 4) == 0)
-                    return AVPROBE_SCORE_MAX;
-                else
-                    return AVPROBE_SCORE_MAX / 2;
-            }
-        }
-        else if (dataType == DATA_XML_INFO)  {
-            const char *infoString = "<infoList>";
-            if (p->buf_size >= (SEPARATOR_SIZE + strlen(infoString)) )  {
-                int infoStringLen = strlen(infoString);
-                if (p->buf_size >= (SEPARATOR_SIZE + infoStringLen) )  {
-                    if (strncasecmp(dataPtr, infoString, infoStringLen) == 0)
-                        return AVPROBE_SCORE_MAX;
+                break;
+            case(DATA_LAYOUT):
+                av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected adbinary layout packet\n");
+                break;
+            case(DATA_INFO):
+                av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected adbinary info packet\n");
+                break;
+            case(DATA_XML_INFO):
+                if (bufferSize >= (SEPARATOR_SIZE + dataSize) )  {
+                    const char *infoString = "<infoList>";
+                    int infoStringLen = strlen(infoString);
+                    if (infoStringLen > dataSize)
+                        infoStringLen = dataSize;
+                    if (bufferSize >= infoStringLen)  {
+                        if (strncasecmp(dataPtr, infoString, infoStringLen) == 0)  {
+                            av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected adbinary xml info packet\n");
+                            score += AVPROBE_SCORE_MAX;
+                        }
+                    }
                 }
-            }
+                break;
         }
+        
+        bufferSize -= dataSize;
+        bufPtr = dataPtr + dataSize;
     }
 
-    return 0;
+    if (score > AVPROBE_SCORE_MAX)
+        score = AVPROBE_SCORE_MAX;
+    
+    av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Score %d\n", score);
+    
+    return score;
 }
 
 static int adbinary_read_header(AVFormatContext *s, AVFormatParameters *ap)
@@ -309,7 +339,7 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
         errorVal = ADPIC_MPEG4_GET_BUFFER_ERROR;
         return errorVal;
     }
-    ad_network2host(vidDat);
+    ad_network2host(vidDat, (uint8_t *)vidDat);
     if (!pic_version_valid(vidDat->version)) {
         av_log(s, AV_LOG_ERROR, "ad_read_mpeg: invalid pic version 0x%08X\n", 
                vidDat->version);
@@ -396,11 +426,11 @@ static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
 
     // Get the fixed size portion of the audio header
     size = sizeof(NetVuAudioData) - sizeof(unsigned char *);
-    if( (n = ad_get_buffer( pb, (unsigned char*)data, size)) != size)
+    if( (n = ad_get_buffer( pb, (uint8_t*)data, size)) != size)
         return ADPIC_AUDIO_ADPCM_GET_BUFFER_ERROR;
 
     // endian fix it...
-    audioheader_network2host(data);
+    audioheader_network2host(data, (uint8_t*)data);
 
     // Now get the additional bytes
     if( data->sizeOfAdditionalData > 0 ) {

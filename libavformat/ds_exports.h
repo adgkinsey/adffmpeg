@@ -19,8 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef __DS_EXPORTS_H__
-#define __DS_EXPORTS_H__
+#ifndef AVFORMAT_DS_EXPORTS_H
+#define AVFORMAT_DS_EXPORTS_H
 
 #ifdef __cplusplus
 extern "C" {
