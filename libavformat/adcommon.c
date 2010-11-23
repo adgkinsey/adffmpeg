@@ -64,29 +64,29 @@ int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
     return 0;
 }
 
-void ad_network2host(NetVuImageData *pic)
+void ad_network2host(NetVuImageData *pic, uint8_t *data)
 {
-    pic->version				= AV_RB32(&pic->version);
-    pic->mode					= AV_RB32(&pic->mode);
-    pic->cam					= AV_RB32(&pic->cam);
-    pic->vid_format				= AV_RB32(&pic->vid_format);
-    pic->start_offset			= AV_RB32(&pic->start_offset);
-    pic->size					= AV_RB32(&pic->size);
-    pic->max_size				= AV_RB32(&pic->max_size);
-    pic->target_size			= AV_RB32(&pic->target_size);
-    pic->factor					= AV_RB32(&pic->factor);
-    pic->alm_bitmask_hi			= AV_RB32(&pic->alm_bitmask_hi);
-    pic->status					= AV_RB32(&pic->status);
-    pic->session_time			= AV_RB32(&pic->session_time);
-    pic->milliseconds			= AV_RB32(&pic->milliseconds);
-    pic->utc_offset				= AV_RB32(&pic->utc_offset);
-    pic->alm_bitmask			= AV_RB32(&pic->alm_bitmask);
-    pic->format.src_pixels		= AV_RB16(&pic->format.src_pixels);
-    pic->format.src_lines		= AV_RB16(&pic->format.src_lines);
-    pic->format.target_pixels	= AV_RB16(&pic->format.target_pixels);
-    pic->format.target_lines	= AV_RB16(&pic->format.target_lines);
-    pic->format.pixel_offset	= AV_RB16(&pic->format.pixel_offset);
-    pic->format.line_offset		= AV_RB16(&pic->format.line_offset);
+    pic->version				= AV_RB32(data + 0);
+    pic->mode					= AV_RB32(data + 4);
+    pic->cam					= AV_RB32(data + 8);
+    pic->vid_format				= AV_RB32(data + 12);
+    pic->start_offset			= AV_RB32(data + 16);
+    pic->size					= AV_RB32(data + 20);
+    pic->max_size				= AV_RB32(data + 24);
+    pic->target_size			= AV_RB32(data + 28);
+    pic->factor					= AV_RB32(data + 32);
+    pic->alm_bitmask_hi			= AV_RB32(data + 36);
+    pic->status					= AV_RB32(data + 40);
+    pic->session_time			= AV_RB32(data + 44);
+    pic->milliseconds			= AV_RB32(data + 48);
+    pic->utc_offset				= AV_RB32(data + 52);
+    pic->alm_bitmask			= AV_RB32(data + 56);
+    pic->format.src_pixels		= AV_RB16(data + 60);
+    pic->format.src_lines		= AV_RB16(data + 62);
+    pic->format.target_pixels	= AV_RB16(data + 64);
+    pic->format.target_lines	= AV_RB16(data + 66);
+    pic->format.pixel_offset	= AV_RB16(data + 68);
+    pic->format.line_offset		= AV_RB16(data + 70);
 }
 
 AVStream * netvu_get_stream(AVFormatContext *s, NetVuImageData *p)
@@ -412,7 +412,7 @@ int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
     }
     
     // Endian convert if necessary
-    ad_network2host(video_data);
+    ad_network2host(video_data, (uint8_t *)video_data);
     
     if (!pic_version_valid(video_data->version))  {
         av_log(s, AV_LOG_ERROR, "ad_read_jpeg: invalid NetVuImageData version "
