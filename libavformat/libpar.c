@@ -19,6 +19,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+/**
+ * @file 
+ * AD-Holdings PAR file demuxer
+ */
 
 #include <parreader.h>
 
@@ -145,10 +149,12 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
     if (srcTime < 0)
         srcTime = pkt->dts;
     if ( (srcTime == 0) && (ps->startTime == 0) )  {
-        if (avf->timestamp > 0)
+        if (avf->start_time_realtime > 0)
+            ps->startTime = avf->start_time_realtime / 1000;
+        else if (avf->timestamp > 0)
             ps->startTime = avf->timestamp * 1000;
         else
-            ps->startTime = 1288702396000LL;
+            ps->startTime = av_gettime() / 1000;
     }
     parTime = srcTime;
     if (parTime < ps->startTime)
