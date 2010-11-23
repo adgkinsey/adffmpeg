@@ -192,16 +192,14 @@ static int adbinary_probe(AVProbeData *p)
                 av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected adbinary info packet\n");
                 break;
             case(DATA_XML_INFO):
-                if (bufferSize >= (SEPARATOR_SIZE + dataSize) )  {
+                if (bufferSize >= dataSize)  {
                     const char *infoString = "<infoList>";
                     int infoStringLen = strlen(infoString);
                     if (infoStringLen > dataSize)
                         infoStringLen = dataSize;
-                    if (bufferSize >= infoStringLen)  {
-                        if (strncasecmp(dataPtr, infoString, infoStringLen) == 0)  {
-                            av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected adbinary xml info packet\n");
-                            score += AVPROBE_SCORE_MAX;
-                        }
+                    if (strncasecmp(dataPtr, infoString, infoStringLen) == 0)  {
+                        av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected adbinary xml info packet\n");
+                        score += AVPROBE_SCORE_MAX;
                     }
                 }
                 break;
