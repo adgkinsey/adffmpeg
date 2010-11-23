@@ -1406,7 +1406,7 @@ rtp_protocol_select="udp_protocol"
 tcp_protocol_deps="network"
 udp_protocol_deps="network"
 ds_protocol_deps="tcp_protocol"
-netvu_protocol_deps="tcp_protocol"
+netvu_protocol_deps="http_protocol"
 
 # filters
 blackframe_filter_deps="gpl"
