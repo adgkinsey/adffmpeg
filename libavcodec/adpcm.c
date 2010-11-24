@@ -1030,96 +1030,13 @@ static int adpcm_decode_frame(AVCodecContext *avctx,
         break;
 
     case CODEC_ID_ADPCM_ADH:
-        {
-			const signed char *inp;	/* Input buffer pointer */
-			int sign;			    /* Current adpcm sign bit */
-			int delta;			    /* Current adpcm output value */
-			int step;			    /* Stepsize */
-			int valpred;		    /* Predicted value */
-			int vpdiff;			    /* Current change to valpred */
-			int index;			    /* Current step change index */
-			int inputbuffer=0;		/* place to keep next 4-bit value */
-			int bufferstep;		    /* toggle between inputbuffer/input */
-			int vp;
-            const char * pval = src;
-
-			/* Restore the decoder state from the copy saved in the packet,
-			   independent of the byte order of the machine we're running on. */
-			vp = *pval++;
-			vp <<= 8;
-			vp |= *pval++;
-			c->status[0].predictor = vp;
-			src += 2;
-			c->status[0].step_index = *pval++;
-			src += 2;
-            pval++;
-
-			m = buf_size - 4;
-            m *= 2;
-
-			inp = pval;
-
-			valpred = c->status[0].predictor;
-			index = c->status[0].step_index;
-			step = step_table[index];
-
-			bufferstep = 0;
-	
-			for ( ; m > 0 ; m-- ) 
-			{
-				/* Step 1 - get the delta value */
-				if ( bufferstep ) 
-				{
-					delta = inputbuffer & 0xf;
-				} 
-				else 
-				{
-					inputbuffer = *inp++;
-					delta = (inputbuffer >> 4) & 0xf;
-				}
-				bufferstep = !bufferstep;
-
-				/* Step 2 - Find new index value (for later) */
-				index += index_table[delta];
-				index =  ( index < 0 ) ? 0 : index;
-				index =  ( index > 88 ) ? 88 : index;
-
-				/* Step 3 - Separate sign and magnitude */
-				sign = delta & 8;
-				delta = delta & 7;
-
-				/* Step 4 - Compute difference and new predicted value */
-				/*
-				** Computes 'vpdiff = (delta+0.5)*step/4', but see comment
-				** in adpcm_coder.
-				*/
-				vpdiff = step >> 3;
-				if ( delta & 4 ) 
-					vpdiff += step;
-				if ( delta & 2 ) 
-					vpdiff += step>>1;
-				if ( delta & 1 ) 
-					vpdiff += step>>2;
-
-				if ( sign )
-					valpred -= vpdiff;
-				else
-					valpred += vpdiff;
-
-				/* Step 5 - clamp output value */
-				if ( valpred > 32767 )
-					valpred = 32767;
-				else if ( valpred < -32768 )
-					valpred = -32768;
-
-				/* Step 6 - Update step value */
-				step = step_table[index];
-
-				/* Step 7 - Output value */
-				*samples++ = valpred;
-			}
-
-			src += buf_size - 4;
+        c->status[0].predictor  = (int16_t)bytestream_get_be16(&src);
+        c->status[0].step_index = *src++;
+        src++;
+        while (src < buf + buf_size) {
+            *samples++ = adpcm_ima_expand_nibble(&c->status[0], src[0] >> 4, 3);
+            *samples++ = adpcm_ima_expand_nibble(&c->status[0], src[0] & 0x0F, 3);
+            src++;
         }
         break;
 
