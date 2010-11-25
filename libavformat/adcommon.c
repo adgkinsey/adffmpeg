@@ -139,7 +139,7 @@ AVStream * ad_get_stream(AVFormatContext *s, int w, int h, int cam, int format, 
             return NULL;
     }
     
-    id = (codec_type << 31)     | 
+    id = (codec_type << 29)     | 
          ((cam - 1) << 24) | 
          ((w >> 4) << 12)    | 
          ((h >> 4) << 0);
