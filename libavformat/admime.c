@@ -23,6 +23,8 @@
  * @file AD-Holdings demuxer for AD stream format (binary)
  */
 
+#include <strings.h>
+
 #include "avformat.h"
 #include "adpic.h"
 

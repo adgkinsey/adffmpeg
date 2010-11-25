@@ -21,6 +21,7 @@
 
 #include <ctype.h>
 #include <string.h>
+#include <strings.h>
 
 #include "avformat.h"
 #include "internal.h"
