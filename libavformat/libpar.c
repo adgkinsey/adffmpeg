@@ -24,11 +24,12 @@
  * AD-Holdings PAR file demuxer
  */
 
+#include <strings.h>
 #include <parreader.h>
 
 #include "avformat.h"
 #include "internal.h"
-#include "libavutil/bswap.h"
+#include "libavutil/intreadwrite.h"
 #include "libpar.h"
 
 
@@ -125,6 +126,7 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
     int64_t srcTime = pkt->pts;
     int written = 0;
 
+    // Metadata
     if (ps->camera < 1)  {
         // Copy over the values from the file data first
         *ps = p->master;
@@ -142,63 +144,72 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
         if (strlen(ps->name) == 0)
             snprintf(ps->name, sizeof(ps->name), "Camera %d", ps->camera);
     }
-
-    // PAR files have timestamps that are in UTC, not elapsed time
-    // So if the pts we have been given is the latter we need to
-    // add an offset to convert it to the former
-    if (srcTime < 0)
-        srcTime = pkt->dts;
-    if ( (srcTime == 0) && (ps->startTime == 0) )  {
-        if (avf->start_time_realtime > 0)
-            ps->startTime = avf->start_time_realtime / 1000;
-        else if (avf->timestamp > 0)
-            ps->startTime = avf->timestamp * 1000;
-        else
-            ps->startTime = av_gettime() / 1000;
-    }
-    parTime = srcTime;
-    if (parTime < ps->startTime)
-        parTime = parTime + ps->startTime;
-
-    if (stream->codec->codec_id == CODEC_ID_MJPEG)  {
-        //p->frameInfo.frameBuffer = parReader_jpegToIMAGE(pkt->data, parTime, pkt->stream_index);
-        if ((stream->codec->pix_fmt == PIX_FMT_YUV422P) || (stream->codec->pix_fmt == PIX_FMT_YUVJ422P) )
-            parFrameFormat = FRAME_FORMAT_JPEG_422;
-        else
-            parFrameFormat = FRAME_FORMAT_JPEG_411;
-    }
-    else if (stream->codec->codec_id == CODEC_ID_MPEG4) {
-        if (pkt->flags & AV_PKT_FLAG_KEY)
-            parFrameFormat = FRAME_FORMAT_MPEG4_411_GOV_I;
-        else
-            parFrameFormat = FRAME_FORMAT_MPEG4_411_GOV_P;
+    
+    uint32_t pktTypeCheck = AV_RL32(pkt->data);
+    if (pktTypeCheck == 0xDECADE11)  {
+        p->frameInfo.frameBufferSize = pkt->size;
+        p->frameInfo.frameBuffer = pkt->data;
+        written = parReader_writePartition(p->frameInfo.parData, &p->frameInfo);
+        return written;
     }
     else  {
-        if (pkt->flags & AV_PKT_FLAG_KEY)
-            parFrameFormat = FRAME_FORMAT_H264_I;
-        else
-            parFrameFormat = FRAME_FORMAT_H264_P;
+        // PAR files have timestamps that are in UTC, not elapsed time
+        // So if the pts we have been given is the latter we need to
+        // add an offset to convert it to the former
+        if (srcTime < 0)
+            srcTime = pkt->dts;
+        if ( (srcTime == 0) && (ps->startTime == 0) )  {
+            if (avf->start_time_realtime > 0)
+                ps->startTime = avf->start_time_realtime / 1000;
+            else if (avf->timestamp > 0)
+                ps->startTime = avf->timestamp * 1000;
+            else
+                ps->startTime = av_gettime() / 1000;
+        }
+        parTime = srcTime;
+        if (parTime < ps->startTime)
+            parTime = parTime + ps->startTime;
+
+        if (stream->codec->codec_id == CODEC_ID_MJPEG)  {
+            //p->frameInfo.frameBuffer = parReader_jpegToIMAGE(pkt->data, parTime, pkt->stream_index);
+            if ((stream->codec->pix_fmt == PIX_FMT_YUV422P) || (stream->codec->pix_fmt == PIX_FMT_YUVJ422P) )
+                parFrameFormat = FRAME_FORMAT_JPEG_422;
+            else
+                parFrameFormat = FRAME_FORMAT_JPEG_411;
+        }
+        else if (stream->codec->codec_id == CODEC_ID_MPEG4) {
+            if (pkt->flags & AV_PKT_FLAG_KEY)
+                parFrameFormat = FRAME_FORMAT_MPEG4_411_GOV_I;
+            else
+                parFrameFormat = FRAME_FORMAT_MPEG4_411_GOV_P;
+        }
+        else  {
+            if (pkt->flags & AV_PKT_FLAG_KEY)
+                parFrameFormat = FRAME_FORMAT_H264_I;
+            else
+                parFrameFormat = FRAME_FORMAT_H264_P;
+        }
+
+        hdr = parReader_generatePicHeader(ps->camera,
+                                          parFrameFormat,
+                                          pkt->size,
+                                          parTime,
+                                          ps->name,
+                                          stream->codec->width,
+                                          stream->codec->height, 
+                                          ps->utc_offset
+                                         );
+        p->frameInfo.frameBufferSize = pkt->size + p->picHeaderSize;
+        ptr = av_malloc(p->frameInfo.frameBufferSize);
+        p->frameInfo.frameBuffer = ptr;
+        memcpy(ptr, hdr, p->picHeaderSize);
+        memcpy(ptr + p->picHeaderSize, pkt->data, pkt->size);
+        written = parReader_writePartition(p->frameInfo.parData, &p->frameInfo);
+        av_free(ptr);
+        parReader_freePicHeader(hdr);
+
+        return written;
     }
-
-    hdr = parReader_generatePicHeader(ps->camera,
-                                      parFrameFormat,
-                                      pkt->size,
-                                      parTime,
-                                      ps->name,
-                                      stream->codec->width,
-                                      stream->codec->height, 
-                                      ps->utc_offset
-                                     );
-    p->frameInfo.frameBufferSize = pkt->size + p->picHeaderSize;
-    ptr = av_malloc(p->frameInfo.frameBufferSize);
-    p->frameInfo.frameBuffer = ptr;
-    memcpy(ptr, hdr, p->picHeaderSize);
-    memcpy(ptr + p->picHeaderSize, pkt->data, pkt->size);
-    written = parReader_writePartition(p->frameInfo.parData, &p->frameInfo);
-    av_free(ptr);
-    parReader_freePicHeader(hdr);
-
-    return written;
 }
 
 static int par_write_trailer(AVFormatContext *avf)
