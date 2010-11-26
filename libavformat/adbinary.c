@@ -24,6 +24,8 @@
  * AD-Holdings demuxer for AD stream format (binary)
  */
 
+#include <strings.h>
+
 #include "avformat.h"
 #include "libavutil/avstring.h"
 #include "libavutil/intreadwrite.h"
@@ -328,53 +330,50 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
                         NetVuImageData *vidDat, char **text_data)
 {
     static const int hdrSize = sizeof(NetVuImageData);
+    int textSize = 0;
     int n, status, errorVal = 0;
 
     if ((n = ad_get_buffer(pb, (uint8_t *)vidDat, hdrSize)) != hdrSize) {
         av_log(s, AV_LOG_ERROR, "ad_read_mpeg: short of data reading header, "
                                 "expected %d, read %d\n", 
-               sizeof (NetVuImageData), n);
-        errorVal = ADPIC_MPEG4_GET_BUFFER_ERROR;
-        return errorVal;
+               hdrSize, n);
+        return ADPIC_MPEG4_GET_BUFFER_ERROR;
     }
     ad_network2host(vidDat, (uint8_t *)vidDat);
     if (!pic_version_valid(vidDat->version)) {
         av_log(s, AV_LOG_ERROR, "ad_read_mpeg: invalid pic version 0x%08X\n", 
                vidDat->version);
-        errorVal = ADPIC_MPEG4_PIC_VERSION_VALID_ERROR;
-        return errorVal;
+        return ADPIC_MPEG4_PIC_VERSION_VALID_ERROR;
     }
 
     // Get the additional text block
-    *text_data = av_malloc( vidDat->start_offset + 1 );
+    textSize = vidDat->start_offset;
+    *text_data = av_malloc( textSize + 1 );
 
     if( *text_data == NULL )
         return ADPIC_MPEG4_ALOCATE_TEXT_BUFFER_ERROR;
 
     // Copy the additional text block
-    if( (n = ad_get_buffer( pb, *text_data, vidDat->start_offset )) != vidDat->start_offset ) {
+    if( (n = ad_get_buffer( pb, *text_data, textSize)) != textSize) {
         av_log(s, AV_LOG_ERROR, "ad_read_mpeg: short of data reading text, "
                                 "expected %d, read %d\n", 
-               vidDat->start_offset, n);
-        errorVal = ADPIC_MPEG4_GET_TEXT_BUFFER_ERROR;
-        return errorVal;
+               textSize, n);
+        return ADPIC_MPEG4_GET_TEXT_BUFFER_ERROR;
     }
 
     // Somtimes the buffer seems to end with a NULL terminator,
-    // other times it doesn't.  Adding a NULL terminator here regardless
-    (*text_data)[vidDat->start_offset] = '\0';
+    // other times it doesn't.  Adding a terminator here regardless
+    (*text_data)[textSize] = '\0';
 
     if ((status = ad_new_packet(pkt, vidDat->size)) < 0) { // PRC 003
         av_log(s, AV_LOG_ERROR, "ad_read_mpeg: ad_new_packet (size %d) failed, "
                                 "status %d\n", vidDat->size, status);
-        errorVal = ADPIC_MPEG4_NEW_PACKET_ERROR;
-        return errorVal;
+        return ADPIC_MPEG4_NEW_PACKET_ERROR;
     }
     if ((n = ad_get_buffer(pb, pkt->data, vidDat->size)) != vidDat->size) {
         av_log(s, AV_LOG_ERROR, "ad_read_mpeg: short of data reading mpeg, "
                                 "expected %d, read %d\n", vidDat->size, n);
-        errorVal = ADPIC_MPEG4_PIC_BODY_ERROR;
-        return errorVal;
+        return ADPIC_MPEG4_PIC_BODY_ERROR;
     }
     return errorVal;
 }
@@ -396,8 +395,11 @@ static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
     vidDat->session_time  = get_be32(pb);
     vidDat->milliseconds  = get_be16(pb);
     
-    if ( url_ferror(pb) || (vidDat->session_time == 0) )
+    if ( url_ferror(pb) || (vidDat->session_time == 0) )  {
+        av_log(s, AV_LOG_ERROR, "ad_read_mpeg_minimal: Reading header, "
+                   "errorcode %d\n", url_ferror(pb));
         return ADPIC_MPEG4_MINIMAL_GET_BUFFER_ERROR;
+    }
     vidDat->version = PIC_VERSION;
     vidDat->cam = channel + 1;
     vidDat->utc_offset = adContext->utc_offset;
@@ -466,8 +468,11 @@ static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb,
     data->seconds = get_be32(pb);
     data->msecs = get_be16(pb);
     data->mode = get_be16(pb);
-    if ( url_ferror(pb) || (data->seconds == 0) )
+    if ( url_ferror(pb) || (data->seconds == 0) )  {
+        av_log(s, AV_LOG_ERROR, "ad_read_audio_minimal: Reading header, "
+                   "errorcode %d\n", url_ferror(pb));
         return ADPIC_MINIMAL_AUDIO_ADPCM_GET_BUFFER_ERROR;
+    }
 
     // Now get the main frame data into a new packet
     if( (status = ad_new_packet( pkt, dataSize )) < 0 )

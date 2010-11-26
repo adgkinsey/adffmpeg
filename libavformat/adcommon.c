@@ -57,7 +57,7 @@ int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
             av_metadata_set2(&s->metadata, nv->hdrNames[ii], nv->hdrs[ii], 0);
         }
         snprintf(temp, sizeof(temp), "%d", nv->utc_offset);
-        av_metadata_set2(&s->metadata, "timezone",    temp,               0);
+        av_metadata_set2(&s->metadata, "timezone", temp, 0);
     }
 
     s->ctx_flags |= AVFMTCTX_NOHEADER;
@@ -91,15 +91,18 @@ void ad_network2host(NetVuImageData *pic, uint8_t *data)
 
 AVStream * netvu_get_stream(AVFormatContext *s, NetVuImageData *p)
 {
+    time_t dateSec;
+    char dateStr[18];
     AVStream *stream = ad_get_stream(s, 
                                      p->format.target_pixels, 
                                      p->format.target_lines, 
                                      p->cam, 
                                      p->vid_format, 
                                      p->title);
-    /// \todo HACK FIXME!!!
     stream->start_time = p->session_time * 1000LL + p->milliseconds;
-    av_metadata_set2(&stream->metadata, "date", "2010-11-16 16:21Z", 0);
+    dateSec = p->session_time;
+    strftime(dateStr, sizeof(dateStr), "%Y-%m-%d %H:%MZ", gmtime(&dateSec));
+    av_metadata_set2(&stream->metadata, "date", dateStr, 0);
     return stream;
 }
 
@@ -139,7 +142,7 @@ AVStream * ad_get_stream(AVFormatContext *s, int w, int h, int cam, int format, 
             return NULL;
     }
     
-    id = (codec_type << 31)     | 
+    id = (codec_type << 29)     | 
          ((cam - 1) << 24) | 
          ((w >> 4) << 12)    | 
          ((h >> 4) << 0);
@@ -209,12 +212,8 @@ AVStream * ad_get_audio_stream(AVFormatContext *s, NetVuAudioData* audioHeader)
             st->codec->channels = 1;
             st->codec->block_align = 0;
 
-            // Use milliseconds as the time base
-            st->r_frame_rate = (AVRational) { 1, 1000 };
-            av_set_pts_info(st, 32, 1, 1000);
-            st->codec->time_base = (AVRational) { 1, 1000 };
-
             switch(audioHeader->mode)  {
+                default:
                 case(RTP_PAYLOAD_TYPE_8000HZ_ADPCM):
                 case(RTP_PAYLOAD_TYPE_8000HZ_PCM):
                     st->codec->sample_rate = 8000;
@@ -243,10 +242,8 @@ AVStream * ad_get_audio_stream(AVFormatContext *s, NetVuAudioData* audioHeader)
                 case(RTP_PAYLOAD_TYPE_48000HZ_PCM):
                     st->codec->sample_rate = 48000;
                     break;
-                default:
-                    st->codec->sample_rate = 8000;
-                    break;
             }
+            av_set_pts_info(st, 32, 1, st->codec->sample_rate);
             st->codec->codec_tag = 0x0012;
 
             st->index = i;
@@ -285,9 +282,9 @@ AVStream * ad_get_data_stream( AVFormatContext *s )
             st->codec->codec_id = CODEC_ID_TEXT;
             
             // Use milliseconds as the time base
-            st->r_frame_rate = (AVRational) { 1, 1000 };
+            //st->r_frame_rate = (AVRational) { 1, 1000 };
             av_set_pts_info(st, 32, 1, 1000);
-            st->codec->time_base = (AVRational) { 1, 1000 };
+            //st->codec->time_base = (AVRational) { 1, 1000 };
             
             st->index = i;
         }
