@@ -94,13 +94,13 @@ static int admime_probe(AVProbeData *p)
     // make adjustments to the buffers so that a standard validation routine
     // can be called...
 
-    if( p->buf[0] == 0x0a )                             // DS2 detection
+    if (p->buf[0] == 0x0a )                             // DS2 detection
         offset = 1;
-    else if( p->buf[0] == 0x0d &&  p->buf[1] == 0x0a )  // Eco 9 detection
+    else if (p->buf[0] == 0x0d &&  p->buf[1] == 0x0a )  // Eco 9 detection
         offset = 2;
 
     // Now check whether we have the start of a MIME boundary separator
-    if( is_valid_separator( &p->buf[offset], p->buf_size - offset ) > 0 )
+    if (is_valid_separator( &p->buf[offset], p->buf_size - offset ) > 0 )
         return AVPROBE_SCORE_MAX;
 
     return 0;
@@ -116,13 +116,13 @@ static int admime_probe(AVProbeData *p)
  */
 static int is_valid_separator( unsigned char * buf, int bufLen )
 {
-    if( buf == NULL )
+    if (buf == NULL )
         return FALSE;
 
-    if( bufLen < strlen(BOUNDARY_PREFIX1) + strlen(BOUNDARY_SUFFIX) )
+    if (bufLen < strlen(BOUNDARY_PREFIX1) + strlen(BOUNDARY_SUFFIX) )
         return FALSE;
 
-    if( (strncmp(buf, BOUNDARY_PREFIX1, strlen(BOUNDARY_PREFIX1)) == 0) ||
+    if ((strncmp(buf, BOUNDARY_PREFIX1, strlen(BOUNDARY_PREFIX1)) == 0) ||
         (strncmp(buf, BOUNDARY_PREFIX2, strlen(BOUNDARY_PREFIX2)) == 0) ||
         (strncmp(buf, BOUNDARY_PREFIX3, strlen(BOUNDARY_PREFIX3)) == 0) ||
         (strncmp(buf, BOUNDARY_PREFIX4, strlen(BOUNDARY_PREFIX4)) == 0) ||
@@ -136,9 +136,9 @@ static int is_valid_separator( unsigned char * buf, int bufLen )
             b++;
         }
 
-        if( *b == ':' ) {
-            if( (b - buf) + strlen(BOUNDARY_SUFFIX)  <= bufLen ) {
-                if( strncmp(b, BOUNDARY_SUFFIX, strlen(BOUNDARY_SUFFIX)) == 0 )
+        if (*b == ':' ) {
+            if ((b - buf) + strlen(BOUNDARY_SUFFIX)  <= bufLen ) {
+                if (strncmp(b, BOUNDARY_SUFFIX, strlen(BOUNDARY_SUFFIX)) == 0 )
                     return TRUE;
             }
         }
@@ -180,11 +180,11 @@ static int parse_mime_header(ByteIOContext *pb,
 
             err = process_line( buffer, &lineCount, dataType, size, extra );
             // First line contains a \n
-            if( !(err == 0 && lineCount == 0) ) {
-                if( err < 0 )
+            if (!(err == 0 && lineCount == 0) ) {
+                if (err < 0 )
                     return err;
 
-                if( err == 0 )
+                if (err == 0 )
                     return 0;
                 lineCount++;
             }
@@ -221,11 +221,11 @@ static int process_line(char *line, int *line_count, int *dataType,
         *line_count = 1;
 
     // The first valid line will be the boundary string - validate this here
-    if( *line_count == 0 ) {
-        if( is_valid_separator( p, strlen(p) ) == FALSE )
+    if (*line_count == 0 ) {
+        if (is_valid_separator( p, strlen(p) ) == FALSE )
             return -1;
     }
-    else if( *line_count == 1 ) { // Second line will contain the HTTP status code
+    else if (*line_count == 1 ) { // Second line will contain the HTTP status code
         while (!isspace(*p) && *p != '\0')
             p++;
         while (isspace(*p))
@@ -249,13 +249,13 @@ static int process_line(char *line, int *line_count, int *dataType,
         if (!strcmp(tag, "Content-length")) {
             *size = strtol(p, NULL, 10);
 
-            if( size == 0 )
+            if (size == 0 )
                 return -1;
         }
 
         if (!strcmp(tag, "Content-type")) {
             // Work out what type we actually have
-            if( strcasecmp(p, MIME_TYPE_JPEG ) == 0 )
+            if (strcasecmp(p, MIME_TYPE_JPEG ) == 0 )
                 *dataType = DATA_JFIF;
             // Or if it starts image/mp4 - this covers all the supported mp4
             // variations (i and p frames)
@@ -263,11 +263,11 @@ static int process_line(char *line, int *line_count, int *dataType,
                 // P for now - as they are both processed the same subsequently
                 *dataType = DATA_MPEG4P;
             }
-            else if( strcasecmp(p, MIME_TYPE_TEXT ) == 0 )
+            else if (strcasecmp(p, MIME_TYPE_TEXT ) == 0 )
                 *dataType = DATA_PLAINTEXT;
-            else if( strcasecmp(p, MIME_TYPE_LAYOUT ) == 0 )
+            else if (strcasecmp(p, MIME_TYPE_LAYOUT ) == 0 )
                 *dataType = DATA_LAYOUT;
-            else if( strcasecmp(p, MIME_TYPE_XML ) == 0 )
+            else if (strcasecmp(p, MIME_TYPE_XML ) == 0 )
                 *dataType = DATA_XML_INFO;
             else if(strncasecmp(p, MIME_TYPE_ADPCM, strlen(MIME_TYPE_ADPCM)) == 0) {
                 *dataType = DATA_AUDIO_ADPCM;
@@ -278,7 +278,7 @@ static int process_line(char *line, int *line_count, int *dataType,
                 while (*p != '\0' && *p != ';')
                     p++;
 
-                if( *p != ';' )
+                if (*p != ';' )
                     return 1;
 
                 p++;
@@ -298,26 +298,26 @@ static int process_line(char *line, int *line_count, int *dataType,
                 while( *p != '\0' && !isspace(*p) )
                     p++;
 
-                if( *p != '\0' )
+                if (*p != '\0' )
                     *p = '\0';
 
                 *extra = strtol(tag, NULL, 10);
 
                 // Map the rate to a RTP payload value for consistancy -
                 // the other audio headers contain mode values in this format
-                if( *extra == 8000 )
+                if (*extra == 8000 )
                     *extra = RTP_PAYLOAD_TYPE_8000HZ_ADPCM;
-                else if( *extra == 11025 )
+                else if (*extra == 11025 )
                     *extra = RTP_PAYLOAD_TYPE_11025HZ_ADPCM;
-                else if( *extra == 16000 )
+                else if (*extra == 16000 )
                     *extra = RTP_PAYLOAD_TYPE_16000HZ_ADPCM;
-                else if( *extra == 22050 )
+                else if (*extra == 22050 )
                     *extra = RTP_PAYLOAD_TYPE_22050HZ_ADPCM;
-                else if( *extra == 32000 )
+                else if (*extra == 32000 )
                     *extra = RTP_PAYLOAD_TYPE_32000HZ_ADPCM;
-                else if( *extra == 44100 )
+                else if (*extra == 44100 )
                     *extra = RTP_PAYLOAD_TYPE_44100HZ_ADPCM;
-                else if( *extra == 48000 )
+                else if (*extra == 48000 )
                     *extra = RTP_PAYLOAD_TYPE_48000HZ_ADPCM;
                 else
                     *extra = RTP_PAYLOAD_TYPE_8000HZ_ADPCM; // Default
@@ -358,16 +358,16 @@ static int parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize,
 
             err = process_mp4data_line(buffer, lineCount, vidDat, &time, txtDat);
 
-            if( err < 0 )
+            if (err < 0 )
                 return err;
 
-            if( err == 0 )
+            if (err == 0 )
                 return 0;
 
             // Check we're not at the end of the buffer. If the following
             // statement is true and we haven't encountered an error then we've
             // finished parsing the buffer
-            if( err == 1 ) {
+            if (err == 1 ) {
                 // Not particularly happy with this code but it seems there's
                 // little consistency in the way these buffers end. This block
                 // catches all of those variations. The variations that indicate
@@ -380,13 +380,13 @@ static int parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize,
                 //
                 // 3. The buffer ends with the sequence \r\n\0
 
-                if( currentChar - mp4TextData == bufferSize )
+                if (currentChar - mp4TextData == bufferSize )
                     return 0;
 
                 // CS - I *think* lines should end either when we've processed
                 // all the buffer OR it's padded with 0s
                 // Is detection of a NULL character here sufficient?
-                if( *currentChar == '\0' )
+                if (*currentChar == '\0' )
                     return 0;
             }
 
@@ -443,42 +443,42 @@ static int process_mp4data_line( char *line, int line_count,
         lineLen = temp - line;
     }
 
-    if( !memcmp( tag, "Number", strlen( "Number" ) ) )
+    if (!memcmp( tag, "Number", strlen( "Number" ) ) )
         vidDat->cam = strtol(p, NULL, 10);
-    else if( !memcmp( tag, "Name", strlen( "Name" ) ) )
+    else if (!memcmp( tag, "Name", strlen( "Name" ) ) )
         memcpy( vidDat->title, p, FFMIN( titleLen, strlen(p) ) );
-    else if( !memcmp( tag, "Version", strlen( "Version" ) ) )
+    else if (!memcmp( tag, "Version", strlen( "Version" ) ) )
         vidDat->version = strtol(p, NULL, 10);
-    else if( !memcmp( tag, "Date", strlen( "Date" ) ) ) {
+    else if (!memcmp( tag, "Date", strlen( "Date" ) ) ) {
         sscanf( p, "%d/%d/%d", &time->tm_mday, &time->tm_mon, &time->tm_year );
         time->tm_year -= 1900;
         time->tm_mon--;
 
-        if( time->tm_sec != 0 || time->tm_min != 0 || time->tm_hour != 0 )
+        if (time->tm_sec != 0 || time->tm_min != 0 || time->tm_hour != 0 )
             vidDat->session_time = mktime( time );
     }
-    else if( !memcmp( tag, "Time", strlen( "Time" ) ) ) {
+    else if (!memcmp( tag, "Time", strlen( "Time" ) ) ) {
         sscanf( p, "%d:%d:%d", &time->tm_hour, &time->tm_min, &time->tm_sec );
 
-        if( time->tm_year != 0 )
+        if (time->tm_year != 0 )
             vidDat->session_time = mktime( time );
     }
-    else if( !memcmp( tag, "MSec", strlen( "MSec" ) ) )
+    else if (!memcmp( tag, "MSec", strlen( "MSec" ) ) )
         vidDat->milliseconds = strtol(p, NULL, 10);
-    else if( !memcmp( tag, "Locale", strlen( "Locale" ) ) )
+    else if (!memcmp( tag, "Locale", strlen( "Locale" ) ) )
         memcpy( vidDat->locale, p, FFMIN( titleLen, strlen(p) ) );
-    else if( !memcmp( tag, "UTCoffset", strlen( "UTCoffset" ) ) )
+    else if (!memcmp( tag, "UTCoffset", strlen( "UTCoffset" ) ) )
         vidDat->utc_offset = strtol(p, NULL, 10);
     else {
         // Any lines that aren't part of the pic struct,
         // tag onto the additional text block
-        if( txtDat != NULL && lineLen > 0 ) {
+        if (txtDat != NULL && lineLen > 0 ) {
 #define LINE_END_LEN        3
             int             strLen  = 0;
             const char      lineEnd[LINE_END_LEN] = { '\r', '\n', '\0' };
 
             // Get the length of the existing text block if it exists
-            if( *txtDat != NULL )
+            if (*txtDat != NULL )
                 strLen = strlen( *txtDat );
 
             // Ok, now allocate some space to hold the new string
@@ -511,7 +511,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     if(parse_mime_header( pb, &data_type, &size, &extra ) != 0 )  {
         errorVal = handleInvalidMime(s, pb, pkt, &data_type, &size, &imgLoaded);
         if (errorVal < 0)  {
-            if( vidDat != NULL )
+            if (vidDat != NULL )
                 av_free(vidDat);
             return errorVal;
         }
@@ -563,13 +563,13 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     else  {
         // If there was an error, release any memory that has been allocated
         av_log(s, AV_LOG_DEBUG, "admime_read_packet: Error %d\n", errorVal);
-        if( vidDat != NULL )
+        if (vidDat != NULL )
             av_free( vidDat );
 
-        if( audDat != NULL )
+        if (audDat != NULL )
             av_free( audDat );
 
-        if( txtDat != NULL )
+        if (txtDat != NULL )
             av_free( txtDat );
     }
 
@@ -592,50 +592,41 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
     memset(vidDat, 0, sizeof(NetVuImageData));
 
     // Allocate a new packet to hold the frame's image data
-    if( ad_new_packet(pkt, size) < 0 ) {
-        errorVal = ADPIC_MPEG4_MIME_NEW_PACKET_ERROR;
-        return errorVal;
-    }
+    if (ad_new_packet(pkt, size) < 0 )
+        return ADPIC_MPEG4_MIME_NEW_PACKET_ERROR;
 
     // Now read the frame data into the packet
-    if( ad_get_buffer( pb, pkt->data, size ) != size ) {
-        errorVal = ADPIC_MPEG4_MIME_GET_BUFFER_ERROR;
-        return errorVal;
-    }
+    if (ad_get_buffer( pb, pkt->data, size ) != size )
+        return ADPIC_MPEG4_MIME_GET_BUFFER_ERROR;
 
     // Now we should have a text block following this which contains the
     // frame data that we can place in a _image_data struct
-    if(  parse_mime_header( pb, &mimeBlockType, &size, extra ) != 0 ) {
-        errorVal = ADPIC_MPEG4_MIME_PARSE_HEADER_ERROR;
-        return errorVal;
-    }
+    if ( parse_mime_header( pb, &mimeBlockType, &size, extra ) != 0 )
+        return ADPIC_MPEG4_MIME_PARSE_HEADER_ERROR;
 
     // Validate the data type and then extract the text buffer
-    if( mimeBlockType == DATA_PLAINTEXT ) {
-        unsigned char *         textBuffer = av_malloc( size );
+    if (mimeBlockType == DATA_PLAINTEXT ) {
+        unsigned char *textBuffer = av_malloc( size );
 
-        if( textBuffer != NULL ) {
-            if( ad_get_buffer( pb, textBuffer, size ) == size ) {
+        if (textBuffer != NULL ) {
+            if (ad_get_buffer( pb, textBuffer, size ) == size ) {
                 // Now parse the text buffer and populate the
                 // _image_data struct
-                if( parse_mp4_text_data(textBuffer, size, vidDat, txtDat ) != 0) {
-                    errorVal = ADPIC_MPEG4_MIME_PARSE_TEXT_DATA_ERROR;
+                if (parse_mp4_text_data(textBuffer, size, vidDat, txtDat ) != 0) {
                     av_free( textBuffer );
-                    return errorVal;
+                    return ADPIC_MPEG4_MIME_PARSE_TEXT_DATA_ERROR;
                 }
                 vidDat->vid_format = PIC_MODE_MPEG4_411;
             }
             else {
                 av_free( textBuffer );
-                errorVal = ADPIC_MPEG4_MIME_GET_TEXT_BUFFER_ERROR;
-                return errorVal;
+                return ADPIC_MPEG4_MIME_GET_TEXT_BUFFER_ERROR;
             }
 
             av_free( textBuffer );
         }
         else {
-            errorVal = ADPIC_MPEG4_MIME_ALOCATE_TEXT_BUFFER_ERROR;
-            return errorVal;
+            return ADPIC_MPEG4_MIME_ALOCATE_TEXT_BUFFER_ERROR;
         }
     }
     return errorVal;
@@ -683,7 +674,7 @@ static int handleInvalidMime(AVFormatContext *s, ByteIOContext *pb,
 
     int chkByte1 = url_fgetc(pb);
     int chkByte2 = url_fgetc(pb);
-    if( (chkByte1 == 0xff) && (chkByte2 == 0xD8)) {
+    if ((chkByte1 == 0xff) && (chkByte2 == 0xD8)) {
         int status;
         int found = FALSE;
         int read = 2;
@@ -698,8 +689,7 @@ static int handleInvalidMime(AVFormatContext *s, ByteIOContext *pb,
         // Read more data till we find end of image marker
         for (; !found && !url_feof(pb) && !url_ferror(pb); read++) {
             if (read >= MAX_IMAGE_SIZE)  {
-                errorVal = ADPIC_PARSE_MIME_HEADER_ERROR;
-                return errorVal;
+                return ADPIC_PARSE_MIME_HEADER_ERROR;
             }
 
             chkByte1 = chkByte2;
@@ -715,8 +705,7 @@ static int handleInvalidMime(AVFormatContext *s, ByteIOContext *pb,
         if ((status = ad_new_packet(pkt, *size)) < 0) {
             av_log(s, AV_LOG_ERROR, "handleInvalidMime: ad_new_packet (size %d)"
                                     " failed, status %d\n", *size, status);
-            errorVal = ADPIC_NEW_PACKET_ERROR;
-            return errorVal;
+            return ADPIC_NEW_PACKET_ERROR;
         }
 
         memcpy(pkt->data, imageData, *size);
