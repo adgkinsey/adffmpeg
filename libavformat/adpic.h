@@ -68,8 +68,8 @@ int ad_read_layout(AVFormatContext *s, ByteIOContext *pb,
                    AVPacket *pkt, int size);
 int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
                    ADFrameType currentFrameType, void *data, char *text_data);
-AVStream * ad_get_stream(AVFormatContext *s, int w, int h, int cam, int format, 
-                         const char *title);
+AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h, 
+                         uint8_t cam, int format, const char *title);
 
 
 #define PIC_REVISION 1

@@ -106,9 +106,10 @@ AVStream * netvu_get_stream(AVFormatContext *s, NetVuImageData *p)
     return stream;
 }
 
-AVStream * ad_get_stream(AVFormatContext *s, int w, int h, int cam, int format, const char *title)
+AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t cam, int32_t format, const char *title)
 {
-    int codec_type, codec_id, id;
+    uint8_t codec_type;
+    int codec_id, id;
     int i, found;
     char textbuffer[4];
     AVStream *st;
@@ -178,7 +179,7 @@ AVStream * ad_get_stream(AVFormatContext *s, int w, int h, int cam, int format, 
 
             if (title)
                 av_metadata_set2(&st->metadata, "title", title, 0);
-            snprintf(textbuffer, sizeof(textbuffer), "%d", cam);
+            snprintf(textbuffer, sizeof(textbuffer), "%u", cam);
             av_metadata_set2(&st->metadata, "track", textbuffer, 0);
         }
     }
@@ -294,7 +295,7 @@ AVStream * ad_get_data_stream( AVFormatContext *s )
 
 int ad_new_packet(AVPacket *pkt, int size)
 {
-    int     retVal = av_new_packet( pkt, size );
+    int retVal = av_new_packet( pkt, size );
 
     if( retVal >= 0 ) {
         // Give the packet its own destruct function
@@ -499,6 +500,15 @@ int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb,
  * type byte followed by a text block. Due to its simplicity, we'll
  * just extract the whole block into the AVPacket's data structure and
  * let the client deal with checking its type and parsing its text
+ * 
+ * \todo Parse the string and use the information to add metadata and/or update 
+ *       the NetVuImageData struct
+ * 
+ * Example strings, taken from a minimal mp4 stream: (Prefixed by a zero byte)
+ * SITE DVIP3S;CAM 1:TV;(JPEG)TARGSIZE 0:(MPEG)BITRATE 262144;IMAGESIZE 0,0:704,256;
+ * SITE DVIP3S;CAM 2:Directors office;(JPEG)TARGSIZE 0:(MPEG)BITRATE 262144;IMAGESIZE 0,0:704,256;
+ * SITE DVIP3S;CAM 3:Development;(JPEG)TARGSIZE 0:(MPEG)BITRATE 262144;IMAGESIZE 0,0:704,256;
+ * SITE DVIP3S;CAM 4:Rear road;(JPEG)TARGSIZE 0:(MPEG)BITRATE 262144;IMAGESIZE 0,0:704,256;
  */
 int ad_read_info(AVFormatContext *s, ByteIOContext *pb,
                  AVPacket *pkt, int size)
@@ -559,6 +569,15 @@ int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
             }
             else
                 pkt->pts = AV_NOPTS_VALUE;
+            
+            // Servers occasionally send insane timezone data, which can screw
+            // up clients.  Check for this and set to 0
+            if (abs(video_data->utc_offset) > 1440)  {
+                av_log(s, AV_LOG_INFO, 
+                       "ad_read_packet: Invalid utc_offset of %d, "
+                       "setting to zero\n", video_data->utc_offset);
+                video_data->utc_offset = 0;
+            }
         }
     }
     else if( frameType == NetVuAudio ) {
