@@ -124,6 +124,7 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
     uint8_t *ptr;
     int parFrameFormat;
     int64_t srcTime = pkt->pts;
+    uint32_t pktTypeCheck;
     int written = 0;
 
     // Metadata
@@ -145,7 +146,7 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
             snprintf(ps->name, sizeof(ps->name), "Camera %d", ps->camera);
     }
     
-    uint32_t pktTypeCheck = AV_RL32(pkt->data);
+    pktTypeCheck = AV_RL32(pkt->data);
     if (pktTypeCheck == 0xDECADE11)  {
         p->frameInfo.frameBufferSize = pkt->size;
         p->frameInfo.frameBuffer = pkt->data;
