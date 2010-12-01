@@ -79,14 +79,21 @@ void ad_network2host(NetVuImageData *pic, uint8_t *data)
     pic->status					= AV_RB32(data + 40);
     pic->session_time			= AV_RB32(data + 44);
     pic->milliseconds			= AV_RB32(data + 48);
-    pic->utc_offset				= AV_RB32(data + 52);
-    pic->alm_bitmask			= AV_RB32(data + 56);
-    pic->format.src_pixels		= AV_RB16(data + 60);
-    pic->format.src_lines		= AV_RB16(data + 62);
-    pic->format.target_pixels	= AV_RB16(data + 64);
-    pic->format.target_lines	= AV_RB16(data + 66);
-    pic->format.pixel_offset	= AV_RB16(data + 68);
-    pic->format.line_offset		= AV_RB16(data + 70);
+    if ((uint8_t *)pic != data)  {
+        memcpy(pic->res,    data + 52, 4);
+        memcpy(pic->title,  data + 56, 31);
+        memcpy(pic->alarm,  data + 87, 31);
+    }
+    pic->format.src_pixels		= AV_RB16(data + 118);
+    pic->format.src_lines		= AV_RB16(data + 120);
+    pic->format.target_pixels	= AV_RB16(data + 122);
+    pic->format.target_lines	= AV_RB16(data + 124);
+    pic->format.pixel_offset	= AV_RB16(data + 126);
+    pic->format.line_offset		= AV_RB16(data + 128);
+    if ((uint8_t *)pic != data)
+        memcpy(pic->locale, data + 130, 30);
+    pic->utc_offset				= AV_RB32(data + 160);
+    pic->alm_bitmask			= AV_RB32(data + 164);
 }
 
 AVStream * netvu_get_stream(AVFormatContext *s, NetVuImageData *p)
