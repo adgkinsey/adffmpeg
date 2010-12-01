@@ -1089,8 +1089,6 @@ static void pmt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
         p = desc_list_end;
     }
 
-    /* all parameters are there */
-    mpegts_close_filter(ts, filter);
  out:
     av_free(mp4_dec_config_descr);
 }
