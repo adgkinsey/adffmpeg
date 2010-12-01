@@ -182,7 +182,6 @@ static int parse_picture_segment(AVCodecContext *avctx,
 
         memcpy(ctx->picture.rle + ctx->picture.rle_data_len, buf, buf_size);
         ctx->picture.rle_data_len += buf_size;
-        ctx->picture.rle_remaining_len -= buf_size;
 
         return 0;
     }
