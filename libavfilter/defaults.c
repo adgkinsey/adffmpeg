@@ -42,7 +42,22 @@ AVFilterBufferRef *avfilter_default_get_video_buffer(AVFilterLink *link, int per
     uint8_t *data[4];
     AVFilterBufferRef *picref = NULL;
 
-    av_image_fill_linesizes(linesize, link->format, w);
+    if (!pic || !(ref = av_mallocz(sizeof(AVFilterBufferRef))))
+        goto fail;
+
+    ref->buf         = pic;
+    ref->video       = av_mallocz(sizeof(AVFilterBufferRefVideoProps));
+    ref->video->w    = w;
+    ref->video->h    = h;
+
+    /* make sure the buffer gets read permission or it's useless for output */
+    ref->perms = perms | AV_PERM_READ;
+
+    pic->refcount = 1;
+    ref->format   = link->format;
+    pic->free     = ff_avfilter_default_free_buffer;
+    av_image_fill_linesizes(pic->linesize, ref->format, ref->video->w);
+
     for (i = 0; i < 4; i++)
         linesize[i] = FFALIGN(linesize[i], 16);
     tempsize = av_image_fill_pointers(data, link->format, h, NULL, linesize);
