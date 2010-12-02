@@ -115,7 +115,7 @@ static int adbinary_probe(AVProbeData *p)
                     NetVuImageData test;
                     ad_network2host(&test, dataPtr);
                     if (pic_version_valid(test.version))  {
-                        av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected adbinary packet\n");
+                        av_log(NULL, AV_LOG_DEBUG, "%s: Detected video packet\n", __func__);
                         score += AVPROBE_SCORE_MAX;
                     }
                 }
@@ -123,7 +123,7 @@ static int adbinary_probe(AVProbeData *p)
             case(DATA_JFIF):
                 if (bufferSize >= 2)  {
                     if ( (*dataPtr == 0xFF) && (*(dataPtr + 1) == 0xD8) )  {
-                        av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected adbinary JFIF packet\n");
+                        av_log(NULL, AV_LOG_DEBUG, "%s: Detected JFIF packet\n", __func__);
                         score += AVPROBE_SCORE_MAX;
                     }
                 }
@@ -133,14 +133,14 @@ static int adbinary_probe(AVProbeData *p)
                     NetVuAudioData test;
                     audioheader_network2host(&test, dataPtr);
                     if (test.version == AUD_VERSION)  {
-                        av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected adbinary audio packet\n");
+                        av_log(NULL, AV_LOG_DEBUG, "%s: Detected audio packet\n", __func__);
                         score += AVPROBE_SCORE_MAX;
                     }
                 }
                 break;
             case(DATA_AUDIO_RAW):
                 // We don't handle this format
-                av_log(NULL, AV_LOG_ERROR, "adbinary_probe: Detected UNSUPPORTED adbinary raw audio packet\n");
+                av_log(NULL, AV_LOG_ERROR, "%s: Detected raw audio packet (unsupported)\n", __func__);
                 break;
             case(DATA_MINIMAL_MPEG4):
                 if (bufferSize >= 10)  {
@@ -153,7 +153,7 @@ static int adbinary_probe(AVProbeData *p)
                     // servers often send larger values than this, 
                     // nonsensical as that is
                     if ((vos >= 0x1B0) && (vos <= 0x1B6) && (sec > 315532800)) {
-                        av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected minimal MPEG4 packet\n");
+                        av_log(NULL, AV_LOG_DEBUG, "%s: Detected minimal MPEG4 packet\n", __func__);
                         score += AVPROBE_SCORE_MAX / 4;
                     }
                 }
@@ -180,18 +180,16 @@ static int adbinary_probe(AVProbeData *p)
                         case(RTP_PAYLOAD_TYPE_32000HZ_PCM):
                         case(RTP_PAYLOAD_TYPE_44100HZ_PCM):
                         case(RTP_PAYLOAD_TYPE_48000HZ_PCM):
-                            av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected minimal audio packet\n");
+                            av_log(NULL, AV_LOG_DEBUG, "%s: Detected minimal audio packet\n", __func__);
                             score += AVPROBE_SCORE_MAX;
-                        default:
-                            return 0;
                     }
                 }
                 break;
             case(DATA_LAYOUT):
-                av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected adbinary layout packet\n");
+                av_log(NULL, AV_LOG_DEBUG, "%s: Detected layout packet\n", __func__);
                 break;
             case(DATA_INFO):
-                av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected adbinary info packet\n");
+                av_log(NULL, AV_LOG_DEBUG, "%s: Detected info packet\n", __func__);
                 break;
             case(DATA_XML_INFO):
                 if (bufferSize >= dataSize)  {
@@ -200,7 +198,7 @@ static int adbinary_probe(AVProbeData *p)
                     if (infoStringLen > dataSize)
                         infoStringLen = dataSize;
                     if (strncasecmp(dataPtr, infoString, infoStringLen) == 0)  {
-                        av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Detected adbinary xml info packet\n");
+                        av_log(NULL, AV_LOG_DEBUG, "%s: Detected xml info packet\n", __func__);
                         score += AVPROBE_SCORE_MAX;
                     }
                 }
@@ -214,7 +212,7 @@ static int adbinary_probe(AVProbeData *p)
     if (score > AVPROBE_SCORE_MAX)
         score = AVPROBE_SCORE_MAX;
     
-    av_log(NULL, AV_LOG_DEBUG, "adbinary_probe: Score %d\n", score);
+    av_log(NULL, AV_LOG_DEBUG, "%s: Score %d\n", __func__, score);
     
     return score;
 }
@@ -244,8 +242,8 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         if(url_feof(pb))
             errorVal = ADPIC_END_OF_STREAM;
         else {
-            av_log(s, AV_LOG_ERROR, "adbinary_read_packet: Reading separator, "
-                   "errorcode %d\n", url_ferror(pb));
+            av_log(s, AV_LOG_ERROR, "%s: Reading separator, errorcode %d\n",  
+                   __func__, url_ferror(pb));
             errorVal = ADPIC_READ_6_BYTE_SEPARATOR_ERROR;
         }
         return errorVal;
@@ -287,9 +285,8 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 errorVal = ad_read_layout(s, pb, pkt, size);
                 break;
             default:
-                av_log(s, AV_LOG_WARNING, "adbinary_read_packet: "
-                       "No handler for data_type = "
-                       "%d\n", data_type);
+                av_log(s, AV_LOG_WARNING, "%s: No handler for data_type = %d\n",
+                       __func__, data_type);
                 errorVal = ADPIC_DEFAULT_ERROR;
                 break;
         }
@@ -334,14 +331,14 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
     int n, status, errorVal = 0;
 
     if ((n = ad_get_buffer(pb, (uint8_t *)vidDat, hdrSize)) != hdrSize) {
-        av_log(s, AV_LOG_ERROR, "ad_read_mpeg: short of data reading header, "
+        av_log(s, AV_LOG_ERROR, "%s: short of data reading header, "
                                 "expected %d, read %d\n", 
-               hdrSize, n);
+               __func__, hdrSize, n);
         return ADPIC_MPEG4_GET_BUFFER_ERROR;
     }
     ad_network2host(vidDat, (uint8_t *)vidDat);
     if (!pic_version_valid(vidDat->version)) {
-        av_log(s, AV_LOG_ERROR, "ad_read_mpeg: invalid pic version 0x%08X\n", 
+        av_log(s, AV_LOG_ERROR, "%s: invalid pic version 0x%08X\n", __func__, 
                vidDat->version);
         return ADPIC_MPEG4_PIC_VERSION_VALID_ERROR;
     }
@@ -355,8 +352,8 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
 
     // Copy the additional text block
     if( (n = ad_get_buffer( pb, *text_data, textSize)) != textSize) {
-        av_log(s, AV_LOG_ERROR, "ad_read_mpeg: short of data reading text, "
-                                "expected %d, read %d\n", 
+        av_log(s, AV_LOG_ERROR, "%s: short of data reading text, "
+                                "expected %d, read %d\n", __func__, 
                textSize, n);
         return ADPIC_MPEG4_GET_TEXT_BUFFER_ERROR;
     }
@@ -366,13 +363,14 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
     (*text_data)[textSize] = '\0';
 
     if ((status = ad_new_packet(pkt, vidDat->size)) < 0) { // PRC 003
-        av_log(s, AV_LOG_ERROR, "ad_read_mpeg: ad_new_packet (size %d) failed, "
-                                "status %d\n", vidDat->size, status);
+        av_log(s, AV_LOG_ERROR, "%s: ad_new_packet (size %d) failed, status %d\n", 
+               __func__, vidDat->size, status);
         return ADPIC_MPEG4_NEW_PACKET_ERROR;
     }
     if ((n = ad_get_buffer(pb, pkt->data, vidDat->size)) != vidDat->size) {
-        av_log(s, AV_LOG_ERROR, "ad_read_mpeg: short of data reading mpeg, "
-                                "expected %d, read %d\n", vidDat->size, n);
+        av_log(s, AV_LOG_ERROR, "%s: short of data reading mpeg, "
+                                "expected %d, read %d\n", 
+               __func__, vidDat->size, n);
         return ADPIC_MPEG4_PIC_BODY_ERROR;
     }
     return errorVal;
@@ -396,8 +394,8 @@ static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
     vidDat->milliseconds  = get_be16(pb);
     
     if ( url_ferror(pb) || (vidDat->session_time == 0) )  {
-        av_log(s, AV_LOG_ERROR, "ad_read_mpeg_minimal: Reading header, "
-                   "errorcode %d\n", url_ferror(pb));
+        av_log(s, AV_LOG_ERROR, "%s: Reading header, errorcode %d\n", 
+               __func__, url_ferror(pb));
         return ADPIC_MPEG4_MINIMAL_GET_BUFFER_ERROR;
     }
     vidDat->version = PIC_VERSION;
@@ -469,8 +467,8 @@ static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb,
     data->msecs = get_be16(pb);
     data->mode = get_be16(pb);
     if ( url_ferror(pb) || (data->seconds == 0) )  {
-        av_log(s, AV_LOG_ERROR, "ad_read_audio_minimal: Reading header, "
-                   "errorcode %d\n", url_ferror(pb));
+        av_log(s, AV_LOG_ERROR, "%s: Reading header, errorcode %d\n", 
+               __func__, url_ferror(pb));
         return ADPIC_MINIMAL_AUDIO_ADPCM_GET_BUFFER_ERROR;
     }
 
