@@ -67,6 +67,8 @@ static int rtsp_read_play(AVFormatContext *s)
                 if (reply->range_start != AV_NOPTS_VALUE) {
                     rtpctx->last_rtcp_ntp_time  = AV_NOPTS_VALUE;
                     rtpctx->first_rtcp_ntp_time = AV_NOPTS_VALUE;
+                    rtpctx->base_timestamp      = 0;
+                    rtpctx->rtcp_ts_offset      = 0;
                     if (st)
                         rtpctx->range_start_offset =
                             av_rescale_q(reply->range_start, AV_TIME_BASE_Q,
@@ -105,9 +107,6 @@ int ff_rtsp_setup_input_streams(AVFormatContext *s, RTSPMessageHeader *reply)
         av_freep(&content);
         return AVERROR_INVALIDDATA;
     }
-    if (reply->content_base[0])
-        av_strlcpy(rt->control_uri, reply->content_base,
-                   sizeof(rt->control_uri));
 
     av_log(s, AV_LOG_VERBOSE, "SDP:\n%s\n", content);
     /* now we got the SDP description, we parse it */
@@ -168,7 +167,7 @@ redo:
     for (;;) {
         RTSPMessageHeader reply;
 
-        ret = ff_rtsp_read_reply(s, &reply, NULL, 1);
+        ret = ff_rtsp_read_reply(s, &reply, NULL, 1, NULL);
         if (ret < 0)
             return ret;
         if (ret == 1) /* received '$' */

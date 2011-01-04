@@ -374,6 +374,10 @@ int ff_put_wav_header(ByteIOContext *pb, AVCodecContext *enc)
     if (enc->codec_id == CODEC_ID_MP2 || enc->codec_id == CODEC_ID_MP3 || enc->codec_id == CODEC_ID_AC3) {
         blkalign = enc->frame_size; //this is wrong, but it seems many demuxers do not work if this is set correctly
         //blkalign = 144 * enc->bit_rate/enc->sample_rate;
+        //For high bitrate AC-3, set blkalign to maximum bytes per frame value
+        //to allow playback on WMP and MPlayer
+        if (enc->bit_rate > 384000)
+            blkalign = 3840;
     } else if (enc->codec_id == CODEC_ID_ADPCM_G726) { //
         blkalign = 1;
     } else if (enc->block_align != 0) { /* specified by the codec */
@@ -534,6 +538,23 @@ enum CodecID ff_wav_codec_get_id(unsigned int tag, int bps)
     if (id == CODEC_ID_ADPCM_IMA_WAV && bps == 8)
         id = CODEC_ID_PCM_ZORK;
     return id;
+}
+
+int ff_get_bmp_header(ByteIOContext *pb, AVStream *st)
+{
+    int tag1;
+    get_le32(pb); /* size */
+    st->codec->width = get_le32(pb);
+    st->codec->height = (int32_t)get_le32(pb);
+    get_le16(pb); /* planes */
+    st->codec->bits_per_coded_sample= get_le16(pb); /* depth */
+    tag1 = get_le32(pb);
+    get_le32(pb); /* ImageSize */
+    get_le32(pb); /* XPelsPerMeter */
+    get_le32(pb); /* YPelsPerMeter */
+    get_le32(pb); /* ClrUsed */
+    get_le32(pb); /* ClrImportant */
+    return tag1;
 }
 #endif // CONFIG_DEMUXERS
 

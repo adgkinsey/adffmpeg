@@ -236,6 +236,7 @@ Advanced options (experts only):
   --enable-pic             build position-independent code
   --malloc-prefix=PFX      prefix malloc and related names with PFX
   --enable-sram            allow use of on-chip SRAM
+  --disable-symver         disable symbol versioning
 
 Developer options (useful when working on FFmpeg itself):
   --disable-debug          disable debugging symbols
@@ -1043,6 +1044,7 @@ HAVE_LIST="
     malloc_h
     memalign
     mkstemp
+    mmap
     pld
     posix_memalign
     round
@@ -1099,6 +1101,7 @@ CMDLINE_SELECT="
     logging
     optimizations
     stripping
+    symver
     yasm
 "
 
@@ -1194,6 +1197,7 @@ aac_latm_decoder_select="aac_decoder aac_latm_parser"
 ac3_decoder_select="mdct ac3_parser"
 alac_encoder_select="lpc"
 amrnb_decoder_select="lsp"
+amrwb_decoder_select="lsp"
 atrac1_decoder_select="mdct"
 atrac3_decoder_select="mdct"
 binkaudio_dct_decoder_select="mdct rdft dct"
@@ -1415,7 +1419,8 @@ cropdetect_filter_deps="gpl"
 frei0r_filter_deps="frei0r dlopen strtok_r"
 frei0r_src_filter_deps="frei0r dlopen strtok_r"
 hqdn3d_filter_deps="gpl"
-ocv_smooth_filter_deps="libopencv"
+scale_filter_deps="swscale"
+ocv_filter_deps="libopencv"
 yadif_filter_deps="gpl"
 
 # libraries
@@ -1427,8 +1432,8 @@ ffmpeg_deps="avcodec avformat swscale"
 ffmpeg_select="buffer_filter"
 ffplay_deps="avcodec avformat swscale sdl"
 ffplay_select="rdft"
-ffprobe_deps="avcodec avformat"
-ffserver_deps="avformat ffm_muxer rtp_protocol rtsp_demuxer"
+ffprobe_deps="avcodec avformat swscale"
+ffserver_deps="avformat ffm_muxer rtp_protocol rtsp_demuxer swscale"
 ffserver_extralibs='$ldl'
 
 doc_deps="texi2html"
@@ -1529,6 +1534,7 @@ test_deps _muxer _demuxer                                               \
 mpg_test_deps="mpeg1system_muxer mpegps_demuxer"
 
 set_ne_test_deps pixdesc
+set_ne_test_deps pixfmts_copy
 set_ne_test_deps pixfmts_crop
 set_ne_test_deps pixfmts_hflip
 set_ne_test_deps pixfmts_null
@@ -2677,6 +2683,7 @@ check_func  inet_aton $network_extralibs
 check_func  isatty
 check_func  ${malloc_prefix}memalign            && enable memalign
 check_func  mkstemp
+check_func  mmap
 check_func  ${malloc_prefix}posix_memalign      && enable posix_memalign
 check_func  setrlimit
 check_func  strerror_r
@@ -3252,7 +3259,11 @@ test -n "$malloc_prefix" &&
 
 if enabled small || disabled optimizations; then
     echo "#undef  av_always_inline"  >> $TMPH
-    echo "#define av_always_inline"  >> $TMPH
+    if enabled small; then
+        echo "#define av_always_inline inline"  >> $TMPH
+    else
+        echo "#define av_always_inline av_unused"  >> $TMPH
+    fi
 fi
 
 if enabled yasm; then

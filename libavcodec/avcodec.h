@@ -32,8 +32,8 @@
 #include "libavutil/cpu.h"
 
 #define LIBAVCODEC_VERSION_MAJOR 52
-#define LIBAVCODEC_VERSION_MINOR 99
-#define LIBAVCODEC_VERSION_MICRO  1
+#define LIBAVCODEC_VERSION_MINOR 101
+#define LIBAVCODEC_VERSION_MICRO  0
 
 #define LIBAVCODEC_VERSION_INT  AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, \
                                                LIBAVCODEC_VERSION_MINOR, \
@@ -407,6 +407,7 @@ enum CodecID {
 
     CODEC_ID_MPEG2TS= 0x20000, /**< _FAKE_ codec to indicate a raw MPEG-2 TS
                                 * stream (only used by libavformat) */
+    CODEC_ID_FFMETADATA=0x21000,   ///< Dummy codec for streams containing only metadata information.
 };
 
 #if LIBAVCODEC_VERSION_MAJOR < 53
@@ -992,11 +993,11 @@ typedef struct AVPanScan{
     int8_t *ref_index[2];\
 \
     /**\
-     * reordered opaque 64bit (generally a integer or double preccission float \
+     * reordered opaque 64bit (generally an integer or a double precision float\
      * PTS but can be anything). \
      * The user sets AVCodecContext.reordered_opaque to represent the input at\
-     * that time ,\
-     * the decoder reorderes values as needed and sets AVFrame.reordered_opaque\
+     * that time,\
+     * the decoder reorders values as needed and sets AVFrame.reordered_opaque\
      * to exactly one of the values provided by the user through AVCodecContext.reordered_opaque \
      * - encoding: unused\
      * - decoding: Read by user.\

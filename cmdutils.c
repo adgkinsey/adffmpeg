@@ -55,7 +55,7 @@ AVCodecContext *avcodec_opts[AVMEDIA_TYPE_NB];
 AVFormatContext *avformat_opts;
 struct SwsContext *sws_opts;
 
-const int this_year = 2010;
+const int this_year = 2011;
 
 void init_opts(void)
 {
@@ -241,14 +241,22 @@ int opt_default(const char *opt, const char *arg){
     }
     if (!o) {
         AVCodec *p = NULL;
+        AVOutputFormat *oformat = NULL;
         while ((p=av_codec_next(p))){
             AVClass *c= p->priv_class;
             if(c && av_find_opt(&c, opt, NULL, 0, 0))
                 break;
         }
-        if(!p){
-        fprintf(stderr, "Unrecognized option '%s'\n", opt);
-        exit(1);
+        if (!p) {
+            while ((oformat = av_oformat_next(oformat))) {
+                const AVClass *c = oformat->priv_class;
+                if (c && av_find_opt(&c, opt, NULL, 0, 0))
+                    break;
+            }
+        }
+        if(!p && !oformat){
+            fprintf(stderr, "Unrecognized option '%s'\n", opt);
+            exit(1);
         }
     }
 
@@ -322,7 +330,13 @@ void set_context_opts(void *ctx, void *opts_ctx, int flags, AVCodec *codec)
         if(codec && codec->priv_class && avctx->priv_data){
             priv_ctx= avctx->priv_data;
         }
+    } else if (!strcmp("AVFormatContext", (*(AVClass**)ctx)->class_name)) {
+        AVFormatContext *avctx = ctx;
+        if (avctx->oformat && avctx->oformat->priv_class) {
+            priv_ctx = avctx->priv_data;
+        }
     }
+
     for(i=0; i<opt_name_count; i++){
         char buf[256];
         const AVOption *opt;

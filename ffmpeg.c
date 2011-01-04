@@ -1747,15 +1747,7 @@ static int output_packet(AVInputStream *ist, int ist_index,
         av_free(buffer_to_free);
         /* XXX: allocate the subtitles in the codec ? */
         if (subtitle_to_free) {
-            if (subtitle_to_free->rects != NULL) {
-                for (i = 0; i < subtitle_to_free->num_rects; i++) {
-                    av_freep(&subtitle_to_free->rects[i]->pict.data[0]);
-                    av_freep(&subtitle_to_free->rects[i]->pict.data[1]);
-                    av_freep(&subtitle_to_free->rects[i]);
-                }
-                av_freep(&subtitle_to_free->rects);
-            }
-            subtitle_to_free->num_rects = 0;
+            avsubtitle_free(subtitle_to_free);
             subtitle_to_free = NULL;
         }
     }
@@ -1990,7 +1982,7 @@ static int transcode(AVFormatContext **output_files,
     nb_ostreams = 0;
     for(i=0;i<nb_output_files;i++) {
         os = output_files[i];
-        if (!os->nb_streams) {
+        if (!os->nb_streams && !(os->oformat->flags & AVFMT_NOSTREAMS)) {
             dump_format(output_files[i], i, output_files[i]->filename, 1);
             fprintf(stderr, "Output file #%d does not contain any stream\n", i);
             ret = AVERROR(EINVAL);
@@ -3912,6 +3904,7 @@ static void show_usage(void)
 static void show_help(void)
 {
     AVCodec *c;
+    AVOutputFormat *oformat = NULL;
 
     av_log_set_callback(log_callback_help);
     show_usage();
@@ -3953,6 +3946,15 @@ static void show_help(void)
 
     av_opt_show2(avformat_opts, NULL, AV_OPT_FLAG_ENCODING_PARAM|AV_OPT_FLAG_DECODING_PARAM, 0);
     printf("\n");
+
+    /* individual muxer options */
+    while ((oformat = av_oformat_next(oformat))) {
+        if (oformat->priv_class) {
+            av_opt_show2(&oformat->priv_class, NULL, AV_OPT_FLAG_ENCODING_PARAM, 0);
+            printf("\n");
+        }
+    }
+
     av_opt_show2(sws_opts, NULL, AV_OPT_FLAG_ENCODING_PARAM|AV_OPT_FLAG_DECODING_PARAM, 0);
 }
 

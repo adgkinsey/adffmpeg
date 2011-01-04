@@ -185,8 +185,9 @@ void avcodec_align_dimensions2(AVCodecContext *s, int *width, int *height, int l
 
     *width = FFALIGN(*width , w_align);
     *height= FFALIGN(*height, h_align);
-    if(s->codec_id == CODEC_ID_H264)
+    if(s->codec_id == CODEC_ID_H264 || s->lowres)
         *height+=2; // some of the optimized chroma MC reads one line too much
+                    // which is also done in mpeg decoders with lowres > 0
 
     linesize_align[0] =
     linesize_align[1] =
@@ -503,6 +504,11 @@ int attribute_align_arg avcodec_open(AVCodecContext *avctx, AVCodec *codec)
         av_log(avctx, AV_LOG_WARNING, "ignoring invalid width/height values\n");
         avcodec_set_dimensions(avctx, 0, 0);
     }
+
+    /* if the decoder init function was already called previously,
+       free the already allocated subtitle_header before overwriting it */
+    if (codec->decode)
+        av_freep(&avctx->subtitle_header);
 
 #define SANE_NB_CHANNELS 128U
     if (avctx->channels > SANE_NB_CHANNELS) {
