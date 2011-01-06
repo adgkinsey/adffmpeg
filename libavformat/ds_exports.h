@@ -64,6 +64,7 @@ typedef struct {
     int32_t utc_offset;         ///< Timezone difference in minutes
     uint32_t alm_bitmask;
 } NetVuImageData;
+#define NetVuImageDataHeaderSize 168
 
 typedef struct _audioHeader {
     uint32_t            version;
@@ -75,6 +76,7 @@ typedef struct _audioHeader {
     uint32_t            msecs;
     unsigned char *     additionalData;
 } NetVuAudioData;
+#define NetVuAudioDataHeaderSize (28 + sizeof(unsigned char *))
 
 #define ID_LENGTH                       8
 #define NUM_ACTIVITIES                  8
