@@ -274,7 +274,7 @@ AVStream * ad_get_data_stream( AVFormatContext *s )
 {
     int id = DATA_STREAM_ID;
     int i, found = FALSE;
-    AVStream *st;
+    AVStream *st = NULL;
 
     for( i = 0; i < s->nb_streams && !found; i++ ) {
         st = s->streams[i];
