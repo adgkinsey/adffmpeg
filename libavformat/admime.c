@@ -557,8 +557,11 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     // Prepare for video or audio read
     errorVal = initADData(data_type, &frameType, &vidDat, &audDat);
-    if (errorVal < 0)
+    if (errorVal < 0)  {
+        if (vidDat != NULL )
+            av_free(vidDat);
         return errorVal;
+    }
 
     // Proceed based on the type of data in this frame
     switch(data_type) {

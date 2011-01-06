@@ -72,6 +72,8 @@ static void audioheader_network2host(NetVuAudioData *dst, uint8_t *src)
     dst->sizeOfAudioData		= AV_RB32(src + 16);
     dst->seconds				= AV_RB32(src + 20);
     dst->msecs					= AV_RB32(src + 24);
+    if ((void*)dst != (void*)src) // Copy additionalData pointer if needed
+        memcpy(&dst->additionalData, src + 28, sizeof(unsigned char *));
 }
 
 /**
@@ -111,7 +113,7 @@ static int adbinary_probe(AVProbeData *p)
             case(DATA_MPEG4P):
             case(DATA_H264I):
             case(DATA_H264P):
-                if (bufferSize >= sizeof(NetVuImageData)) {
+                if (bufferSize >= NetVuImageDataHeaderSize) {
                     NetVuImageData test;
                     ad_network2host(&test, dataPtr);
                     if (pic_version_valid(test.version))  {
@@ -129,7 +131,7 @@ static int adbinary_probe(AVProbeData *p)
                 }
                 break;
             case(DATA_AUDIO_ADPCM):
-                if (bufferSize >= sizeof(NetVuAudioData))  {
+                if (bufferSize >= NetVuAudioDataHeaderSize)  {
                     NetVuAudioData test;
                     audioheader_network2host(&test, dataPtr);
                     if (test.version == AUD_VERSION)  {
@@ -240,7 +242,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     size         = get_be32(pb);
     if (size == 0)  {
         if(url_feof(pb))
-            errorVal = ADPIC_END_OF_STREAM;
+            errorVal = AVERROR_EOF;
         else {
             av_log(s, AV_LOG_ERROR, "%s: Reading separator, errorcode %d\n",  
                    __func__, url_ferror(pb));
@@ -326,7 +328,7 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
                         AVPacket *pkt,
                         NetVuImageData *vidDat, char **text_data)
 {
-    static const int hdrSize = sizeof(NetVuImageData);
+    static const int hdrSize = NetVuImageDataHeaderSize;
     int textSize = 0;
     int n, status, errorVal = 0;
 
@@ -362,7 +364,7 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
     // other times it doesn't.  Adding a terminator here regardless
     (*text_data)[textSize] = '\0';
 
-    if ((status = ad_new_packet(pkt, vidDat->size)) < 0) { // PRC 003
+    if ((status = ad_new_packet(pkt, vidDat->size)) < 0) {
         av_log(s, AV_LOG_ERROR, "%s: ad_new_packet (size %d) failed, status %d\n", 
                __func__, vidDat->size, status);
         return ADPIC_MPEG4_NEW_PACKET_ERROR;
@@ -373,6 +375,10 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
                __func__, vidDat->size, n);
         return ADPIC_MPEG4_PIC_BODY_ERROR;
     }
+    
+    if (vidDat->vid_format & (PIC_MODE_MPEG4_411_I | PIC_MODE_MPEG4_411_GOV_I))
+        pkt->flags |= AV_PKT_FLAG_KEY;    
+    
     return errorVal;
 }
 
@@ -423,7 +429,7 @@ static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
     int n, status, errorVal = 0;
 
     // Get the fixed size portion of the audio header
-    size = sizeof(NetVuAudioData) - sizeof(unsigned char *);
+    size = NetVuAudioDataHeaderSize - sizeof(unsigned char *);
     if( (n = ad_get_buffer( pb, (uint8_t*)data, size)) != size)
         return ADPIC_AUDIO_ADPCM_GET_BUFFER_ERROR;
 

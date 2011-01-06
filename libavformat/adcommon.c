@@ -366,27 +366,21 @@ int ad_get_buffer(ByteIOContext *s, uint8_t *buf, int size)
 int initADData(int data_type, ADFrameType *frameType,
                NetVuImageData **vidDat, NetVuAudioData **audDat)
 {
-    int errorVal = 0;
-
     if( (data_type == DATA_JPEG)          || (data_type == DATA_JFIF)   ||
         (data_type == DATA_MPEG4I)        || (data_type == DATA_MPEG4P) ||
         (data_type == DATA_H264I)         || (data_type == DATA_H264P)  ||
         (data_type == DATA_MINIMAL_MPEG4)                               ) {
         *frameType = NetVuVideo;
         *vidDat = av_malloc( sizeof(NetVuImageData) );
-        if( *vidDat == NULL ) {
-            errorVal = ADPIC_NETVU_IMAGE_DATA_ERROR;
-            return errorVal;
-        }
+        if( *vidDat == NULL )
+            return ADPIC_NETVU_IMAGE_DATA_ERROR;
     }
     else if ( (data_type == DATA_AUDIO_ADPCM) ||
               (data_type == DATA_MINIMAL_AUDIO_ADPCM) ) {
         *frameType = NetVuAudio;
         *audDat = av_malloc( sizeof(NetVuAudioData) );
-        if( *audDat == NULL ) {
-            errorVal = ADPIC_NETVU_AUDIO_DATA_ERROR;
-            return errorVal;
-        }
+        if( *audDat == NULL )
+            return ADPIC_NETVU_AUDIO_DATA_ERROR;
     }
     else if ( (data_type == DATA_INFO) || (data_type == DATA_XML_INFO) )
         *frameType = NetVuDataInfo;
@@ -395,14 +389,14 @@ int initADData(int data_type, ADFrameType *frameType,
     else
         *frameType = FrameTypeUnknown;
 
-    return errorVal;
+    return 0;
 }
 
 int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
                  AVPacket *pkt,
                  NetVuImageData *video_data, char **text_data)
 {
-    static const int nviSize = sizeof(NetVuImageData);
+    static const int nviSize = NetVuImageDataHeaderSize;
     int hdrSize;
     char jfif[2048], *ptr;
     int n, textSize, errorVal = 0;
@@ -484,20 +478,17 @@ int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb,
     if(!imgLoaded) {
         if ((status = ad_new_packet(pkt, size)) < 0) { // PRC 003
             av_log(s, AV_LOG_ERROR, "ad_read_jfif: ad_new_packet %d failed, status %d\n", size, status);
-            errorVal = ADPIC_JFIF_NEW_PACKET_ERROR;
-            return errorVal;
+            return ADPIC_JFIF_NEW_PACKET_ERROR;
         }
 
         if ((n = ad_get_buffer(pb, pkt->data, size)) != size) {
             av_log(s, AV_LOG_ERROR, "ad_read_jfif: short of data reading jfif image, expected %d, read %d\n", size, n);
-            errorVal = ADPIC_JFIF_GET_BUFFER_ERROR;
-            return errorVal;
+            return ADPIC_JFIF_GET_BUFFER_ERROR;
         }
     }
     if ( parse_jfif(s, pkt->data, video_data, size, text_data ) <= 0) {
         av_log(s, AV_LOG_ERROR, "ad_read_jfif: parse_jfif failed\n");
-        errorVal = ADPIC_JFIF_MANUAL_SIZE_ERROR;
-        return errorVal;
+        return ADPIC_JFIF_MANUAL_SIZE_ERROR;
     }
     return errorVal;
 }
@@ -539,23 +530,19 @@ int ad_read_layout(AVFormatContext *s, ByteIOContext *pb,
     int n, status, errorVal = 0;
 
     // Allocate a new packet
-    if( (status = ad_new_packet( pkt, size )) < 0 ) {
-        errorVal = ADPIC_LAYOUT_NEW_PACKET_ERROR;
-        return errorVal;
-    }
+    if( (status = ad_new_packet( pkt, size )) < 0 )
+        return ADPIC_LAYOUT_NEW_PACKET_ERROR;
 
     // Get the data
-    if( (n = ad_get_buffer( pb, pkt->data, size)) != size ) {
-        errorVal = ADPIC_LAYOUT_GET_BUFFER_ERROR;
-        return errorVal;
-    }
+    if( (n = ad_get_buffer( pb, pkt->data, size)) != size )
+        return ADPIC_LAYOUT_GET_BUFFER_ERROR;
+    
     return errorVal;
 }
 
 int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
                    ADFrameType frameType, void *data, char *text_data)
 {
-    int         errorVal   = 0;
     AVStream    *st        = NULL;
     ADFrameData *frameData = NULL;
 
@@ -565,8 +552,7 @@ int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
         NetVuImageData *video_data = (NetVuImageData *)data;
         if ( (st = netvu_get_stream( s, video_data)) == NULL ) {
             av_log(s, AV_LOG_ERROR, "ad_read_packet: Failed get_stream for video\n");
-            errorVal = ADPIC_GET_STREAM_ERROR;
-            return errorVal;
+            return ADPIC_GET_STREAM_ERROR;
         }
         else  {
             if (video_data->session_time > 0)  {
