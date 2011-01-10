@@ -63,7 +63,7 @@ static const uint8_t jfif_header[] = {
     0x01, 0x02,                     // version
     0x02,                           // density units (0 - none, 1 - PPI, 2 - PPCM)
     0x00, 0x19,                     // X density
-    0x00, 0x32,                     // Y density
+    0x00, 0x19,                     // Y density
     0x00,                           // X thumbnail size
     0x00,                           // Y thumbnail size
 };
@@ -196,6 +196,10 @@ unsigned int build_jpeg_header(void *jfif, NetVuImageData *pic, unsigned int max
         return 0;
 
     memcpy(bufptr, jfif_header, sizeof(jfif_header));
+    
+    if( (pic->format.target_pixels > 360) && (pic->format.target_lines <= 480) )
+        bufptr[17] = 0x32;
+        
     bufptr += sizeof(jfif_header);
     
     // Q tables and markers
@@ -345,6 +349,9 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic,
 {
     int i, sos = FALSE;
     unsigned short length, marker;
+    uint16_t xdensity = 0;
+    uint16_t ydensity = 0;
+    uint8_t *densityPtr = NULL;
 
     //av_log(s, AV_LOG_DEBUG, "parse_jfif: leading bytes 0x%02X, 0x%02X, "
     //       "length=%d\n", data[0], data[1], imgSize);
@@ -372,7 +379,7 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic,
         //no header
         i += 2;
     }
-
+    
     while ( !sos && (i < imgSize) ) {
         marker = AV_RB16(&data[i]);
         i += 2;
@@ -384,14 +391,9 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic,
                 //av_log(s, AV_LOG_DEBUG, "parse_jfif: found APP0 marker, length = %d\n", length );
                 
                 if ((data[i]==0x4A)&&(data[i+1]==0x46)&&(data[i+2]==0x49)&&(data[i+3]==0x46)&&(data[i+4]==0x00))  {
-                    int xdensity = AV_RB16(&data[i+8]);
-                    int ydensity = AV_RB16(&data[i+10]);
-                    if ( xdensity == (ydensity*2) )  {
-                        // Server is sending wrong pixel aspect ratio
-                        // Reverse it
-                        AV_WB16(&data[i+8], ydensity);
-                        AV_WB16(&data[i+10], xdensity);
-                    }
+                    xdensity = AV_RB16(&data[i+8]);
+                    ydensity = AV_RB16(&data[i+10]);
+                    densityPtr = &data[i+8];
                 }
                 i += length - 2;
                 break;
@@ -442,6 +444,23 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic,
                 //       "next byte = 0x%02X, length = %d\n", marker, data[i], length );
                 i += length - 2;	// Skip past the unknown field
                 break;
+        }
+        
+        if ( (pic->format.target_lines > 0) && (xdensity == (ydensity*2)) )  {
+            if( (pic->format.target_pixels > 360) && (pic->format.target_lines <= 480) )  {
+                // Server is sending wrong pixel aspect ratio, reverse it
+                av_log(s, AV_LOG_DEBUG, "%s: Server is sending wrong pixel "
+                                        "aspect ratio. Old = %d:%d, New = %d:%d"
+                                        " Res = %dx%d\n",  
+                       __func__, xdensity, ydensity, ydensity, xdensity, 
+                       pic->format.target_pixels, pic->format.target_lines);
+                AV_WB16(densityPtr, ydensity);
+                AV_WB16(densityPtr + 2, xdensity);
+            }
+            else  {
+                // Server is sending wrong pixel aspect ratio, set it to 1:1
+                AV_WB16(densityPtr, ydensity);
+            }
         }
     }
     pic->size = imgSize - i - 2; 	// 2 bytes for FFD9 PRC 029
