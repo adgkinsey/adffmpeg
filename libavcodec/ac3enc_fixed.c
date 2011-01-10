@@ -26,6 +26,7 @@
  * fixed-point AC-3 encoder.
  */
 
+#undef CONFIG_AC3ENC_FLOAT
 #include "ac3enc.c"
 
 
@@ -318,6 +319,17 @@ static int normalize_samples(AC3EncodeContext *s)
 }
 
 
+/**
+ * Scale MDCT coefficients from float to fixed-point.
+ */
+static void scale_coefficients(AC3EncodeContext *s)
+{
+    /* scaling/conversion is obviously not needed for the fixed-point encoder
+       since the coefficients are already fixed-point. */
+    return;
+}
+
+
 #ifdef TEST
 /*************************************************************************/
 /* TEST */
@@ -413,8 +425,8 @@ int main(void)
 #endif /* TEST */
 
 
-AVCodec ac3_encoder = {
-    "ac3",
+AVCodec ac3_fixed_encoder = {
+    "ac3_fixed",
     AVMEDIA_TYPE_AUDIO,
     CODEC_ID_AC3,
     sizeof(AC3EncodeContext),

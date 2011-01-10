@@ -684,6 +684,61 @@ static void rtsp_parse_transport(RTSPMessageHeader *reply, const char *p)
     }
 }
 
+static void handle_rtp_info(RTSPState *rt, const char *url,
+                            uint32_t seq, uint32_t rtptime)
+{
+    int i;
+    if (!rtptime || !url[0])
+        return;
+    if (rt->transport != RTSP_TRANSPORT_RTP)
+        return;
+    for (i = 0; i < rt->nb_rtsp_streams; i++) {
+        RTSPStream *rtsp_st = rt->rtsp_streams[i];
+        RTPDemuxContext *rtpctx = rtsp_st->transport_priv;
+        if (!rtpctx)
+            continue;
+        if (!strcmp(rtsp_st->control_url, url)) {
+            rtpctx->base_timestamp = rtptime;
+            break;
+        }
+    }
+}
+
+static void rtsp_parse_rtp_info(RTSPState *rt, const char *p)
+{
+    int read = 0;
+    char key[20], value[1024], url[1024] = "";
+    uint32_t seq = 0, rtptime = 0;
+
+    for (;;) {
+        p += strspn(p, SPACE_CHARS);
+        if (!*p)
+            break;
+        get_word_sep(key, sizeof(key), "=", &p);
+        if (*p != '=')
+            break;
+        p++;
+        get_word_sep(value, sizeof(value), ";, ", &p);
+        read++;
+        if (!strcmp(key, "url"))
+            av_strlcpy(url, value, sizeof(url));
+        else if (!strcmp(key, "seq"))
+            seq = strtol(value, NULL, 10);
+        else if (!strcmp(key, "rtptime"))
+            rtptime = strtol(value, NULL, 10);
+        if (*p == ',') {
+            handle_rtp_info(rt, url, seq, rtptime);
+            url[0] = '\0';
+            seq = rtptime = 0;
+            read = 0;
+        }
+        if (*p)
+            p++;
+    }
+    if (read > 0)
+        handle_rtp_info(rt, url, seq, rtptime);
+}
+
 void ff_rtsp_parse_line(RTSPMessageHeader *reply, const char *buf,
                         RTSPState *rt, const char *method)
 {
@@ -728,6 +783,10 @@ void ff_rtsp_parse_line(RTSPMessageHeader *reply, const char *buf,
         p += strspn(p, SPACE_CHARS);
         if (method && !strcmp(method, "DESCRIBE"))
             av_strlcpy(rt->control_uri, p , sizeof(rt->control_uri));
+    } else if (av_stristart(p, "RTP-Info:", &p) && rt) {
+        p += strspn(p, SPACE_CHARS);
+        if (method && !strcmp(method, "PLAY"))
+            rtsp_parse_rtp_info(rt, p);
     }
 }
 
@@ -1034,6 +1093,10 @@ static int make_setup_request(AVFormatContext *s, const char *host, int port,
                 err = AVERROR_INVALIDDATA;
                 goto fail;
             }
+#else
+            av_log(s, AV_LOG_ERROR, "Unable to open an input RTP port\n");
+            err = AVERROR(EIO);
+            goto fail;
 #endif
 
         rtp_opened:
@@ -1127,16 +1190,18 @@ static int make_setup_request(AVFormatContext *s, const char *host, int port,
             break;
 
         case RTSP_LOWER_TRANSPORT_UDP: {
-            char url[1024];
+            char url[1024], options[30] = "";
 
+            if (rt->filter_source)
+                av_strlcpy(options, "?connect=1", sizeof(options));
             /* Use source address if specified */
             if (reply->transports[0].source[0]) {
                 ff_url_join(url, sizeof(url), "rtp", NULL,
                             reply->transports[0].source,
-                            reply->transports[0].server_port_min, NULL);
+                            reply->transports[0].server_port_min, options);
             } else {
                 ff_url_join(url, sizeof(url), "rtp", NULL, host,
-                            reply->transports[0].server_port_min, NULL);
+                            reply->transports[0].server_port_min, options);
             }
             if (!(rt->server_type == RTSP_SERVER_WMS && i > 1) &&
                 rtp_set_remote_url(rtsp_st->rtp_handle, url) < 0) {
@@ -1256,6 +1321,8 @@ redirect:
             } else if(!strcmp(option, "http")) {
                 lower_transport_mask |= (1<< RTSP_LOWER_TRANSPORT_TCP);
                 rt->control_transport = RTSP_MODE_TUNNEL;
+            } else if (!strcmp(option, "filter_src")) {
+                rt->filter_source = 1;
             } else {
                 /* Write options back into the buffer, using memmove instead
                  * of strcpy since the strings may overlap. */
