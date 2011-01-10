@@ -47,7 +47,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     socklen_t optlen;
     char hostname[1024],proto[1024],path[1024];
     char portstr[10];
-    int recvBufSize = TCP_RECV_BUFFER_SIZE;
+    const int recvBufSize = TCP_RECV_BUFFER_SIZE;
 
     av_url_split(proto, sizeof(proto), NULL, 0, hostname, sizeof(hostname),
         &port, path, sizeof(path), uri);
@@ -103,20 +103,16 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
             tv.tv_sec = 0;
             tv.tv_usec = 100 * 1000;
             ret = select(fd_max + 1, NULL, &wfds, &efds, &tv);
-
             if (ret > 0 && (FD_ISSET(fd, &wfds) || FD_ISSET(fd, &efds)))
-                break; /* Connected ok, break out of the loop here */
-            else if (ret == 0)
-            {
+                break;
+            else if (ret == 0)  {
                 TimeOutCount++;
-                if(TimeOutCount > 100)
-                {
+                if(TimeOutCount > 100)  {
                      ret = AVERROR(EIO);
                      goto fail1; 
                 }
             }
-            else
-            {
+            else  {
                 ret = AVERROR(EIO);
                 goto fail1;
             }
@@ -165,7 +161,6 @@ static int tcp_read(URLContext *h, uint8_t *buf, int size)
     int len, fd_max, ret;
     fd_set rfds;
     struct timeval tv;
-    clock_t TimeOut = clock () + (2.0 /*0.5*/ * CLOCKS_PER_SEC);
 
     for (;;) {
         if (url_interrupt_cb())
@@ -173,26 +168,20 @@ static int tcp_read(URLContext *h, uint8_t *buf, int size)
         fd_max = s->fd;
         FD_ZERO(&rfds);
         FD_SET(s->fd, &rfds);
-        tv.tv_sec = 0;
-        tv.tv_usec = 100 * 1000;
+        tv.tv_sec = 2;
+        tv.tv_usec = 0;
         ret = select(fd_max + 1, &rfds, NULL, NULL, &tv);
         if (ret > 0 && FD_ISSET(s->fd, &rfds)) {
-
             len = recv(s->fd, buf, size, 0);
-
             if (len < 0) {
                 if (ff_neterrno() != FF_NETERROR(EINTR) &&
                     ff_neterrno() != FF_NETERROR(EAGAIN))
                     return ff_neterrno();
             } else return len;
-        } else if (ret < 0) {
+        } else if (ret <= 0) {
             if (ff_neterrno() == FF_NETERROR(EINTR))
                 continue;
             return -1;
-        }
-        else if(TimeOut<clock())
-        { 
-            return -2;
         }
     }
 }
