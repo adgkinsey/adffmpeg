@@ -27,7 +27,7 @@
 #include "libavcore/samplefmt.h"
 
 #define LIBAVFILTER_VERSION_MAJOR  1
-#define LIBAVFILTER_VERSION_MINOR 72
+#define LIBAVFILTER_VERSION_MINOR 74
 #define LIBAVFILTER_VERSION_MICRO  0
 
 #define LIBAVFILTER_VERSION_INT AV_VERSION_INT(LIBAVFILTER_VERSION_MAJOR, \
@@ -80,6 +80,9 @@ typedef struct AVFilterBuffer {
      * reallocating it from scratch.
      */
     void (*free)(struct AVFilterBuffer *buf);
+
+    int format;                 ///< media format
+    int w, h;                   ///< width and height of the allocated buffer
 } AVFilterBuffer;
 
 #define AV_PERM_READ     0x01   ///< can read from the buffer
@@ -96,7 +99,7 @@ typedef struct AVFilterBuffer {
  */
 typedef struct AVFilterBufferRefAudioProps {
     int64_t channel_layout;     ///< channel layout of audio buffer
-    int samples_nb;             ///< number of audio samples
+    int nb_samples;             ///< number of audio samples
     int size;                   ///< audio buffer size
     uint32_t sample_rate;       ///< audio buffer sample rate
     int planar;                 ///< audio buffer - planar or packed
@@ -174,7 +177,7 @@ AVFilterBufferRef *avfilter_ref_buffer(AVFilterBufferRef *ref, int pmask);
  * Remove a reference to a buffer. If this is the last reference to the
  * buffer, the buffer itself is also automatically freed.
  *
- * @param ref reference to the buffer
+ * @param ref reference to the buffer, may be NULL
  */
 void avfilter_unref_buffer(AVFilterBufferRef *ref);
 
