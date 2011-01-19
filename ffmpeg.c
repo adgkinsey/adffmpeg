@@ -1607,10 +1607,13 @@ static int output_packet(AVInputStream *ist, int ist_index,
 
 #if CONFIG_AVFILTER
         if (ist->st->codec->codec_type == AVMEDIA_TYPE_VIDEO && ist->input_video_filter) {
+            AVRational sar;
+            if (ist->st->sample_aspect_ratio.num) sar = ist->st->sample_aspect_ratio;
+            else                                  sar = ist->st->codec->sample_aspect_ratio;
             // add it to be filtered
             av_vsrc_buffer_add_frame(ist->input_video_filter, &picture,
                                      ist->pts,
-                                     ist->st->codec->sample_aspect_ratio);
+                                     sar);
         }
 #endif
 
@@ -2144,7 +2147,7 @@ static int transcode(AVFormatContext **output_files,
                 goto fail;
             memcpy(codec->extradata, icodec->extradata, icodec->extradata_size);
             codec->extradata_size= icodec->extradata_size;
-            if(!copy_tb && av_q2d(icodec->time_base)*icodec->ticks_per_frame > av_q2d(ist->st->time_base) && av_q2d(ist->st->time_base) < 1.0/1000){
+            if(!copy_tb && av_q2d(icodec->time_base)*icodec->ticks_per_frame > av_q2d(ist->st->time_base) && av_q2d(ist->st->time_base) < 1.0/500){
                 codec->time_base = icodec->time_base;
                 codec->time_base.num *= icodec->ticks_per_frame;
                 av_reduce(&codec->time_base.num, &codec->time_base.den,

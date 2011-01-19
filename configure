@@ -278,7 +278,7 @@ die(){
     cat <<EOF
 
 If you think configure made a mistake, make sure you are using the latest
-version from SVN.  If the latest version fails, report the problem to the
+version from Git.  If the latest version fails, report the problem to the
 ffmpeg-user@mplayerhq.hu mailing list or IRC #ffmpeg on irc.freenode.net.
 EOF
     if disabled logging; then
@@ -1830,6 +1830,8 @@ tmpfile TMPASM .asm
 
 unset -f mktemp
 
+chmod +x $TMPE
+
 # make sure we can execute files in $TMPDIR
 cat > $TMPSH 2>> $logfile <<EOF
 #! /bin/sh
@@ -2532,10 +2534,18 @@ elif enabled arm; then
     check_cflags -marm
     nogas=die
 
-    check_ld <<EOF && enable vfp_args
+    if     check_cpp_condition stddef.h "defined __ARM_PCS_VFP"; then
+        enable vfp_args
+    elif ! check_cpp_condition stddef.h "defined __ARM_PCS || defined __SOFTFP__"; then
+        case "${cross_prefix:-$cc}" in
+            *hardfloat*)         enable vfp_args;   fpabi=vfp ;;
+            *) check_ld <<EOF && enable vfp_args && fpabi=vfp || fpabi=soft ;;
 __asm__ (".eabi_attribute 28, 1");
 int main(void) { return 0; }
 EOF
+        esac
+        warn "Compiler does not indicate floating-point ABI, guessing $fpabi."
+    fi
 
     # We have to check if pld is a nop and disable it.
     check_asm pld '"pld [r0]"'
@@ -2908,7 +2918,7 @@ enabled extra_warnings && check_cflags -Winline
 check_ldflags -Wl,--warn-common
 check_ldflags -Wl,--as-needed
 check_ldflags '-Wl,-rpath-link,\$(BUILD_ROOT)/libpostproc -Wl,-rpath-link,\$(BUILD_ROOT)/libswscale -Wl,-rpath-link,\$(BUILD_ROOT)/libavfilter -Wl,-rpath-link,\$(BUILD_ROOT)/libavdevice -Wl,-rpath-link,\$(BUILD_ROOT)/libavformat -Wl,-rpath-link,\$(BUILD_ROOT)/libavcodec -Wl,-rpath-link,\$(BUILD_ROOT)/libavcore -Wl,-rpath-link,\$(BUILD_ROOT)/libavutil'
-check_ldflags -Wl,-Bsymbolic
+test_ldflags -Wl,-Bsymbolic && append SHFLAGS -Wl,-Bsymbolic
 
 echo "X{};" > $TMPV
 if test_ldflags -Wl,--version-script,$TMPV; then
@@ -2976,6 +2986,8 @@ elif enabled armcc; then
     # 2523: use of inline assembler is deprecated
     add_cflags -W${armcc_opt},--diag_suppress=2523
     add_cflags -W${armcc_opt},--diag_suppress=1207
+    add_cflags -W${armcc_opt},--diag_suppress=1293 # assignment in condition
+    add_cflags -W${armcc_opt},--diag_suppress=3343 # hardfp compat
 elif enabled tms470; then
     add_cflags -pds=824 -pds=837
 fi
@@ -3253,7 +3265,6 @@ cat > $TMPH <<EOF
 #define CC_TYPE "$cc_type"
 #define CC_VERSION $cc_version
 #define restrict $_restrict
-#define ASMALIGN(ZEROBITS) ".p2align " #ZEROBITS "\\n\\t"
 #define EXTERN_PREFIX "${extern_prefix}"
 #define EXTERN_ASM ${extern_prefix}
 #define SLIBSUF "$SLIBSUF"
