@@ -1369,9 +1369,6 @@ static inline void RENAME(yuvPlanartoyuy2)(const uint8_t *ysrc, const uint8_t *u
         //FIXME handle 2 lines at once (fewer prefetches, reuse some chroma, but very likely memory-limited anyway)
         __asm__ volatile(
             "xor                 %%"REG_a", %%"REG_a"   \n\t"
-<<<<<<< HEAD
-            ASMALIGN(4)
-=======
             ".p2align                    4              \n\t"
             "1:                                         \n\t"
             PREFETCH"    32(%1, %%"REG_a", 2)           \n\t"
@@ -1522,9 +1519,6 @@ static inline void RENAME(yuvPlanartouyvy)(const uint8_t *ysrc, const uint8_t *u
         //FIXME handle 2 lines at once (fewer prefetches, reuse some chroma, but very likely memory-limited anyway)
         __asm__ volatile(
             "xor                %%"REG_a", %%"REG_a"    \n\t"
-<<<<<<< HEAD
-            ASMALIGN(4)
-=======
             ".p2align                   4               \n\t"
             "1:                                         \n\t"
             PREFETCH"   32(%1, %%"REG_a", 2)            \n\t"
@@ -1654,9 +1648,6 @@ static inline void RENAME(yuy2toyv12)(const uint8_t *src, uint8_t *ydst, uint8_t
             "xor                 %%"REG_a", %%"REG_a"   \n\t"
             "pcmpeqw                 %%mm7, %%mm7       \n\t"
             "psrlw                      $8, %%mm7       \n\t" // FF,00,FF,00...
-<<<<<<< HEAD
-            ASMALIGN(4)
-=======
             ".p2align                    4              \n\t"
             "1:                \n\t"
             PREFETCH" 64(%0, %%"REG_a", 4)              \n\t"
@@ -1710,9 +1701,6 @@ static inline void RENAME(yuy2toyv12)(const uint8_t *src, uint8_t *ydst, uint8_t
 
         __asm__ volatile(
             "xor                 %%"REG_a", %%"REG_a"   \n\t"
-<<<<<<< HEAD
-            ASMALIGN(4)
-=======
             ".p2align                    4              \n\t"
             "1:                                         \n\t"
             PREFETCH" 64(%0, %%"REG_a", 4)              \n\t"
@@ -1896,9 +1884,6 @@ static inline void RENAME(uyvytoyv12)(const uint8_t *src, uint8_t *ydst, uint8_t
             "xor                 %%"REG_a", %%"REG_a"   \n\t"
             "pcmpeqw             %%mm7, %%mm7   \n\t"
             "psrlw                  $8, %%mm7   \n\t" // FF,00,FF,00...
-<<<<<<< HEAD
-            ASMALIGN(4)
-=======
             ".p2align                4          \n\t"
             "1:                                 \n\t"
             PREFETCH" 64(%0, %%"REG_a", 4)          \n\t"
@@ -1952,9 +1937,6 @@ static inline void RENAME(uyvytoyv12)(const uint8_t *src, uint8_t *ydst, uint8_t
 
         __asm__ volatile(
             "xor                 %%"REG_a", %%"REG_a"   \n\t"
-<<<<<<< HEAD
-            ASMALIGN(4)
-=======
             ".p2align                    4          \n\t"
             "1:                                 \n\t"
             PREFETCH" 64(%0, %%"REG_a", 4)          \n\t"
@@ -2030,9 +2012,6 @@ static inline void RENAME(rgb24toyv12)(const uint8_t *src, uint8_t *ydst, uint8_
                 "movq       "MANGLE(ff_w1111)", %%mm5       \n\t"
                 "pxor                    %%mm7, %%mm7       \n\t"
                 "lea (%%"REG_a", %%"REG_a", 2), %%"REG_d"   \n\t"
-<<<<<<< HEAD
-                ASMALIGN(4)
-=======
                 ".p2align                    4              \n\t"
                 "1:                                         \n\t"
                 PREFETCH"    64(%0, %%"REG_d")              \n\t"
@@ -2107,9 +2086,6 @@ static inline void RENAME(rgb24toyv12)(const uint8_t *src, uint8_t *ydst, uint8_
             "pxor                    %%mm7, %%mm7       \n\t"
             "lea (%%"REG_a", %%"REG_a", 2), %%"REG_d"   \n\t"
             "add                 %%"REG_d", %%"REG_d"   \n\t"
-<<<<<<< HEAD
-            ASMALIGN(4)
-=======
             ".p2align                    4              \n\t"
             "1:                                         \n\t"
             PREFETCH"    64(%0, %%"REG_d")              \n\t"

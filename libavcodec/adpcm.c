@@ -1100,18 +1100,16 @@ static int adpcm_decode_frame(AVCodecContext *avctx,
         src += m<<st;
 
         break;
-
     case CODEC_ID_ADPCM_ADH:
-        c->status[0].predictor  = (int16_t)bytestream_get_be16(&src);
-        c->status[0].step_index = *src++;
-        src++;
-        while (src < buf + buf_size) {
-            *samples++ = adpcm_ima_expand_nibble(&c->status[0], src[0] >> 4, 3);
-            *samples++ = adpcm_ima_expand_nibble(&c->status[0], src[0] & 0x0F, 3);
-            src++;
-        }
-        break;
-
+       c->status[0].predictor  = (int16_t)bytestream_get_be16(&src);
+       c->status[0].step_index = *src++;
+       src++;
+       while (src < buf + buf_size)  {
+           *samples++ = adpcm_ima_expand_nibble(&c->status[0], src[0] >> 4, 3);
+           *samples++ = adpcm_ima_expand_nibble(&c->status[0], src[0] & 0x0F, 3);
+           src++;
+       }
+       break;
     case CODEC_ID_ADPCM_MS:
         if (avctx->block_align != 0 && buf_size > avctx->block_align)
             buf_size = avctx->block_align;

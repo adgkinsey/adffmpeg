@@ -2055,9 +2055,6 @@ static inline void RENAME(hScale)(int16_t *dst, int dstW, const uint8_t *src, in
             "pxor                %%mm7, %%mm7       \n\t"
             "push           %%"REG_BP"              \n\t" // we use 7 regs here ...
             "mov             %%"REG_a", %%"REG_BP"  \n\t"
-<<<<<<< HEAD
-            ASMALIGN(4)
-=======
             ".p2align                4              \n\t"
             "1:                                     \n\t"
             "movzwl   (%2, %%"REG_BP"), %%eax       \n\t"
@@ -2102,9 +2099,6 @@ static inline void RENAME(hScale)(int16_t *dst, int dstW, const uint8_t *src, in
             "pxor                 %%mm7, %%mm7      \n\t"
             "push            %%"REG_BP"             \n\t" // we use 7 regs here ...
             "mov              %%"REG_a", %%"REG_BP" \n\t"
-<<<<<<< HEAD
-            ASMALIGN(4)
-=======
             ".p2align                 4             \n\t"
             "1:                                     \n\t"
             "movzwl    (%2, %%"REG_BP"), %%eax      \n\t"
@@ -2156,9 +2150,6 @@ static inline void RENAME(hScale)(int16_t *dst, int dstW, const uint8_t *src, in
         dst-= counter/2;
         __asm__ volatile(
             "pxor                  %%mm7, %%mm7     \n\t"
-<<<<<<< HEAD
-            ASMALIGN(4)
-=======
             ".p2align                  4            \n\t"
             "1:                                     \n\t"
             "mov                      %2, %%"REG_c" \n\t"
@@ -2344,9 +2335,6 @@ static inline void RENAME(hyscale_fast)(SwsContext *c, int16_t *dst,
         "xor %%"REG_a", %%"REG_a"            \n\t" // i
         "xor %%"REG_d", %%"REG_d"            \n\t" // xx
         "xorl    %%ecx, %%ecx                \n\t" // xalpha
-<<<<<<< HEAD
-        ASMALIGN(4)
-=======
         ".p2align    4                       \n\t"
         "1:                                  \n\t"
         "movzbl    (%0, %%"REG_d"), %%edi    \n\t" //src[xx]
@@ -2487,9 +2475,6 @@ static inline void RENAME(hcscale_fast)(SwsContext *c, int16_t *dst,
             "xor %%"REG_a", %%"REG_a"               \n\t" // i
             "xor %%"REG_d", %%"REG_d"               \n\t" // xx
             "xorl    %%ecx, %%ecx                   \n\t" // xalpha
-<<<<<<< HEAD
-            ASMALIGN(4)
-=======
             ".p2align    4                          \n\t"
             "1:                                     \n\t"
             "mov        %0, %%"REG_S"               \n\t"

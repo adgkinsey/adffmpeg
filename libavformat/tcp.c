@@ -42,11 +42,11 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     TCPContext *s = NULL;
     fd_set wfds, efds;
     int fd_max, ret;
-    int TimeOutCount = 0;
     struct timeval tv;
     socklen_t optlen;
     char hostname[1024],proto[1024],path[1024];
     char portstr[10];
+    int TimeOutCount = 0;
     const int recvBufSize = TCP_RECV_BUFFER_SIZE;
 
     av_url_split(proto, sizeof(proto), NULL, 0, hostname, sizeof(hostname),
@@ -72,7 +72,6 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     fd = socket(cur_ai->ai_family, cur_ai->ai_socktype, cur_ai->ai_protocol);
     if (fd < 0)
         goto fail;
-
     if (setsockopt( fd, SOL_SOCKET, SO_RCVBUF, (char*)&recvBufSize, sizeof(recvBufSize)) < 0)
         goto fail;
     ff_socket_nonblock(fd, 1);
@@ -105,14 +104,14 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
             ret = select(fd_max + 1, NULL, &wfds, &efds, &tv);
             if (ret > 0 && (FD_ISSET(fd, &wfds) || FD_ISSET(fd, &efds)))
                 break;
-            else if (ret == 0)  {
+	    else if (ret == 0) {
                 TimeOutCount++;
-                if(TimeOutCount > 100)  {
-                     ret = AVERROR(EIO);
-                     goto fail1; 
+                if(TimeOutCount > 100) {
+                    ret = AVERROR(EIO);
+                    goto fail1; 
                 }
             }
-            else  {
+            else {
                 ret = AVERROR(EIO);
                 goto fail1;
             }

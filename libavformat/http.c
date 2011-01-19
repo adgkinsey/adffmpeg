@@ -367,6 +367,7 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
 
         av_strlcat(s->response_headers, line, sizeof(s->response_headers));
         av_strlcat(s->response_headers, "\n", sizeof(s->response_headers));
+
         dprintf(NULL, "header='%s'\n", line);
 
         err = process_line(h, line, s->line_count, new_location);
