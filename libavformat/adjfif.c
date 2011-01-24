@@ -449,11 +449,11 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic,
         if ( (pic->format.target_lines > 0) && (xdensity == (ydensity*2)) )  {
             if( (pic->format.target_pixels > 360) && (pic->format.target_lines <= 480) )  {
                 // Server is sending wrong pixel aspect ratio, reverse it
-                av_log(s, AV_LOG_DEBUG, "%s: Server is sending wrong pixel "
-                                        "aspect ratio. Old = %d:%d, New = %d:%d"
-                                        " Res = %dx%d\n",  
-                       __func__, xdensity, ydensity, ydensity, xdensity, 
-                       pic->format.target_pixels, pic->format.target_lines);
+                //av_log(s, AV_LOG_DEBUG, "%s: Server is sending wrong pixel "
+                //                        "aspect ratio. Old = %d:%d, New = %d:%d"
+                //                        " Res = %dx%d\n",  
+                //       __func__, xdensity, ydensity, ydensity, xdensity, 
+                //       pic->format.target_pixels, pic->format.target_lines);
                 AV_WB16(densityPtr, ydensity);
                 AV_WB16(densityPtr + 2, xdensity);
             }
