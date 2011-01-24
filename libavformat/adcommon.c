@@ -481,7 +481,7 @@ int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb,
             return ADPIC_JFIF_NEW_PACKET_ERROR;
         }
 
-        if ((n = ad_get_buffer(pb, pkt->data, size)) != size) {
+        if ((n = ad_get_buffer(pb, pkt->data, size)) < size) {
             av_log(s, AV_LOG_ERROR, "ad_read_jfif: short of data reading jfif image, expected %d, read %d\n", size, n);
             return ADPIC_JFIF_GET_BUFFER_ERROR;
         }
