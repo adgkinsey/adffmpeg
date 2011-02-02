@@ -88,7 +88,7 @@ static int adbinary_probe(AVProbeData *p)
     uint8_t *bufPtr = p->buf;
     
     // Netvu protocol can only send adbinary or admime
-    if (av_stristart(p->filename, "netvu://", NULL) == 1)
+    if ( (p->filename) && (av_stristart(p->filename, "netvu://", NULL) == 1))
         score += AVPROBE_SCORE_MAX / 4;
     
     while ((bufferSize >= SEPARATOR_SIZE) && (score < AVPROBE_SCORE_MAX))  {
