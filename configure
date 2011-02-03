@@ -187,8 +187,8 @@ External library support:
   --enable-libxvid         enable Xvid encoding via xvidcore,
                            native MPEG-4/Xvid encoder exists [no]
   --enable-mlib            enable Sun medialib [no]
-  --enable-zlib            enable zlib [autodetect]
   --enable-libparreader    enable PAR (de)muxing via libparreader [no]
+  --enable-zlib            enable zlib [autodetect]
 
 Advanced options (experts only):
   --source-path=PATH       path to source code [$source_path]
@@ -1352,8 +1352,6 @@ libvpx_encoder_deps="libvpx"
 libx264_encoder_deps="libx264"
 libxavs_encoder_deps="libxavs"
 libxvid_encoder_deps="libxvid"
-libparreader_demuxer_deps="libparreader"
-libparreader_muxer_deps="libparreader"
 
 # demuxers / muxers
 ac3_demuxer_deps="ac3_parser"
@@ -1365,6 +1363,8 @@ flac_demuxer_deps="flac_parser"
 ipod_muxer_select="mov_muxer"
 libnut_demuxer_deps="libnut"
 libnut_muxer_deps="libnut"
+libparreader_demuxer_deps="libparreader"
+libparreader_muxer_deps="libparreader"
 matroska_audio_muxer_select="matroska_muxer"
 matroska_demuxer_suggest="zlib bzlib"
 mov_demuxer_suggest="zlib"
@@ -3093,9 +3093,9 @@ echo "libvpx enabled            ${libvpx-no}"
 echo "libx264 enabled           ${libx264-no}"
 echo "libxavs enabled           ${libxavs-no}"
 echo "libxvid enabled           ${libxvid-no}"
+echo "libparreader enabled      ${libparreader-no}"
 echo "zlib enabled              ${zlib-no}"
 echo "bzlib enabled             ${bzlib-no}"
-echo "libparreader enabled      ${libparreader-no}"
 echo
 
 for type in decoder encoder hwaccel parser demuxer muxer protocol filter bsf indev outdev; do

@@ -253,7 +253,6 @@ void av_register_all(void)
     REGISTER_PROTOCOL (RTP, rtp);
     REGISTER_PROTOCOL (TCP, tcp);
     REGISTER_PROTOCOL (UDP, udp);
-
     REGISTER_PROTOCOL (DM, dm);
     REGISTER_PROTOCOL (NETVU, netvu);
 }
