@@ -316,7 +316,6 @@ static void rtsp_parse_range_npt(const char *p, int64_t *start, int64_t *end)
     *end = AV_NOPTS_VALUE;
 
     get_word_sep(buf, sizeof(buf), "-", &p);
-
     *start = parse_date(buf, 1);
     if (*p == '-') {
         p++;

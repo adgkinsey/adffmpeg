@@ -172,9 +172,7 @@ static int tcp_read(URLContext *h, uint8_t *buf, int size)
         tv.tv_usec = 100 * 1000;
         ret = select(fd_max + 1, &rfds, NULL, NULL, &tv);
         if (ret > 0 && FD_ISSET(s->fd, &rfds)) {
-
             len = recv(s->fd, buf, size, 0);
-
             if (len < 0) {
                 if (ff_neterrno() != FF_NETERROR(EINTR) &&
                     ff_neterrno() != FF_NETERROR(EAGAIN))

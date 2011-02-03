@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include "os_support.h"
 
+
 /* standard file protocol */
 
 static int file_open(URLContext *h, const char *filename, int flags)
