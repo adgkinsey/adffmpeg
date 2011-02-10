@@ -627,6 +627,8 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
 {
     int errorVal = 0;
     int mimeBlockType = 0;
+    uint8_t buf[TEMP_BUFFER_SIZE];
+    int bufSize = TEMP_BUFFER_SIZE;
 
     // Fields are set manually from MIME data with these types so need
     // to set everything to zero initially in case some values aren't
@@ -643,7 +645,7 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
 
     // Now we should have a text block following this which contains the
     // frame data that we can place in a _image_data struct
-    if (parse_mime_header(pb, NULL, NULL, &mimeBlockType, &size, extra ) != 0)
+    if (parse_mime_header(pb, buf, &bufSize, &mimeBlockType, &size, extra ) != 0)
         return ADPIC_MPEG4_MIME_PARSE_HEADER_ERROR;
 
     // Validate the data type and then extract the text buffer
