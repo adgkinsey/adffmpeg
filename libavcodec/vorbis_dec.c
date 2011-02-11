@@ -1123,8 +1123,8 @@ static int vorbis_floor0_decode(vorbis_context *vc,
     return 0;
 }
 
-static uint_fast8_t vorbis_floor1_decode(vorbis_context *vc,
-                                         vorbis_floor_data *vfu, float *vec)
+static int vorbis_floor1_decode(vorbis_context *vc,
+                                vorbis_floor_data *vfu, float *vec)
 {
     vorbis_floor1 *vf = &vfu->t1;
     GetBitContext *gb = &vc->gb;
