@@ -187,6 +187,7 @@ External library support:
                            native MPEG-4/Xvid encoder exists [no]
   --enable-mlib            enable Sun medialib [no]
   --enable-zlib            enable zlib [autodetect]
+  --enable-libparreader    enable PAR (de)muxing via libparreader [no]
 
 Advanced options (experts only):
   --source-path=PATH       path to source code [$source_path]
@@ -914,6 +915,7 @@ CONFIG_LIST="
     libx264
     libxavs
     libxvid
+    libparreader
     lpc
     lsp
     mdct
@@ -1375,6 +1377,8 @@ flac_demuxer_select="flac_parser"
 ipod_muxer_select="mov_muxer"
 libnut_demuxer_deps="libnut"
 libnut_muxer_deps="libnut"
+libparreader_demuxer_deps="libparreader"
+libparreader_muxer_deps="libparreader"
 matroska_audio_muxer_select="matroska_muxer"
 matroska_demuxer_suggest="zlib bzlib"
 mov_demuxer_suggest="zlib"
@@ -1422,6 +1426,10 @@ rtmp_protocol_select="tcp_protocol"
 rtp_protocol_select="udp_protocol"
 tcp_protocol_deps="network"
 udp_protocol_deps="network"
+ds_protocol_deps="network"
+ds_protocol_select="tcp_protocol"
+netvu_protocol_deps="network"
+netvu_protocol_select="http_protocol"
 
 # filters
 blackframe_filter_deps="gpl"
@@ -2852,6 +2860,7 @@ enabled libx264    && require  libx264 x264.h x264_encoder_encode -lx264 &&
 enabled libxavs    && require  libxavs xavs.h xavs_encoder_encode -lxavs
 enabled libxvid    && require  libxvid xvid.h xvid_global -lxvidcore
 enabled mlib       && require  mediaLib mlib_types.h mlib_VectorSub_S16_U8_Mod -lmlib
+enabled libparreader && require2 libparreader "parreader.h parreader_types.h" parReader_getPicStructSize -lparreader
 
 # libdc1394 check
 if enabled libdc1394; then
@@ -3115,6 +3124,7 @@ echo "libxavs enabled           ${libxavs-no}"
 echo "libxvid enabled           ${libxvid-no}"
 echo "zlib enabled              ${zlib-no}"
 echo "bzlib enabled             ${bzlib-no}"
+echo "libparreader enabled      ${libparreader-no}"
 echo
 
 for type in decoder encoder hwaccel parser demuxer muxer protocol filter bsf indev outdev; do
