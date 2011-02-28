@@ -36,7 +36,7 @@ static void md5_finish(struct AVFormatContext *s, char *buf)
     buf[offset] = '\n';
     buf[offset+1] = 0;
 
-    put_buffer(s->pb, buf, strlen(buf));
+    avio_write(s->pb, buf, strlen(buf));
     put_flush_packet(s->pb);
 }
 
@@ -65,7 +65,7 @@ static int write_trailer(struct AVFormatContext *s)
     return 0;
 }
 
-AVOutputFormat md5_muxer = {
+AVOutputFormat ff_md5_muxer = {
     "md5",
     NULL_IF_CONFIG_SMALL("MD5 testing format"),
     NULL,
@@ -95,7 +95,7 @@ static int framemd5_write_packet(struct AVFormatContext *s, AVPacket *pkt)
     return 0;
 }
 
-AVOutputFormat framemd5_muxer = {
+AVOutputFormat ff_framemd5_muxer = {
     "framemd5",
     NULL_IF_CONFIG_SMALL("Per-frame MD5 testing format"),
     NULL,

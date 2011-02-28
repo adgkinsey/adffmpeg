@@ -36,9 +36,9 @@
 #include "libswscale/swscale.h"
 #include "libavcodec/opt.h"
 #include "libavcodec/audioconvert.h"
-#include "libavcore/audioconvert.h"
-#include "libavcore/parseutils.h"
-#include "libavcore/samplefmt.h"
+#include "libavutil/audioconvert.h"
+#include "libavutil/parseutils.h"
+#include "libavutil/samplefmt.h"
 #include "libavutil/colorspace.h"
 #include "libavutil/fifo.h"
 #include "libavutil/intreadwrite.h"
@@ -172,7 +172,7 @@ static int loop_output = AVFMT_NOOUTPUTLOOP;
 static int qp_hist = 0;
 #if CONFIG_AVFILTER
 static char *vfilters = NULL;
-AVFilterGraph *graph = NULL;
+static AVFilterGraph *graph = NULL;
 #endif
 
 static int intra_only = 0;
@@ -251,7 +251,7 @@ static int64_t timer_start;
 
 static uint8_t *audio_buf;
 static uint8_t *audio_out;
-unsigned int allocated_audio_out_size, allocated_audio_buf_size;
+static unsigned int allocated_audio_out_size, allocated_audio_buf_size;
 
 static short *samples;
 
@@ -505,25 +505,11 @@ static int ffmpeg_exit(int ret)
 
     /* close files */
     for(i=0;i<nb_output_files;i++) {
-        /* maybe av_close_output_file ??? */
         AVFormatContext *s = output_files[i];
         int j;
         if (!(s->oformat->flags & AVFMT_NOFILE) && s->pb)
-            url_fclose(s->pb);
-        for(j=0;j<s->nb_streams;j++) {
-            av_metadata_free(&s->streams[j]->metadata);
-            av_free(s->streams[j]->codec);
-            av_free(s->streams[j]->info);
-            av_free(s->streams[j]);
-        }
-        for(j=0;j<s->nb_programs;j++) {
-            av_metadata_free(&s->programs[j]->metadata);
-        }
-        for(j=0;j<s->nb_chapters;j++) {
-            av_metadata_free(&s->chapters[j]->metadata);
-        }
-        av_metadata_free(&s->metadata);
-        av_free(s);
+            avio_close(s->pb);
+        avformat_free_context(s);
         av_free(output_streams_for_file[i]);
     }
     for(i=0;i<nb_input_files;i++) {
@@ -538,7 +524,6 @@ static int ffmpeg_exit(int ret)
         fclose(vstats_file);
     av_free(vstats_filename);
 
-    av_free(opt_names);
     av_free(streamid_map);
     av_free(input_codecs);
     av_free(output_codecs);
@@ -600,8 +585,14 @@ static void choose_sample_fmt(AVStream *st, AVCodec *codec)
             if(*p == st->codec->sample_fmt)
                 break;
         }
-        if(*p == -1)
+        if (*p == -1) {
+            av_log(NULL, AV_LOG_WARNING,
+                   "Incompatible sample format '%s' for codec '%s', auto-selecting format '%s'\n",
+                   av_get_sample_fmt_name(st->codec->sample_fmt),
+                   codec->name,
+                   av_get_sample_fmt_name(codec->sample_fmts[0]));
             st->codec->sample_fmt = codec->sample_fmts[0];
+        }
     }
 }
 
@@ -706,11 +697,6 @@ static int read_ffserver_streams(AVFormatContext *s, const char *filename)
             } else
                 choose_pixel_fmt(st, codec);
         }
-
-        if(!st->codec->thread_count)
-            st->codec->thread_count = 1;
-        if(st->codec->thread_count>1)
-            avcodec_thread_init(st->codec, st->codec->thread_count);
 
         if(st->codec->flags & CODEC_FLAG_BITEXACT)
             nopts = 1;
@@ -825,7 +811,9 @@ need_realloc:
             if (ost->resample)
                 audio_resample_close(ost->resample);
         }
-        if (ost->resample_sample_fmt  == enc->sample_fmt &&
+        /* if audio_sync_method is >1 the resampler is needed for audio drift compensation */
+        if (audio_sync_method <= 1 &&
+            ost->resample_sample_fmt  == enc->sample_fmt &&
             ost->resample_channels    == enc->channels   &&
             ost->resample_sample_rate == enc->sample_rate) {
             ost->resample = NULL;
@@ -1545,7 +1533,8 @@ static int output_packet(AVInputStream *ist, int ist_index,
                     decoded_data_size = (ist->st->codec->width * ist->st->codec->height * 3) / 2;
                     /* XXX: allocate picture correctly */
                     avcodec_get_frame_defaults(&picture);
-                    ist->st->codec->reordered_opaque = pkt_pts;
+                    avpkt.pts = pkt_pts;
+                    avpkt.dts = ist->pts;
                     pkt_pts = AV_NOPTS_VALUE;
 
                     ret = avcodec_decode_video2(ist->st->codec,
@@ -1557,7 +1546,7 @@ static int output_packet(AVInputStream *ist, int ist_index,
                         /* no picture yet */
                         goto discard_packet;
                     }
-                    ist->next_pts = ist->pts = guess_correct_pts(&ist->pts_ctx, picture.reordered_opaque, ist->pts);
+                    ist->next_pts = ist->pts = guess_correct_pts(&ist->pts_ctx, picture.pkt_pts, picture.pkt_dts);
                     if (ist->st->codec->time_base.num != 0) {
                         int ticks= ist->st->parser ? ist->st->parser->repeat_pict+1 : ist->st->codec->ticks_per_frame;
                         ist->next_pts += ((int64_t)AV_TIME_BASE *
@@ -1988,7 +1977,7 @@ static int transcode(AVFormatContext **output_files,
     for(i=0;i<nb_output_files;i++) {
         os = output_files[i];
         if (!os->nb_streams && !(os->oformat->flags & AVFMT_NOSTREAMS)) {
-            dump_format(output_files[i], i, output_files[i]->filename, 1);
+            av_dump_format(output_files[i], i, output_files[i]->filename, 1);
             fprintf(stderr, "Output file #%d does not contain any stream\n", i);
             ret = AVERROR(EINVAL);
             goto fail;
@@ -2039,7 +2028,7 @@ static int transcode(AVFormatContext **output_files,
                 /* Sanity check that the stream types match */
                 if (ist_table[ost->source_index]->st->codec->codec_type != ost->st->codec->codec_type) {
                     int i= ost->file_index;
-                    dump_format(output_files[i], i, output_files[i]->filename, 1);
+                    av_dump_format(output_files[i], i, output_files[i]->filename, 1);
                     fprintf(stderr, "Codec type mismatch for mapping #%d.%d -> #%d.%d\n",
                         stream_maps[n].file_index, stream_maps[n].stream_index,
                         ost->file_index, ost->index);
@@ -2090,7 +2079,7 @@ static int transcode(AVFormatContext **output_files,
                     }
                     if (!found) {
                         int i= ost->file_index;
-                        dump_format(output_files[i], i, output_files[i]->filename, 1);
+                        av_dump_format(output_files[i], i, output_files[i]->filename, 1);
                         fprintf(stderr, "Could not find input stream matching output stream #%d.%d\n",
                                 ost->file_index, ost->index);
                         ffmpeg_exit(1);
@@ -2470,7 +2459,7 @@ static int transcode(AVFormatContext **output_files,
     /* dump the file output parameters - cannot be done before in case
        of stream copy */
     for(i=0;i<nb_output_files;i++) {
-        dump_format(output_files[i], i, output_files[i]->filename, 1);
+        av_dump_format(output_files[i], i, output_files[i]->filename, 1);
     }
 
     /* dump the stream mapping */
@@ -2690,10 +2679,7 @@ static int transcode(AVFormatContext **output_files,
         }
     }
 #if CONFIG_AVFILTER
-    if (graph) {
-        avfilter_graph_free(graph);
-        av_freep(&graph);
-    }
+    avfilter_graph_free(&graph);
 #endif
 
     /* finished ! */
@@ -3005,7 +2991,7 @@ static void parse_meta_type(char *arg, char *type, int *index, char **endptr)
         *type = 'g';
 }
 
-static void opt_map_meta_data(const char *arg)
+static void opt_map_metadata(const char *arg)
 {
     AVMetaDataMap *m, *m1;
     char *p;
@@ -3029,6 +3015,13 @@ static void opt_map_meta_data(const char *arg)
         metadata_streams_autocopy = 0;
     if (m->type == 'c' || m1->type == 'c')
         metadata_chapters_autocopy = 0;
+}
+
+static void opt_map_meta_data(const char *arg)
+{
+    fprintf(stderr, "-map_meta_data is deprecated and will be removed soon. "
+                    "Use -map_metadata instead.\n");
+    opt_map_metadata(arg);
 }
 
 static void opt_map_chapters(const char *arg)
@@ -3238,7 +3231,7 @@ static void opt_input_file(const char *filename)
     for(i=0;i<ic->nb_streams;i++) {
         AVStream *st = ic->streams[i];
         AVCodecContext *dec = st->codec;
-        avcodec_thread_init(dec, thread_count);
+        dec->thread_count = thread_count;
         input_codecs = grow_array(input_codecs, sizeof(*input_codecs), &nb_input_codecs, nb_input_codecs + 1);
         switch (dec->codec_type) {
         case AVMEDIA_TYPE_AUDIO:
@@ -3316,7 +3309,7 @@ static void opt_input_file(const char *filename)
     input_files_ts_offset[nb_input_files] = input_ts_offset - (copy_ts ? 0 : timestamp);
     /* dump the file content */
     if (verbose >= 0)
-        dump_format(ic, nb_input_files, filename, 0);
+        av_dump_format(ic, nb_input_files, filename, 0);
 
     nb_input_files++;
 
@@ -3396,7 +3389,7 @@ static void new_video_stream(AVFormatContext *oc, int file_idx)
     ost->bitstream_filters = video_bitstream_filters;
     video_bitstream_filters= NULL;
 
-    avcodec_thread_init(st->codec, thread_count);
+    st->codec->thread_count= thread_count;
 
     video_enc = st->codec;
 
@@ -3543,7 +3536,7 @@ static void new_audio_stream(AVFormatContext *oc, int file_idx)
     ost->bitstream_filters = audio_bitstream_filters;
     audio_bitstream_filters= NULL;
 
-    avcodec_thread_init(st->codec, thread_count);
+    st->codec->thread_count= thread_count;
 
     audio_enc = st->codec;
     audio_enc->codec_type = AVMEDIA_TYPE_AUDIO;
@@ -3796,7 +3789,7 @@ static void opt_output_file(const char *filename)
         }
 
         /* open the file */
-        if ((err = url_fopen(&oc->pb, filename, URL_WRONLY)) < 0) {
+        if ((err = avio_open(&oc->pb, filename, URL_WRONLY)) < 0) {
             print_error(filename, err);
             ffmpeg_exit(1);
         }
@@ -3816,7 +3809,6 @@ static void opt_output_file(const char *filename)
 
     set_context_opts(oc, avformat_opts, AV_OPT_FLAG_ENCODING_PARAM, NULL);
 
-    nb_streamid_map = 0;
     av_freep(&forced_key_frames);
 }
 
@@ -4190,7 +4182,10 @@ static const OptionDef options[] = {
     { "i", HAS_ARG, {(void*)opt_input_file}, "input file name", "filename" },
     { "y", OPT_BOOL, {(void*)&file_overwrite}, "overwrite output files" },
     { "map", HAS_ARG | OPT_EXPERT, {(void*)opt_map}, "set input stream mapping", "file:stream[:syncfile:syncstream]" },
-    { "map_meta_data", HAS_ARG | OPT_EXPERT, {(void*)opt_map_meta_data}, "set meta data information of outfile from infile", "outfile[,metadata]:infile[,metadata]" },
+    { "map_meta_data", HAS_ARG | OPT_EXPERT, {(void*)opt_map_meta_data}, "DEPRECATED set meta data information of outfile from infile",
+      "outfile[,metadata]:infile[,metadata]" },
+    { "map_metadata", HAS_ARG | OPT_EXPERT, {(void*)opt_map_metadata}, "set metadata information of outfile from infile",
+      "outfile[,metadata]:infile[,metadata]" },
     { "map_chapters",  HAS_ARG | OPT_EXPERT, {(void*)opt_map_chapters},  "set chapters mapping", "outfile:infile" },
     { "t", OPT_FUNC2 | HAS_ARG, {(void*)opt_recording_time}, "record or transcode \"duration\" seconds of audio/video", "duration" },
     { "fs", HAS_ARG | OPT_INT64, {(void*)&limit_filesize}, "set the limit file size in bytes", "limit_size" }, //

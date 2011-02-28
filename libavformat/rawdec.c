@@ -21,6 +21,7 @@
  */
 
 #include "avformat.h"
+#include "avio_internal.h"
 #include "rawdec.h"
 
 /* raw input */
@@ -81,7 +82,7 @@ int ff_raw_read_partial_packet(AVFormatContext *s, AVPacket *pkt)
 
     pkt->pos= url_ftell(s->pb);
     pkt->stream_index = 0;
-    ret = get_partial_buffer(s->pb, pkt->data, size);
+    ret = ffio_read_partial(s->pb, pkt->data, size);
     if (ret < 0) {
         av_free_packet(pkt);
         return ret;
@@ -138,7 +139,7 @@ int ff_raw_video_read_header(AVFormatContext *s,
 /* Note: Do not forget to add new entries to the Makefile as well. */
 
 #if CONFIG_G722_DEMUXER
-AVInputFormat g722_demuxer = {
+AVInputFormat ff_g722_demuxer = {
     "g722",
     NULL_IF_CONFIG_SMALL("raw G.722"),
     0,
@@ -152,7 +153,7 @@ AVInputFormat g722_demuxer = {
 #endif
 
 #if CONFIG_GSM_DEMUXER
-AVInputFormat gsm_demuxer = {
+AVInputFormat ff_gsm_demuxer = {
     "gsm",
     NULL_IF_CONFIG_SMALL("raw GSM"),
     0,
@@ -166,7 +167,7 @@ AVInputFormat gsm_demuxer = {
 #endif
 
 #if CONFIG_MJPEG_DEMUXER
-AVInputFormat mjpeg_demuxer = {
+AVInputFormat ff_mjpeg_demuxer = {
     "mjpeg",
     NULL_IF_CONFIG_SMALL("raw MJPEG video"),
     0,
@@ -180,7 +181,7 @@ AVInputFormat mjpeg_demuxer = {
 #endif
 
 #if CONFIG_MLP_DEMUXER
-AVInputFormat mlp_demuxer = {
+AVInputFormat ff_mlp_demuxer = {
     "mlp",
     NULL_IF_CONFIG_SMALL("raw MLP"),
     0,
@@ -194,7 +195,7 @@ AVInputFormat mlp_demuxer = {
 #endif
 
 #if CONFIG_TRUEHD_DEMUXER
-AVInputFormat truehd_demuxer = {
+AVInputFormat ff_truehd_demuxer = {
     "truehd",
     NULL_IF_CONFIG_SMALL("raw TrueHD"),
     0,
@@ -208,7 +209,7 @@ AVInputFormat truehd_demuxer = {
 #endif
 
 #if CONFIG_SHORTEN_DEMUXER
-AVInputFormat shorten_demuxer = {
+AVInputFormat ff_shorten_demuxer = {
     "shn",
     NULL_IF_CONFIG_SMALL("raw Shorten"),
     0,
@@ -222,7 +223,7 @@ AVInputFormat shorten_demuxer = {
 #endif
 
 #if CONFIG_VC1_DEMUXER
-AVInputFormat vc1_demuxer = {
+AVInputFormat ff_vc1_demuxer = {
     "vc1",
     NULL_IF_CONFIG_SMALL("raw VC-1"),
     0,

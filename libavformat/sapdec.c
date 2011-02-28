@@ -25,15 +25,16 @@
 #include "network.h"
 #include "os_support.h"
 #include "internal.h"
-#if HAVE_SYS_SELECT_H
-#include <sys/select.h>
+#include "avio_internal.h"
+#if HAVE_POLL_H
+#include <poll.h>
 #endif
 #include <sys/time.h>
 
 struct SAPState {
     URLContext *ann_fd;
     AVFormatContext *sdp_ctx;
-    ByteIOContext sdp_pb;
+    AVIOContext sdp_pb;
     uint16_t hash;
     char *sdp;
     int eof;
@@ -142,7 +143,7 @@ static int sap_read_header(AVFormatContext *s,
     }
 
     av_log(s, AV_LOG_VERBOSE, "SDP:\n%s\n", sap->sdp);
-    init_put_byte(&sap->sdp_pb, sap->sdp, strlen(sap->sdp), 0, NULL, NULL,
+    ffio_init_context(&sap->sdp_pb, sap->sdp, strlen(sap->sdp), 0, NULL, NULL,
                   NULL, NULL);
 
     infmt = av_find_input_format("sdp");
@@ -183,19 +184,15 @@ static int sap_fetch_packet(AVFormatContext *s, AVPacket *pkt)
     struct SAPState *sap = s->priv_data;
     int fd = url_get_file_handle(sap->ann_fd);
     int n, ret;
-    fd_set rfds;
-    struct timeval tv;
+    struct pollfd p = {fd, POLLIN, 0};
     uint8_t recvbuf[1500];
 
     if (sap->eof)
         return AVERROR_EOF;
 
     while (1) {
-        FD_ZERO(&rfds);
-        FD_SET(fd, &rfds);
-        tv.tv_sec = tv.tv_usec = 0;
-        n = select(fd + 1, &rfds, NULL, NULL, &tv);
-        if (n <= 0 || !FD_ISSET(fd, &rfds))
+        n = poll(&p, 1, 0);
+        if (n <= 0 || !(p.revents & POLLIN))
             break;
         ret = url_read(sap->ann_fd, recvbuf, sizeof(recvbuf));
         if (ret >= 8) {
@@ -226,7 +223,7 @@ static int sap_fetch_packet(AVFormatContext *s, AVPacket *pkt)
     return ret;
 }
 
-AVInputFormat sap_demuxer = {
+AVInputFormat ff_sap_demuxer = {
     "sap",
     NULL_IF_CONFIG_SMALL("SAP input format"),
     sizeof(struct SAPState),

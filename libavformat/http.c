@@ -64,13 +64,6 @@ static const AVClass httpcontext_class = {
 static int http_connect(URLContext *h, const char *path, const char *hoststr,
                         const char *auth, int *new_location);
 
-
-size_t ff_http_get_headers(URLContext *h, char *headers, int bufferSize)
-{
-    HTTPContext *s = h->priv_data;
-    return av_strlcpy(headers, s->response_headers, bufferSize);
-}
-
 void ff_http_set_headers(URLContext *h, const char *headers)
 {
     HTTPContext *s = h->priv_data;
@@ -91,6 +84,12 @@ void ff_http_init_auth_state(URLContext *dest, const URLContext *src)
 {
     memcpy(&((HTTPContext*)dest->priv_data)->auth_state,
            &((HTTPContext*)src->priv_data)->auth_state, sizeof(HTTPAuthState));
+}
+
+size_t ff_http_get_headers(URLContext *h, char *headers, int bufferSize)
+{
+    HTTPContext *s = h->priv_data;
+    return av_strlcpy(headers, s->response_headers, bufferSize);
 }
 
 /* return non zero if error */
@@ -233,7 +232,7 @@ static int process_line(URLContext *h, char *line, int line_count,
             p++;
         s->http_code = strtol(p, &end, 10);
 
-        dprintf(NULL, "http_code=%d\n", s->http_code);
+        av_dlog(NULL, "http_code=%d\n", s->http_code);
 
         /* error codes are 4xx and 5xx, but regard 401 as a success, so we
          * don't abort until all headers have been parsed. */
@@ -365,10 +364,10 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
         if (http_get_line(s, line, sizeof(line)) < 0)
             return AVERROR(EIO);
 
+        av_dlog(NULL, "header='%s'\n", line);
+        
         av_strlcat(s->response_headers, line, sizeof(s->response_headers));
         av_strlcat(s->response_headers, "\n", sizeof(s->response_headers));
-
-        dprintf(NULL, "header='%s'\n", line);
 
         err = process_line(h, line, s->line_count, new_location);
         if (err < 0)
@@ -399,7 +398,7 @@ static int http_read(URLContext *h, uint8_t *buf, int size)
 
                 s->chunksize = strtoll(line, NULL, 16);
 
-                dprintf(NULL, "Chunked encoding data size: %"PRId64"'\n", s->chunksize);
+                av_dlog(NULL, "Chunked encoding data size: %"PRId64"'\n", s->chunksize);
 
                 if (!s->chunksize)
                     return 0;
@@ -515,7 +514,7 @@ http_get_file_handle(URLContext *h)
     return url_get_file_handle(s->hd);
 }
 
-URLProtocol http_protocol = {
+URLProtocol ff_http_protocol = {
     "http",
     http_open,
     http_read,

@@ -1,7 +1,4 @@
-/*
- * H.26L/H.264/AVC/JVT/14496-10/... parser
- * Copyright (c) 2003 Michael Niedermayer <michaelni@gmx.at>
- *
+/**
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -19,21 +16,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-/**
- * @file
- * H.264 / AVC / MPEG4 part10 parser.
- * @author Michael Niedermayer <michaelni@gmx.at>
- */
+#ifndef AVCODEC_ARM_VP8_H
+#define AVCODEC_ARM_VP8_H
 
-#ifndef AVCODEC_H264_PARSER_H
-#define AVCODEC_H264_PARSER_H
+#if HAVE_ARMV6
+#define decode_block_coeffs_internal ff_decode_block_coeffs_armv6
+int ff_decode_block_coeffs_armv6(VP56RangeCoder *rc, DCTELEM block[16],
+                                 uint8_t probs[8][3][NUM_DCT_TOKENS-1],
+                                 int i, uint8_t *token_prob, int16_t qmul[2]);
+#endif
 
-#include "h264.h"
-
-/**
- * finds the end of the current frame in the bitstream.
- * @return the position of the first byte of the next frame, or -1
- */
-int ff_h264_find_frame_end(H264Context *h, const uint8_t *buf, int buf_size);
-
-#endif /* AVCODEC_H264_PARSER_H */
+#endif

@@ -9,20 +9,20 @@ PROGS-$(CONFIG_FFPLAY)   += ffplay
 PROGS-$(CONFIG_FFPROBE)  += ffprobe
 PROGS-$(CONFIG_FFSERVER) += ffserver
 
-PROGS      := $(addsuffix   $(EXESUF), $(PROGS-yes))
-PROGS_G     = $(addsuffix _g$(EXESUF), $(PROGS-yes))
-OBJS        = $(addsuffix .o,          $(PROGS-yes)) cmdutils.o
-MANPAGES    = $(addprefix doc/, $(addsuffix .1, $(PROGS-yes)))
-PODPAGES    = $(addprefix doc/, $(addsuffix .pod, $(PROGS-yes)))
-HTMLPAGES   = $(addprefix doc/, $(addsuffix .html, $(PROGS-yes)))
-TOOLS       = $(addprefix tools/, $(addsuffix $(EXESUF), cws2fws pktdumper probetest qt-faststart trasher))
-HOSTPROGS   = $(addprefix tests/, audiogen videogen rotozoom tiny_psnr base64)
+PROGS      := $(PROGS-yes:%=%$(EXESUF))
+PROGS_G     = $(PROGS-yes:%=%_g$(EXESUF))
+OBJS        = $(PROGS-yes:%=%.o) cmdutils.o
+MANPAGES    = $(PROGS-yes:%=doc/%.1)
+PODPAGES    = $(PROGS-yes:%=doc/%.pod)
+HTMLPAGES   = $(PROGS-yes:%=doc/%.html)
+TOOLS       = $(addprefix tools/, $(addsuffix $(EXESUF), cws2fws graph2dot lavfi-showfiltfmts pktdumper probetest qt-faststart trasher))
+TESTTOOLS   = audiogen videogen rotozoom tiny_psnr base64
+HOSTPROGS  := $(TESTTOOLS:%=tests/%)
 
 BASENAMES   = ffmpeg ffplay ffprobe ffserver
-ALLPROGS    = $(addsuffix   $(EXESUF), $(BASENAMES))
-ALLPROGS_G  = $(addsuffix _g$(EXESUF), $(BASENAMES))
-ALLMANPAGES = $(addsuffix .1, $(BASENAMES))
-ALLHTMLPAGES= $(addsuffix .html, $(BASENAMES))
+ALLPROGS    = $(BASENAMES:%=%$(EXESUF))
+ALLPROGS_G  = $(BASENAMES:%=%_g$(EXESUF))
+ALLMANPAGES = $(BASENAMES:%=%.1)
 
 FFLIBS-$(CONFIG_AVDEVICE) += avdevice
 FFLIBS-$(CONFIG_AVFILTER) += avfilter
@@ -30,7 +30,6 @@ FFLIBS-$(CONFIG_AVFORMAT) += avformat
 FFLIBS-$(CONFIG_AVCODEC)  += avcodec
 FFLIBS-$(CONFIG_POSTPROC) += postproc
 FFLIBS-$(CONFIG_SWSCALE)  += swscale
-FFLIBS-$(CONFIG_AVCORE)   += avcore
 
 FFLIBS := avutil
 
@@ -66,7 +65,7 @@ config.h: .config
 
 SUBDIR_VARS := OBJS FFLIBS CLEANFILES DIRS TESTPROGS EXAMPLES SKIPHEADERS \
                ALTIVEC-OBJS MMX-OBJS NEON-OBJS X86-OBJS YASM-OBJS-FFT YASM-OBJS \
-               HOSTPROGS BUILT_HEADERS TESTOBJS ARCH_HEADERS
+               HOSTPROGS BUILT_HEADERS TESTOBJS ARCH_HEADERS ARMV6-OBJS
 
 define RESET
 $(1) :=
@@ -93,6 +92,8 @@ tools/%$(EXESUF): tools/%.o
 tools/%.o: tools/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $(CC_O) $<
 
+-include $(wildcard tools/*.d)
+
 ffplay.o: CFLAGS += $(SDL_CFLAGS)
 
 VERSION_SH  = $(SRC_PATH_BARE)/version.sh
@@ -111,22 +112,22 @@ version.h .version:
 
 alltools: $(TOOLS)
 
-documentation: $(addprefix doc/, developer.html faq.html general.html libavfilter.html \
-                                 $(ALLHTMLPAGES) $(ALLMANPAGES))
+DOCS = $(addprefix doc/, developer.html faq.html general.html libavfilter.html) $(HTMLPAGES) $(MANPAGES) $(PODPAGES)
 
-$(HTMLPAGES) $(PODPAGES): doc/fftools-common-opts.texi
+documentation: $(DOCS)
 
-doc/ffmpeg.pod doc/ffmpeg.html: doc/demuxers.texi doc/bitstream_filters.texi doc/eval.texi doc/indevs.texi doc/filters.texi doc/outdevs.texi doc/protocols.texi doc/metadata.texi
-doc/ffplay.pod doc/ffplay.html: doc/demuxers.texi doc/eval.texi doc/indevs.texi doc/filters.texi doc/outdevs.texi doc/protocols.texi
-doc/ffprobe.pod doc/ffprobe.html: doc/demuxers.texi doc/indevs.texi doc/protocols.texi
-doc/libavfilter.html: doc/filters.texi
+-include $(wildcard $(DOCS:%=%.d))
+
+TEXIDEP = awk '/^@include/ { printf "$@: $(@D)/%s\n", $$2 }' <$< >$(@:%=%.d)
 
 doc/%.html: TAG = HTML
-doc/%.html: doc/%.texi
-	$(M)cd doc && texi2html -monolithic -number $(<:doc/%=%)
+doc/%.html: doc/%.texi $(SRC_PATH_BARE)/doc/t2h.init
+	$(Q)$(TEXIDEP)
+	$(M)cd doc && texi2html -monolithic --init-file $(SRC_PATH_BARE)/doc/t2h.init $(<:doc/%=%)
 
 doc/%.pod: TAG = POD
 doc/%.pod: doc/%.texi
+	$(Q)$(TEXIDEP)
 	$(M)doc/texi2pod.pl $< $@
 
 doc/%.1: TAG = MAN
@@ -162,13 +163,14 @@ testclean:
 	$(RM) -r tests/vsynth1 tests/vsynth2 tests/data
 	$(RM) $(addprefix tests/,$(CLEANSUFFIXES))
 	$(RM) tests/seek_test$(EXESUF) tests/seek_test.o
-	$(RM) $(addprefix tests/,$(addsuffix $(HOSTEXESUF),audiogen videogen rotozoom tiny_psnr base64))
+	$(RM) $(TESTTOOLS:%=tests/%$(HOSTEXESUF))
 
 clean:: testclean
 	$(RM) $(ALLPROGS) $(ALLPROGS_G)
 	$(RM) $(CLEANSUFFIXES)
 	$(RM) doc/*.html doc/*.pod doc/*.1
 	$(RM) $(TOOLS)
+	$(RM) $(CLEANSUFFIXES:%=tools/%)
 
 distclean::
 	$(RM) $(DISTCLEANSUFFIXES)

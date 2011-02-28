@@ -21,6 +21,7 @@
 
 #include "avformat.h"
 #include "ffmeta.h"
+#include "internal.h"
 
 static int probe(AVProbeData *p)
 {
@@ -29,17 +30,17 @@ static int probe(AVProbeData *p)
     return 0;
 }
 
-static void get_line(ByteIOContext *s, uint8_t *buf, int size)
+static void get_line(AVIOContext *s, uint8_t *buf, int size)
 {
     do {
         uint8_t c;
         int i = 0;
 
-        while ((c = get_byte(s))) {
+        while ((c = avio_r8(s))) {
             if (c == '\\') {
                 if (i < size - 1)
                     buf[i++] = c;
-                c = get_byte(s);
+                c = avio_r8(s);
             } else if (c == '\n')
                 break;
 
@@ -163,7 +164,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     return AVERROR_EOF;
 }
 
-AVInputFormat ffmetadata_demuxer = {
+AVInputFormat ff_ffmetadata_demuxer = {
     .name        = "ffmetadata",
     .long_name   = NULL_IF_CONFIG_SMALL("FFmpeg metadata in text format"),
     .read_probe  = probe,
