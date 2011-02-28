@@ -752,7 +752,7 @@ static void parreaderLogger(int level, const char *format, va_list args)
     av_vlog(NULL, av_log_level, format, args);
 }
 
-AVOutputFormat libparreader_muxer = {
+AVOutputFormat ff_libparreader_muxer = {
     .name           = "libpar",
     .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings PAR format"),
     .mime_type      = "video/adhbinary",
@@ -766,7 +766,7 @@ AVOutputFormat libparreader_muxer = {
     .flags          = AVFMT_GLOBALHEADER,
 };
 
-AVInputFormat libparreader_demuxer = {
+AVInputFormat ff_libparreader_demuxer = {
     .name           = "libpar",
     .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings PAR format"),
     .priv_data_size = sizeof(PARDecContext),

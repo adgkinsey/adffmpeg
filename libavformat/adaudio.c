@@ -154,7 +154,7 @@ static AVStream *get_audio_stream( struct AVFormatContext *s )
 }
 
 
-AVInputFormat adaudio_demuxer = {
+AVInputFormat ff_adaudio_demuxer = {
     .name           = "adaudio",
     .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings audio format"),
     .read_probe     = adaudio_probe,

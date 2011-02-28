@@ -306,7 +306,7 @@ static int dspicReadClose( AVFormatContext *s )
 }
 
 
-AVInputFormat dspic_demuxer = {
+AVInputFormat ff_dspic_demuxer = {
     .name           = "dspic",
     .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings Digital-Sprite format"),
     .read_probe     = dspicProbe,

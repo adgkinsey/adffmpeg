@@ -209,7 +209,7 @@ static int64_t netvu_seek(URLContext *h, int64_t off, int whence)
 }
 
 
-URLProtocol netvu_protocol = {
+URLProtocol ff_netvu_protocol = {
     "netvu",
     netvu_open,
     netvu_read,

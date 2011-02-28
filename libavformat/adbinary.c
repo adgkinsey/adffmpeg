@@ -489,7 +489,7 @@ static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb,
 }
 
 
-AVInputFormat adbinary_demuxer = {
+AVInputFormat ff_adbinary_demuxer = {
     .name           = "adbinary",
     .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings video format (binary)"),
     .priv_data_size = sizeof(AdbinaryContext),

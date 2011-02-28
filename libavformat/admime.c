@@ -757,7 +757,7 @@ static int admime_read_close(AVFormatContext *s)
 }
 
 
-AVInputFormat admime_demuxer = {
+AVInputFormat ff_admime_demuxer = {
     .name           = "admime",
     .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings video format (MIME)"),
     .priv_data_size = 0,

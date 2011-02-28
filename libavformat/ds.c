@@ -1251,7 +1251,7 @@ static int64_t TimeTolong64( time_t time )
 }
 
 
-URLProtocol dm_protocol = {
+URLProtocol ff_dm_protocol = {
     .name                = "dm",
     .url_open            = DSOpen,
     .url_read            = DSRead,
