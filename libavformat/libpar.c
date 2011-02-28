@@ -30,6 +30,7 @@
 #include "avformat.h"
 #include "internal.h"
 #include "libavutil/intreadwrite.h"
+#include "./libavutil/parseutils.h"
 #include "libpar.h"
 
 
@@ -69,13 +70,10 @@ const unsigned int MAX_FRAMEBUFFER_SIZE = 256 * 1024;
 
 void importMetadata(const AVMetadataTag *tag, PAREncStreamContext *ps)
 {
-    struct tm timeval = {0};
-
     if (strcasecmp(tag->key, "title") == 0)
         strncpy(ps->name, tag->value, sizeof(ps->name));
     else if (strcasecmp(tag->key, "date") == 0)  {
-        small_strptime(tag->value, "%Y-%m-%d %H:%M", &timeval);
-        ps->startTime = mktime(&timeval);
+        av_parse_time(&ps->startTime, tag->value, 0);
         ps->startTime *= 1000;
     }
     else if (strcasecmp(tag->key, "track") == 0)

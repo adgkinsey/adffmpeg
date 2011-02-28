@@ -16,16 +16,21 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVCORE_INTERNAL_H
-#define AVCORE_INTERNAL_H
-
 /**
  * @file
- * internal functions
+ * targa file common definitions
+ *
+ * Based on:
+ * http://www.gamers.org/dEngine/quake3/TGA.txt
+ *
+ * and other specs you can find referenced for example in:
+ * http://en.wikipedia.org/wiki/Truevision_TGA
  */
 
-#include "avcore.h"
-
-int ff_set_systematic_pal2(uint32_t pal[256], enum PixelFormat pix_fmt);
-
-#endif /* AVCORE_INTERNAL_H */
+enum TargaCompr {
+    TGA_NODATA = 0, // no image data
+    TGA_PAL    = 1, // palettized
+    TGA_RGB    = 2, // true-color
+    TGA_BW     = 3, // black & white or grayscale
+    TGA_RLE    = 8, // flag pointing that data is RLE-coded
+};
