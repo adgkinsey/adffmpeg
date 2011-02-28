@@ -38,7 +38,7 @@ void ad_release_packet(AVPacket *pkt);
 
 int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
 {
-    ByteIOContext*	    pb = s->pb;
+    AVIOContext*	    pb = s->pb;
     URLContext*		    urlContext = pb->opaque;
     NetvuContext*	    nv = NULL;
 
@@ -340,7 +340,7 @@ void ad_release_packet( AVPacket *pkt )
     av_destruct_packet( pkt );    
 }
 
-int ad_get_buffer(ByteIOContext *s, uint8_t *buf, int size)
+int ad_get_buffer(AVIOContext *s, uint8_t *buf, int size)
 {
     int TotalDataRead = 0;
     int DataReadThisTime = 0;
@@ -349,7 +349,7 @@ int ad_get_buffer(ByteIOContext *s, uint8_t *buf, int size)
 
     //get data while ther is no time out and we still need data
     while(TotalDataRead < size && retrys < RetryBoundry) {
-        DataReadThisTime += get_buffer(s, buf, (size - TotalDataRead));
+        DataReadThisTime += avio_read(s, buf, (size - TotalDataRead));
 
         // if we retreave some data keep trying until we get the required data
         // or we have much longer time out
@@ -392,7 +392,7 @@ int initADData(int data_type, ADFrameType *frameType,
     return 0;
 }
 
-int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
+int ad_read_jpeg(AVFormatContext *s, AVIOContext *pb,
                  AVPacket *pkt,
                  NetVuImageData *video_data, char **text_data)
 {
@@ -469,7 +469,7 @@ int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
     return errorVal;
 }
 
-int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb,
+int ad_read_jfif(AVFormatContext *s, AVIOContext *pb,
                  AVPacket *pkt, int imgLoaded, int size,
                  NetVuImageData *video_data, char **text_data)
 {
@@ -508,7 +508,7 @@ int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb,
  * SITE DVIP3S;CAM 3:Development;(JPEG)TARGSIZE 0:(MPEG)BITRATE 262144;IMAGESIZE 0,0:704,256;
  * SITE DVIP3S;CAM 4:Rear road;(JPEG)TARGSIZE 0:(MPEG)BITRATE 262144;IMAGESIZE 0,0:704,256;
  */
-int ad_read_info(AVFormatContext *s, ByteIOContext *pb,
+int ad_read_info(AVFormatContext *s, AVIOContext *pb,
                  AVPacket *pkt, int size)
 {
     int n, status, errorVal = 0;
@@ -524,7 +524,7 @@ int ad_read_info(AVFormatContext *s, ByteIOContext *pb,
     return errorVal;
 }
 
-int ad_read_layout(AVFormatContext *s, ByteIOContext *pb,
+int ad_read_layout(AVFormatContext *s, AVIOContext *pb,
                    AVPacket *pkt, int size)
 {
     int n, status, errorVal = 0;
@@ -540,7 +540,7 @@ int ad_read_layout(AVFormatContext *s, ByteIOContext *pb,
     return errorVal;
 }
 
-int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
+int ad_read_packet(AVFormatContext *s, AVIOContext *pb, AVPacket *pkt,
                    ADFrameType frameType, void *data, char *text_data)
 {
     AVStream    *st        = NULL;

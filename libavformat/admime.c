@@ -37,7 +37,7 @@
 #define DATA_PLAINTEXT          (MAX_DATA_TYPE + 1)
 
 
-static int parse_mime_header(ByteIOContext *pb, uint8_t *buf, int *bufSize, 
+static int parse_mime_header(AVIOContext *pb, uint8_t *buf, int *bufSize, 
                              int *dataType, int *size, long *extra );
 static int process_line( char *line, int* line_count, int *dataType,
                          int *size, long *extra );
@@ -47,13 +47,13 @@ static int process_mp4data_line(char *line, int line_count,
                                 NetVuImageData *vidDat, struct tm *tim,
                                 char ** txtDat );
 static int is_valid_separator( unsigned char * buf, int bufLen );
-static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
+static int ad_read_mpeg(AVFormatContext *s, AVIOContext *pb,
                         AVPacket *pkt, int size, long *extra,
                         NetVuImageData *vidDat, char **txtDat);
-static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
+static int ad_read_audio(AVFormatContext *s, AVIOContext *pb,
                          AVPacket *pkt, int size, long extra,
                          NetVuAudioData *audDat);
-static int handleInvalidMime(AVFormatContext *s, ByteIOContext *pb,
+static int handleInvalidMime(AVFormatContext *s, AVIOContext *pb,
                              uint8_t *preRead, int preReadSize, AVPacket *pkt, 
                              int *data_type, int *size, int *imgLoaded);
 
@@ -176,7 +176,7 @@ static int admime_read_header(AVFormatContext *s, AVFormatParameters *ap)
  * \return Zero on successful decode, -2 if a raw JPEG, anything else indicates
  *         failure
  */
-static int parse_mime_header(ByteIOContext *pb, uint8_t *buffer, int *bufSize, 
+static int parse_mime_header(AVIOContext *pb, uint8_t *buffer, int *bufSize, 
                              int *dataType, int *size, long *extra)
 {
     unsigned char *             q = NULL;
@@ -532,7 +532,7 @@ static int process_mp4data_line( char *line, int line_count,
 
 static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    ByteIOContext *         pb = s->pb;
+    AVIOContext *         pb = s->pb;
     NetVuAudioData *        audDat = NULL;
     NetVuImageData *        vidDat = NULL;
     char *                  txtDat = NULL;
@@ -620,7 +620,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
 /**
  * MPEG4 or H264 video frame with a MIME trailer
  */
-static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
+static int ad_read_mpeg(AVFormatContext *s, AVIOContext *pb,
                         AVPacket *pkt, int size, long *extra,
                         NetVuImageData *vidDat, char **txtDat)
 {
@@ -678,7 +678,7 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
 /**
  * Audio frame
  */
-static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
+static int ad_read_audio(AVFormatContext *s, AVIOContext *pb,
                          AVPacket *pkt, int size, long extra,
                          NetVuAudioData *audDat)
 {
@@ -709,7 +709,7 @@ static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
  * However sometimes the header is missing and then there is a valid image so 
  * try and parse a frame out anyway.
  */
-static int handleInvalidMime(AVFormatContext *s, ByteIOContext *pb, 
+static int handleInvalidMime(AVFormatContext *s, AVIOContext *pb, 
                              uint8_t *preRead, int preReadSize, AVPacket *pkt, 
                              int *data_type, int *size, int *imgLoaded)
 {

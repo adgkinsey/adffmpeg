@@ -40,15 +40,15 @@ enum pkt_offsets { DATA_TYPE, DATA_CHANNEL,
                  };
 
 static void audioheader_network2host(NetVuAudioData *dst, uint8_t *src);
-static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
+static int ad_read_mpeg(AVFormatContext *s, AVIOContext *pb,
                         AVPacket *pkt,
                         NetVuImageData *vidDat, char **text_data);
-static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
+static int ad_read_mpeg_minimal(AVFormatContext *s, AVIOContext *pb,
                                 AVPacket *pkt, int size, int channel,
                                 NetVuImageData *vidDat, char **text_data);
-static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
+static int ad_read_audio(AVFormatContext *s, AVIOContext *pb,
                          AVPacket *pkt, int size, NetVuAudioData *data);
-static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb,
+static int ad_read_audio_minimal(AVFormatContext *s, AVIOContext *pb,
                                  AVPacket *pkt, int size, NetVuAudioData *data);
 
 
@@ -228,7 +228,7 @@ static int adbinary_read_header(AVFormatContext *s, AVFormatParameters *ap)
 
 static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
-    ByteIOContext *         pb = s->pb;
+    AVIOContext *         pb = s->pb;
     NetVuAudioData *        audDat = NULL;
     NetVuImageData *        vidDat = NULL;
     char *                  txtDat = NULL;
@@ -237,9 +237,9 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     ADFrameType             frameType;
 
     // First read the 6 byte separator
-    data_type    = get_byte(pb);
-    data_channel = get_byte(pb);
-    size         = get_be32(pb);
+    data_type    = avio_r8(pb);
+    data_channel = avio_r8(pb);
+    size         = avio_rb32(pb);
     if (size == 0)  {
         if(url_feof(pb))
             errorVal = AVERROR_EOF;
@@ -324,7 +324,7 @@ static int adbinary_read_close(AVFormatContext *s)
 /**
  * MPEG4 or H264 video frame with a Netvu header
  */
-static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
+static int ad_read_mpeg(AVFormatContext *s, AVIOContext *pb,
                         AVPacket *pkt,
                         NetVuImageData *vidDat, char **text_data)
 {
@@ -385,7 +385,7 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
 /**
  * MPEG4 or H264 video frame with a minimal header
  */
-static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
+static int ad_read_mpeg_minimal(AVFormatContext *s, AVIOContext *pb,
                                 AVPacket *pkt, int size, int channel,
                                 NetVuImageData *vidDat, char **text_data)
 {
@@ -396,8 +396,8 @@ static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
 
     // Get the minimal video header and copy into generic video data structure
     memset(vidDat, 0, sizeof(NetVuImageData));
-    vidDat->session_time  = get_be32(pb);
-    vidDat->milliseconds  = get_be16(pb);
+    vidDat->session_time  = avio_rb32(pb);
+    vidDat->milliseconds  = avio_rb16(pb);
     
     if ( url_ferror(pb) || (vidDat->session_time == 0) )  {
         av_log(s, AV_LOG_ERROR, "%s: Reading header, errorcode %d\n", 
@@ -423,7 +423,7 @@ static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
 /**
  * Audio frame with a Netvu header
  */
-static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
+static int ad_read_audio(AVFormatContext *s, AVIOContext *pb,
                          AVPacket *pkt, int size, NetVuAudioData *data)
 {
     int n, status, errorVal = 0;
@@ -461,7 +461,7 @@ static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
 /**
  * Audio frame with a minimal header
  */
-static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb,
+static int ad_read_audio_minimal(AVFormatContext *s, AVIOContext *pb,
                                  AVPacket *pkt, int size, NetVuAudioData *data)
 {
     int dataSize = size - sizeof(MinimalAudioHeader);
@@ -469,9 +469,9 @@ static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb,
 
     // Get the minimal audio header and copy into generic audio data structure
     memset(data, 0, sizeof(NetVuAudioData));
-    data->seconds = get_be32(pb);
-    data->msecs = get_be16(pb);
-    data->mode = get_be16(pb);
+    data->seconds = avio_rb32(pb);
+    data->msecs   = avio_rb16(pb);
+    data->mode    = avio_rb16(pb);
     if ( url_ferror(pb) || (data->seconds == 0) )  {
         av_log(s, AV_LOG_ERROR, "%s: Reading header, errorcode %d\n", 
                __func__, url_ferror(pb));

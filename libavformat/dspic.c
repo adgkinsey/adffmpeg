@@ -29,7 +29,7 @@ static int dspicProbe( AVProbeData *p );
 static int dspicReadHeader( AVFormatContext *s, AVFormatParameters *ap );
 static int dspicReadPacket( AVFormatContext *s, AVPacket *pkt );
 static int dspicReadClose( AVFormatContext *s );
-static int ReadNetworkMessageHeader( ByteIOContext *context, MessageHeader *header );
+static int ReadNetworkMessageHeader( AVIOContext *context, MessageHeader *header );
 static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize );
 static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData );
 
@@ -67,7 +67,7 @@ static int dspicReadHeader( AVFormatContext *s, AVFormatParameters *ap )
 
 static int dspicReadPacket( AVFormatContext *s, AVPacket *pkt )
 {
-    ByteIOContext *         ioContext = s->pb;
+    AVIOContext *         ioContext = s->pb;
     int                     retVal = 0;
     MessageHeader           header;
     int                     dataSize = 0;
@@ -91,7 +91,7 @@ static int dspicReadPacket( AVFormatContext *s, AVPacket *pkt )
             if( (retVal = ad_new_packet( pkt, dataSize )) < 0 )
                 return retVal;
 
-            if( get_buffer( ioContext, pkt->data, dataSize ) != dataSize )
+            if( avio_read( ioContext, pkt->data, dataSize ) != dataSize )
                 return AVERROR_IO;
         }
         else if( header.messageType == TCP_SRV_IMG_DATA ) {
@@ -105,7 +105,7 @@ static int dspicReadPacket( AVFormatContext *s, AVPacket *pkt )
                 return retVal;
 
             /* Read the jfif data out of the buffer */
-            if( get_buffer( ioContext, pkt->data, dataSize ) != dataSize )
+            if( avio_read( ioContext, pkt->data, dataSize ) != dataSize )
                 return AVERROR_IO;
 
             /* Now extract the frame info that's in there */
@@ -287,16 +287,16 @@ static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData )
     return retVal;
 }
 
-static int ReadNetworkMessageHeader( ByteIOContext *context, MessageHeader *header )
+static int ReadNetworkMessageHeader( AVIOContext *context, MessageHeader *header )
 {
     // Read the header in a piece at a time...
-    header->magicNumber = get_be32(context);
-    header->length = get_be32(context);
-    header->channelID = get_be32(context);
-    header->sequence = get_be32(context);
-    header->messageVersion = get_be32(context);
-    header->checksum = get_be32(context);
-    header->messageType = get_be32(context);
+    header->magicNumber    = avio_rb32(context);
+    header->length         = avio_rb32(context);
+    header->channelID      = avio_rb32(context);
+    header->sequence       = avio_rb32(context);
+    header->messageVersion = avio_rb32(context);
+    header->checksum       = avio_rb32(context);
+    header->messageType    = avio_rb32(context);
     return 0;
 }
 

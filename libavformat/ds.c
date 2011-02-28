@@ -501,7 +501,7 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
     char *              encCredentials = NULL;
     ClientConnectMsg *  connectMsg = NULL;
     int                 channelID = -2;
-    int                 streamType, res, cam;
+    int                 streamType = 0, res = 0, cam = 0;
     time_t              from = 0, to = 0;
     int                 rate = 0;
     vcrMode             playMode = VM_PLAY;

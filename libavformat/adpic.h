@@ -53,20 +53,20 @@ enum data_type { DATA_JPEG, DATA_JFIF,
 int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset);
 void ad_network2host(NetVuImageData *pic, uint8_t *data);
 int ad_new_packet(AVPacket *pkt, int size);
-int ad_get_buffer(ByteIOContext *s, uint8_t *buf, int size);
+int ad_get_buffer(AVIOContext *s, uint8_t *buf, int size);
 int initADData(int data_type, ADFrameType *frameType,
                NetVuImageData **vidDat, NetVuAudioData **audDat);
-int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
+int ad_read_jpeg(AVFormatContext *s, AVIOContext *pb,
                  AVPacket *pkt,
                  NetVuImageData *video_data, char **text_data);
-int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb,
+int ad_read_jfif(AVFormatContext *s, AVIOContext *pb,
                  AVPacket *pkt, int manual_size, int size,
                  NetVuImageData *video_data, char **text_data);
-int ad_read_info(AVFormatContext *s, ByteIOContext *pb,
+int ad_read_info(AVFormatContext *s, AVIOContext *pb,
                  AVPacket *pkt, int size);
-int ad_read_layout(AVFormatContext *s, ByteIOContext *pb,
+int ad_read_layout(AVFormatContext *s, AVIOContext *pb,
                    AVPacket *pkt, int size);
-int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
+int ad_read_packet(AVFormatContext *s, AVIOContext *pb, AVPacket *pkt,
                    ADFrameType currentFrameType, void *data, char *text_data);
 AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h, 
                          uint8_t cam, int format, const char *title);
