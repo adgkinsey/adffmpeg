@@ -174,7 +174,7 @@ AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t cam
 
             // Set pixel aspect ratio, display aspect is (sar * width / height)
             // May get overridden by codec
-            if( (st->codec->width  > 360) && (st->codec->height <= 480) )
+            if( (st->codec->width > 360) && (st->codec->height < 480) )
                 st->sample_aspect_ratio = (AVRational) { 1, 2 };
             else
                 st->sample_aspect_ratio = (AVRational) { 1, 1 };
