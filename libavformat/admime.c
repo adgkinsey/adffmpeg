@@ -700,6 +700,8 @@ static int ad_read_audio(AVFormatContext *s, AVIOContext *pb,
     if (ad_get_buffer( pb, pkt->data, size) != size)
         return(ADPIC_AUDIO_ADPCM_MIME_GET_BUFFER_ERROR);
 
+    audiodata_network2host(pkt->data, size);
+    
     return 0;
 }
 

@@ -26,13 +26,15 @@
 
 #include "avformat.h"
 #include "ds_exports.h"
+#include "adpic.h"
 
 
 #define SIZEOF_RTP_HEADER       12
 #define AD_AUDIO_STREAM_ID      0x212ED83E
 
 
-static AVStream *get_audio_stream( struct AVFormatContext *s );
+static int adaudio_probe(AVProbeData *p);
+static int adaudio_read_header(AVFormatContext *s, AVFormatParameters *ap);
 static int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt);
 
 
@@ -91,9 +93,11 @@ static int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 
                 /* Copy data into packet */
                 memcpy( pkt->data, &ioContext->buf_ptr[SIZEOF_RTP_HEADER], sampleSize );
+                
+                audiodata_network2host(pkt->data, sampleSize);
 
                 /* Configure stream info */
-                if( (st = get_audio_stream( s )) != NULL ) {
+                if( (st = ad_get_audio_stream(s, NULL)) != NULL ) {
                     pkt->stream_index = st->index;
                     pkt->duration =  ((int)(AV_TIME_BASE * 1.0));
 
@@ -118,39 +122,6 @@ static int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     }
 
     return retVal;
-}
-
-static AVStream *get_audio_stream( struct AVFormatContext *s )
-{
-    int id;
-    int i, found;
-    AVStream *st;
-
-    found = 0;
-
-    id = AD_AUDIO_STREAM_ID;
-
-    for( i = 0; i < s->nb_streams; i++ ) {
-        st = s->streams[i];
-        if( st->id == id ) {
-            found = 1;
-            break;
-        }
-    }
-
-    // Did we find our audio stream? If not, create a new one
-    if( !found ) {
-        st = av_new_stream( s, id );
-        if (st) {
-            st->codec->codec_type = CODEC_TYPE_AUDIO;
-            st->codec->codec_id = CODEC_ID_ADPCM_ADH;
-            st->codec->channels = 1;
-            st->codec->block_align = 0;
-            st->index = i;
-        }
-    }
-
-    return st;
 }
 
 
