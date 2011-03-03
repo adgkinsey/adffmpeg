@@ -478,8 +478,6 @@ OBJS-$(CONFIG_ADPCM_THP_DECODER)          += adpcm.o
 OBJS-$(CONFIG_ADPCM_XA_DECODER)           += adpcm.o
 OBJS-$(CONFIG_ADPCM_YAMAHA_DECODER)       += adpcm.o
 OBJS-$(CONFIG_ADPCM_YAMAHA_ENCODER)       += adpcm.o
-OBJS-$(CONFIG_ADPCM_ADH_DECODER)          += adpcm.o
-OBJS-$(CONFIG_ADPCM_ADH_ENCODER)          += adpcm.o
 
 # libavformat dependencies
 OBJS-$(CONFIG_ADTS_MUXER)              += mpeg4audio.o

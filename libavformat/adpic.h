@@ -70,6 +70,8 @@ int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
                    ADFrameType currentFrameType, void *data, char *text_data);
 AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h, 
                          uint8_t cam, int format, const char *title);
+AVStream * ad_get_audio_stream(AVFormatContext *s, NetVuAudioData* audioHeader);
+void audiodata_network2host(uint8_t *data, int size);
 
 
 #define PIC_REVISION 1

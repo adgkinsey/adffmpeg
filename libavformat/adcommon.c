@@ -31,7 +31,6 @@
 
 
 AVStream * netvu_get_stream(AVFormatContext *s, NetVuImageData *pic);
-AVStream * ad_get_audio_stream(AVFormatContext *s, NetVuAudioData* audioHeader);
 AVStream * ad_get_data_stream(AVFormatContext *s);
 void ad_release_packet(AVPacket *pkt);
 
@@ -216,43 +215,47 @@ AVStream * ad_get_audio_stream(AVFormatContext *s, NetVuAudioData* audioHeader)
         st = av_new_stream( s, id );
         if (st) {
             st->codec->codec_type = CODEC_TYPE_AUDIO;
-            st->codec->codec_id = CODEC_ID_ADPCM_ADH;
+            st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
             st->codec->channels = 1;
             st->codec->block_align = 0;
+            st->codec->bits_per_coded_sample = 4;
 
-            switch(audioHeader->mode)  {
-                default:
-                case(RTP_PAYLOAD_TYPE_8000HZ_ADPCM):
-                case(RTP_PAYLOAD_TYPE_8000HZ_PCM):
-                    st->codec->sample_rate = 8000;
-                    break;
-                case(RTP_PAYLOAD_TYPE_16000HZ_ADPCM):
-                case(RTP_PAYLOAD_TYPE_16000HZ_PCM):
-                    st->codec->sample_rate = 16000;
-                    break;
-                case(RTP_PAYLOAD_TYPE_44100HZ_ADPCM):
-                case(RTP_PAYLOAD_TYPE_44100HZ_PCM):
-                    st->codec->sample_rate = 441000;
-                    break;
-                case(RTP_PAYLOAD_TYPE_11025HZ_ADPCM):
-                case(RTP_PAYLOAD_TYPE_11025HZ_PCM):
-                    st->codec->sample_rate = 11025;
-                    break;
-                case(RTP_PAYLOAD_TYPE_22050HZ_ADPCM):
-                case(RTP_PAYLOAD_TYPE_22050HZ_PCM):
-                    st->codec->sample_rate = 22050;
-                    break;
-                case(RTP_PAYLOAD_TYPE_32000HZ_ADPCM):
-                case(RTP_PAYLOAD_TYPE_32000HZ_PCM):
-                    st->codec->sample_rate = 32000;
-                    break;
-                case(RTP_PAYLOAD_TYPE_48000HZ_ADPCM):
-                case(RTP_PAYLOAD_TYPE_48000HZ_PCM):
-                    st->codec->sample_rate = 48000;
-                    break;
+            if (audioHeader)  {
+                switch(audioHeader->mode)  {
+                    default:
+                    case(RTP_PAYLOAD_TYPE_8000HZ_ADPCM):
+                    case(RTP_PAYLOAD_TYPE_8000HZ_PCM):
+                        st->codec->sample_rate = 8000;
+                        break;
+                    case(RTP_PAYLOAD_TYPE_16000HZ_ADPCM):
+                    case(RTP_PAYLOAD_TYPE_16000HZ_PCM):
+                        st->codec->sample_rate = 16000;
+                        break;
+                    case(RTP_PAYLOAD_TYPE_44100HZ_ADPCM):
+                    case(RTP_PAYLOAD_TYPE_44100HZ_PCM):
+                        st->codec->sample_rate = 441000;
+                        break;
+                    case(RTP_PAYLOAD_TYPE_11025HZ_ADPCM):
+                    case(RTP_PAYLOAD_TYPE_11025HZ_PCM):
+                        st->codec->sample_rate = 11025;
+                        break;
+                    case(RTP_PAYLOAD_TYPE_22050HZ_ADPCM):
+                    case(RTP_PAYLOAD_TYPE_22050HZ_PCM):
+                        st->codec->sample_rate = 22050;
+                        break;
+                    case(RTP_PAYLOAD_TYPE_32000HZ_ADPCM):
+                    case(RTP_PAYLOAD_TYPE_32000HZ_PCM):
+                        st->codec->sample_rate = 32000;
+                        break;
+                    case(RTP_PAYLOAD_TYPE_48000HZ_ADPCM):
+                    case(RTP_PAYLOAD_TYPE_48000HZ_PCM):
+                        st->codec->sample_rate = 48000;
+                        break;
+                }
             }
+            else
+                st->codec->sample_rate = 8000;
             av_set_pts_info(st, 32, 1, st->codec->sample_rate);
-            st->codec->codec_tag = 0x0012;
 
             st->index = i;
         }
@@ -614,4 +617,20 @@ int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
     pkt->pos = -1;
 
     return 0;
+}
+
+void audiodata_network2host(uint8_t *data, int size)
+{
+    const uint8_t *dataEnd = data + size;
+    uint8_t upper, lower;
+    uint16_t predictor = AV_RB16(data);
+    
+    AV_WL16(data, predictor);
+    data += 4;
+    
+    for (;data < dataEnd; data++)  {
+        upper = ((*data) & 0xF0) >> 4;
+        lower = ((*data) & 0x0F) << 4;
+        *data = upper | lower;
+    }
 }

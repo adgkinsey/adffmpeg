@@ -454,6 +454,8 @@ static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
     // Now get the actual audio data
     if( (n = ad_get_buffer( pb, pkt->data, data->sizeOfAudioData)) != data->sizeOfAudioData )
         return ADPIC_AUDIO_ADPCM_MIME_GET_BUFFER_ERROR;
+    
+    audiodata_network2host(pkt->data, data->sizeOfAudioData);
 
     return errorVal;
 }
@@ -485,6 +487,8 @@ static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb,
     if( (n = ad_get_buffer( pb, pkt->data, dataSize )) != dataSize )
         return ADPIC_MINIMAL_AUDIO_ADPCM_GET_BUFFER_ERROR2;
 
+    audiodata_network2host(pkt->data, dataSize);
+    
     return errorVal;
 }
 

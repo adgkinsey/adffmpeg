@@ -323,9 +323,10 @@ AVStream* createStream(AVFormatContext * avf,
     }
     else if (parReader_frameIsAudio(frameInfo))  {
         st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
-        st->codec->codec_id = CODEC_ID_ADPCM_ADH;
+        st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
         st->codec->channels = 1;
         st->codec->block_align = 0;
+        st->codec->bits_per_coded_sample = 4;
         st->start_time = frameInfo->imageTime * 1000 + frameInfo->imageMS;
 
         switch(getAudioFrameSubType(frameInfo))  {
@@ -381,7 +382,6 @@ AVStream* createStream(AVFormatContext * avf,
                 st->codec->sample_rate = 8000;
                 break;
         }
-        st->codec->codec_tag = 0x0012;
     }
     else  {
         st->codec->codec_type = AVMEDIA_TYPE_DATA;
@@ -761,7 +761,7 @@ AVOutputFormat libparreader_muxer = {
     .mime_type      = "video/adhbinary",
     .extensions     = "par",
     .priv_data_size = sizeof(PAREncContext),
-    .audio_codec    = CODEC_ID_ADPCM_ADH,
+    .audio_codec    = CODEC_ID_ADPCM_IMA_WAV,
     .video_codec    = CODEC_ID_MJPEG,
     .write_header   = par_write_header,
     .write_packet   = par_write_packet,
