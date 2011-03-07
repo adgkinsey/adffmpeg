@@ -169,13 +169,13 @@ static int find_prev_start_code(AVIOContext *pb, int *size_ptr)
     int max_size, start_code;
 
     max_size = *size_ptr;
-    pos_start = url_ftell(pb);
+    pos_start = avio_tell(pb);
 
     /* in order to go faster, we fill the buffer */
     pos = pos_start - 16386;
     if (pos < 0)
         pos = 0;
-    url_fseek(pb, pos, SEEK_SET);
+    avio_seek(pb, pos, SEEK_SET);
     avio_r8(pb);
 
     pos = pos_start;
@@ -185,7 +185,7 @@ static int find_prev_start_code(AVIOContext *pb, int *size_ptr)
             start_code = -1;
             goto the_end;
         }
-        url_fseek(pb, pos, SEEK_SET);
+        avio_seek(pb, pos, SEEK_SET);
         start_code = avio_rb32(pb);
         if ((start_code & 0xffffff00) == 0x100)
             break;
@@ -212,7 +212,7 @@ static long mpegps_psm_parse(MpegDemuxContext *m, AVIOContext *pb)
     ps_info_length = avio_rb16(pb);
 
     /* skip program_stream_info */
-    url_fskip(pb, ps_info_length);
+    avio_seek(pb, ps_info_length, SEEK_CUR);
     es_map_length = avio_rb16(pb);
 
     /* at least one es available? */
@@ -223,7 +223,7 @@ static long mpegps_psm_parse(MpegDemuxContext *m, AVIOContext *pb)
         /* remember mapping from stream id to stream type */
         m->psm_es_type[es_id] = type;
         /* skip program_stream_info */
-        url_fskip(pb, es_info_length);
+        avio_seek(pb, es_info_length, SEEK_CUR);
         es_map_length -= 4 + es_info_length;
     }
     avio_rb32(pb); /* crc32 */
@@ -241,17 +241,17 @@ static int mpegps_read_pes_header(AVFormatContext *s,
     int len, size, startcode, c, flags, header_len;
     int pes_ext, ext2_len, id_ext, skip;
     int64_t pts, dts;
-    int64_t last_sync= url_ftell(s->pb);
+    int64_t last_sync= avio_tell(s->pb);
 
  error_redo:
-        url_fseek(s->pb, last_sync, SEEK_SET);
+        avio_seek(s->pb, last_sync, SEEK_SET);
  redo:
         /* next start code (should be immediately after) */
         m->header_state = 0xff;
         size = MAX_SYNC_SIZE;
         startcode = find_next_start_code(s->pb, &size, &m->header_state);
-        last_sync = url_ftell(s->pb);
-    //printf("startcode=%x pos=0x%"PRIx64"\n", startcode, url_ftell(s->pb));
+        last_sync = avio_tell(s->pb);
+    //printf("startcode=%x pos=0x%"PRIx64"\n", startcode, avio_tell(s->pb));
     if (startcode < 0){
         if(url_feof(s->pb))
             return AVERROR_EOF;
@@ -264,7 +264,7 @@ static int mpegps_read_pes_header(AVFormatContext *s,
     if (startcode == SYSTEM_HEADER_START_CODE)
         goto redo;
     if (startcode == PADDING_STREAM) {
-        url_fskip(s->pb, avio_rb16(s->pb));
+        avio_seek(s->pb, avio_rb16(s->pb), SEEK_CUR);
         goto redo;
     }
     if (startcode == PRIVATE_STREAM_2) {
@@ -281,7 +281,7 @@ static int mpegps_read_pes_header(AVFormatContext *s,
             }
             m->sofdec -= !m->sofdec;
         }
-        url_fskip(s->pb, len);
+        avio_seek(s->pb, len, SEEK_CUR);
         goto redo;
     }
     if (startcode == PROGRAM_STREAM_MAP) {
@@ -295,7 +295,7 @@ static int mpegps_read_pes_header(AVFormatContext *s,
           (startcode == 0x1bd) || (startcode == 0x1fd)))
         goto redo;
     if (ppos) {
-        *ppos = url_ftell(s->pb) - 4;
+        *ppos = avio_tell(s->pb) - 4;
     }
     len = avio_rb16(s->pb);
     pts =
@@ -359,7 +359,7 @@ static int mpegps_read_pes_header(AVFormatContext *s,
                 av_log(s, AV_LOG_WARNING, "pes_ext %X is invalid\n", pes_ext);
                 pes_ext=skip=0;
             }
-            url_fskip(s->pb, skip);
+            avio_seek(s->pb, skip, SEEK_CUR);
             header_len -= skip;
 
             if (pes_ext & 0x01) { /* PES extension 2 */
@@ -375,7 +375,7 @@ static int mpegps_read_pes_header(AVFormatContext *s,
         }
         if(header_len < 0)
             goto error_redo;
-        url_fskip(s->pb, header_len);
+        avio_seek(s->pb, header_len, SEEK_CUR);
     }
     else if( c!= 0xf )
         goto redo;
@@ -433,7 +433,7 @@ static int mpegps_read_packet(AVFormatContext *s,
 
     if(startcode == 0x1bd) {
         dvdaudio_substream_type = avio_r8(s->pb);
-        url_fskip(s->pb, 3);
+        avio_seek(s->pb, 3, SEEK_CUR);
         len -= 4;
     }
 
@@ -475,7 +475,7 @@ static int mpegps_read_packet(AVFormatContext *s,
         static const unsigned char avs_seqh[4] = { 0, 0, 1, 0xb0 };
         unsigned char buf[8];
         avio_read(s->pb, buf, 8);
-        url_fseek(s->pb, -8, SEEK_CUR);
+        avio_seek(s->pb, -8, SEEK_CUR);
         if(!memcmp(buf, avs_seqh, 4) && (buf[6] != 0 || buf[7] != 1))
             codec_id = CODEC_ID_CAVS;
         else
@@ -525,7 +525,7 @@ static int mpegps_read_packet(AVFormatContext *s,
     } else {
     skip:
         /* skip packet */
-        url_fskip(s->pb, len);
+        avio_seek(s->pb, len, SEEK_CUR);
         goto redo;
     }
     /* no stream found: add a new stream */
@@ -587,7 +587,7 @@ static int64_t mpegps_read_dts(AVFormatContext *s, int stream_index,
 #ifdef DEBUG_SEEK
     printf("read_dts: pos=0x%"PRIx64" next=%d -> ", pos, find_next);
 #endif
-    if (url_fseek(s->pb, pos, SEEK_SET) < 0)
+    if (avio_seek(s->pb, pos, SEEK_SET) < 0)
         return AV_NOPTS_VALUE;
 
     for(;;) {
@@ -602,7 +602,7 @@ static int64_t mpegps_read_dts(AVFormatContext *s, int stream_index,
             dts != AV_NOPTS_VALUE) {
             break;
         }
-        url_fskip(s->pb, len);
+        avio_seek(s->pb, len, SEEK_CUR);
     }
 #ifdef DEBUG_SEEK
     printf("pos=0x%"PRIx64" dts=0x%"PRIx64" %0.3f\n", pos, dts, dts / 90000.0);

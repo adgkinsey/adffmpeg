@@ -292,7 +292,8 @@ static attribute_align_arg void *frame_worker_thread(void *arg)
 
         if (fctx->die) break;
 
-        if (!codec->update_thread_context) ff_thread_finish_setup(avctx);
+        if (!codec->update_thread_context && avctx->thread_safe_callbacks)
+            ff_thread_finish_setup(avctx);
 
         pthread_mutex_lock(&p->mutex);
         avcodec_get_frame_defaults(&p->frame);
@@ -682,6 +683,11 @@ static int frame_thread_init(AVCodecContext *avctx)
     FrameThreadContext *fctx;
     int i, err = 0;
 
+    if (thread_count <= 1) {
+        avctx->active_thread_type = 0;
+        return 0;
+    }
+
     avctx->thread_opaque = fctx = av_mallocz(sizeof(FrameThreadContext));
 
     fctx->threads = av_mallocz(sizeof(PerThreadContext) * thread_count);
@@ -779,7 +785,8 @@ int ff_thread_get_buffer(AVCodecContext *avctx, AVFrame *f)
         return avctx->get_buffer(avctx, f);
     }
 
-    if (p->state != STATE_SETTING_UP) {
+    if (p->state != STATE_SETTING_UP &&
+        (avctx->codec->update_thread_context || !avctx->thread_safe_callbacks)) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() cannot be called after ff_thread_finish_setup()\n");
         return -1;
     }
@@ -810,6 +817,9 @@ int ff_thread_get_buffer(AVCodecContext *avctx, AVFrame *f)
         err = p->result;
 
         pthread_mutex_unlock(&p->progress_mutex);
+
+        if (!avctx->codec->update_thread_context)
+            ff_thread_finish_setup(avctx);
     }
 
     pthread_mutex_unlock(&p->parent->buffer_mutex);
@@ -876,8 +886,6 @@ int ff_thread_init(AVCodecContext *avctx, int thread_count)
         av_log(avctx, AV_LOG_ERROR, "avcodec_thread_init is ignored after avcodec_open\n");
         return -1;
     }
-
-    avctx->thread_count = FFMAX(1, thread_count);
 
     if (avctx->codec) {
         validate_thread_parameters(avctx);

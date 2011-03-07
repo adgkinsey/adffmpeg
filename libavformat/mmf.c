@@ -52,10 +52,10 @@ static void end_tag_be(AVIOContext *pb, int64_t start)
 {
     int64_t pos;
 
-    pos = url_ftell(pb);
-    url_fseek(pb, start - 4, SEEK_SET);
+    pos = avio_tell(pb);
+    avio_seek(pb, start - 4, SEEK_SET);
     avio_wb32(pb, (uint32_t)(pos - start));
-    url_fseek(pb, pos, SEEK_SET);
+    avio_seek(pb, pos, SEEK_SET);
 }
 
 static int mmf_write_header(AVFormatContext *s)
@@ -84,7 +84,7 @@ static int mmf_write_header(AVFormatContext *s)
 
     avio_write(pb, "ATR\x00", 4);
     avio_wb32(pb, 0);
-    mmf->atrpos = url_ftell(pb);
+    mmf->atrpos = avio_tell(pb);
     avio_w8(pb, 0); /* format type */
     avio_w8(pb, 0); /* sequence type */
     avio_w8(pb, (0 << 7) | (1 << 4) | rate); /* (channel << 7) | (format << 4) | rate */
@@ -94,7 +94,7 @@ static int mmf_write_header(AVFormatContext *s)
 
     ffio_wfourcc(pb, "Atsq");
     avio_wb32(pb, 16);
-    mmf->atsqpos = url_ftell(pb);
+    mmf->atsqpos = avio_tell(pb);
     /* Will be filled on close */
     avio_write(pb, "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 16);
 
@@ -139,11 +139,11 @@ static int mmf_write_trailer(AVFormatContext *s)
         end_tag_be(pb, mmf->atrpos);
         end_tag_be(pb, 8);
 
-        pos = url_ftell(pb);
+        pos = avio_tell(pb);
         size = pos - mmf->awapos;
 
         /* Fill Atsq chunk */
-        url_fseek(pb, mmf->atsqpos, SEEK_SET);
+        avio_seek(pb, mmf->atsqpos, SEEK_SET);
 
         /* "play wav" */
         avio_w8(pb, 0); /* start time */
@@ -158,7 +158,7 @@ static int mmf_write_trailer(AVFormatContext *s)
         /* "end of sequence" */
         avio_write(pb, "\x00\x00\x00\x00", 4);
 
-        url_fseek(pb, pos, SEEK_SET);
+        avio_seek(pb, pos, SEEK_SET);
 
         put_flush_packet(pb);
     }
@@ -195,7 +195,7 @@ static int mmf_read_header(AVFormatContext *s,
     file_size = avio_rb32(pb);
 
     /* Skip some unused chunks that may or may not be present */
-    for(;; url_fseek(pb, size, SEEK_CUR)) {
+    for(;; avio_seek(pb, size, SEEK_CUR)) {
         tag = avio_rl32(pb);
         size = avio_rb32(pb);
         if(tag == MKTAG('C','N','T','I')) continue;
@@ -226,7 +226,7 @@ static int mmf_read_header(AVFormatContext *s,
     avio_r8(pb); /* time base g */
 
     /* Skip some unused chunks that may or may not be present */
-    for(;; url_fseek(pb, size, SEEK_CUR)) {
+    for(;; avio_seek(pb, size, SEEK_CUR)) {
         tag = avio_rl32(pb);
         size = avio_rb32(pb);
         if(tag == MKTAG('A','t','s','q')) continue;

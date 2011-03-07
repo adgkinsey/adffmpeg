@@ -102,10 +102,10 @@ static int wav_write_trailer(AVFormatContext *s)
         ff_end_tag(pb, wav->data);
 
         /* update file size */
-        file_size = url_ftell(pb);
-        url_fseek(pb, 4, SEEK_SET);
+        file_size = avio_tell(pb);
+        avio_seek(pb, 4, SEEK_SET);
         avio_wl32(pb, (uint32_t)(file_size - 8));
-        url_fseek(pb, file_size, SEEK_SET);
+        avio_seek(pb, file_size, SEEK_SET);
 
         put_flush_packet(pb);
 
@@ -115,9 +115,9 @@ static int wav_write_trailer(AVFormatContext *s)
             number_of_samples = av_rescale(wav->maxpts - wav->minpts + wav->last_duration,
                                            s->streams[0]->codec->sample_rate * (int64_t)s->streams[0]->time_base.num,
                                            s->streams[0]->time_base.den);
-            url_fseek(pb, wav->data-12, SEEK_SET);
+            avio_seek(pb, wav->data-12, SEEK_SET);
             avio_wl32(pb, number_of_samples);
-            url_fseek(pb, file_size, SEEK_SET);
+            avio_seek(pb, file_size, SEEK_SET);
             put_flush_packet(pb);
         }
     }
@@ -160,7 +160,7 @@ static int64_t find_tag(AVIOContext *pb, uint32_t tag1)
         size = next_tag(pb, &tag);
         if (tag == tag1)
             break;
-        url_fseek(pb, size, SEEK_CUR);
+        avio_seek(pb, size, SEEK_CUR);
     }
     return size;
 }
@@ -217,7 +217,7 @@ static int wav_read_header(AVFormatContext *s,
         avio_rl64(pb); /* RIFF size */
         data_size = avio_rl64(pb);
         sample_count = avio_rl64(pb);
-        url_fskip(pb, size - 16); /* skip rest of ds64 chunk */
+        avio_seek(pb, size - 16, SEEK_CUR); /* skip rest of ds64 chunk */
     }
 
     /* parse fmt header */
@@ -243,7 +243,7 @@ static int wav_read_header(AVFormatContext *s,
             sample_count = avio_rl32(pb);
             size -= 4;
         }
-        url_fseek(pb, size, SEEK_CUR);
+        avio_seek(pb, size, SEEK_CUR);
     }
     if (rf64)
         size = data_size;
@@ -252,7 +252,7 @@ static int wav_read_header(AVFormatContext *s,
     if (!size) {
         wav->data_end = INT64_MAX;
     } else
-        wav->data_end= url_ftell(pb) + size;
+        wav->data_end= avio_tell(pb) + size;
 
     if (!sample_count && st->codec->channels && av_get_bits_per_sample(st->codec->codec_id))
         sample_count = (size<<3) / (st->codec->channels * (uint64_t)av_get_bits_per_sample(st->codec->codec_id));
@@ -276,7 +276,7 @@ static int64_t find_guid(AVIOContext *pb, const uint8_t guid1[16])
             return -1;
         if (!memcmp(guid, guid1, 16))
             return size;
-        url_fskip(pb, FFALIGN(size, INT64_C(8)) - 24);
+        avio_seek(pb, FFALIGN(size, INT64_C(8)) - 24, SEEK_CUR);
     }
     return -1;
 }
@@ -296,7 +296,7 @@ static int wav_read_packet(AVFormatContext *s,
 
     st = s->streams[0];
 
-    left = wav->data_end - url_ftell(s->pb);
+    left = wav->data_end - avio_tell(s->pb);
     if (left <= 0){
         if (CONFIG_W64_DEMUXER && wav->w64)
             left = find_guid(s->pb, guid_data) - 24;
@@ -304,7 +304,7 @@ static int wav_read_packet(AVFormatContext *s,
             left = find_tag(s->pb, MKTAG('d', 'a', 't', 'a'));
         if (left < 0)
             return AVERROR_EOF;
-        wav->data_end= url_ftell(s->pb) + left;
+        wav->data_end= avio_tell(s->pb) + left;
     }
 
     size = MAX_SIZE;
@@ -410,7 +410,7 @@ static int w64_read_header(AVFormatContext *s, AVFormatParameters *ap)
 
     /* subtract chunk header size - normal wav file doesn't count it */
     ff_get_wav_header(pb, st->codec, size - 24);
-    url_fskip(pb, FFALIGN(size, INT64_C(8)) - size);
+    avio_seek(pb, FFALIGN(size, INT64_C(8)) - size, SEEK_CUR);
 
     st->need_parsing = AVSTREAM_PARSE_FULL;
 
@@ -421,7 +421,7 @@ static int w64_read_header(AVFormatContext *s, AVFormatParameters *ap)
         av_log(s, AV_LOG_ERROR, "could not find data guid\n");
         return -1;
     }
-    wav->data_end = url_ftell(pb) + size - 24;
+    wav->data_end = avio_tell(pb) + size - 24;
     wav->w64      = 1;
 
     return 0;

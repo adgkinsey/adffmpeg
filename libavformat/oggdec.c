@@ -62,7 +62,7 @@ ogg_save (AVFormatContext * s)
     struct ogg_state *ost =
         av_malloc(sizeof (*ost) + (ogg->nstreams-1) * sizeof (*ogg->streams));
     int i;
-    ost->pos = url_ftell (s->pb);
+    ost->pos = avio_tell (s->pb);
     ost->curidx = ogg->curidx;
     ost->next = ogg->state;
     ost->nstreams = ogg->nstreams;
@@ -97,7 +97,7 @@ ogg_restore (AVFormatContext * s, int discard)
         for (i = 0; i < ogg->nstreams; i++)
             av_free (ogg->streams[i].buf);
 
-        url_fseek (bc, ost->pos, SEEK_SET);
+        avio_seek (bc, ost->pos, SEEK_SET);
         ogg->curidx = ost->curidx;
         ogg->nstreams = ost->nstreams;
         memcpy(ogg->streams, ost->streams,
@@ -247,7 +247,7 @@ ogg_read_page (AVFormatContext * s, int *str)
     }
 
     os = ogg->streams + idx;
-    os->page_pos = url_ftell(bc) - 27;
+    os->page_pos = avio_tell(bc) - 27;
 
     if(os->psize > 0)
         ogg_new_buf(ogg, idx);
@@ -468,7 +468,7 @@ ogg_get_length (AVFormatContext * s)
     end = size > MAX_PAGE_SIZE? size - MAX_PAGE_SIZE: 0;
 
     ogg_save (s);
-    url_fseek (s->pb, end, SEEK_SET);
+    avio_seek (s->pb, end, SEEK_SET);
 
     while (!ogg_read_page (s, &i)){
         if (ogg->streams[i].granule != -1 && ogg->streams[i].granule != 0 &&
@@ -604,10 +604,10 @@ ogg_read_timestamp (AVFormatContext * s, int stream_index, int64_t * pos_arg,
     AVIOContext *bc = s->pb;
     int64_t pts = AV_NOPTS_VALUE;
     int i;
-    url_fseek(bc, *pos_arg, SEEK_SET);
+    avio_seek(bc, *pos_arg, SEEK_SET);
     ogg_reset(ogg);
 
-    while (url_ftell(bc) < pos_limit && !ogg_packet(s, &i, NULL, NULL, pos_arg)) {
+    while (avio_tell(bc) < pos_limit && !ogg_packet(s, &i, NULL, NULL, pos_arg)) {
         if (i == stream_index) {
             pts = ogg_calc_pts(s, i, NULL);
             if (os->keyframe_seek && !(os->pflags & AV_PKT_FLAG_KEY))

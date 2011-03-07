@@ -98,7 +98,7 @@ static int read_header(AVFormatContext *s, AVFormatParameters *ap)
         return AVERROR(EIO);
     }
 
-    url_fskip(pb, 4);
+    avio_seek(pb, 4, SEEK_CUR);
 
     vst->codec->width  = avio_rl32(pb);
     vst->codec->height = avio_rl32(pb);
@@ -127,7 +127,7 @@ static int read_header(AVFormatContext *s, AVFormatParameters *ap)
     }
 
     if (bink->num_audio_tracks) {
-        url_fskip(pb, 4 * bink->num_audio_tracks);
+        avio_seek(pb, 4 * bink->num_audio_tracks, SEEK_CUR);
 
         for (i = 0; i < bink->num_audio_tracks; i++) {
             ast = av_new_stream(s, 1);
@@ -169,7 +169,7 @@ static int read_header(AVFormatContext *s, AVFormatParameters *ap)
                            keyframe ? AVINDEX_KEYFRAME : 0);
     }
 
-    url_fskip(pb, 4);
+    avio_seek(pb, 4, SEEK_CUR);
 
     bink->current_track = -1;
     return 0;
@@ -225,7 +225,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
                     AV_RL32(pkt->data) / (2 * s->streams[bink->current_track]->codec->channels);
             return 0;
         } else {
-            url_fseek(pb, audio_size, SEEK_CUR);
+            avio_seek(pb, audio_size, SEEK_CUR);
         }
     }
 
@@ -251,7 +251,7 @@ static int read_seek(AVFormatContext *s, int stream_index, int64_t timestamp, in
         return -1;
 
     /* seek to the first frame */
-    url_fseek(s->pb, vst->index_entries[0].pos, SEEK_SET);
+    avio_seek(s->pb, vst->index_entries[0].pos, SEEK_SET);
     bink->video_pts = 0;
     memset(bink->audio_pts, 0, sizeof(bink->audio_pts));
     bink->current_track = -1;

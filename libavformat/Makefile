@@ -317,6 +317,7 @@ OBJS-$(CONFIG_LIBPARREADER_MUXER)        += libpar.o
 # protocols I/O
 OBJS+= avio.o aviobuf.o
 
+OBJS-$(CONFIG_APPLEHTTP_PROTOCOL)        += applehttpproto.o
 OBJS-$(CONFIG_CONCAT_PROTOCOL)           += concat.o
 OBJS-$(CONFIG_FILE_PROTOCOL)             += file.o
 OBJS-$(CONFIG_GOPHER_PROTOCOL)           += gopher.o

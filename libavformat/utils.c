@@ -330,7 +330,7 @@ int av_get_packet(AVIOContext *s, AVPacket *pkt, int size)
     if(ret<0)
         return ret;
 
-    pkt->pos= url_ftell(s);
+    pkt->pos= avio_tell(s);
 
     ret= avio_read(s, pkt->data, size);
     if(ret<=0)
@@ -490,7 +490,7 @@ int av_open_input_stream(AVFormatContext **ic_ptr,
     }
 
     if (pb && !ic->data_offset)
-        ic->data_offset = url_ftell(ic->pb);
+        ic->data_offset = avio_tell(ic->pb);
 
 #if FF_API_OLD_METADATA
     ff_metadata_demux_compat(ic);
@@ -1531,7 +1531,7 @@ int av_seek_frame_binary(AVFormatContext *s, int stream_index, int64_t target_ts
         return -1;
 
     /* do the seek */
-    if ((ret = url_fseek(s->pb, pos, SEEK_SET)) < 0)
+    if ((ret = avio_seek(s->pb, pos, SEEK_SET)) < 0)
         return ret;
 
     av_update_cur_dts(s, st, ts);
@@ -1671,7 +1671,7 @@ static int av_seek_frame_byte(AVFormatContext *s, int stream_index, int64_t pos,
     if     (pos < pos_min) pos= pos_min;
     else if(pos > pos_max) pos= pos_max;
 
-    url_fseek(s->pb, pos, SEEK_SET);
+    avio_seek(s->pb, pos, SEEK_SET);
 
 #if 0
     av_update_cur_dts(s, st, ts);
@@ -1701,11 +1701,11 @@ static int av_seek_frame_generic(AVFormatContext *s,
         if(st->nb_index_entries){
             assert(st->index_entries);
             ie= &st->index_entries[st->nb_index_entries-1];
-            if ((ret = url_fseek(s->pb, ie->pos, SEEK_SET)) < 0)
+            if ((ret = avio_seek(s->pb, ie->pos, SEEK_SET)) < 0)
                 return ret;
             av_update_cur_dts(s, st, ie->timestamp);
         }else{
-            if ((ret = url_fseek(s->pb, s->data_offset, SEEK_SET)) < 0)
+            if ((ret = avio_seek(s->pb, s->data_offset, SEEK_SET)) < 0)
                 return ret;
         }
         for(i=0;; i++) {
@@ -1732,7 +1732,7 @@ static int av_seek_frame_generic(AVFormatContext *s,
             return 0;
     }
     ie = &st->index_entries[index];
-    if ((ret = url_fseek(s->pb, ie->pos, SEEK_SET)) < 0)
+    if ((ret = avio_seek(s->pb, ie->pos, SEEK_SET)) < 0)
         return ret;
     av_update_cur_dts(s, st, ie->timestamp);
 
@@ -1956,7 +1956,7 @@ static void av_estimate_timings_from_pts(AVFormatContext *ic, int64_t old_offset
     if (offset < 0)
         offset = 0;
 
-    url_fseek(ic->pb, offset, SEEK_SET);
+    avio_seek(ic->pb, offset, SEEK_SET);
     read_size = 0;
     for(;;) {
         if (read_size >= DURATION_MAX_READ_SIZE<<(FFMAX(retry-1,0)))
@@ -1991,7 +1991,7 @@ static void av_estimate_timings_from_pts(AVFormatContext *ic, int64_t old_offset
 
     fill_all_stream_timings(ic);
 
-    url_fseek(ic->pb, old_offset, SEEK_SET);
+    avio_seek(ic->pb, old_offset, SEEK_SET);
     for (i=0; i<ic->nb_streams; i++) {
         st= ic->streams[i];
         st->cur_dts= st->first_dts;
@@ -2212,7 +2212,7 @@ int av_find_stream_info(AVFormatContext *ic)
     int i, count, ret, read_size, j;
     AVStream *st;
     AVPacket pkt1, *pkt;
-    int64_t old_offset = url_ftell(ic->pb);
+    int64_t old_offset = avio_tell(ic->pb);
 
     for(i=0;i<ic->nb_streams;i++) {
         AVCodec *codec;
@@ -3494,26 +3494,25 @@ void av_hex_dump_log(void *avcl, int level, uint8_t *buf, int size)
     hex_dump_internal(avcl, NULL, level, buf, size);
 }
 
- //FIXME needs to know the time_base
-static void pkt_dump_internal(void *avcl, FILE *f, int level, AVPacket *pkt, int dump_payload)
+static void pkt_dump_internal(void *avcl, FILE *f, int level, AVPacket *pkt, int dump_payload, AVRational time_base)
 {
 #undef fprintf
 #define PRINT(...) do { if (!f) av_log(avcl, level, __VA_ARGS__); else fprintf(f, __VA_ARGS__); } while(0)
     PRINT("stream #%d:\n", pkt->stream_index);
     PRINT("  keyframe=%d\n", ((pkt->flags & AV_PKT_FLAG_KEY) != 0));
-    PRINT("  duration=%0.3f\n", (double)pkt->duration / AV_TIME_BASE);
+    PRINT("  duration=%0.3f\n", pkt->duration * av_q2d(time_base));
     /* DTS is _always_ valid after av_read_frame() */
     PRINT("  dts=");
     if (pkt->dts == AV_NOPTS_VALUE)
         PRINT("N/A");
     else
-        PRINT("%0.3f", (double)pkt->dts / AV_TIME_BASE);
+        PRINT("%0.3f", pkt->dts * av_q2d(time_base));
     /* PTS may not be known if B-frames are present. */
     PRINT("  pts=");
     if (pkt->pts == AV_NOPTS_VALUE)
         PRINT("N/A");
     else
-        PRINT("%0.3f", (double)pkt->pts / AV_TIME_BASE);
+        PRINT("%0.3f", pkt->pts * av_q2d(time_base));
     PRINT("\n");
     PRINT("  size=%d\n", pkt->size);
 #undef PRINT
@@ -3523,12 +3522,25 @@ static void pkt_dump_internal(void *avcl, FILE *f, int level, AVPacket *pkt, int
 
 void av_pkt_dump(FILE *f, AVPacket *pkt, int dump_payload)
 {
-    pkt_dump_internal(NULL, f, 0, pkt, dump_payload);
+    AVRational tb = { 1, AV_TIME_BASE };
+    pkt_dump_internal(NULL, f, 0, pkt, dump_payload, tb);
+}
+
+void av_pkt_dump2(FILE *f, AVPacket *pkt, int dump_payload, AVStream *st)
+{
+    pkt_dump_internal(NULL, f, 0, pkt, dump_payload, st->time_base);
 }
 
 void av_pkt_dump_log(void *avcl, int level, AVPacket *pkt, int dump_payload)
 {
-    pkt_dump_internal(avcl, NULL, level, pkt, dump_payload);
+    AVRational tb = { 1, AV_TIME_BASE };
+    pkt_dump_internal(avcl, NULL, level, pkt, dump_payload, tb);
+}
+
+void av_pkt_dump_log2(void *avcl, int level, AVPacket *pkt, int dump_payload,
+                      AVStream *st)
+{
+    pkt_dump_internal(avcl, NULL, level, pkt, dump_payload, st->time_base);
 }
 
 #if FF_API_URL_SPLIT

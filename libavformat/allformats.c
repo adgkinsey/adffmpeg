@@ -235,6 +235,7 @@ void av_register_all(void)
     REGISTER_MUXDEMUX (LIBPARREADER, libparreader);
 
     /* protocols */
+    REGISTER_PROTOCOL (APPLEHTTP, applehttp);
     REGISTER_PROTOCOL (CONCAT, concat);
     REGISTER_PROTOCOL (FILE, file);
     REGISTER_PROTOCOL (GOPHER, gopher);
