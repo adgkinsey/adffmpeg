@@ -59,6 +59,7 @@ void libpar_packet_destroy(struct AVPacket *packet);
 AVStream* createStream(AVFormatContext * avf,
                        const ParFrameInfo *frameInfo);
 void createPacket(AVFormatContext * avf, AVPacket *packet, int siz, int fChang);
+static void endianSwapAudioData(uint8_t *data, int size);
 void importMetadata(const AVMetadataTag *tag, PAREncStreamContext *ps);
 
 static void parreaderLogger(int level, const char *format, va_list args);
@@ -453,6 +454,8 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
     }
     else if (parReader_frameIsAudio(fi))  {
         pktFI->frameBufferSize = parReader_getAudStructSize();
+        
+        endianSwapAudioData(pkt->data, siz);
     }
     else  {
         /// \todo Do something with data frames
@@ -490,6 +493,22 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
     }
 
     ctxt->frameCached = 0;
+}
+
+static void endianSwapAudioData(uint8_t *data, int size)
+{
+    const uint8_t *dataEnd = data + size;
+    uint8_t upper, lower;
+    uint16_t predictor = AV_RB16(data);
+    
+    AV_WL16(data, predictor);
+    data += 4;
+    
+    for (;data < dataEnd; data++)  {
+        upper = ((*data) & 0xF0) >> 4;
+        lower = ((*data) & 0x0F) << 4;
+        *data = upper | lower;
+    }
 }
 
 static int par_probe(AVProbeData *p)
