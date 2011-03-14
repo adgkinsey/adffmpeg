@@ -426,9 +426,17 @@ attribute_deprecated int url_fclose(AVIOContext *s);
 attribute_deprecated int64_t url_fseek(AVIOContext *s, int64_t offset, int whence);
 attribute_deprecated int url_fskip(AVIOContext *s, int64_t offset);
 attribute_deprecated int64_t url_ftell(AVIOContext *s);
+attribute_deprecated int64_t url_fsize(AVIOContext *s);
+#define URL_EOF (-1)
+attribute_deprecated int url_fgetc(AVIOContext *s);
 /**
  * @}
  */
+
+/**
+ * @deprecated use AVIOContext.eof_reached
+ */
+attribute_deprecated int url_feof(AVIOContext *s);
 #endif
 
 AVIOContext *avio_alloc_context(
@@ -474,6 +482,12 @@ int avio_put_str16le(AVIOContext *s, const char *str);
 int64_t avio_seek(AVIOContext *s, int64_t offset, int whence);
 
 /**
+ * Skip given number of bytes forward
+ * @return new position or AVERROR.
+ */
+#define avio_skip(s, offset) avio_seek(s, offset, SEEK_CUR)
+
+/**
  * ftell() equivalent for AVIOContext.
  * @return position or AVERROR.
  */
@@ -483,23 +497,13 @@ int64_t avio_seek(AVIOContext *s, int64_t offset, int whence);
  * Get the filesize.
  * @return filesize or AVERROR
  */
-int64_t url_fsize(AVIOContext *s);
-
-/**
- * feof() equivalent for AVIOContext.
- * @return non zero if and only if end of file
- */
-int url_feof(AVIOContext *s);
+int64_t avio_size(AVIOContext *s);
 
 int url_ferror(AVIOContext *s);
 
 int av_url_read_fpause(AVIOContext *h, int pause);
 int64_t av_url_read_fseek(AVIOContext *h, int stream_index,
                           int64_t timestamp, int flags);
-
-#define URL_EOF (-1)
-/** @note return URL_EOF (-1) if EOF */
-int url_fgetc(AVIOContext *s);
 
 /** @warning currently size is limited */
 #ifdef __GNUC__
@@ -508,9 +512,11 @@ int url_fprintf(AVIOContext *s, const char *fmt, ...) __attribute__ ((__format__
 int url_fprintf(AVIOContext *s, const char *fmt, ...);
 #endif
 
+#if FF_API_OLD_AVIO
 /** @note unlike fgets, the EOL character is not returned and a whole
     line is parsed. return NULL if first char read was EOF */
-char *url_fgets(AVIOContext *s, char *buf, int buf_size);
+attribute_deprecated char *url_fgets(AVIOContext *s, char *buf, int buf_size);
+#endif
 
 void put_flush_packet(AVIOContext *s);
 
@@ -594,21 +600,6 @@ int url_resetbuf(AVIOContext *s, int flags);
 #endif
 
 /**
- * Rewind the AVIOContext using the specified buffer containing the first buf_size bytes of the file.
- * Used after probing to avoid seeking.
- * Joins buf and s->buffer, taking any overlap into consideration.
- * @note s->buffer must overlap with buf or they can't be joined and the function fails
- * @note This function is NOT part of the public API
- *
- * @param s The read-only AVIOContext to rewind
- * @param buf The probe buffer containing the first buf_size bytes of the file
- * @param buf_size The size of buf
- * @return 0 in case of success, a negative value corresponding to an
- * AVERROR code in case of failure
- */
-int ff_rewind_with_probe_data(AVIOContext *s, unsigned char *buf, int buf_size);
-
-/**
  * Create and initialize a AVIOContext for accessing the
  * resource indicated by url.
  * @note When the resource indicated by url has been opened in
@@ -626,15 +617,12 @@ int avio_open(AVIOContext **s, const char *url, int flags);
 int avio_close(AVIOContext *s);
 URLContext *url_fileno(AVIOContext *s);
 
+#if FF_API_OLD_AVIO
 /**
- * Return the maximum packet size associated to packetized buffered file
- * handle. If the file is not packetized (stream like http or file on
- * disk), then 0 is returned.
- *
- * @param s buffered file handle
- * @return maximum packet size in bytes
+ * @deprecated use AVIOContext.max_packet_size directly.
  */
-int url_fget_max_packet_size(AVIOContext *s);
+attribute_deprecated int url_fget_max_packet_size(AVIOContext *s);
+#endif
 
 int url_open_buf(AVIOContext **s, uint8_t *buf, int buf_size, int flags);
 

@@ -121,7 +121,7 @@ static uint64_t find_any_startcode(AVIOContext *bc, int64_t pos){
     if(pos >= 0)
         avio_seek(bc, pos, SEEK_SET); //note, this may fail if the stream is not seekable, but that should not matter, as in this case we simply start where we currently are
 
-    while(!url_feof(bc)){
+    while(!bc->eof_reached){
         state= (state<<8) | avio_r8(bc);
         if((state>>56) != 'N')
             continue;
@@ -508,7 +508,7 @@ static int find_and_decode_index(NUTContext *nut){
     AVIOContext *bc = s->pb;
     uint64_t tmp, end;
     int i, j, syncpoint_count;
-    int64_t filesize= url_fsize(bc);
+    int64_t filesize= avio_size(bc);
     int64_t *syncpoints;
     int8_t *has_keyframe;
     int ret= -1;
@@ -790,7 +790,7 @@ static int nut_read_packet(AVFormatContext *s, AVPacket *pkt)
             pos-=8;
         }else{
             frame_code = avio_r8(bc);
-            if(url_feof(bc))
+            if(bc->eof_reached)
                 return -1;
             if(frame_code == 'N'){
                 tmp= frame_code;

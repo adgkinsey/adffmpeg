@@ -891,7 +891,8 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
 {
     const uint8_t *desc_end;
     int desc_len, desc_tag;
-    char language[4];
+    char language[252];
+    int i;
 
     desc_tag = get8(pp, desc_list_end);
     if (desc_tag < 0)
@@ -935,7 +936,17 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
         language[1] = get8(pp, desc_end);
         language[2] = get8(pp, desc_end);
         language[3] = 0;
-        get8(pp, desc_end);
+        /* hearing impaired subtitles detection */
+        switch(get8(pp, desc_end)) {
+        case 0x20: /* DVB subtitles (for the hard of hearing) with no monitor aspect ratio criticality */
+        case 0x21: /* DVB subtitles (for the hard of hearing) for display on 4:3 aspect ratio monitor */
+        case 0x22: /* DVB subtitles (for the hard of hearing) for display on 16:9 aspect ratio monitor */
+        case 0x23: /* DVB subtitles (for the hard of hearing) for display on 2.21:1 aspect ratio monitor */
+        case 0x24: /* DVB subtitles (for the hard of hearing) for display on a high definition monitor */
+        case 0x25: /* DVB subtitles (for the hard of hearing) with plano-stereoscopic disparity for display on a high definition monitor */
+            st->disposition |= AV_DISPOSITION_HEARING_IMPAIRED;
+            break;
+        }
         if (st->codec->extradata) {
             if (st->codec->extradata_size == 4 && memcmp(st->codec->extradata, *pp, 4))
                 av_log_ask_for_sample(fc, "DVB sub with multiple IDs\n");
@@ -950,15 +961,20 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
         av_metadata_set2(&st->metadata, "language", language, 0);
         break;
     case 0x0a: /* ISO 639 language descriptor */
-        language[0] = get8(pp, desc_end);
-        language[1] = get8(pp, desc_end);
-        language[2] = get8(pp, desc_end);
-        language[3] = 0;
-        av_metadata_set2(&st->metadata, "language", language, 0);
+        for (i = 0; i + 4 <= desc_len; i += 4) {
+            language[i + 0] = get8(pp, desc_end);
+            language[i + 1] = get8(pp, desc_end);
+            language[i + 2] = get8(pp, desc_end);
+            language[i + 3] = ',';
         switch (get8(pp, desc_end)) {
             case 0x01: st->disposition |= AV_DISPOSITION_CLEAN_EFFECTS; break;
             case 0x02: st->disposition |= AV_DISPOSITION_HEARING_IMPAIRED; break;
             case 0x03: st->disposition |= AV_DISPOSITION_VISUAL_IMPAIRED; break;
+        }
+        }
+        if (i) {
+            language[i - 1] = 0;
+            av_metadata_set2(&st->metadata, "language", language, 0);
         }
         break;
     case 0x05: /* registration descriptor */
@@ -1312,8 +1328,8 @@ static int mpegts_resync(AVFormatContext *s)
     int c, i;
 
     for(i = 0;i < MAX_RESYNC_SIZE; i++) {
-        c = url_fgetc(pb);
-        if (c < 0)
+        c = avio_r8(pb);
+        if (pb->eof_reached)
             return -1;
         if (c == 0x47) {
             avio_seek(pb, -1, SEEK_CUR);

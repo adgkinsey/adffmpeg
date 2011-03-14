@@ -91,7 +91,7 @@ static int ffm_resync(AVFormatContext *s, int state)
 {
     av_log(s, AV_LOG_ERROR, "resyncing\n");
     while (state != PACKET_ID) {
-        if (url_feof(s->pb)) {
+        if (s->pb->eof_reached) {
             av_log(s, AV_LOG_ERROR, "cannot find FFM syncword\n");
             return -1;
         }
@@ -282,7 +282,7 @@ static int ffm_read_header(AVFormatContext *s, AVFormatParameters *ap)
     ffm->write_index = avio_rb64(pb);
     /* get also filesize */
     if (!url_is_streamed(pb)) {
-        ffm->file_size = url_fsize(pb);
+        ffm->file_size = avio_size(pb);
         if (ffm->write_index)
             adjust_write_index(s);
     } else {

@@ -94,7 +94,8 @@ struct AVFormatContext;
  * filename     -- original name of the file.
  * genre        -- <self-evident>.
  * language     -- main language in which the work is performed, preferably
- *                 in ISO 639-2 format.
+ *                 in ISO 639-2 format. Multiple languages can be specified by
+ *                 separating them with commas.
  * performer    -- artist who performed the work, if different from artist.
  *                 E.g for "Also sprach Zarathustra", artist would be "Richard
  *                 Strauss" and performer "London Philharmonic Orchestra".
@@ -296,7 +297,9 @@ typedef struct AVOutputFormat {
     int (*write_packet)(struct AVFormatContext *, AVPacket *pkt);
     int (*write_trailer)(struct AVFormatContext *);
     /**
-     * can use flags: AVFMT_NOFILE, AVFMT_NEEDNUMBER, AVFMT_GLOBALHEADER
+     * can use flags: AVFMT_NOFILE, AVFMT_NEEDNUMBER, AVFMT_RAWPICTURE,
+     * AVFMT_GLOBALHEADER, AVFMT_NOTIMESTAMPS, AVFMT_VARIABLE_FPS,
+     * AVFMT_NODIMENSIONS, AVFMT_NOSTREAMS
      */
     int flags;
     /**
