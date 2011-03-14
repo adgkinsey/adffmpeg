@@ -27,6 +27,7 @@
  * NetVuImageData header and full JFIF image (and vice-versa)
  */
 
+#include <time.h>
 #include "internal.h"
 #include "libavutil/intreadwrite.h"
 
@@ -569,5 +570,5 @@ static void parse_comment( char *text, int text_len, NetVuImageData *pic, char *
         }
     }
 
-    pic->session_time = mktimegm(&t);
+    pic->session_time = mktime(&t);
 }
