@@ -451,7 +451,7 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
     int ret;
 
     for(;;) {
-        if (url_interrupt_cb())
+        if (url_interrupt_cb(h))
             return AVERROR(EINTR);
         ret = poll(&p, 1, 100);
         if (ret < 0) {

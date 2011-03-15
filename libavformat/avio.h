@@ -90,7 +90,7 @@ typedef struct URLPollEntry {
  */
 #define URL_FLAG_NONBLOCK 4
 
-typedef int URLInterruptCB(void);
+typedef int URLInterruptCB(void *opaque);
 
 /**
  * Create a URLContext for accessing to the resource indicated by

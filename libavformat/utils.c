@@ -2266,7 +2266,7 @@ int av_find_stream_info(AVFormatContext *ic)
     count = 0;
     read_size = 0;
     for(;;) {
-        if(url_interrupt_cb()){
+        if(url_interrupt_cb(ic)){
             ret= AVERROR(EINTR);
             av_log(ic, AV_LOG_DEBUG, "interrupted\n");
             break;

@@ -45,7 +45,7 @@ static const AVClass urlcontext_class =
 /*@}*/
 #endif
 
-static int default_interrupt_cb(void);
+static int default_interrupt_cb(void *opaque);
 
 URLProtocol *first_protocol = NULL;
 URLInterruptCB *url_interrupt_cb = default_interrupt_cb;
@@ -222,8 +222,8 @@ static inline int retry_transfer_wrapper(URLContext *h, unsigned char *buf, int 
     len = 0;
     while (len < size_min) {
         ret = transfer_func(h, buf+len, size-len);
-        if (ret == AVERROR(EINTR))
-            continue;
+//        if (ret == AVERROR(EINTR))
+//            continue;
         if (h->flags & URL_FLAG_NONBLOCK)
             return ret;
         if (ret == AVERROR(EAGAIN)) {
@@ -237,7 +237,7 @@ static inline int retry_transfer_wrapper(URLContext *h, unsigned char *buf, int 
         if (ret)
            fast_retries = FFMAX(fast_retries, 2);
         len += ret;
-        if (url_interrupt_cb())
+        if (url_interrupt_cb(h))
             return AVERROR(EINTR);
     }
     return len;
@@ -336,7 +336,7 @@ void url_get_filename(URLContext *h, char *buf, int buf_size)
 }
 
 
-static int default_interrupt_cb(void)
+static int default_interrupt_cb(void *opaque)
 {
     return 0;
 }

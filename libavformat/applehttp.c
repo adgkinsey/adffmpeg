@@ -527,7 +527,7 @@ reload:
     if (c->finished)
         return AVERROR_EOF;
     while (av_gettime() - c->last_load_time < c->target_duration*1000000) {
-        if (url_interrupt_cb())
+        if (url_interrupt_cb(s))
             return AVERROR(EINTR);
         usleep(100*1000);
     }

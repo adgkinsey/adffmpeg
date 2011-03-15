@@ -1564,7 +1564,7 @@ static int udp_read_packet(AVFormatContext *s, RTSPStream **prtsp_st,
     struct pollfd *p = rt->p;
 
     for (;;) {
-        if (url_interrupt_cb())
+        if (url_interrupt_cb(rt->rtsp_hd))
             return AVERROR(EINTR);
         if (wait_end && wait_end - av_gettime() < 0)
             return AVERROR(EAGAIN);

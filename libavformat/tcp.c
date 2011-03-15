@@ -73,7 +73,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     if (ret < 0) {
         struct pollfd p = {fd, POLLOUT, 0};
         if (ff_neterrno() == AVERROR(EINTR)) {
-            if (url_interrupt_cb())
+            if (url_interrupt_cb(h))
                 goto fail1;
             goto redo;
         }
@@ -83,7 +83,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
 
         /* wait until we are connected or until abort */
         for(;;) {
-            if (url_interrupt_cb()) {
+            if (url_interrupt_cb(h)) {
                 ret = AVERROR(EINTR);
                 goto fail1;
             }
@@ -178,7 +178,9 @@ static int tcp_close(URLContext *h)
 static int tcp_get_file_handle(URLContext *h)
 {
     TCPContext *s = h->priv_data;
-    return s->fd;
+    if (s)
+        return s->fd;
+    return 0;
 }
 
 URLProtocol ff_tcp_protocol = {
