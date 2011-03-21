@@ -350,7 +350,7 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
     *text_data = av_malloc( textSize + 1 );
 
     if( *text_data == NULL )
-        return ADPIC_MPEG4_ALOCATE_TEXT_BUFFER_ERROR;
+        return AVERROR(ENOMEM);
 
     // Copy the additional text block
     if( (n = ad_get_buffer( pb, *text_data, textSize)) != textSize) {
@@ -440,7 +440,7 @@ static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
     if( data->sizeOfAdditionalData > 0 ) {
         data->additionalData = av_malloc( data->sizeOfAdditionalData );
         if( data->additionalData == NULL )
-            return ADPIC_AUDIO_ADPCM_ALOCATE_ADITIONAL_ERROR;
+            return AVERROR(ENOMEM);
 
         if( (n = ad_get_buffer( pb, data->additionalData, data->sizeOfAdditionalData )) != data->sizeOfAdditionalData )
             return ADPIC_AUDIO_ADPCM_GET_BUFFER_ERROR2;

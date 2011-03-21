@@ -376,14 +376,14 @@ int initADData(int data_type, ADFrameType *frameType,
         *frameType = NetVuVideo;
         *vidDat = av_malloc( sizeof(NetVuImageData) );
         if( *vidDat == NULL )
-            return ADPIC_NETVU_IMAGE_DATA_ERROR;
+            return AVERROR(ENOMEM);
     }
     else if ( (data_type == DATA_AUDIO_ADPCM) ||
               (data_type == DATA_MINIMAL_AUDIO_ADPCM) ) {
         *frameType = NetVuAudio;
         *audDat = av_malloc( sizeof(NetVuAudioData) );
         if( *audDat == NULL )
-            return ADPIC_NETVU_AUDIO_DATA_ERROR;
+            return AVERROR(ENOMEM);
     }
     else if ( (data_type == DATA_INFO) || (data_type == DATA_XML_INFO) )
         *frameType = NetVuDataInfo;
@@ -428,7 +428,7 @@ int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
     if( *text_data == NULL )  {
         av_log(s, AV_LOG_ERROR, "ad_read_jpeg: text_data allocation failed "
                                 "(%d bytes)", textSize + 1);
-        return ADPIC_JPEG_ALOCATE_TEXT_BLOCK_ERROR;
+        return AVERROR(ENOMEM);
     }
 
     // Copy the additional text block
@@ -595,7 +595,7 @@ int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
     pkt->stream_index = st->index;
     frameData = av_malloc(sizeof(*frameData));
     if( frameData == NULL )
-        return ADPIC_NETVU_IMAGE_DATA_ERROR;
+        return AVERROR(ENOMEM);
 
     frameData->additionalData = NULL;
     frameData->frameType = frameType;
