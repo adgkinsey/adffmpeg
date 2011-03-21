@@ -383,68 +383,41 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic,
     while ( !sos && (i < imgSize) ) {
         marker = AV_RB16(&data[i]);
         i += 2;
-        length = AV_RB16(&data[i]);
+        length = AV_RB16(&data[i]) - 2;
         i += 2;
 
         switch (marker) {
             case 0xffe0 :	// APP0
-                //av_log(s, AV_LOG_DEBUG, "parse_jfif: found APP0 marker, length = %d\n", length );
-                
                 if ((data[i]==0x4A)&&(data[i+1]==0x46)&&(data[i+2]==0x49)&&(data[i+3]==0x46)&&(data[i+4]==0x00))  {
                     xdensity = AV_RB16(&data[i+8]);
                     ydensity = AV_RB16(&data[i+10]);
                     densityPtr = &data[i+8];
                 }
-                i += length - 2;
                 break;
             case 0xffdb :	// Q table
-                //av_log(s, AV_LOG_DEBUG, "parse_jfif: found Q table marker, length = %d, Table no = %d\n", length, data[i] );
                 if (!data[i])
                     pic->factor =  find_q(&data[i+1]);
-                i += length - 2;
                 break;
             case 0xffc0 :	// SOF
-                memcpy(&pic->format.target_pixels, &data[i+3], 2);
-                pic->format.target_pixels = be2me_16(pic->format.target_pixels);
-                memcpy(&pic->format.target_lines, &data[i+1], 2);
-                pic->format.target_lines = be2me_16(pic->format.target_lines);
-                if (data[i+7] == 0x22) {	// PRC 022
+                pic->format.target_lines  = AV_RB16(&data[i+1]);
+                pic->format.target_pixels = AV_RB16(&data[i+3]);
+                if (data[i+7] == 0x22)
                     pic->vid_format = PIC_MODE_JPEG_411;
-                }
-                else if (data[i+7] == 0x21) {
+                else if (data[i+7] == 0x21)
                     pic->vid_format = PIC_MODE_JPEG_422;
-                }
-                else {
-                    //av_log(s, AV_LOG_INFO, "parse_jfif: Unknown format byte 0x%02X\n", data[i+7]);
-                }
-                //av_log(s, AV_LOG_DEBUG, "parse_jfif: found SOF marker, "
-                //       "length = %d, xres=%d, yres = %d\n", length, 
-                //       pic->format.target_pixels, pic->format.target_lines );
-                i += length - 2;
-                break;
-            case 0xffc4 :	// Huffman table
-                i += length - 2;
+                else
+                    av_log(s, AV_LOG_WARNING, "%s: Unknown SOF format byte 0x%02X\n", __func__, data[i+7]);
                 break;
             case 0xffda :	// SOS
-                //av_log(s, AV_LOG_DEBUG, "parse_jfif: found SOS marker, length = %d\n", length );
-                i += length - 2;
                 sos = TRUE;
                 break;
-            case 0xffdd :	// DRI
-                //av_log(s, AV_LOG_DEBUG, "parse_jfif: found DRI marker, length = %d\n", length );
-                i += length - 2;
-                break;
             case 0xfffe :	// Comment
-                //av_log(s, AV_LOG_DEBUG, "parse_jfif: found Comment marker, length = %d\n", length );
                 parse_comment((char *)&data[i], length - 2, pic, text);
-                i += length - 2;
                 break;
             default :
-                //av_log(s, AV_LOG_INFO, "parse_jfif: Unknown marker 0x%04X, "
-                //       "next byte = 0x%02X, length = %d\n", marker, data[i], length );
-                i += length - 2;	// Skip past the unknown field
                 break;
         }
+        i += length;
         
         if ( (pic->format.target_lines > 0) && (xdensity == (ydensity*2)) )  {
             if( (pic->format.target_pixels > 360) && (pic->format.target_lines <= 480) )  {
@@ -463,10 +436,9 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic,
             }
         }
     }
-    pic->size = imgSize - i - 2; 	// 2 bytes for FFD9 PRC 029
+    pic->size = imgSize - i - 2; 	// 2 bytes for FFD9
     return i;
 }
-
 
 static void parse_comment( char *text, int text_len, NetVuImageData *pic, char **additionalText )
 {
