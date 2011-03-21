@@ -219,7 +219,7 @@ ogg_read_page (AVFormatContext * s, int *str)
             break;
 
         c = avio_r8(bc);
-        if (bc->eof_reached)
+        if (url_feof(bc))
             return -1;
         sync[sp++ & 3] = c;
     }while (i++ < MAX_PAGE_SIZE);

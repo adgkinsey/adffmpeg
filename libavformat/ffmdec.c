@@ -91,7 +91,7 @@ static int ffm_resync(AVFormatContext *s, int state)
 {
     av_log(s, AV_LOG_ERROR, "resyncing\n");
     while (state != PACKET_ID) {
-        if (s->pb->eof_reached) {
+        if (url_feof(s->pb)) {
             av_log(s, AV_LOG_ERROR, "cannot find FFM syncword\n");
             return -1;
         }
@@ -187,7 +187,7 @@ static int64_t get_dts(AVFormatContext *s, int64_t pos)
     int64_t dts;
 
     ffm_seek1(s, pos);
-    avio_seek(pb, 4, SEEK_CUR);
+    avio_skip(pb, 4);
     dts = avio_rb64(pb);
 #ifdef DEBUG_SEEK
     av_log(s, AV_LOG_DEBUG, "dts=%0.6f\n", dts / 1000000.0);
@@ -325,8 +325,7 @@ static int ffm_read_header(AVFormatContext *s, AVFormatParameters *ap)
             codec->qcompress = avio_rb16(pb) / 10000.0;
             codec->qblur = avio_rb16(pb) / 10000.0;
             codec->bit_rate_tolerance = avio_rb32(pb);
-            avio_get_str(pb, INT_MAX, rc_eq_buf, sizeof(rc_eq_buf));
-            codec->rc_eq = av_strdup(rc_eq_buf);
+            codec->rc_eq = av_strdup(get_strz(pb, rc_eq_buf, sizeof(rc_eq_buf)));
             codec->rc_max_rate = avio_rb32(pb);
             codec->rc_min_rate = avio_rb32(pb);
             codec->rc_buffer_size = avio_rb32(pb);

@@ -809,7 +809,7 @@ static int mpegts_push_data(MpegTSFilter *filter,
              * a couple of seconds to milliseconds for properly muxed files.
              * total_size is the number of bytes following pes_packet_length
              * in the pes header, i.e. not counting the first 6 bytes */
-            if (pes->total_size < MAX_PES_PAYLOAD &&
+            if (!ts->stop_parse && pes->total_size < MAX_PES_PAYLOAD &&
                 pes->pes_header_size + pes->data_index == pes->total_size + 6) {
                 ts->stop_parse = 1;
                 new_pes_packet(pes, ts->pkt);
@@ -1329,7 +1329,7 @@ static int mpegts_resync(AVFormatContext *s)
 
     for(i = 0;i < MAX_RESYNC_SIZE; i++) {
         c = avio_r8(pb);
-        if (pb->eof_reached)
+        if (url_feof(pb))
             return -1;
         if (c == 0x47) {
             avio_seek(pb, -1, SEEK_CUR);
@@ -1362,7 +1362,7 @@ static int read_packet(AVFormatContext *s, uint8_t *buf, int raw_packet_size)
         } else {
             skip = raw_packet_size - TS_PACKET_SIZE;
             if (skip > 0)
-                avio_seek(pb, skip, SEEK_CUR);
+                avio_skip(pb, skip);
             break;
         }
     }

@@ -287,7 +287,7 @@ static int read_packet(AVFormatContext *s1, AVPacket *pkt)
             infer_size(&codec->width, &codec->height, size[0]);
     } else {
         f[0] = s1->pb;
-        if (f[0]->eof_reached)
+        if (url_feof(f[0]))
             return AVERROR(EIO);
         size[0]= 4096;
     }
@@ -372,8 +372,8 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
         avio_write(pb[0], pkt->data        , ysize);
         avio_write(pb[1], pkt->data + ysize, (pkt->size - ysize)/2);
         avio_write(pb[2], pkt->data + ysize +(pkt->size - ysize)/2, (pkt->size - ysize)/2);
-        put_flush_packet(pb[1]);
-        put_flush_packet(pb[2]);
+        avio_flush(pb[1]);
+        avio_flush(pb[2]);
         avio_close(pb[1]);
         avio_close(pb[2]);
     }else{
@@ -402,7 +402,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
         }
         avio_write(pb[0], pkt->data, pkt->size);
     }
-    put_flush_packet(pb[0]);
+    avio_flush(pb[0]);
     if (!img->is_pipe) {
         avio_close(pb[0]);
     }

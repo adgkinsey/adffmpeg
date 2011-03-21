@@ -170,7 +170,7 @@ void avio_write(AVIOContext *s, const unsigned char *buf, int size)
     }
 }
 
-void put_flush_packet(AVIOContext *s)
+void avio_flush(AVIOContext *s)
 {
     flush_buffer(s);
     s->must_flush = 0;
@@ -233,6 +233,11 @@ int64_t avio_seek(AVIOContext *s, int64_t offset, int whence)
     return offset;
 }
 
+int64_t avio_skip(AVIOContext *s, int64_t offset)
+{
+    return avio_seek(s, offset, SEEK_CUR);
+}
+
 #if FF_API_OLD_AVIO
 int url_fskip(AVIOContext *s, int64_t offset)
 {
@@ -265,21 +270,25 @@ int64_t avio_size(AVIOContext *s)
     return size;
 }
 
-#if FF_API_OLD_AVIO
 int url_feof(AVIOContext *s)
 {
     if(!s)
         return 0;
+    if(s->eof_reached){
+        s->eof_reached=0;
+        fill_buffer(s);
+    }
     return s->eof_reached;
 }
-#endif
 
+#if FF_API_OLD_AVIO
 int url_ferror(AVIOContext *s)
 {
     if(!s)
         return 0;
     return s->error;
 }
+#endif
 
 void avio_wl32(AVIOContext *s, unsigned int val)
 {
@@ -376,6 +385,26 @@ int64_t url_fseek(AVIOContext *s, int64_t offset, int whence)
 int64_t url_fsize(AVIOContext *s)
 {
     return avio_size(s);
+}
+int url_setbufsize(AVIOContext *s, int buf_size)
+{
+    return ffio_set_buf_size(s, buf_size);
+}
+int url_fprintf(AVIOContext *s, const char *fmt, ...)
+{
+    va_list ap;
+    char buf[4096];
+    int ret;
+
+    va_start(ap, fmt);
+    ret = vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    avio_write(s, buf, strlen(buf));
+    return ret;
+}
+void put_flush_packet(AVIOContext *s)
+{
+    avio_flush(s);
 }
 #endif
 
@@ -490,7 +519,7 @@ static void fill_buffer(AVIOContext *s)
 
     /* make buffer smaller in case it ended up large after probing */
     if (s->buffer_size > max_buffer_size) {
-        url_setbufsize(s, max_buffer_size);
+        ffio_set_buf_size(s, max_buffer_size);
 
         s->checksum_ptr = dst = s->buffer;
         len = s->buffer_size;
@@ -599,8 +628,8 @@ int avio_read(AVIOContext *s, unsigned char *buf, int size)
         }
     }
     if (size1 == size) {
-        if (url_ferror(s)) return url_ferror(s);
-        if (s->eof_reached)   return AVERROR_EOF;
+        if (s->error)      return s->error;
+        if (url_feof(s))   return AVERROR_EOF;
     }
     return size1 - size;
 }
@@ -622,8 +651,8 @@ int ffio_read_partial(AVIOContext *s, unsigned char *buf, int size)
     memcpy(buf, s->buf_ptr, len);
     s->buf_ptr += len;
     if (!len) {
-        if (url_ferror(s)) return url_ferror(s);
-        if (s->eof_reached)   return AVERROR_EOF;
+        if (s->error)      return s->error;
+        if (url_feof(s))   return AVERROR_EOF;
     }
     return len;
 }
@@ -753,7 +782,7 @@ uint64_t avio_rb64(AVIOContext *s)
     return val;
 }
 
-uint64_t ff_get_v(AVIOContext *bc){
+uint64_t ffio_read_varlen(AVIOContext *bc){
     uint64_t val = 0;
     int tmp;
 
@@ -801,7 +830,7 @@ int url_fdopen(AVIOContext **s, URLContext *h)
     return 0;
 }
 
-int url_setbufsize(AVIOContext *s, int buf_size)
+int ffio_set_buf_size(AVIOContext *s, int buf_size)
 {
     uint8_t *buffer;
     buffer = av_malloc(buf_size);
@@ -908,8 +937,7 @@ URLContext *url_fileno(AVIOContext *s)
     return s->opaque;
 }
 
-#if CONFIG_MUXERS
-int url_fprintf(AVIOContext *s, const char *fmt, ...)
+int avio_printf(AVIOContext *s, const char *fmt, ...)
 {
     va_list ap;
     char buf[4096];
@@ -921,7 +949,6 @@ int url_fprintf(AVIOContext *s, const char *fmt, ...)
     avio_write(s, buf, strlen(buf));
     return ret;
 }
-#endif //CONFIG_MUXERS
 
 #if FF_API_OLD_AVIO
 char *url_fgets(AVIOContext *s, char *buf, int buf_size)
@@ -930,11 +957,11 @@ char *url_fgets(AVIOContext *s, char *buf, int buf_size)
     char *q;
 
     c = avio_r8(s);
-    if (s->eof_reached)
+    if (url_feof(s))
         return NULL;
     q = buf;
     for(;;) {
-        if (s->eof_reached || c == '\n')
+        if (url_feof(s) || c == '\n')
             break;
         if ((q - buf) < buf_size - 1)
             *q++ = c;
@@ -982,6 +1009,7 @@ int64_t av_url_read_fseek(AVIOContext *s, int stream_index,
  * back to the server even if CONFIG_MUXERS is false. */
 #if CONFIG_MUXERS || CONFIG_NETWORK
 /* buffer handling */
+#if FF_API_OLD_AVIO
 int url_open_buf(AVIOContext **s, uint8_t *buf, int buf_size, int flags)
 {
     int ret;
@@ -998,9 +1026,10 @@ int url_open_buf(AVIOContext **s, uint8_t *buf, int buf_size, int flags)
 
 int url_close_buf(AVIOContext *s)
 {
-    put_flush_packet(s);
+    avio_flush(s);
     return s->buf_ptr - s->buffer;
 }
+#endif
 
 /* output in a dynamic buffer */
 
@@ -1125,7 +1154,7 @@ int url_close_dyn_buf(AVIOContext *s, uint8_t **pbuffer)
         padding = FF_INPUT_BUFFER_PADDING_SIZE;
     }
 
-    put_flush_packet(s);
+    avio_flush(s);
 
     *pbuffer = d->buffer;
     size = d->size;

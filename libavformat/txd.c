@@ -61,7 +61,7 @@ next_chunk:
     chunk_size = avio_rl32(pb);
     marker     = avio_rl32(pb);
 
-    if (s->pb->eof_reached)
+    if (url_feof(s->pb))
         return AVERROR_EOF;
     if (marker != TXD_MARKER && marker != TXD_MARKER2) {
         av_log(s, AV_LOG_ERROR, "marker does not match\n");
@@ -73,7 +73,7 @@ next_chunk:
             if (chunk_size > 100)
                 break;
         case TXD_EXTRA:
-            avio_seek(s->pb, chunk_size, SEEK_CUR);
+            avio_skip(s->pb, chunk_size);
         case TXD_FILE:
         case TXD_TEXTURE:
             goto next_chunk;

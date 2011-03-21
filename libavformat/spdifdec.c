@@ -171,7 +171,7 @@ static int spdif_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     while (state != (AV_BSWAP16C(SYNCWORD1) << 16 | AV_BSWAP16C(SYNCWORD2))) {
         state = (state << 8) | avio_r8(pb);
-        if (pb->eof_reached)
+        if (url_feof(pb))
             return AVERROR_EOF;
     }
 
@@ -201,7 +201,7 @@ static int spdif_read_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     /* skip over the padding to the beginning of the next frame */
-    avio_seek(pb, offset - pkt->size - BURST_HEADER_SIZE, SEEK_CUR);
+    avio_skip(pb, offset - pkt->size - BURST_HEADER_SIZE);
 
     if (!s->nb_streams) {
         /* first packet, create a stream */

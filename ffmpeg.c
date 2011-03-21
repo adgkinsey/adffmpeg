@@ -172,7 +172,6 @@ static int loop_output = AVFMT_NOOUTPUTLOOP;
 static int qp_hist = 0;
 #if CONFIG_AVFILTER
 static char *vfilters = NULL;
-static AVFilterGraph *graph = NULL;
 #endif
 
 static int intra_only = 0;
@@ -303,6 +302,14 @@ typedef struct AVOutputStream {
     AVAudioConvert *reformat_ctx;
     AVFifoBuffer *fifo;     /* for compression: one audio fifo per codec */
     FILE *logfile;
+
+#if CONFIG_AVFILTER
+    AVFilterContext *output_video_filter;
+    AVFilterContext *input_video_filter;
+    AVFilterBufferRef *picref;
+    char *avfilter;
+    AVFilterGraph *graph;
+#endif
 } AVOutputStream;
 
 static AVOutputStream **output_streams_for_file[MAX_FILES] = { NULL };
@@ -320,16 +327,12 @@ typedef struct AVInputStream {
     int64_t       next_pts;  /* synthetic pts for cases where pkt.pts
                                 is not defined */
     int64_t       pts;       /* current pts */
-    PtsCorrectionContext pts_ctx;
     int is_start;            /* is 1 at the start and after a discontinuity */
     int showed_multi_packet_warning;
     int is_past_recording_time;
 #if CONFIG_AVFILTER
-    AVFilterContext *output_video_filter;
-    AVFilterContext *input_video_filter;
     AVFrame *filter_frame;
     int has_filter_frame;
-    AVFilterBufferRef *picref;
 #endif
 } AVInputStream;
 
@@ -355,22 +358,30 @@ static int configure_filters(AVInputStream *ist, AVOutputStream *ost)
     AVCodecContext *codec = ost->st->codec;
     AVCodecContext *icodec = ist->st->codec;
     FFSinkContext ffsink_ctx = { .pix_fmt = codec->pix_fmt };
+    AVRational sample_aspect_ratio;
     char args[255];
     int ret;
 
-    graph = avfilter_graph_alloc();
+    ost->graph = avfilter_graph_alloc();
 
-    snprintf(args, 255, "%d:%d:%d:%d:%d", ist->st->codec->width,
-             ist->st->codec->height, ist->st->codec->pix_fmt, 1, AV_TIME_BASE);
-    ret = avfilter_graph_create_filter(&ist->input_video_filter, avfilter_get_by_name("buffer"),
-                                       "src", args, NULL, graph);
+    if (ist->st->sample_aspect_ratio.num){
+        sample_aspect_ratio = ist->st->sample_aspect_ratio;
+    }else
+        sample_aspect_ratio = ist->st->codec->sample_aspect_ratio;
+
+    snprintf(args, 255, "%d:%d:%d:%d:%d:%d:%d", ist->st->codec->width,
+             ist->st->codec->height, ist->st->codec->pix_fmt, 1, AV_TIME_BASE,
+             sample_aspect_ratio.num, sample_aspect_ratio.den);
+
+    ret = avfilter_graph_create_filter(&ost->input_video_filter, avfilter_get_by_name("buffer"),
+                                       "src", args, NULL, ost->graph);
     if (ret < 0)
         return ret;
-    ret = avfilter_graph_create_filter(&ist->output_video_filter, &ffsink,
-                                       "out", NULL, &ffsink_ctx, graph);
+    ret = avfilter_graph_create_filter(&ost->output_video_filter, &ffsink,
+                                       "out", NULL, &ffsink_ctx, ost->graph);
     if (ret < 0)
         return ret;
-    last_filter = ist->input_video_filter;
+    last_filter = ost->input_video_filter;
 
     if (codec->width  != icodec->width || codec->height != icodec->height) {
         snprintf(args, 255, "%d:%d:flags=0x%X",
@@ -378,7 +389,7 @@ static int configure_filters(AVInputStream *ist, AVOutputStream *ost)
                  codec->height,
                  (int)av_get_int(sws_opts, "sws_flags", NULL));
         if ((ret = avfilter_graph_create_filter(&filter, avfilter_get_by_name("scale"),
-                                                NULL, args, NULL, graph)) < 0)
+                                                NULL, args, NULL, ost->graph)) < 0)
             return ret;
         if ((ret = avfilter_link(last_filter, 0, filter, 0)) < 0)
             return ret;
@@ -386,9 +397,9 @@ static int configure_filters(AVInputStream *ist, AVOutputStream *ost)
     }
 
     snprintf(args, sizeof(args), "flags=0x%X", (int)av_get_int(sws_opts, "sws_flags", NULL));
-    graph->scale_sws_opts = av_strdup(args);
+    ost->graph->scale_sws_opts = av_strdup(args);
 
-    if (vfilters) {
+    if (ost->avfilter) {
         AVFilterInOut *outputs = av_malloc(sizeof(AVFilterInOut));
         AVFilterInOut *inputs  = av_malloc(sizeof(AVFilterInOut));
 
@@ -398,23 +409,25 @@ static int configure_filters(AVInputStream *ist, AVOutputStream *ost)
         outputs->next    = NULL;
 
         inputs->name    = av_strdup("out");
-        inputs->filter_ctx = ist->output_video_filter;
+        inputs->filter_ctx = ost->output_video_filter;
         inputs->pad_idx = 0;
         inputs->next    = NULL;
 
-        if ((ret = avfilter_graph_parse(graph, vfilters, inputs, outputs, NULL)) < 0)
+        if ((ret = avfilter_graph_parse(ost->graph, ost->avfilter, inputs, outputs, NULL)) < 0)
             return ret;
-        av_freep(&vfilters);
+        av_freep(&ost->avfilter);
     } else {
-        if ((ret = avfilter_link(last_filter, 0, ist->output_video_filter, 0)) < 0)
+        if ((ret = avfilter_link(last_filter, 0, ost->output_video_filter, 0)) < 0)
             return ret;
     }
 
-    if ((ret = avfilter_graph_config(graph, NULL)) < 0)
+    if ((ret = avfilter_graph_config(ost->graph, NULL)) < 0)
         return ret;
 
-    codec->width  = ist->output_video_filter->inputs[0]->w;
-    codec->height = ist->output_video_filter->inputs[0]->h;
+    codec->width  = ost->output_video_filter->inputs[0]->w;
+    codec->height = ost->output_video_filter->inputs[0]->h;
+    codec->sample_aspect_ratio = ost->st->sample_aspect_ratio =
+        ost->output_video_filter->inputs[0]->sample_aspect_ratio;
 
     return 0;
 }
@@ -496,7 +509,8 @@ static int read_key(void)
 
 static int decode_interrupt_cb(void)
 {
-    return q_pressed || (q_pressed = read_key() == 'q');
+    q_pressed += read_key() == 'q';
+    return q_pressed > 1;
 }
 
 static int ffmpeg_exit(int ret)
@@ -1545,7 +1559,7 @@ static int output_packet(AVInputStream *ist, int ist_index,
                         /* no picture yet */
                         goto discard_packet;
                     }
-                    ist->next_pts = ist->pts = guess_correct_pts(&ist->pts_ctx, picture.pkt_pts, picture.pkt_dts);
+                    ist->next_pts = ist->pts = picture.best_effort_timestamp;
                     if (ist->st->codec->time_base.num != 0) {
                         int ticks= ist->st->parser ? ist->st->parser->repeat_pict+1 : ist->st->codec->ticks_per_frame;
                         ist->next_pts += ((int64_t)AV_TIME_BASE *
@@ -1594,14 +1608,19 @@ static int output_packet(AVInputStream *ist, int ist_index,
         }
 
 #if CONFIG_AVFILTER
-        if (ist->st->codec->codec_type == AVMEDIA_TYPE_VIDEO && ist->input_video_filter) {
-            AVRational sar;
-            if (ist->st->sample_aspect_ratio.num) sar = ist->st->sample_aspect_ratio;
-            else                                  sar = ist->st->codec->sample_aspect_ratio;
-            // add it to be filtered
-            av_vsrc_buffer_add_frame(ist->input_video_filter, &picture,
-                                     ist->pts,
-                                     sar);
+        if(ist->st->codec->codec_type == AVMEDIA_TYPE_VIDEO){
+            for(i=0;i<nb_ostreams;i++) {
+                ost = ost_table[i];
+                if (ost->input_video_filter && ost->source_index == ist_index) {
+                    AVRational sar;
+                    if (ist->st->sample_aspect_ratio.num) sar = ist->st->sample_aspect_ratio;
+                    else                                  sar = ist->st->codec->sample_aspect_ratio;
+                    // add it to be filtered
+                    av_vsrc_buffer_add_frame(ost->input_video_filter, &picture,
+                                             ist->pts,
+                                             sar);
+                }
+            }
         }
 #endif
 
@@ -1626,26 +1645,24 @@ static int output_packet(AVInputStream *ist, int ist_index,
             if (pts > now)
                 usleep(pts - now);
         }
-#if CONFIG_AVFILTER
-        frame_available = ist->st->codec->codec_type != AVMEDIA_TYPE_VIDEO ||
-            !ist->output_video_filter || avfilter_poll_frame(ist->output_video_filter->inputs[0]);
-#endif
         /* if output time reached then transcode raw format,
            encode packets and output them */
         if (start_time == 0 || ist->pts >= start_time)
-#if CONFIG_AVFILTER
-        while (frame_available) {
-            AVRational ist_pts_tb;
-            if (ist->st->codec->codec_type == AVMEDIA_TYPE_VIDEO && ist->output_video_filter)
-                get_filtered_video_frame(ist->output_video_filter, &picture, &ist->picref, &ist_pts_tb);
-            if (ist->picref)
-                ist->pts = av_rescale_q(ist->picref->pts, ist_pts_tb, AV_TIME_BASE_Q);
-#endif
             for(i=0;i<nb_ostreams;i++) {
                 int frame_size;
 
                 ost = ost_table[i];
                 if (ost->source_index == ist_index) {
+#if CONFIG_AVFILTER
+                frame_available = ist->st->codec->codec_type != AVMEDIA_TYPE_VIDEO ||
+                    !ost->output_video_filter || avfilter_poll_frame(ost->output_video_filter->inputs[0]);
+                while (frame_available) {
+                    AVRational ist_pts_tb;
+                    if (ist->st->codec->codec_type == AVMEDIA_TYPE_VIDEO && ost->output_video_filter)
+                        get_filtered_video_frame(ost->output_video_filter, &picture, &ost->picref, &ist_pts_tb);
+                    if (ost->picref)
+                        ist->pts = av_rescale_q(ost->picref->pts, ist_pts_tb, AV_TIME_BASE_Q);
+#endif
                     os = output_files[ost->file_index];
 
                     /* set the input output pts pairs */
@@ -1659,8 +1676,8 @@ static int output_packet(AVInputStream *ist, int ist_index,
                             break;
                         case AVMEDIA_TYPE_VIDEO:
 #if CONFIG_AVFILTER
-                            if (ist->picref->video)
-                                ost->st->codec->sample_aspect_ratio = ist->picref->video->pixel_aspect;
+                            if (ost->picref->video)
+                                ost->st->codec->sample_aspect_ratio = ost->picref->video->pixel_aspect;
 #endif
                             do_video_out(os, ost, ist, &picture, &frame_size);
                             if (vstats_filename && frame_size)
@@ -1681,7 +1698,11 @@ static int output_packet(AVInputStream *ist, int ist_index,
                         av_init_packet(&opkt);
 
                         if ((!ost->frame_number && !(pkt->flags & AV_PKT_FLAG_KEY)) && !copy_initial_nonkeyframes)
+#if !CONFIG_AVFILTER
                             continue;
+#else
+                            goto cont;
+#endif
 
                         /* no reencoding needed : output the packet directly */
                         /* force the input stream PTS */
@@ -1729,16 +1750,17 @@ static int output_packet(AVInputStream *ist, int ist_index,
                         ost->frame_number++;
                         av_free_packet(&opkt);
                     }
+#if CONFIG_AVFILTER
+                    cont:
+                    frame_available = (ist->st->codec->codec_type == AVMEDIA_TYPE_VIDEO) &&
+                                       ost->output_video_filter && avfilter_poll_frame(ost->output_video_filter->inputs[0]);
+                    if(ost->picref)
+                        avfilter_unref_buffer(ost->picref);
+                }
+#endif
                 }
             }
 
-#if CONFIG_AVFILTER
-            frame_available = (ist->st->codec->codec_type == AVMEDIA_TYPE_VIDEO) &&
-                              ist->output_video_filter && avfilter_poll_frame(ist->output_video_filter->inputs[0]);
-            if(ist->picref)
-                avfilter_unref_buffer(ist->picref);
-        }
-#endif
         av_free(buffer_to_free);
         /* XXX: allocate the subtitles in the codec ? */
         if (subtitle_to_free) {
@@ -2348,7 +2370,6 @@ static int transcode(AVFormatContext **output_files,
         st= ist->st;
         ist->pts = st->avg_frame_rate.num ? - st->codec->has_b_frames*AV_TIME_BASE / av_q2d(st->avg_frame_rate) : 0;
         ist->next_pts = AV_NOPTS_VALUE;
-        init_pts_correction(&ist->pts_ctx);
         ist->is_start = 1;
     }
 
@@ -2488,8 +2509,9 @@ static int transcode(AVFormatContext **output_files,
         print_sdp(output_files, nb_output_files);
     }
 
-    if (!using_stdin && verbose >= 0) {
-        fprintf(stderr, "Press [q] to stop encoding\n");
+    if (!using_stdin) {
+        if(verbose >= 0)
+            fprintf(stderr, "Press [q] to stop encoding\n");
         url_set_interrupt_cb(decode_interrupt_cb);
     }
     term_init();
@@ -2669,6 +2691,9 @@ static int transcode(AVFormatContext **output_files,
             av_freep(&ost->st->codec->stats_in);
             avcodec_close(ost->st->codec);
         }
+#if CONFIG_AVFILTER
+        avfilter_graph_free(&ost->graph);
+#endif
     }
 
     /* close each decoder */
@@ -2678,9 +2703,6 @@ static int transcode(AVFormatContext **output_files,
             avcodec_close(ist->st->codec);
         }
     }
-#if CONFIG_AVFILTER
-    avfilter_graph_free(&graph);
-#endif
 
     /* finished ! */
     ret = 0;
@@ -3364,6 +3386,7 @@ static void new_video_stream(AVFormatContext *oc, int file_idx)
     AVCodecContext *video_enc;
     enum CodecID codec_id = CODEC_ID_NONE;
     AVCodec *codec= NULL;
+    int i;
 
     st = av_new_stream(oc, oc->nb_streams < nb_streamid_map ? streamid_map[oc->nb_streams] : 0);
     if (!st) {
@@ -3383,6 +3406,17 @@ static void new_video_stream(AVFormatContext *oc, int file_idx)
             codec_id = av_guess_codec(oc->oformat, NULL, oc->filename, NULL, AVMEDIA_TYPE_VIDEO);
             codec = avcodec_find_encoder(codec_id);
         }
+#if CONFIG_AVFILTER
+        if(frame_aspect_ratio > 0){
+            i = vfilters ? strlen(vfilters) : 0;
+            vfilters = av_realloc(vfilters, i+100);
+            snprintf(vfilters+i, i+100, "%csetdar=%f\n", i?',':' ', frame_aspect_ratio);
+            frame_aspect_ratio=0;
+        }
+
+        ost->avfilter= vfilters;
+        vfilters= NULL;
+#endif
     }
 
     avcodec_get_context_defaults3(st->codec, codec);
@@ -3805,7 +3839,6 @@ static void opt_output_file(const char *filename)
     oc->preload= (int)(mux_preload*AV_TIME_BASE);
     oc->max_delay= (int)(mux_max_delay*AV_TIME_BASE);
     oc->loop_output = loop_output;
-    oc->flags |= AVFMT_FLAG_NONBLOCK;
 
     set_context_opts(oc, avformat_opts, AV_OPT_FLAG_ENCODING_PARAM, NULL);
 
@@ -4181,7 +4214,7 @@ static const OptionDef options[] = {
     { "f", HAS_ARG, {(void*)opt_format}, "force format", "fmt" },
     { "i", HAS_ARG, {(void*)opt_input_file}, "input file name", "filename" },
     { "y", OPT_BOOL, {(void*)&file_overwrite}, "overwrite output files" },
-    { "map", HAS_ARG | OPT_EXPERT, {(void*)opt_map}, "set input stream mapping", "file:stream[:syncfile:syncstream]" },
+    { "map", HAS_ARG | OPT_EXPERT, {(void*)opt_map}, "set input stream mapping", "file.stream[:syncfile.syncstream]" },
     { "map_meta_data", HAS_ARG | OPT_EXPERT, {(void*)opt_map_meta_data}, "DEPRECATED set meta data information of outfile from infile",
       "outfile[,metadata]:infile[,metadata]" },
     { "map_metadata", HAS_ARG | OPT_EXPERT, {(void*)opt_map_metadata}, "set metadata information of outfile from infile",

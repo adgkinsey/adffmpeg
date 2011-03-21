@@ -65,19 +65,19 @@ static int bfi_read_header(AVFormatContext * s, AVFormatParameters * ap)
         return AVERROR(ENOMEM);
 
     /* Set the total number of frames. */
-    avio_seek(pb, 8, SEEK_CUR);
+    avio_skip(pb, 8);
     chunk_header           = avio_rl32(pb);
     bfi->nframes           = avio_rl32(pb);
     avio_rl32(pb);
     avio_rl32(pb);
     avio_rl32(pb);
     fps                    = avio_rl32(pb);
-    avio_seek(pb, 12, SEEK_CUR);
+    avio_skip(pb, 12);
     vstream->codec->width  = avio_rl32(pb);
     vstream->codec->height = avio_rl32(pb);
 
     /*Load the palette to extradata */
-    avio_seek(pb, 8, SEEK_CUR);
+    avio_skip(pb, 8);
     vstream->codec->extradata      = av_malloc(768);
     vstream->codec->extradata_size = 768;
     avio_read(pb, vstream->codec->extradata,
@@ -109,7 +109,7 @@ static int bfi_read_packet(AVFormatContext * s, AVPacket * pkt)
     BFIContext *bfi = s->priv_data;
     AVIOContext *pb = s->pb;
     int ret, audio_offset, video_offset, chunk_size, audio_size = 0;
-    if (bfi->nframes == 0 || pb->eof_reached) {
+    if (bfi->nframes == 0 || url_feof(pb)) {
         return AVERROR(EIO);
     }
 
@@ -117,7 +117,7 @@ static int bfi_read_packet(AVFormatContext * s, AVPacket * pkt)
     if (!bfi->avflag) {
         uint32_t state = 0;
         while(state != MKTAG('S','A','V','I')){
-            if (pb->eof_reached)
+            if (url_feof(pb))
                 return AVERROR(EIO);
             state = 256*state + avio_r8(pb);
         }

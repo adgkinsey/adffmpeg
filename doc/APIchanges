@@ -12,6 +12,14 @@ libavutil:   2009-03-08
 
 API changes, most recent first:
 
+2011-XX-XX - XXXXXXX - lavu  XX.XXX.X - pixfmt.h
+  Add PIX_FMT_BGR48LE and PIX_FMT_BGR48BE pixel formats
+
+2011-03-02 - 863c471 - lavf  52.103.0 - av_pkt_dump2, av_pkt_dump_log2
+  Add new functions av_pkt_dump2, av_pkt_dump_log2 that uses the
+  source stream timebase for outputting timestamps. Deprecate
+  av_pkt_dump and av_pkt_dump_log.
+
 2011-02-20 - e731b8d - lavf  52.102.0 - avio.h
   * e731b8d - rename init_put_byte() to ffio_init_context(), deprecating the
               original, and move it to a private header so it is no longer
@@ -72,6 +80,12 @@ API changes, most recent first:
 
 2011-02-02 - dfd2a00 - lavu 50.37.0 - log.h
   Make av_dlog public.
+
+2011-01-31 - X - lavfi 1.76.0 - vsrc_buffer
+  Add sample_aspect_ratio fields to vsrc_buffer arguments
+
+2011-01-31 - X - lavfi 1.75.0 - AVFilterLink sample_aspect_ratio
+  Add sample_aspect_ratio field to AVFilterLink.
 
 2011-01-15 - r26374 - lavfi 1.74.0 - AVFilterBufferRefAudioProps
   Rename AVFilterBufferRefAudioProps.samples_nb to nb_samples.

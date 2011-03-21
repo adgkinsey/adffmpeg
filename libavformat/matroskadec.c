@@ -127,6 +127,7 @@ typedef struct {
     int      sub_packet_size;
     int      sub_packet_cnt;
     int      pkt_cnt;
+    uint64_t buf_timecode;
     uint8_t *buf;
 } MatroskaTrackAudio;
 
@@ -485,7 +486,7 @@ static EbmlSyntax matroska_segments[] = {
 static EbmlSyntax matroska_blockgroup[] = {
     { MATROSKA_ID_BLOCK,          EBML_BIN,  0, offsetof(MatroskaBlock,bin) },
     { MATROSKA_ID_SIMPLEBLOCK,    EBML_BIN,  0, offsetof(MatroskaBlock,bin) },
-    { MATROSKA_ID_BLOCKDURATION,  EBML_UINT, 0, offsetof(MatroskaBlock,duration), {.u=AV_NOPTS_VALUE} },
+    { MATROSKA_ID_BLOCKDURATION,  EBML_UINT, 0, offsetof(MatroskaBlock,duration) },
     { MATROSKA_ID_BLOCKREFERENCE, EBML_UINT, 0, offsetof(MatroskaBlock,reference) },
     { 1,                          EBML_UINT, 0, offsetof(MatroskaBlock,non_simple), {.u=1} },
     { 0 }
@@ -548,7 +549,7 @@ static int ebml_read_num(MatroskaDemuxContext *matroska, AVIOContext *pb,
      * use it safely here to catch EOS. */
     if (!(total = avio_r8(pb))) {
         /* we might encounter EOS here */
-        if (!pb->eof_reached) {
+        if (!url_feof(pb)) {
             int64_t pos = avio_tell(pb);
             av_log(matroska->ctx, AV_LOG_ERROR,
                    "Read error at pos. %"PRIu64" (0x%"PRIx64")\n",
@@ -831,7 +832,7 @@ static int ebml_parse_elem(MatroskaDemuxContext *matroska,
                      return ebml_parse_nest(matroska, syntax->def.n, data);
     case EBML_PASS:  return ebml_parse_id(matroska, syntax->def.n, id, data);
     case EBML_STOP:  return 1;
-    default:         return avio_seek(pb,length,SEEK_CUR)<0 ? AVERROR(EIO) : 0;
+    default:         return avio_skip(pb,length)<0 ? AVERROR(EIO) : 0;
     }
     if (res == AVERROR_INVALIDDATA)
         av_log(matroska->ctx, AV_LOG_ERROR, "Invalid element\n");
@@ -1393,10 +1394,10 @@ static int matroska_read_header(AVFormatContext *s, AVFormatParameters *ap)
             int flavor;
             ffio_init_context(&b, track->codec_priv.data,track->codec_priv.size,
                           0, NULL, NULL, NULL, NULL);
-            avio_seek(&b, 22, SEEK_CUR);
+            avio_skip(&b, 22);
             flavor                       = avio_rb16(&b);
             track->audio.coded_framesize = avio_rb32(&b);
-            avio_seek(&b, 12, SEEK_CUR);
+            avio_skip(&b, 12);
             track->audio.sub_packet_h    = avio_rb16(&b);
             track->audio.frame_size      = avio_rb16(&b);
             track->audio.sub_packet_size = avio_rb16(&b);
@@ -1621,7 +1622,7 @@ static int matroska_parse_block(MatroskaDemuxContext *matroska, uint8_t *data,
     st = track->stream;
     if (st->discard >= AVDISCARD_ALL)
         return res;
-    if (duration == AV_NOPTS_VALUE)
+    if (!duration)
         duration = track->default_duration / matroska->time_scale;
 
     block_time = AV_RB16(data);
@@ -1740,6 +1741,8 @@ static int matroska_parse_block(MatroskaDemuxContext *matroska, uint8_t *data,
                 int x;
 
                 if (!track->audio.pkt_cnt) {
+                    if (track->audio.sub_packet_cnt == 0)
+                        track->audio.buf_timecode = timecode;
                     if (st->codec->codec_id == CODEC_ID_RA_288)
                         for (x=0; x<h/2; x++)
                             memcpy(track->audio.buf+x*2*w+y*cfs,
@@ -1762,6 +1765,8 @@ static int matroska_parse_block(MatroskaDemuxContext *matroska, uint8_t *data,
                     av_new_packet(pkt, a);
                     memcpy(pkt->data, track->audio.buf
                            + a * (h*w / a - track->audio.pkt_cnt--), a);
+                    pkt->pts = track->audio.buf_timecode;
+                    track->audio.buf_timecode = AV_NOPTS_VALUE;
                     pkt->pos = pos;
                     pkt->stream_index = st->index;
                     dynarray_add(&matroska->packets,&matroska->num_packets,pkt);
@@ -1903,6 +1908,9 @@ static int matroska_read_seek(AVFormatContext *s, int stream_index,
 
     index_min = index;
     for (i=0; i < matroska->tracks.nb_elem; i++) {
+        tracks[i].audio.pkt_cnt = 0;
+        tracks[i].audio.sub_packet_cnt = 0;
+        tracks[i].audio.buf_timecode = AV_NOPTS_VALUE;
         tracks[i].end_timecode = 0;
         if (tracks[i].type == MATROSKA_TRACK_TYPE_SUBTITLE
             && !tracks[i].stream->discard != AVDISCARD_ALL) {

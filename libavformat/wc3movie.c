@@ -101,7 +101,7 @@ static int wc3_read_header(AVFormatContext *s,
     wc3->vpkt.data = NULL; wc3->vpkt.size = 0;
 
     /* skip the first 3 32-bit numbers */
-    avio_seek(pb, 12, SEEK_CUR);
+    avio_skip(pb, 12);
 
     /* traverse through the chunks and load the header information before
      * the first BRCH tag */
@@ -114,12 +114,12 @@ static int wc3_read_header(AVFormatContext *s,
         case SOND_TAG:
         case INDX_TAG:
             /* SOND unknown, INDX unnecessary; ignore both */
-            avio_seek(pb, size, SEEK_CUR);
+            avio_skip(pb, size);
             break;
 
         case PC__TAG:
             /* number of palettes, unneeded */
-            avio_seek(pb, 12, SEEK_CUR);
+            avio_skip(pb, 12);
             break;
 
         case BNAM_TAG:
@@ -157,7 +157,7 @@ static int wc3_read_header(AVFormatContext *s,
         fourcc_tag = avio_rl32(pb);
         /* chunk sizes are 16-bit aligned */
         size = (avio_rb32(pb) + 1) & (~1);
-        if (pb->eof_reached)
+        if (url_feof(pb))
             return AVERROR(EIO);
 
     } while (fourcc_tag != BRCH_TAG);
@@ -208,7 +208,7 @@ static int wc3_read_packet(AVFormatContext *s,
         fourcc_tag = avio_rl32(pb);
         /* chunk sizes are 16-bit aligned */
         size = (avio_rb32(pb) + 1) & (~1);
-        if (pb->eof_reached)
+        if (url_feof(pb))
             return AVERROR(EIO);
 
         switch (fourcc_tag) {
@@ -240,7 +240,7 @@ static int wc3_read_packet(AVFormatContext *s,
         case TEXT_TAG:
             /* subtitle chunk */
 #if 0
-            avio_seek(pb, size, SEEK_CUR);
+            avio_skip(pb, size);
 #else
             if ((unsigned)size > sizeof(text) || (ret = avio_read(pb, text, size)) != size)
                 ret = AVERROR(EIO);

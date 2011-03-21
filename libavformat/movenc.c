@@ -91,6 +91,7 @@ static int mov_write_stsz_tag(AVIOContext *pb, MOVTrack *track)
     }
     if (equalChunks) {
         int sSize = track->cluster[0].size/track->cluster[0].entries;
+        sSize = FFMAX(1, sSize); // adpcm mono case could make sSize == 0
         avio_wb32(pb, sSize); // sample size
         avio_wb32(pb, entries); // sample count
     }
@@ -2042,7 +2043,7 @@ int ff_mov_write_packet(AVFormatContext *s, AVPacket *pkt)
     trk->sampleCount += samplesInChunk;
     mov->mdat_size += size;
 
-    put_flush_packet(pb);
+    avio_flush(pb);
 
     if (trk->hint_track >= 0 && trk->hint_track < mov->nb_streams)
         ff_mov_add_hinted_packet(s, pkt, trk->hint_track, trk->entry);
@@ -2227,7 +2228,7 @@ static int mov_write_header(AVFormatContext *s)
         }
     }
 
-    put_flush_packet(pb);
+    avio_flush(pb);
 
     return 0;
  error:
@@ -2271,7 +2272,7 @@ static int mov_write_trailer(AVFormatContext *s)
 
     }
 
-    put_flush_packet(pb);
+    avio_flush(pb);
 
     av_freep(&mov->tracks);
 

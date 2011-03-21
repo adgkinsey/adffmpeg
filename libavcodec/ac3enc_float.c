@@ -28,6 +28,7 @@
 
 #define CONFIG_AC3ENC_FLOAT 1
 #include "ac3enc.c"
+#include "kbdwin.h"
 
 
 /**
@@ -74,7 +75,7 @@ static av_cold int mdct_init(AVCodecContext *avctx, AC3MDCTContext *mdct,
  */
 static void mdct512(AC3MDCTContext *mdct, float *out, float *in)
 {
-    ff_mdct_calc(&mdct->fft, out, in);
+    mdct->fft.mdct_calc(&mdct->fft, out, in);
 }
 
 
@@ -103,9 +104,8 @@ static int normalize_samples(AC3EncodeContext *s)
  */
 static void scale_coefficients(AC3EncodeContext *s)
 {
-    int i;
-    for (i = 0; i < AC3_MAX_COEFS * AC3_MAX_BLOCKS * s->channels; i++)
-        s->fixed_coef_buffer[i] = SCALE_FLOAT(s->mdct_coef_buffer[i], 24);
+    s->ac3dsp.float_to_fixed24(s->fixed_coef_buffer, s->mdct_coef_buffer,
+                               AC3_MAX_COEFS * AC3_MAX_BLOCKS * s->channels);
 }
 
 

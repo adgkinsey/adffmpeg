@@ -169,6 +169,7 @@ External library support:
                            and libraw1394 [no]
   --enable-libdirac        enable Dirac support via libdirac [no]
   --enable-libfaac         enable FAAC support via libfaac [no]
+  --enable-libfreetype     enable libfreetype [no]
   --enable-libgsm          enable GSM support via libgsm [no]
   --enable-libmp3lame      enable MP3 encoding via libmp3lame [no]
   --enable-libnut          enable NUT (de)muxing via libnut,
@@ -907,6 +908,7 @@ CONFIG_LIST="
     avformat
     avisynth
     bzlib
+    crystalhd
     dct
     doc
     dwt
@@ -928,6 +930,7 @@ CONFIG_LIST="
     libdc1394
     libdirac
     libfaac
+    libfreetype
     libgsm
     libmp3lame
     libnut
@@ -959,6 +962,7 @@ CONFIG_LIST="
     rtpdec
     runtime_cpudetect
     shared
+    sinewin
     small
     sram
     static
@@ -1075,6 +1079,7 @@ HAVE_LIST="
     llrintf
     local_aligned_16
     local_aligned_8
+    localtime_r
     log2
     log2f
     loongson
@@ -1236,8 +1241,8 @@ mdct_select="fft"
 rdft_select="fft"
 
 # decoders / encoders / hardware accelerators
-aac_decoder_select="mdct rdft"
-aac_encoder_select="mdct"
+aac_decoder_select="mdct rdft sinewin"
+aac_encoder_select="mdct sinewin"
 aac_latm_decoder_select="aac_decoder aac_latm_parser"
 ac3_decoder_select="mdct ac3_parser"
 ac3_encoder_select="mdct ac3dsp"
@@ -1245,12 +1250,12 @@ ac3_fixed_encoder_select="ac3dsp"
 alac_encoder_select="lpc"
 amrnb_decoder_select="lsp"
 amrwb_decoder_select="lsp"
-atrac1_decoder_select="mdct"
+atrac1_decoder_select="mdct sinewin"
 atrac3_decoder_select="mdct"
 binkaudio_dct_decoder_select="mdct rdft dct"
 binkaudio_rdft_decoder_select="mdct rdft"
 cavs_decoder_select="golomb"
-cook_decoder_select="mdct"
+cook_decoder_select="mdct sinewin"
 cscd_decoder_suggest="zlib"
 dca_decoder_select="mdct"
 dnxhd_encoder_select="aandct"
@@ -1274,6 +1279,7 @@ h263_vaapi_hwaccel_select="vaapi h263_decoder"
 h263i_decoder_select="h263_decoder"
 h263p_encoder_select="h263_encoder"
 h264_decoder_select="golomb h264dsp h264pred"
+h264_crystalhd_decoder_select="crystalhd h264_mp4toannexb_bsf"
 h264_dxva2_hwaccel_deps="dxva2api_h"
 h264_dxva2_hwaccel_select="dxva2 h264_decoder"
 h264_vaapi_hwaccel_select="vaapi"
@@ -1296,21 +1302,24 @@ mpeg4_decoder_select="h263_decoder mpeg4video_parser"
 mpeg4_encoder_select="h263_encoder"
 mpeg_vdpau_decoder_select="vdpau mpegvideo_decoder"
 mpeg1_vdpau_decoder_select="vdpau mpeg1video_decoder"
+mpeg2_crystalhd_decoder_select="crystalhd"
 mpeg2_dxva2_hwaccel_deps="dxva2api_h"
 mpeg2_dxva2_hwaccel_select="dxva2 mpeg2video_decoder"
 mpeg2_vaapi_hwaccel_select="vaapi mpeg2video_decoder"
+mpeg4_crystalhd_decoder_select="crystalhd"
 mpeg4_vaapi_hwaccel_select="vaapi mpeg4_decoder"
 mpeg4_vdpau_decoder_select="vdpau mpeg4_decoder"
 mpeg_xvmc_decoder_deps="X11_extensions_XvMClib_h"
 mpeg_xvmc_decoder_select="mpegvideo_decoder"
+msmpeg4_crystalhd_decoder_select="crystalhd"
 msmpeg4v1_decoder_select="h263_decoder"
 msmpeg4v1_encoder_select="h263_encoder"
 msmpeg4v2_decoder_select="h263_decoder"
 msmpeg4v2_encoder_select="h263_encoder"
 msmpeg4v3_decoder_select="h263_decoder"
 msmpeg4v3_encoder_select="h263_encoder"
-nellymoser_decoder_select="mdct"
-nellymoser_encoder_select="mdct"
+nellymoser_decoder_select="mdct sinewin"
+nellymoser_encoder_select="mdct sinewin"
 png_decoder_select="zlib"
 png_encoder_select="zlib"
 qcelp_decoder_select="lsp"
@@ -1337,8 +1346,9 @@ tiff_decoder_suggest="zlib"
 tiff_encoder_suggest="zlib"
 truehd_decoder_select="mlp_decoder"
 tscc_decoder_select="zlib"
-twinvq_decoder_select="mdct lsp"
+twinvq_decoder_select="mdct lsp sinewin"
 vc1_decoder_select="h263_decoder"
+vc1_crystalhd_decoder_select="crystalhd"
 vc1_dxva2_hwaccel_deps="dxva2api_h DXVA_PictureParameters_wDecodedPictureIndex"
 vc1_dxva2_hwaccel_select="dxva2 vc1_decoder"
 vc1_vaapi_hwaccel_select="vaapi vc1_decoder"
@@ -1349,17 +1359,18 @@ vp6_decoder_select="huffman"
 vp6a_decoder_select="vp6_decoder"
 vp6f_decoder_select="vp6_decoder"
 vp8_decoder_select="h264pred"
-wmapro_decoder_select="mdct"
-wmav1_decoder_select="mdct"
-wmav1_encoder_select="mdct"
-wmav2_decoder_select="mdct"
-wmav2_encoder_select="mdct"
-wmavoice_decoder_select="lsp rdft dct mdct"
+wmapro_decoder_select="mdct sinewin"
+wmav1_decoder_select="mdct sinewin"
+wmav1_encoder_select="mdct sinewin"
+wmav2_decoder_select="mdct sinewin"
+wmav2_encoder_select="mdct sinewin"
+wmavoice_decoder_select="lsp rdft dct mdct sinewin"
 wmv1_decoder_select="h263_decoder"
 wmv1_encoder_select="h263_encoder"
 wmv2_decoder_select="h263_decoder"
 wmv2_encoder_select="h263_encoder"
 wmv3_decoder_select="vc1_decoder"
+wmv3_crystalhd_decoder_select="crystalhd"
 wmv3_dxva2_hwaccel_select="vc1_dxva2_hwaccel"
 wmv3_vaapi_hwaccel_select="vc1_vaapi_hwaccel"
 wmv3_vdpau_decoder_select="vc1_vdpau_decoder"
@@ -1368,6 +1379,7 @@ zlib_encoder_select="zlib"
 zmbv_decoder_select="zlib"
 zmbv_encoder_select="zlib"
 
+crystalhd_deps="libcrystalhd_libcrystalhd_if_h"
 vaapi_deps="va_va_h"
 vdpau_deps="vdpau_vdpau_h vdpau_vdpau_x11_h"
 
@@ -1436,6 +1448,7 @@ alsa_indev_deps="alsa_asoundlib_h snd_pcm_htimestamp"
 alsa_outdev_deps="alsa_asoundlib_h"
 bktr_indev_deps_any="dev_bktr_ioctl_bt848_h machine_ioctl_bt848_h dev_video_bktr_ioctl_bt848_h dev_ic_bt8xx_h"
 dv1394_indev_deps="dv1394 dv_demuxer"
+fbdev_indev_deps="linux_fb_h"
 jack_indev_deps="jack_jack_h"
 libdc1394_indev_deps="libdc1394"
 oss_indev_deps_any="soundcard_h sys_soundcard_h"
@@ -1465,9 +1478,11 @@ netvu_protocol_select="http_protocol"
 # filters
 blackframe_filter_deps="gpl"
 cropdetect_filter_deps="gpl"
+drawtext_filter_deps="libfreetype"
 frei0r_filter_deps="frei0r dlopen strtok_r"
 frei0r_src_filter_deps="frei0r dlopen strtok_r"
 hqdn3d_filter_deps="gpl"
+mp_filter_deps="gpl"
 scale_filter_deps="swscale"
 ocv_filter_deps="libopencv"
 yadif_filter_deps="gpl"
@@ -2394,7 +2409,8 @@ case $target_os in
         enable malloc_aligned
         gas="gas-preprocessor.pl $cc"
         enabled ppc && add_asflags -force_cpusubtype_ALL
-        SHFLAGS='-dynamiclib -Wl,-single_module -Wl,-install_name,$(SHLIBDIR)/$(SLIBNAME),-current_version,$(LIBVERSION),-compatibility_version,$(LIBMAJOR) -Wl,-read_only_relocs,suppress'
+        SHFLAGS='-dynamiclib -Wl,-single_module -Wl,-install_name,$(SHLIBDIR)/$(SLIBNAME),-current_version,$(LIBVERSION),-compatibility_version,$(LIBMAJOR)'
+        enabled x86_32 && append SHFLAGS -Wl,-read_only_relocs,suppress
         strip="${strip} -x"
         add_ldflags -Wl,-dynamic,-search_paths_first
         SLIBSUF=".dylib"
@@ -2425,7 +2441,7 @@ case $target_os in
         SLIBSUF=".dll"
         SLIBNAME_WITH_VERSION='$(SLIBPREF)$(FULLNAME)-$(LIBVERSION)$(SLIBSUF)'
         SLIBNAME_WITH_MAJOR='$(SLIBPREF)$(FULLNAME)-$(LIBMAJOR)$(SLIBSUF)'
-        SLIB_EXTRA_CMD='-lib.exe /machine:$(LIBTARGET) /def:$$(@:$(SLIBSUF)=.def) /out:$(SUBDIR)$(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.lib)'
+        SLIB_EXTRA_CMD=-'$(DLLTOOL) -m $(LIBTARGET) -d $$(@:$(SLIBSUF)=.def) -l $(SUBDIR)$(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.lib)'
         SLIB_INSTALL_EXTRA_CMD='-install -m 644 $(SUBDIR)$(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.lib) "$(SHLIBDIR)/$(SLIBNAME:$(SLIBSUF)=.lib)"; \
             install -m 644 $(SUBDIR)$(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.lib) "$(SHLIBDIR)/$(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.lib)"; \
             install -d "$(LIBDIR)"; \
@@ -2433,6 +2449,7 @@ case $target_os in
         SLIB_UNINSTALL_EXTRA_CMD='rm -f "$(SHLIBDIR)/$(SLIBNAME:$(SLIBSUF)=.lib)"'
         SHFLAGS='-shared -Wl,--output-def,$$(@:$(SLIBSUF)=.def) -Wl,--out-implib,$(SUBDIR)lib$(SLIBNAME:$(SLIBSUF)=.dll.a) -Wl,--enable-runtime-pseudo-reloc -Wl,--enable-auto-image-base'
         objformat="win32"
+        dlltool="${cross_prefix}dlltool"
         enable dos_paths
         check_cflags -fno-common
         check_cpp_condition _mingw.h "defined (__MINGW64_VERSION_MAJOR) || (__MINGW32_MAJOR_VERSION > 3) \
@@ -2777,6 +2794,7 @@ check_func  getrusage
 check_struct "sys/time.h sys/resource.h" "struct rusage" ru_maxrss
 check_func  inet_aton $network_extralibs
 check_func  isatty
+check_func  localtime_r
 check_func  ${malloc_prefix}memalign            && enable memalign
 check_func  mkstemp
 check_func  mmap
@@ -2794,6 +2812,7 @@ check_func_headers windows.h VirtualAlloc
 check_header conio.h
 check_header dlfcn.h
 check_header dxva2api.h
+check_header libcrystalhd/libcrystalhd_if.h
 check_header malloc.h
 check_header poll.h
 check_header sys/mman.h
@@ -2842,6 +2861,7 @@ for thread in $THREADS_LIST; do
 done
 
 check_lib math.h sin -lm
+disabled crystalhd || check_lib libcrystalhd/libcrystalhd_if.h DtsGetVersion -lcrystalhd
 disabled vaapi || check_lib va/va.h vaInitialize -lva
 
 check_mathfunc exp2
@@ -2863,6 +2883,7 @@ enabled libdirac   && require_pkg_config dirac                          \
     "libdirac_decoder/dirac_parser.h libdirac_encoder/dirac_encoder.h"  \
     "dirac_decoder_init dirac_encoder_init"
 enabled libfaac    && require2 libfaac "stdint.h faac.h" faacEncGetVersion -lfaac
+enabled libfreetype && add_cflags $(pkg-config --cflags freetype2) && require libfreetype ft2build.h FT_Init_FreeType -lfreetype
 enabled libgsm     && require  libgsm gsm/gsm.h gsm_create -lgsm
 enabled libmp3lame && require  "libmp3lame >= 3.98.3" lame/lame.h lame_set_VBR_quality -lmp3lame
 enabled libnut     && require  libnut libnut.h nut_demuxer_init -lnut
@@ -2897,7 +2918,7 @@ if enabled libdc1394; then
     die "ERROR: No version of libdc1394 found "
 fi
 
-if check_pkg_config sdl SDL.h SDL_Init; then
+if check_pkg_config sdl SDL_version.h SDL_Linked_Version; then
     check_cpp_condition SDL.h "(SDL_MAJOR_VERSION<<16 | SDL_MINOR_VERSION<<8 | SDL_PATCHLEVEL) >= 0x010201" $sdl_cflags &&
     enable sdl &&
     check_struct SDL.h SDL_VideoInfo current_w $sdl_cflags && enable sdl_video_size
@@ -2905,6 +2926,7 @@ fi
 
 texi2html -version > /dev/null 2>&1 && enable texi2html || disable texi2html
 
+check_header linux/fb.h
 check_header linux/videodev.h
 check_header linux/videodev2.h
 check_header sys/videoio.h
@@ -3152,7 +3174,7 @@ echo
 for type in decoder encoder hwaccel parser demuxer muxer protocol filter bsf indev outdev; do
     echo "Enabled ${type}s:"
     eval list=\$$(toupper $type)_LIST
-    print_enabled '_*' $list | sort | pr -3 -t
+    print_enabled '_*' $list | sort | pr -r -3 -t
     echo
 done
 
@@ -3180,6 +3202,8 @@ if enabled source_path_used; then
         libavdevice
         libavfilter
         libavfilter/$arch
+        libavfilter/libmpcodecs
+        libavfilter/libmpcodecs/libvo
         libavformat
         libavutil
         libavutil/$arch
@@ -3244,6 +3268,7 @@ CPPFLAGS=$CPPFLAGS
 CFLAGS=$CFLAGS
 ASFLAGS=$ASFLAGS
 CC_O=$CC_O
+DLLTOOL=$dlltool
 LDFLAGS=$LDFLAGS
 FFSERVERLDFLAGS=$FFSERVERLDFLAGS
 SHFLAGS=$SHFLAGS

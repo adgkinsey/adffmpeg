@@ -222,8 +222,8 @@ static inline int retry_transfer_wrapper(URLContext *h, unsigned char *buf, int 
     len = 0;
     while (len < size_min) {
         ret = transfer_func(h, buf+len, size-len);
-//        if (ret == AVERROR(EINTR))
-//            continue;
+        if (ret == AVERROR(EINTR))
+            continue;
         if (h->flags & URL_FLAG_NONBLOCK)
             return ret;
         if (ret == AVERROR(EAGAIN)) {
@@ -238,7 +238,7 @@ static inline int retry_transfer_wrapper(URLContext *h, unsigned char *buf, int 
            fast_retries = FFMAX(fast_retries, 2);
         len += ret;
         if (url_interrupt_cb(h))
-            return AVERROR(EINTR);
+            return AVERROR_EXIT;
     }
     return len;
 }

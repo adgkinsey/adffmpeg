@@ -96,7 +96,7 @@ static int dxa_read_header(AVFormatContext *s, AVFormatParameters *ap)
         c->has_sound = 1;
         size = avio_rb32(pb);
         c->vidpos = avio_tell(pb) + size;
-        avio_seek(pb, 16, SEEK_CUR);
+        avio_skip(pb, 16);
         fsize = avio_rl32(pb);
 
         ast = av_new_stream(s, 0);
@@ -104,11 +104,11 @@ static int dxa_read_header(AVFormatContext *s, AVFormatParameters *ap)
             return -1;
         ff_get_wav_header(pb, ast->codec, fsize);
         // find 'data' chunk
-        while(avio_tell(pb) < c->vidpos && !pb->eof_reached){
+        while(avio_tell(pb) < c->vidpos && !url_feof(pb)){
             tag = avio_rl32(pb);
             fsize = avio_rl32(pb);
             if(tag == MKTAG('d', 'a', 't', 'a')) break;
-            avio_seek(pb, fsize, SEEK_CUR);
+            avio_skip(pb, fsize);
         }
         c->bpc = (fsize + c->frames - 1) / c->frames;
         if(ast->codec->block_align)
@@ -162,7 +162,7 @@ static int dxa_read_packet(AVFormatContext *s, AVPacket *pkt)
         return 0;
     }
     avio_seek(s->pb, c->vidpos, SEEK_SET);
-    while(!s->pb->eof_reached && c->frames){
+    while(!url_feof(s->pb) && c->frames){
         avio_read(s->pb, buf, 4);
         switch(AV_RL32(buf)){
         case MKTAG('N', 'U', 'L', 'L'):

@@ -146,13 +146,13 @@ static int tmv_read_packet(AVFormatContext *s, AVPacket *pkt)
     int ret, pkt_size = tmv->stream_index ?
                         tmv->audio_chunk_size : tmv->video_chunk_size;
 
-    if (pb->eof_reached)
+    if (url_feof(pb))
         return AVERROR_EOF;
 
     ret = av_get_packet(pb, pkt, pkt_size);
 
     if (tmv->stream_index)
-        avio_seek(pb, tmv->padding, SEEK_CUR);
+        avio_skip(pb, tmv->padding);
 
     pkt->stream_index  = tmv->stream_index;
     tmv->stream_index ^= 1;

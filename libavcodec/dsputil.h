@@ -122,7 +122,7 @@ void ff_gmc_c(uint8_t *dst, uint8_t *src, int stride, int h, int ox, int oy,
 /* minimum alignment rules ;)
 If you notice errors in the align stuff, need more alignment for some ASM code
 for some CPU or need to use a function with less aligned data then send a mail
-to the libav-devel mailing list, ...
+to the ffmpeg-devel mailing list, ...
 
 !warning These alignments might not match reality, (missing attribute((align))
 stuff somewhere possible).
@@ -369,6 +369,7 @@ typedef struct DSPContext {
     /* this might write to dst[w] */
     void (*add_png_paeth_prediction)(uint8_t *dst, uint8_t *src, uint8_t *top, int w, int bpp);
     void (*bswap_buf)(uint32_t *dst, const uint32_t *src, int w);
+    void (*bswap16_buf)(uint16_t *dst, const uint16_t *src, int len);
 
     void (*h263_v_loop_filter)(uint8_t *src, int stride, int qscale);
     void (*h263_h_loop_filter)(uint8_t *src, int stride, int qscale);

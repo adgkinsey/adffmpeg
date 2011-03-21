@@ -412,7 +412,7 @@ static int dv_read_header(AVFormatContext *s,
 
     state = avio_rb32(s->pb);
     while ((state & 0xffffff7f) != 0x1f07003f) {
-        if (s->pb->eof_reached) {
+        if (url_feof(s->pb)) {
             av_log(s, AV_LOG_ERROR, "Cannot find DV header.\n");
             return -1;
         }

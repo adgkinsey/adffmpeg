@@ -353,6 +353,151 @@ drawbox
 drawbox=10:20:200:60:red@@0.5"
 @end example
 
+@section fade
+
+Apply fade-in/out effect to input video.
+
+It accepts the parameters:
+@var{type}:@var{start_frame}:@var{nb_frames}
+
+@var{type} specifies if the effect type, can be either "in" for
+fade-in, or "out" for a fade-out effect.
+
+@var{start_frame} specifies the number of the start frame for starting
+to apply the fade effect.
+
+@var{nb_frames} specifies the number of frames for which the fade
+effect has to last. At the end of the fade-in effect the output video
+will have the same intensity as the input video, at the end of the
+fade-out transition the output video will be completely black.
+
+A few usage examples follow, usable too as test scenarios.
+@example
+# fade in first 30 frames of video
+fade=in:0:30
+
+# fade out last 45 frames of a 200-frame video
+fade=out:155:45
+
+# fade in first 25 frames and fade out last 25 frames of a 1000-frame video
+fade=in:0:25, fade=out:975:25
+
+# make first 5 frames black, then fade in from frame 5-24
+fade=in:5:20
+@end example
+
+@section drawtext
+
+Draw text string or text from specified file on top of video using the
+libfreetype library.
+
+To enable compilation of this filter you need to configure FFmpeg with
+@code{--enable-libfreetype}.
+
+The filter also recognizes strftime() sequences in the provided text
+and expands them accordingly. Check the documentation of strftime().
+
+The filter accepts parameters as a list of @var{key}=@var{value} pairs,
+separated by ":".
+
+The description of the accepted parameters follows.
+
+@table @option
+
+@item fontfile
+The font file to be used for drawing text. Path must be included.
+This parameter is mandatory.
+
+@item text
+The text string to be drawn. The text must be a sequence of UTF-8
+encoded characters.
+This parameter is mandatory if no file is specified.
+
+@item textfile
+A text file containing text to be drawn. The text must be a sequence
+of UTF-8 encoded characters
+
+This parameter is mandatory if no text string is specified.
+
+If both text and textfile are specified, an error is thrown.
+
+@item x, y
+The offsets where text will be drawn within the video frame.
+Relative to the top/left border of the output image.
+
+The default value of @var{x} and @var{y} is 0.
+
+@item fontsize
+The font size to be used for drawing text.
+The default value of @var{size} is 16.
+
+@item fontcolor
+The color to be used for drawing fonts.
+Either a string (e.g. "red") or in 0xRRGGBB[AA] format
+(e.g. "0xff000033"), possibly followed by an alpha specifier.
+The default value of @var{fontcolor} is "black".
+
+@item boxcolor
+The color to be used for drawing box around text.
+Either a string (e.g. "yellow") or in 0xRRGGBB[AA] format
+(e.g. "0xff00ff"), possibly followed by an alpha specifier.
+
+The default value of @var{bgcolor} is "white".
+
+@item box
+Used to draw a box around text using background color.
+Value should be either 1 (enable) or 0 (disable).
+The default value of @var{box} is 0.
+
+@item ft_load_flags
+Flags to be used for loading the fonts.
+
+The flags map the corresponding flags supported by libfreetype, and are
+a combination of the following values:
+@table @var
+@item default
+@item no_scale
+@item no_hinting
+@item render
+@item no_bitmap
+@item vertical_layout
+@item force_autohint
+@item crop_bitmap
+@item pedantic
+@item ignore_global_advance_width
+@item no_recurse
+@item ignore_transform
+@item monochrome
+@item linear_design
+@item no_autohint
+@item end table
+@end table
+
+Default value is "render".
+
+For more information consult the documentation for the FT_LOAD_*
+libfreetype flags.
+
+@item tabsize
+The size in number of spaces to use for rendering the tab.
+Default value is 4.
+@end table
+
+For example the command:
+@example
+drawtext=fontfile=FreeSerif.ttf: text='Test Text': x=100: y=50: fontsize=24: fontcolor=yellow@@0.2: boxcolor=red@@0.2: box=1"
+@end example
+
+will draw 'Test Text' with font FreeSerif of size 24 at position
+(100,50), text color is yellow, and draw a red box around text. Both
+the text and the box have an opacity of 20%.
+
+Note that the double quotes are not necessary if spaces are not used
+within the parameter list.
+
+For more information about libfreetype, check:
+@url{http://www.freetype.org/}
+
 @section fifo
 
 Buffer input images and send them when they are requested.
@@ -1014,7 +1159,7 @@ This source is mainly intended for a programmatic use, in particular
 through the interface defined in @file{libavfilter/vsrc_buffer.h}.
 
 It accepts the following parameters:
-@var{width}:@var{height}:@var{pix_fmt_string}:@var{timebase_num}:@var{timebase_den}
+@var{width}:@var{height}:@var{pix_fmt_string}:@var{timebase_num}:@var{timebase_den}:@var{sample_aspect_ratio_num}:@var{sample_aspect_ratio.den}
 
 All the parameters need to be explicitely defined.
 
@@ -1033,15 +1178,20 @@ name.
 @item timebase_num, timebase_den
 Specify numerator and denomitor of the timebase assumed by the
 timestamps of the buffered frames.
+
+@item sample_aspect_ratio.num, sample_aspect_ratio.den
+Specify numerator and denominator of the sample aspect ratio assumed
+by the video frames.
 @end table
 
 For example:
 @example
-buffer=320:240:yuv410p:1:24
+buffer=320:240:yuv410p:1:24:1:1
 @end example
 
 will instruct the source to accept video frames with size 320x240 and
-with format "yuv410p" and assuming 1/24 as the timestamps timebase.
+with format "yuv410p", assuming 1/24 as the timestamps timebase and
+square pixels (1:1 sample aspect ratio).
 Since the pixel format with name "yuv410p" corresponds to the number 6
 (check the enum PixelFormat definition in @file{libavutil/pixfmt.h}),
 this example corresponds to:

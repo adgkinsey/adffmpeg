@@ -227,7 +227,7 @@ static int idcin_read_packet(AVFormatContext *s,
     unsigned char r, g, b;
     unsigned char palette_buffer[768];
 
-    if (s->pb->eof_reached)
+    if (url_feof(s->pb))
         return AVERROR(EIO);
 
     if (idcin->next_chunk_is_video) {
@@ -257,7 +257,7 @@ static int idcin_read_packet(AVFormatContext *s,
 
         chunk_size = avio_rl32(pb);
         /* skip the number of decoded bytes (always equal to width * height) */
-        avio_seek(pb, 4, SEEK_CUR);
+        avio_skip(pb, 4);
         chunk_size -= 4;
         ret= av_get_packet(pb, pkt, chunk_size);
         if (ret < 0)

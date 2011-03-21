@@ -46,9 +46,44 @@ typedef struct AC3DSPContext {
      * @return    a value with the same MSB as max(abs(src[]))
      */
     int (*ac3_max_msb_abs_int16)(const int16_t *src, int len);
+
+    /**
+     * Left-shift each value in an array of int16_t by a specified amount.
+     * @param src    input array
+     *               constraints: align 16
+     * @param len    number of values in the array
+     *               constraints: multiple of 32 greater than 0
+     * @param shift  left shift amount
+     *               constraints: range [0,15]
+     */
+    void (*ac3_lshift_int16)(int16_t *src, unsigned int len, unsigned int shift);
+
+    /**
+     * Right-shift each value in an array of int32_t by a specified amount.
+     * @param src    input array
+     *               constraints: align 16
+     * @param len    number of values in the array
+     *               constraints: multiple of 16 greater than 0
+     * @param shift  right shift amount
+     *               constraints: range [0,31]
+     */
+    void (*ac3_rshift_int32)(int32_t *src, unsigned int len, unsigned int shift);
+
+    /**
+     * Convert an array of float in range [-1.0,1.0] to int32_t with range
+     * [-(1<<24),(1<<24)]
+     *
+     * @param dst destination array of int32_t.
+     *            constraints: 16-byte aligned
+     * @param src source array of float.
+     *            constraints: 16-byte aligned
+     * @param len number of elements to convert.
+     *            constraints: multiple of 32 greater than zero
+     */
+    void (*float_to_fixed24)(int32_t *dst, const float *src, unsigned int len);
 } AC3DSPContext;
 
-void ff_ac3dsp_init    (AC3DSPContext *c);
-void ff_ac3dsp_init_x86(AC3DSPContext *c);
+void ff_ac3dsp_init    (AC3DSPContext *c, int bit_exact);
+void ff_ac3dsp_init_x86(AC3DSPContext *c, int bit_exact);
 
 #endif /* AVCODEC_AC3DSP_H */

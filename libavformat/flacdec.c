@@ -46,7 +46,7 @@ static int flac_read_header(AVFormatContext *s,
     }
 
     /* process metadata blocks */
-    while (!s->pb->eof_reached && !metadata_last) {
+    while (!url_feof(s->pb) && !metadata_last) {
         avio_read(s->pb, header, 4);
         ff_flac_parse_block_header(header, &metadata_last, &metadata_type,
                                    &metadata_size);
@@ -65,7 +65,7 @@ static int flac_read_header(AVFormatContext *s,
             break;
         /* skip metadata block for unsupported types */
         default:
-            ret = avio_seek(s->pb, metadata_size, SEEK_CUR);
+            ret = avio_skip(s->pb, metadata_size);
             if (ret < 0)
                 return ret;
         }
