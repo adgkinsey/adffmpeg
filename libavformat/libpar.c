@@ -57,19 +57,17 @@ typedef struct {
 
 
 void libpar_packet_destroy(struct AVPacket *packet);
-AVStream* createStream(AVFormatContext * avf,
-                       const ParFrameInfo *frameInfo);
-void createPacket(AVFormatContext * avf, AVPacket *packet, int siz, int fChang);
+static AVStream* createStream(AVFormatContext * avf, const ParFrameInfo *frameInfo);
+static int createPacket(AVFormatContext * avf, AVPacket *packet, int siz, int fChang);
 static void endianSwapAudioData(uint8_t *data, int size);
-void importMetadata(const AVMetadataTag *tag, PAREncStreamContext *ps);
-
+static void importMetadata(const AVMetadataTag *tag, PAREncStreamContext *ps);
 static void parreaderLogger(int level, const char *format, va_list args);
 
 
 const unsigned int MAX_FRAMEBUFFER_SIZE = 256 * 1024;
 
 
-void importMetadata(const AVMetadataTag *tag, PAREncStreamContext *ps)
+static void importMetadata(const AVMetadataTag *tag, PAREncStreamContext *ps)
 {
     if (strcasecmp(tag->key, "title") == 0)
         strncpy(ps->name, tag->value, sizeof(ps->name));
@@ -201,6 +199,8 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
                                          );
         p->frameInfo.frameBufferSize = pkt->size + p->picHeaderSize;
         ptr = av_malloc(p->frameInfo.frameBufferSize);
+        if (ptr == NULL)
+            return AVERROR(ENOMEM);
         p->frameInfo.frameBuffer = ptr;
         memcpy(ptr, hdr, p->picHeaderSize);
         memcpy(ptr + p->picHeaderSize, pkt->data, pkt->size);
@@ -242,8 +242,8 @@ void libpar_packet_destroy(struct AVPacket *packet)
     av_destruct_packet(packet);
 }
 
-AVStream* createStream(AVFormatContext * avf,
-                       const ParFrameInfo *frameInfo)
+static AVStream* createStream(AVFormatContext * avf,
+                              const ParFrameInfo *frameInfo)
 {
     char textbuffer[128];
     int w, h;
@@ -391,7 +391,7 @@ AVStream* createStream(AVFormatContext * avf,
     return st;
 }
 
-void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
+static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
 {
     PARDecContext *ctxt = avf->priv_data;
     ParFrameInfo *fi = &ctxt->frameInfo;
@@ -411,13 +411,13 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
         if (str)
             streamIndex = str->index;
         else
-            return;
+            return -1;
     }
     av_new_packet(pkt, siz);
 
     if (NULL == pkt->data)  {
         pkt->size = 0;
-        return;
+        return AVERROR(ENOMEM);
     }
 
     pkt->destruct = libpar_packet_destroy;
@@ -427,7 +427,7 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
     pktExt = av_malloc(sizeof(LibparFrameExtra));
     if (NULL == pktExt)  {
         pkt->size = 0;
-        return;
+        return AVERROR(ENOMEM);
     }
     pkt->priv = pktExt;
 
@@ -440,7 +440,7 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
     pktExt->frameInfo = av_mallocz(sizeof(ParFrameInfo));
     if (NULL == pktExt->frameInfo)  {
         pkt->size = 0;
-        return;
+        return AVERROR(ENOMEM);
     }
     pktFI = pktExt->frameInfo;
 
@@ -469,7 +469,7 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
         pktFI->frameBuffer = av_malloc(fbs);
         if (NULL == pktFI->frameBuffer)  {
             pkt->size = 0;
-            return;
+            return AVERROR(ENOMEM);
         }
         memcpy(pktFI->frameBuffer, fi->frameBuffer, fbs);
         pktFI->frameData = NULL;
@@ -490,6 +490,8 @@ void createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
     }
 
     ctxt->frameCached = 0;
+    
+    return 0;
 }
 
 static void endianSwapAudioData(uint8_t *data, int size)
@@ -539,6 +541,8 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
 
     p->frameInfo.frameBufferSize = MAX_FRAMEBUFFER_SIZE;
     p->frameInfo.frameBuffer = av_malloc(p->frameInfo.frameBufferSize);
+    if (p->frameInfo.frameBuffer == NULL)
+        return AVERROR(ENOMEM);
 
     switch(av_log_get_level())  {
         case(AV_LOG_QUIET):

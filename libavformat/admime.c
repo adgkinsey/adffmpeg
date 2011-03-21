@@ -669,7 +669,7 @@ static int ad_read_mpeg(AVFormatContext *s, AVIOContext *pb,
             av_free( textBuffer );
         }
         else {
-            return ADPIC_MPEG4_MIME_ALOCATE_TEXT_BUFFER_ERROR;
+            return AVERROR(ENOMEM);
         }
     }
     return errorVal;
