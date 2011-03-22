@@ -305,6 +305,7 @@ OBJS-$(CONFIG_YUV4MPEGPIPE_DEMUXER)      += yuv4mpeg.o
 OBJS-$(CONFIG_DSPIC_DEMUXER)             += ds.o dspic.o adcommon.o
 OBJS-$(CONFIG_ADMIME_DEMUXER)            += admime.o adcommon.o adjfif.o
 OBJS-$(CONFIG_ADBINARY_DEMUXER)          += adbinary.o adcommon.o adjfif.o
+OBJS-$(CONFIG_ADRAW_DEMUXER)             += adraw.o adcommon.o adjfif.o
 OBJS-$(CONFIG_ADAUDIO_DEMUXER)           += adaudio.o
 OBJS-$(CONFIG_DM_PROTOCOL)               += dsenc.o ds.o
 OBJS-$(CONFIG_NETVU_PROTOCOL)            += netvu.o

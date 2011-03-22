@@ -229,6 +229,7 @@ void av_register_all(void)
     REGISTER_DEMUXER  (ADAUDIO, adaudio);
     REGISTER_DEMUXER  (ADMIME, admime);
     REGISTER_DEMUXER  (ADBINARY, adbinary);
+    REGISTER_DEMUXER  (ADRAW, adraw);
     REGISTER_DEMUXER  (DSPIC, dspic);
 
     /* external libraries */

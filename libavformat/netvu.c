@@ -138,7 +138,8 @@ static int netvu_open(URLContext *h, const char *uri, int flags)
     nv->hdrNames[NETVU_PPS]         = "pps";
     nv->hdrNames[NETVU_SITE_ID]     = "site_id";
     nv->hdrNames[NETVU_BOUNDARY]    = "boundary";
-    nv->utc_offset                  = 0;
+    // Set utc_offset an invalid value so if server doesn't set it we can ignore it
+    nv->utc_offset                  = 1441;
     
     h->is_streamed = 1;
     

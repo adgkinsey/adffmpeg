@@ -55,8 +55,10 @@ int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
         for(ii = 0; ii < NETVU_MAX_HEADERS; ii++)  {
             av_metadata_set2(&s->metadata, nv->hdrNames[ii], nv->hdrs[ii], 0);
         }
-        snprintf(temp, sizeof(temp), "%d", nv->utc_offset);
-        av_metadata_set2(&s->metadata, "timezone", temp, 0);
+        if ( (nv->utc_offset >= 0) && (nv->utc_offset <= 1440) )  {
+            snprintf(temp, sizeof(temp), "%d", nv->utc_offset);
+            av_metadata_set2(&s->metadata, "timezone", temp, 0);
+        }
     }
 
     s->ctx_flags |= AVFMTCTX_NOHEADER;
@@ -372,9 +374,12 @@ int initADData(int data_type, ADFrameType *frameType,
     if( (data_type == DATA_JPEG)          || (data_type == DATA_JFIF)   ||
         (data_type == DATA_MPEG4I)        || (data_type == DATA_MPEG4P) ||
         (data_type == DATA_H264I)         || (data_type == DATA_H264P)  ||
-        (data_type == DATA_MINIMAL_MPEG4)                               ) {
+        (data_type == DATA_MINIMAL_MPEG4)                               )
+    {
         *frameType = NetVuVideo;
-        *vidDat = av_malloc( sizeof(NetVuImageData) );
+    
+        if (*vidDat == NULL)
+            *vidDat = av_malloc( sizeof(NetVuImageData) );
         if( *vidDat == NULL )
             return AVERROR(ENOMEM);
     }
@@ -405,20 +410,23 @@ int ad_read_jpeg(AVFormatContext *s, AVIOContext *pb,
     int n, textSize, errorVal = 0;
     int status;
 
-    // Read the pic structure
-    if ((n = ad_get_buffer(pb, (uint8_t*)video_data, nviSize)) != nviSize)  {
-        av_log(s, AV_LOG_ERROR, "ad_read_jpeg: Short of data reading "
-                                "NetVuImageData, expected %d, read %d\n", 
-                                nviSize, n);
-        return ADPIC_JPEG_IMAGE_DATA_READ_ERROR;
+    // Check if we've already read a pic header
+    if (!pic_version_valid(video_data->version))  {
+        // Read the pic structure
+        if ((n = ad_get_buffer(pb, (uint8_t*)video_data, nviSize)) != nviSize)  {
+            av_log(s, AV_LOG_ERROR, "ad_read_jpeg: Short of data reading "
+                                    "NetVuImageData, expected %d, read %d\n", 
+                                    nviSize, n);
+            return ADPIC_JPEG_IMAGE_DATA_READ_ERROR;
+        }
+        
+        // Endian convert if necessary
+        ad_network2host(video_data, (uint8_t *)video_data);
     }
     
-    // Endian convert if necessary
-    ad_network2host(video_data, (uint8_t *)video_data);
-    
     if (!pic_version_valid(video_data->version))  {
-        av_log(s, AV_LOG_ERROR, "ad_read_jpeg: invalid NetVuImageData version "
-                                "0x%08X\n", video_data->version);
+        av_log(s, AV_LOG_ERROR, "%s: invalid NetVuImageData version "
+                                "0x%08X\n", __func__, video_data->version);
         return ADPIC_JPEG_PIC_VERSION_ERROR;
     }
 
