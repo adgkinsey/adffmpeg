@@ -40,7 +40,7 @@ static int adraw_probe(AVProbeData *p)
         NetVuImageData test;
         ad_network2host(&test, bufPtr);
         if (pic_version_valid(test.version))  {
-            return AVPROBE_SCORE_MAX;
+            return AVPROBE_SCORE_MAX / 2;
         }
         --bufferSize;
         ++bufPtr;
