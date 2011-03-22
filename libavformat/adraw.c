@@ -69,7 +69,7 @@ static int adraw_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     buf = av_malloc(sizeof(NetVuImageData));
     
     // Scan for 0xDECADE11 marker
-    errorVal = get_buffer(pb, buf, sizeof(NetVuImageData) - 1);
+    errorVal = get_buffer(pb, buf, sizeof(NetVuImageData));
     while (errorVal > 0)  {
         ad_network2host(vidDat, buf);
         if (pic_version_valid(vidDat->version))  {
