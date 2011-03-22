@@ -55,8 +55,10 @@ int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
         for(ii = 0; ii < NETVU_MAX_HEADERS; ii++)  {
             av_metadata_set2(&s->metadata, nv->hdrNames[ii], nv->hdrs[ii], 0);
         }
-        snprintf(temp, sizeof(temp), "%d", nv->utc_offset);
-        av_metadata_set2(&s->metadata, "timezone", temp, 0);
+        if ( (nv->utc_offset >= 0) && (nv->utc_offset <= 1440) )  {
+            snprintf(temp, sizeof(temp), "%d", nv->utc_offset);
+            av_metadata_set2(&s->metadata, "timezone", temp, 0);
+        }
     }
 
     s->ctx_flags |= AVFMTCTX_NOHEADER;
