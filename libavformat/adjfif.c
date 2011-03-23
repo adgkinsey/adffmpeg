@@ -338,9 +338,9 @@ static int find_q(unsigned char *qy)
 /**
  * Analyses a JFIF header and fills out a NetVuImageData structure with the info
  * 
- * \param data		        Input buffer
- * \param pic				NetVuImageData structure
- * \param imglength			Total length of input buffer
+ * \param data                Input buffer
+ * \param pic                NetVuImageData structure
+ * \param imglength            Total length of input buffer
  * \param additionalText    Buffer in which is placed text from the JFIF comment
  *                          that doesn't have a specific field in NetVuImageData
  * \return Length of JFIF header in bytes
@@ -388,18 +388,18 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic,
         i += 2;
 
         switch (marker) {
-            case 0xffe0 :	// APP0
+            case 0xffe0 :    // APP0
                 if ((data[i]==0x4A)&&(data[i+1]==0x46)&&(data[i+2]==0x49)&&(data[i+3]==0x46)&&(data[i+4]==0x00))  {
                     xdensity = AV_RB16(&data[i+8]);
                     ydensity = AV_RB16(&data[i+10]);
                     densityPtr = &data[i+8];
                 }
                 break;
-            case 0xffdb :	// Q table
+            case 0xffdb :    // Q table
                 if (!data[i])
                     pic->factor =  find_q(&data[i+1]);
                 break;
-            case 0xffc0 :	// SOF
+            case 0xffc0 :    // SOF
                 pic->format.target_lines  = AV_RB16(&data[i+1]);
                 pic->format.target_pixels = AV_RB16(&data[i+3]);
                 if (data[i+7] == 0x22)
@@ -409,10 +409,10 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic,
                 else
                     av_log(s, AV_LOG_WARNING, "%s: Unknown SOF format byte 0x%02X\n", __func__, data[i+7]);
                 break;
-            case 0xffda :	// SOS
+            case 0xffda :    // SOS
                 sos = TRUE;
                 break;
-            case 0xfffe :	// Comment
+            case 0xfffe :    // Comment
                 parse_comment((char *)&data[i], length - 2, pic, text);
                 break;
             default :
@@ -437,7 +437,7 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic,
             }
         }
     }
-    pic->size = imgSize - i - 2; 	// 2 bytes for FFD9
+    pic->size = imgSize - i - 2;     // 2 bytes for FFD9
     return i;
 }
 

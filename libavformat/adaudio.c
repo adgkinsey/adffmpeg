@@ -74,7 +74,7 @@ static int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     int                     sampleSize = 0;
     AVStream *              st = NULL;
     ADFrameData *           frameData = NULL;
-    int					    isPacketAlloced = 0;
+    int                        isPacketAlloced = 0;
 
     /* Get the next packet */
     if( (packetSize = ioContext->read_packet( ioContext->opaque, ioContext->buf_ptr, ioContext->buffer_size )) > 0 ) {

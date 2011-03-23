@@ -41,7 +41,7 @@ static void copy_value_to_field(const char *value, char **dest)
 
 static void netvu_parse_content_type_header(char * p, NetvuContext *nv)
 {
-	int finishedContentHeader = 0;
+    int finishedContentHeader = 0;
     char *  name  = NULL;
     char *  value = NULL;
 
@@ -50,7 +50,7 @@ static void netvu_parse_content_type_header(char * p, NetvuContext *nv)
     while((*p != ';') && (*p != '\0'))
         p++;
 
-	if(*p == '\0')
+    if(*p == '\0')
         finishedContentHeader = 1;
 
     *p = '\0';
@@ -91,14 +91,14 @@ static void netvu_parse_content_type_header(char * p, NetvuContext *nv)
                 value += 1;
             }
 
-			// Copy the attribute into the relevant field
+            // Copy the attribute into the relevant field
             for(ii = 0; ii < NETVU_MAX_HEADERS; ii++)  {
                 if( strcasecmp(name, nv->hdrNames[ii] ) == 0 )
                     copy_value_to_field(value, &nv->hdrs[ii]);
             }
             if(strcasecmp(name, "utc_offset") == 0)
-				nv->utc_offset = atoi(value);
-		}
+                nv->utc_offset = atoi(value);
+        }
     }
 }
 
@@ -187,7 +187,7 @@ static int netvu_close(URLContext *h)
     int i, ret = 0;
 
     if (nv->hd)
-    	ret = url_close(nv->hd);
+        ret = url_close(nv->hd);
 
     for (i = 0; i < NETVU_MAX_HEADERS; i++)  {
         if (nv->hdrs[i])

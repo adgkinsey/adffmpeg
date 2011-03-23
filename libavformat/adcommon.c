@@ -37,9 +37,9 @@ void ad_release_packet(AVPacket *pkt);
 
 int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
 {
-    AVIOContext*	    pb = s->pb;
-    URLContext*		    urlContext = pb->opaque;
-    NetvuContext*	    nv = NULL;
+    AVIOContext*        pb = s->pb;
+    URLContext*            urlContext = pb->opaque;
+    NetvuContext*        nv = NULL;
 
     if (urlContext && urlContext->is_streamed)  {
         if ( av_stristart(urlContext->filename, "netvu://", NULL) == 1)
@@ -67,34 +67,34 @@ int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
 
 void ad_network2host(NetVuImageData *pic, uint8_t *data)
 {
-    pic->version				= AV_RB32(data + 0);
-    pic->mode					= AV_RB32(data + 4);
-    pic->cam					= AV_RB32(data + 8);
-    pic->vid_format				= AV_RB32(data + 12);
-    pic->start_offset			= AV_RB32(data + 16);
-    pic->size					= AV_RB32(data + 20);
-    pic->max_size				= AV_RB32(data + 24);
-    pic->target_size			= AV_RB32(data + 28);
-    pic->factor					= AV_RB32(data + 32);
-    pic->alm_bitmask_hi			= AV_RB32(data + 36);
-    pic->status					= AV_RB32(data + 40);
-    pic->session_time			= AV_RB32(data + 44);
-    pic->milliseconds			= AV_RB32(data + 48);
+    pic->version                = AV_RB32(data + 0);
+    pic->mode                    = AV_RB32(data + 4);
+    pic->cam                    = AV_RB32(data + 8);
+    pic->vid_format                = AV_RB32(data + 12);
+    pic->start_offset            = AV_RB32(data + 16);
+    pic->size                    = AV_RB32(data + 20);
+    pic->max_size                = AV_RB32(data + 24);
+    pic->target_size            = AV_RB32(data + 28);
+    pic->factor                    = AV_RB32(data + 32);
+    pic->alm_bitmask_hi            = AV_RB32(data + 36);
+    pic->status                    = AV_RB32(data + 40);
+    pic->session_time            = AV_RB32(data + 44);
+    pic->milliseconds            = AV_RB32(data + 48);
     if ((uint8_t *)pic != data)  {
         memcpy(pic->res,    data + 52, 4);
         memcpy(pic->title,  data + 56, 31);
         memcpy(pic->alarm,  data + 87, 31);
     }
-    pic->format.src_pixels		= AV_RB16(data + 118);
-    pic->format.src_lines		= AV_RB16(data + 120);
-    pic->format.target_pixels	= AV_RB16(data + 122);
-    pic->format.target_lines	= AV_RB16(data + 124);
-    pic->format.pixel_offset	= AV_RB16(data + 126);
-    pic->format.line_offset		= AV_RB16(data + 128);
+    pic->format.src_pixels        = AV_RB16(data + 118);
+    pic->format.src_lines        = AV_RB16(data + 120);
+    pic->format.target_pixels    = AV_RB16(data + 122);
+    pic->format.target_lines    = AV_RB16(data + 124);
+    pic->format.pixel_offset    = AV_RB16(data + 126);
+    pic->format.line_offset        = AV_RB16(data + 128);
     if ((uint8_t *)pic != data)
         memcpy(pic->locale, data + 130, 30);
-    pic->utc_offset				= AV_RB32(data + 160);
-    pic->alm_bitmask			= AV_RB32(data + 164);
+    pic->utc_offset                = AV_RB32(data + 160);
+    pic->alm_bitmask            = AV_RB32(data + 164);
 }
 
 AVStream * netvu_get_stream(AVFormatContext *s, NetVuImageData *p)

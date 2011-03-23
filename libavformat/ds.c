@@ -91,9 +91,9 @@ typedef enum _netRejectReason {
 } NetRejectReason;
 
 typedef struct _srvConnectRejectMsg {
-    long					reason;				/* enum NET_REJECT_REASON */
-    long					timestamp;
-    char					macAddr[MAC_ADDR_LENGTH];
+    long                    reason;                /* enum NET_REJECT_REASON */
+    long                    timestamp;
+    char                    macAddr[MAC_ADDR_LENGTH];
     unsigned long           appVersion;
     unsigned long           minViewerVersion;
 } SrvConnectRejectMsg;
@@ -116,32 +116,32 @@ typedef enum _realmType {
 } RealmType;
 
 typedef struct _srvConnectReplyMsg {
-    long					numCameras;
-    long					viewableCamMask;
-    long					telemetryCamMask;
-    long					failedCamMask;
-    long					maxMsgInterval;
-    int64_t			        timestamp;                          /* TODO: Verify - this was a 'hyper long' before. Assuming 64 bit value. Is this correct? Is solution portable? */
-    char					cameraTitles[16][28];
+    long                    numCameras;
+    long                    viewableCamMask;
+    long                    telemetryCamMask;
+    long                    failedCamMask;
+    long                    maxMsgInterval;
+    int64_t                    timestamp;                          /* TODO: Verify - this was a 'hyper long' before. Assuming 64 bit value. Is this correct? Is solution portable? */
+    char                    cameraTitles[16][28];
     long                    unitType;
     unsigned long           applicationVersion;
     long                    videoStandard;
     char                    macAddr[MAC_ADDR_LENGTH];
     char                    unitName[UNIT_NAME_LENGTH];
-    long					numFixedRealms;	                    /* Number of FIXED system realms */
-    unsigned long		    realmFlags[NUM_FIXED_REALMS];	    /* Indicates if user is in realm. */
+    long                    numFixedRealms;                        /* Number of FIXED system realms */
+    unsigned long            realmFlags[NUM_FIXED_REALMS];        /* Indicates if user is in realm. */
     unsigned long           minimumViewerVersion;
 } SrvConnectReplyMsg;
 #define VER_TCP_SRV_CONNECT_REPLY           0x00000001
 
 typedef struct _srvFeatureConnectReplyMsg {
-    long					numCameras;
-    long					viewableCamMask;
-    long					telemetryCamMask;
-    long					failedCamMask;
-    long					maxMsgInterval;
-    int64_t			        timestamp;                          /* TODO: Verify - this was a 'hyper long' before. Assuming 64 bit value. Is this correct? Is solution portable? */
-    char					cameraTitles[16][28];
+    long                    numCameras;
+    long                    viewableCamMask;
+    long                    telemetryCamMask;
+    long                    failedCamMask;
+    long                    maxMsgInterval;
+    int64_t                    timestamp;                          /* TODO: Verify - this was a 'hyper long' before. Assuming 64 bit value. Is this correct? Is solution portable? */
+    char                    cameraTitles[16][28];
     long                    unitType;
     unsigned long           applicationVersion;
     long                    videoStandard;
@@ -149,18 +149,18 @@ typedef struct _srvFeatureConnectReplyMsg {
     char                    unitName[UNIT_NAME_LENGTH];
 
     unsigned long           minimumViewerVersion;
-    unsigned long 		    unitFeature01;
-    unsigned long 		    unitFeature02;
-    unsigned long 		    unitFeature03;
-    unsigned long 		    unitFeature04;
-    long					numFixedRealms;	               /* Number of FIXED system realms */
-    unsigned long		    realmFlags[NUM_FIXED_REALMS];	   /* Indicates if user is in realm. */
+    unsigned long             unitFeature01;
+    unsigned long             unitFeature02;
+    unsigned long             unitFeature03;
+    unsigned long             unitFeature04;
+    long                    numFixedRealms;                   /* Number of FIXED system realms */
+    unsigned long            realmFlags[NUM_FIXED_REALMS];       /* Indicates if user is in realm. */
 } SrvFeatureConnectReplyMsg;
 #define VER_TCP_SRV_FEATURE_CONNECT_REPLY   0x00000002
 
 typedef struct _cliImgLiveRequestMsg {
-    long					cameraMask;
-    long					resolution;
+    long                    cameraMask;
+    long                    resolution;
 } CliImgLiveRequestMsg;
 #define VER_TCP_CLI_IMG_LIVE_REQUEST        0x00000001
 #define SIZEOF_TCP_CLI_IMG_LIVE_REQUEST_IO  8            /* Size in bytes of the MessageHeader structure. Can't use sizeof to read/write one of these to network as structure packing may differ based on platform */
@@ -175,11 +175,11 @@ typedef enum _vcrMode {
 } vcrMode;
 
 typedef struct _cliImgPlayRequestMsg {
-    long					cameraMask;
-    long					mode;			    /*	(enum VCR_MODE) */
-    long					pace;
-    int64_t				    fromTime;		    /*		(time_u)	*/
-    int64_t				    toTime;		        /*		(time_u)	*/
+    long                    cameraMask;
+    long                    mode;                /*    (enum VCR_MODE) */
+    long                    pace;
+    int64_t                    fromTime;            /*        (time_u)    */
+    int64_t                    toTime;                /*        (time_u)    */
 } CliImgPlayRequestMsg;
 #define VER_TCP_CLI_IMG_PLAY_REQUEST        0x00000001
 #define SIZEOF_TCP_CLI_IMG_PLAY_REQUEST_IO  28            /* Size in bytes of the MessageHeader structure. Can't use sizeof to read/write one of these to network as structure packing may differ based on platform */

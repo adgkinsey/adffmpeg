@@ -59,7 +59,7 @@ typedef unsigned long int UINT4;
 /* MD5 context. */
 typedef struct {
     UINT4 state[4];                   /* state (ABCD) */
-    UINT4 count[2];					/* number of bits, modulo 2^64 (lsb first) */
+    UINT4 count[2];                    /* number of bits, modulo 2^64 (lsb first) */
     unsigned char buffer[64];         /* input buffer */
 } MD5_CTX;
 
@@ -349,7 +349,7 @@ static void Decode(UINT4 * output, const unsigned char *input, unsigned int len)
 
 static unsigned char hex_val (const char *char2)
 {
-    unsigned long	ret_val ;
+    unsigned long    ret_val ;
     if (char2[0] > '9')
         ret_val = (char2[0] - 'A' + 10) * 0x10 ;
     else
@@ -372,7 +372,7 @@ static void GetFingerPrint(char* FingerPrint, const char* Source, unsigned int L
     short j ;
     unsigned char public_key[6] ;
 
-    char	local_fp[32+1] ;
+    char    local_fp[32+1] ;
     //unsigned int len = strlen(Source);
 
     if (cpublic_key != NULL) {
@@ -399,7 +399,7 @@ static void MD5Print(char* FingerPrint, int size, const unsigned char * digest)
 {
     unsigned int i;
 
-    char	temp[20];
+    char    temp[20];
 
     strcpy(FingerPrint, "");
 

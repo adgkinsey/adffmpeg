@@ -169,7 +169,7 @@ static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize )
         length = av_be2ne16(length);
 
         switch (marker) {
-            case 0xffe0 : {	// APP0
+            case 0xffe0 : {    // APP0
                 /* Have a little look at the data in this block, see if it's what we're looking for */
                 if( memcmp( &data[i], DSApp0Identifier, strlen(DSApp0Identifier) ) == 0 ) {
                     int         offset = i;
@@ -187,34 +187,34 @@ static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize )
             }
             break;
 
-            case 0xffdb :	// Q table
+            case 0xffdb :    // Q table
                 i += length - 2;
                 break;
 
-            case 0xffc0 :	// SOF
+            case 0xffc0 :    // SOF
                 i += length - 2;
                 break;
 
-            case 0xffc4 :	// Huffman table
+            case 0xffc4 :    // Huffman table
                 i += length - 2;
                 break;
 
-            case 0xffda :	// SOS
+            case 0xffda :    // SOS
                 i += length - 2;
                 sos = TRUE;
                 break;
 
-            case 0xffdd :	// DRI
+            case 0xffdd :    // DRI
                 i += length - 2;
                 break;
 
-            case 0xfffe :	// Comment
+            case 0xfffe :    // Comment
                 i += length - 2;
                 break;
 
             default :
                 /* Unknown marker encountered, better just skip past it */
-                i += length - 2;	// JCB 026 skip past the unknown field
+                i += length - 2;    // JCB 026 skip past the unknown field
                 break;
         }
     }
