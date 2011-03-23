@@ -400,10 +400,11 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChan
     ParFrameInfo *fi = &ctxt->frameInfo;
     LibparFrameExtra *pktExt = NULL;
     ParFrameInfo *pktFI = NULL;
-
     int streamIndex = -1;
     int id = fi->channel;
-    for(int ii = 0; ii < avf->nb_streams; ii++)  {
+    int ii;
+    
+    for(ii = 0; ii < avf->nb_streams; ii++)  {
         if ( (NULL != avf->streams[ii]) && (avf->streams[ii]->id == id) )  {
             streamIndex = ii;
             break;
