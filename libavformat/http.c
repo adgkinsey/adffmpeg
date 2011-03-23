@@ -365,7 +365,7 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
             return AVERROR(EIO);
 
         av_dlog(NULL, "header='%s'\n", line);
-        
+
         av_strlcat(s->response_headers, line, sizeof(s->response_headers));
         av_strlcat(s->response_headers, "\n", sizeof(s->response_headers));
 

@@ -437,10 +437,10 @@ static char *CreateUserPassword( const char *Username, const char *Password )
     return userPassword;
 }
 
-char * EncryptPasswordString(const char * Username, 
-                             const char * Password, 
-                             long Timestamp, 
-                             const char * MacAddress, 
+char * EncryptPasswordString(const char * Username,
+                             const char * Password,
+                             long Timestamp,
+                             const char * MacAddress,
                              long RemoteApplicationVersion )
 {
     // Encrypt Password

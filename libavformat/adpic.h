@@ -20,7 +20,7 @@
  */
 
 /**
- * @file 
+ * @file
  * Type information and function prototypes for common AD-Holdings demuxer code
  */
 
@@ -68,7 +68,7 @@ int ad_read_layout(AVFormatContext *s, AVIOContext *pb,
                    AVPacket *pkt, int size);
 int ad_read_packet(AVFormatContext *s, AVIOContext *pb, AVPacket *pkt,
                    ADFrameType currentFrameType, void *data, char *text_data);
-AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h, 
+AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h,
                          uint8_t cam, int format, const char *title);
 AVStream * ad_get_audio_stream(AVFormatContext *s, NetVuAudioData* audioHeader);
 void audiodata_network2host(uint8_t *data, int size);
@@ -97,7 +97,7 @@ void audiodata_network2host(uint8_t *data, int size);
 #define ADPIC_NO_ERROR                              0
 #define ADPIC_ERROR                                 -200            //used to offset ad pic errors so that adpic can be identified as the origon of the error
 
-#define ADPIC_UNKNOWN_ERROR                         ADPIC_ERROR + -1 //AVERROR_UNKNOWN     // (-200 + -1) unknown error 
+#define ADPIC_UNKNOWN_ERROR                         ADPIC_ERROR + -1 //AVERROR_UNKNOWN     // (-200 + -1) unknown error
 #define ADPIC_READ_6_BYTE_SEPARATOR_ERROR           ADPIC_ERROR + -2
 #define ADPIC_NEW_PACKET_ERROR                      ADPIC_ERROR + -3
 #define ADPIC_PARSE_MIME_HEADER_ERROR               ADPIC_ERROR + -4

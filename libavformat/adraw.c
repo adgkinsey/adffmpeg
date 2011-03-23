@@ -20,7 +20,7 @@
  */
 
 /**
- * @file 
+ * @file
  * AD-Holdings demuxer for AD stream format (raw)
  */
 
@@ -35,7 +35,7 @@ static int adraw_probe(AVProbeData *p)
 {
     int bufferSize = p->buf_size;
     uint8_t *bufPtr = p->buf;
-    
+
     while (bufferSize >= NetVuImageDataHeaderSize)  {
         NetVuImageData test;
         ad_network2host(&test, bufPtr);
@@ -67,7 +67,7 @@ static int adraw_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 
     vidDat = av_malloc(sizeof(NetVuImageData));
     buf = av_malloc(sizeof(NetVuImageData));
-    
+
     // Scan for 0xDECADE11 marker
     errorVal = avio_read(pb, buf, sizeof(NetVuImageData));
     while (errorVal > 0)  {
@@ -81,7 +81,7 @@ static int adraw_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         errorVal = avio_read(pb, buf + sizeof(NetVuImageData) - 1, 1);
     }
     av_free(buf);
-    
+
     if (errorVal > 0)  {
         // Prepare for video or audio read
         errorVal = initADData(DATA_JPEG, &frameType, &vidDat, NULL);
@@ -90,7 +90,7 @@ static int adraw_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         errorVal = ad_read_jpeg(s, pb, pkt, vidDat, &txtDat);
     if (errorVal >= 0)
         errorVal = ad_read_packet(s, pb, pkt, frameType, vidDat, txtDat);
-    
+
     if (errorVal < 0)  {
         // If there was an error, release any memory has been allocated
         if( vidDat != NULL )

@@ -37,7 +37,7 @@
 #define DATA_PLAINTEXT          (MAX_DATA_TYPE + 1)
 
 
-static int parse_mime_header(AVIOContext *pb, uint8_t *buf, int *bufSize, 
+static int parse_mime_header(AVIOContext *pb, uint8_t *buf, int *bufSize,
                              int *dataType, int *size, long *extra );
 static int process_line( char *line, int* line_count, int *dataType,
                          int *size, long *extra );
@@ -54,7 +54,7 @@ static int ad_read_audio(AVFormatContext *s, AVIOContext *pb,
                          AVPacket *pkt, int size, long extra,
                          NetVuAudioData *audDat);
 static int handleInvalidMime(AVFormatContext *s, AVIOContext *pb,
-                             uint8_t *preRead, int preReadSize, AVPacket *pkt, 
+                             uint8_t *preRead, int preReadSize, AVPacket *pkt,
                              int *data_type, int *size, int *imgLoaded);
 
 
@@ -74,8 +74,8 @@ static const char *     MIME_TYPE_XML    = "text/xml";
 static const char *     MIME_TYPE_ADPCM  = "audio/adpcm";
 static const char *     MIME_TYPE_LAYOUT = "data/layout";
 
-static const uint8_t rawJfifHeader[] = { 0xff, 0xd8, 0xff, 0xe0, 
-                                         0x00, 0x10, 0x4a, 0x46, 
+static const uint8_t rawJfifHeader[] = { 0xff, 0xd8, 0xff, 0xe0,
+                                         0x00, 0x10, 0x4a, 0x46,
                                          0x49, 0x46, 0x00, 0x01 };
 
 /**
@@ -108,7 +108,7 @@ static int admime_probe(AVProbeData *p)
     if (is_valid_separator( &p->buf[offset], p->buf_size - offset ) > 0 )
         return AVPROBE_SCORE_MAX;
 
-    // If server is only sending a single frame (i.e. fields=1) then it 
+    // If server is only sending a single frame (i.e. fields=1) then it
     // sometimes just sends the raw JPEG with no MIME or other header, check
     // for this
     if (p->buf_size >= sizeof(rawJfifHeader))  {
@@ -119,14 +119,14 @@ static int admime_probe(AVProbeData *p)
         if (matchedBytes == sizeof(rawJfifHeader))
             return AVPROBE_SCORE_MAX;
     }
-    
+
     return 0;
 }
 
 /**
  * Validates a multipart MIME boundary separator against the convention used by
  * NetVu video servers
- * 
+ *
  * \param buf Buffer containing the boundary separator
  * \param bufLen Size of the buffer
  * \return 1 if boundary separator is valid, 0 if not
@@ -172,11 +172,11 @@ static int admime_read_header(AVFormatContext *s, AVFormatParameters *ap)
 
 /**
  * Read and process MIME header information
- * 
+ *
  * \return Zero on successful decode, -2 if a raw JPEG, anything else indicates
  *         failure
  */
-static int parse_mime_header(AVIOContext *pb, uint8_t *buffer, int *bufSize, 
+static int parse_mime_header(AVIOContext *pb, uint8_t *buffer, int *bufSize,
                              int *dataType, int *size, long *extra)
 {
     unsigned char *             q = NULL;
@@ -184,7 +184,7 @@ static int parse_mime_header(AVIOContext *pb, uint8_t *buffer, int *bufSize,
     const int                   maxBufSize = *bufSize;
 
     *bufSize = 0;
-    
+
     // Check for JPEG header first
     do {
         ch = url_fgetc(pb);
@@ -197,7 +197,7 @@ static int parse_mime_header(AVIOContext *pb, uint8_t *buffer, int *bufSize,
         else
             break;
     } while( (*bufSize) < sizeof(rawJfifHeader));
-        
+
     q = buffer;
     // Try and parse the header
     for(;;) {
@@ -227,7 +227,7 @@ static int parse_mime_header(AVIOContext *pb, uint8_t *buffer, int *bufSize,
             if ((q - buffer) < (maxBufSize - 1))
                 *q++ = ch;
         }
-        
+
         ch = url_fgetc( pb );
     }
 
@@ -548,7 +548,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     errorVal = parse_mime_header(pb, buf, &bufSize, &data_type, &size, &extra);
     if(errorVal != 0 )  {
         if (errorVal == -2)
-            errorVal = handleInvalidMime(s, pb, buf, bufSize, pkt, 
+            errorVal = handleInvalidMime(s, pb, buf, bufSize, pkt,
                                          &data_type, &size, &imgLoaded);
 
         if (errorVal < 0)
@@ -701,25 +701,25 @@ static int ad_read_audio(AVFormatContext *s, AVIOContext *pb,
         return(ADPIC_AUDIO_ADPCM_MIME_GET_BUFFER_ERROR);
 
     audiodata_network2host(pkt->data, size);
-    
+
     return 0;
 }
 
 /**
  * Invalid mime header.
- * 
- * However sometimes the header is missing and then there is a valid image so 
+ *
+ * However sometimes the header is missing and then there is a valid image so
  * try and parse a frame out anyway.
  */
-static int handleInvalidMime(AVFormatContext *s, AVIOContext *pb, 
-                             uint8_t *preRead, int preReadSize, AVPacket *pkt, 
+static int handleInvalidMime(AVFormatContext *s, AVIOContext *pb,
+                             uint8_t *preRead, int preReadSize, AVPacket *pkt,
                              int *data_type, int *size, int *imgLoaded)
 {
     int errorVal = 0;
     int chkByte;
     int status, read, found = FALSE;
     uint8_t imageData[MAX_IMAGE_SIZE];
-    
+
     for(read = 0; read < preReadSize; read++)  {
         imageData[read] = preRead[read];
     }

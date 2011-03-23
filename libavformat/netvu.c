@@ -56,7 +56,7 @@ static void netvu_parse_content_type_header(char * p, NetvuContext *nv)
     *p = '\0';
     p++;
     copy_value_to_field( value, &nv->hdrs[NETVU_CONTENT] );
-    
+
     while( *p != '\0' && finishedContentHeader != 1)  {
         while(isspace(*p))
             p++; // Skip whitespace
@@ -85,7 +85,7 @@ static void netvu_parse_content_type_header(char * p, NetvuContext *nv)
         // Strip any "s off
         if( strlen(value) > 0 )  {
             int ii;
-            
+
             if( *value == '"' && *(value + strlen(value) - 1) == '"' )  {
                 *(value + strlen(value) - 1) = '\0';
                 value += 1;
@@ -106,7 +106,7 @@ static void processLine(char *line, NetvuContext *nv)
 {
     char *p = line;
     char *tag;
-    
+
     while (*p != '\0' && *p != ':')
         p++;
     if (*p != ':')
@@ -117,7 +117,7 @@ static void processLine(char *line, NetvuContext *nv)
     p++;
     while (isspace(*p))
         p++;
-    
+
     if (!strcasecmp (tag, nv->hdrNames[NETVU_CONTENT]))
         netvu_parse_content_type_header(p, nv);
     else if(!strcasecmp(tag, nv->hdrNames[NETVU_SERVER]))
@@ -129,7 +129,7 @@ static int netvu_open(URLContext *h, const char *uri, int flags)
     char hostname[1024], auth[1024], path[1024], http[1024];
     int port, err;
     NetvuContext *nv = h->priv_data;
-    
+
     nv->hdrNames[NETVU_SERVER]      = "Server";
     nv->hdrNames[NETVU_CONTENT]     = "Content-type";
     nv->hdrNames[NETVU_RESOLUTION]  = "resolution";
@@ -140,21 +140,21 @@ static int netvu_open(URLContext *h, const char *uri, int flags)
     nv->hdrNames[NETVU_BOUNDARY]    = "boundary";
     // Set utc_offset an invalid value so if server doesn't set it we can ignore it
     nv->utc_offset                  = 1441;
-    
+
     h->is_streamed = 1;
-    
+
     av_url_split(NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port,
                  path, sizeof(path), uri);
     if (port < 0)
         port = 80;
     ff_url_join(http, sizeof(http), "http", auth, hostname, port, "%s", path);
-    
+
     err = url_open(&nv->hd, http, URL_RDWR);
     if (err >= 0)  {
         char headers[1024];
         char *startOfLine = &headers[0];
         int ii;
-        
+
         size_t hdrSize = ff_http_get_headers(nv->hd, headers, sizeof(headers));
         if (hdrSize > 0)  {
             for (ii = 0; ii < hdrSize; ii++)  {
