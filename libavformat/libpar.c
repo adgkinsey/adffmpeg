@@ -20,7 +20,7 @@
  */
 
 /**
- * @file 
+ * @file
  * AD-Holdings PAR file demuxer
  */
 
@@ -96,7 +96,7 @@ static int par_write_header(AVFormatContext *avf)
             importMetadata(tag, &(p->master));
     }
     while (tag);
-    
+
     for (ii = 0; ii < avf->nb_streams; ii++)  {
         AVStream *st = avf->streams[ii];
         // Set timebase to 1 millisecond, and min frame rate to 1 / timebase
@@ -144,7 +144,7 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
         if (strlen(ps->name) == 0)
             snprintf(ps->name, sizeof(ps->name), "Camera %d", ps->camera);
     }
-    
+
     pktTypeCheck = AV_RL32(pkt->data);
     if (pktTypeCheck == 0xDECADE11)  {
         p->frameInfo.frameBufferSize = pkt->size;
@@ -196,7 +196,7 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
                                           parTime,
                                           ps->name,
                                           stream->codec->width,
-                                          stream->codec->height, 
+                                          stream->codec->height,
                                           ps->utc_offset
                                          );
         p->frameInfo.frameBufferSize = pkt->size + p->picHeaderSize;
@@ -403,7 +403,7 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChan
     int streamIndex = -1;
     int id = fi->channel;
     int ii;
-    
+
     for(ii = 0; ii < avf->nb_streams; ii++)  {
         if ( (NULL != avf->streams[ii]) && (avf->streams[ii]->id == id) )  {
             streamIndex = ii;
@@ -455,7 +455,7 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChan
     }
     else if (parReader_frameIsAudio(fi))  {
         pktFI->frameBufferSize = parReader_getAudStructSize();
-        
+
         endianSwapAudioData(pkt->data, siz);
     }
     else  {
@@ -494,7 +494,7 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChan
     }
 
     ctxt->frameCached = 0;
-    
+
     return 0;
 }
 
@@ -503,10 +503,10 @@ static void endianSwapAudioData(uint8_t *data, int size)
     const uint8_t *dataEnd = data + size;
     uint8_t upper, lower;
     uint16_t predictor = AV_RB16(data);
-    
+
     AV_WL16(data, predictor);
     data += 4;
-    
+
     for (;data < dataEnd; data++)  {
         upper = ((*data) & 0xF0) >> 4;
         lower = ((*data) & 0x0F) << 4;
@@ -613,7 +613,7 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
 
     snprintf(textbuf, sizeof(textbuf), "%d", parReader_getUTCOffset(&p->frameInfo));
     av_metadata_set2(&avf->metadata, "timezone", textbuf, 0);
-    
+
     strm = createStream(avf, &p->frameInfo);
     if (strm)  {
         // Note: Do not set avf->start_time, ffmpeg computes it from AVStream values

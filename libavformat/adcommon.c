@@ -51,7 +51,7 @@ int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
 
         if (utcOffset)
             *utcOffset = nv->utc_offset;
-        
+
         for(ii = 0; ii < NETVU_MAX_HEADERS; ii++)  {
             av_metadata_set2(&s->metadata, nv->hdrNames[ii], nv->hdrs[ii], 0);
         }
@@ -101,11 +101,11 @@ AVStream * netvu_get_stream(AVFormatContext *s, NetVuImageData *p)
 {
     time_t dateSec;
     char dateStr[18];
-    AVStream *stream = ad_get_stream(s, 
-                                     p->format.target_pixels, 
-                                     p->format.target_lines, 
-                                     p->cam, 
-                                     p->vid_format, 
+    AVStream *stream = ad_get_stream(s,
+                                     p->format.target_pixels,
+                                     p->format.target_lines,
+                                     p->cam,
+                                     p->vid_format,
                                      p->title);
     stream->start_time = p->session_time * 1000LL + p->milliseconds;
     dateSec = p->session_time;
@@ -145,17 +145,17 @@ AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t cam
             break;
 
         default:
-            av_log(s, AV_LOG_WARNING, 
-                   "ad_get_stream: unrecognised vid_format %d\n", 
+            av_log(s, AV_LOG_WARNING,
+                   "ad_get_stream: unrecognised vid_format %d\n",
                    format);
             return NULL;
     }
-    
-    id = (codec_type << 29)     | 
-         ((cam - 1) << 24) | 
-         ((w >> 4) << 12)    | 
+
+    id = (codec_type << 29)     |
+         ((cam - 1) << 24) |
+         ((w >> 4) << 12)    |
          ((h >> 4) << 0);
-    
+
     found = FALSE;
     for (i = 0; i < s->nb_streams; i++) {
         st = s->streams[i];
@@ -268,10 +268,10 @@ AVStream * ad_get_audio_stream(AVFormatContext *s, NetVuAudioData* audioHeader)
 
 /**
  * Returns the data stream associated with the current connection.
- * 
- * If there isn't one already, a new one will be created and added to the 
+ *
+ * If there isn't one already, a new one will be created and added to the
  * AVFormatContext passed in.
- * 
+ *
  * \param s Pointer to AVFormatContext
  * \return Pointer to the data stream on success, NULL on failure
  */
@@ -293,12 +293,12 @@ AVStream * ad_get_data_stream( AVFormatContext *s )
         if (st) {
             st->codec->codec_type = CODEC_TYPE_DATA;
             st->codec->codec_id = CODEC_ID_TEXT;
-            
+
             // Use milliseconds as the time base
             //st->r_frame_rate = (AVRational) { 1, 1000 };
             av_set_pts_info(st, 32, 1, 1000);
             //st->codec->time_base = (AVRational) { 1, 1000 };
-            
+
             st->index = i;
         }
     }
@@ -320,10 +320,10 @@ int ad_new_packet(AVPacket *pkt, int size)
 void ad_release_packet( AVPacket *pkt )
 {
     ADFrameData *frameData;
-    
+
     if ( (pkt == NULL) || (pkt->priv == NULL) )
         return;
-        
+
     // Have a look what type of frame we have and then free as appropriate
     frameData = (ADFrameData *)pkt->priv;
 
@@ -342,7 +342,7 @@ void ad_release_packet( AVPacket *pkt )
     av_free( pkt->priv );
 
     // Now use the default routine to release the rest of the packet's resources
-    av_destruct_packet( pkt );    
+    av_destruct_packet( pkt );
 }
 
 int ad_get_buffer(ByteIOContext *s, uint8_t *buf, int size)
@@ -377,7 +377,7 @@ int initADData(int data_type, ADFrameType *frameType,
         (data_type == DATA_MINIMAL_MPEG4)                               )
     {
         *frameType = NetVuVideo;
-    
+
         if (*vidDat == NULL)
             *vidDat = av_malloc( sizeof(NetVuImageData) );
         if( *vidDat == NULL )
@@ -415,15 +415,15 @@ int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
         // Read the pic structure
         if ((n = ad_get_buffer(pb, (uint8_t*)video_data, nviSize)) != nviSize)  {
             av_log(s, AV_LOG_ERROR, "ad_read_jpeg: Short of data reading "
-                                    "NetVuImageData, expected %d, read %d\n", 
+                                    "NetVuImageData, expected %d, read %d\n",
                                     nviSize, n);
             return ADPIC_JPEG_IMAGE_DATA_READ_ERROR;
         }
-        
+
         // Endian convert if necessary
         ad_network2host(video_data, (uint8_t *)video_data);
     }
-    
+
     if (!pic_version_valid(video_data->version))  {
         av_log(s, AV_LOG_ERROR, "%s: invalid NetVuImageData version "
                                 "0x%08X\n", __func__, video_data->version);
@@ -446,7 +446,7 @@ int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
         return ADPIC_JPEG_READ_TEXT_BLOCK_ERROR;
     }
 
-    // Somtimes the buffer seems to end with a NULL terminator, other times it 
+    // Somtimes the buffer seems to end with a NULL terminator, other times it
     // doesn't.  Adding a terminator here regardless
     (*text_data)[textSize] = '\0';
 
@@ -458,7 +458,7 @@ int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
     // We now know the packet size required for the image, allocate it.
     if ((status = ad_new_packet(pkt, hdrSize + video_data->size + 2)) < 0)  {
         av_log(s, AV_LOG_ERROR, "ad_read_jpeg: ad_new_packet %d failed, "
-                                "status %d\n", hdrSize + video_data->size + 2, 
+                                "status %d\n", hdrSize + video_data->size + 2,
                                 status);
         return ADPIC_JPEG_NEW_PACKET_ERROR;
     }
@@ -509,10 +509,10 @@ int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb,
  * type byte followed by a text block. Due to its simplicity, we'll
  * just extract the whole block into the AVPacket's data structure and
  * let the client deal with checking its type and parsing its text
- * 
- * \todo Parse the string and use the information to add metadata and/or update 
+ *
+ * \todo Parse the string and use the information to add metadata and/or update
  *       the NetVuImageData struct
- * 
+ *
  * Example strings, taken from a minimal mp4 stream: (Prefixed by a zero byte)
  * SITE DVIP3S;CAM 1:TV;(JPEG)TARGSIZE 0:(MPEG)BITRATE 262144;IMAGESIZE 0,0:704,256;
  * SITE DVIP3S;CAM 2:Directors office;(JPEG)TARGSIZE 0:(MPEG)BITRATE 262144;IMAGESIZE 0,0:704,256;
@@ -531,7 +531,7 @@ int ad_read_info(AVFormatContext *s, ByteIOContext *pb,
     // Get the data
     if( (n = ad_get_buffer( pb, pkt->data, size)) != size )
         return ADPIC_INFO_GET_BUFFER_ERROR;
-    
+
     return errorVal;
 }
 
@@ -547,7 +547,7 @@ int ad_read_layout(AVFormatContext *s, ByteIOContext *pb,
     // Get the data
     if( (n = ad_get_buffer( pb, pkt->data, size)) != size )
         return ADPIC_LAYOUT_GET_BUFFER_ERROR;
-    
+
     return errorVal;
 }
 
@@ -558,7 +558,7 @@ int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
     ADFrameData *frameData = NULL;
 
     if (frameType == NetVuVideo)  {
-        // At this point We have a legal NetVuImageData structure which we use 
+        // At this point We have a legal NetVuImageData structure which we use
         // to determine which codec stream to use
         NetVuImageData *video_data = (NetVuImageData *)data;
         if ( (st = netvu_get_stream( s, video_data)) == NULL ) {
@@ -632,10 +632,10 @@ void audiodata_network2host(uint8_t *data, int size)
     const uint8_t *dataEnd = data + size;
     uint8_t upper, lower;
     uint16_t predictor = AV_RB16(data);
-    
+
     AV_WL16(data, predictor);
     data += 4;
-    
+
     for (;data < dataEnd; data++)  {
         upper = ((*data) & 0xF0) >> 4;
         lower = ((*data) & 0x0F) << 4;

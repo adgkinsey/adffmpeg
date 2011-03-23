@@ -20,7 +20,7 @@
  */
 
 /**
- * @file 
+ * @file
  * AD-Holdings demuxer for AD stream format (binary)
  */
 
@@ -86,11 +86,11 @@ static int adbinary_probe(AVProbeData *p)
     uint32_t dataSize;
     int bufferSize = p->buf_size;
     uint8_t *bufPtr = p->buf;
-    
+
     // Netvu protocol can only send adbinary or admime
     if ( (p->filename) && (av_stristart(p->filename, "netvu://", NULL) == 1))
         score += AVPROBE_SCORE_MAX / 4;
-    
+
     while ((bufferSize >= SEPARATOR_SIZE) && (score < AVPROBE_SCORE_MAX))  {
         dataSize =  (bufPtr[DATA_SIZE_BYTE_0] << 24) +
                     (bufPtr[DATA_SIZE_BYTE_1] << 16) +
@@ -100,13 +100,13 @@ static int adbinary_probe(AVProbeData *p)
         // Maximum of 32 cameras can be connected to a system
         if (bufPtr[DATA_CHANNEL] > 32)
             return 0;
-        
+
         if (bufPtr[DATA_TYPE] >= MAX_DATA_TYPE)
             return 0;
-        
+
         dataPtr = &bufPtr[SEPARATOR_SIZE];
         bufferSize -= SEPARATOR_SIZE;
-        
+
         switch (bufPtr[DATA_TYPE])  {
             case(DATA_JPEG):
             case(DATA_MPEG4I):
@@ -152,7 +152,7 @@ static int adbinary_probe(AVProbeData *p)
                     // Check for MPEG4 start code in data along with a timestamp
                     // of 1980 or later.  Crappy test, but there isn't much data
                     // to go on.  Should be able to use milliseconds <= 1000 but
-                    // servers often send larger values than this, 
+                    // servers often send larger values than this,
                     // nonsensical as that is
                     if ((vos >= 0x1B0) && (vos <= 0x1B6) && (sec > 315532800)) {
                         av_log(NULL, AV_LOG_DEBUG, "%s: Detected minimal MPEG4 packet\n", __func__);
@@ -206,16 +206,16 @@ static int adbinary_probe(AVProbeData *p)
                 }
                 break;
         }
-        
+
         bufferSize -= dataSize;
         bufPtr = dataPtr + dataSize;
     }
 
     if (score > AVPROBE_SCORE_MAX)
         score = AVPROBE_SCORE_MAX;
-    
+
     av_log(NULL, AV_LOG_DEBUG, "%s: Score %d\n", __func__, score);
-    
+
     return score;
 }
 
@@ -244,7 +244,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         if(url_feof(pb))
             errorVal = AVERROR_EOF;
         else {
-            av_log(s, AV_LOG_ERROR, "%s: Reading separator, errorcode %d\n",  
+            av_log(s, AV_LOG_ERROR, "%s: Reading separator, errorcode %d\n",
                    __func__, url_ferror(pb));
             errorVal = ADPIC_READ_6_BYTE_SEPARATOR_ERROR;
         }
@@ -300,7 +300,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         else
             errorVal = ad_read_packet(s, pb, pkt, frameType, vidDat, txtDat);
     }
-    
+
     if (errorVal < 0)  {
         // If there was an error, release any memory has been allocated
         if( vidDat != NULL )
@@ -334,13 +334,13 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
 
     if ((n = ad_get_buffer(pb, (uint8_t *)vidDat, hdrSize)) != hdrSize) {
         av_log(s, AV_LOG_ERROR, "%s: short of data reading header, "
-                                "expected %d, read %d\n", 
+                                "expected %d, read %d\n",
                __func__, hdrSize, n);
         return ADPIC_MPEG4_GET_BUFFER_ERROR;
     }
     ad_network2host(vidDat, (uint8_t *)vidDat);
     if (!pic_version_valid(vidDat->version)) {
-        av_log(s, AV_LOG_ERROR, "%s: invalid pic version 0x%08X\n", __func__, 
+        av_log(s, AV_LOG_ERROR, "%s: invalid pic version 0x%08X\n", __func__,
                vidDat->version);
         return ADPIC_MPEG4_PIC_VERSION_VALID_ERROR;
     }
@@ -355,7 +355,7 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
     // Copy the additional text block
     if( (n = ad_get_buffer( pb, *text_data, textSize)) != textSize) {
         av_log(s, AV_LOG_ERROR, "%s: short of data reading text, "
-                                "expected %d, read %d\n", __func__, 
+                                "expected %d, read %d\n", __func__,
                textSize, n);
         return ADPIC_MPEG4_GET_TEXT_BUFFER_ERROR;
     }
@@ -365,20 +365,20 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
     (*text_data)[textSize] = '\0';
 
     if ((status = ad_new_packet(pkt, vidDat->size)) < 0) {
-        av_log(s, AV_LOG_ERROR, "%s: ad_new_packet (size %d) failed, status %d\n", 
+        av_log(s, AV_LOG_ERROR, "%s: ad_new_packet (size %d) failed, status %d\n",
                __func__, vidDat->size, status);
         return ADPIC_MPEG4_NEW_PACKET_ERROR;
     }
     if ((n = ad_get_buffer(pb, pkt->data, vidDat->size)) != vidDat->size) {
         av_log(s, AV_LOG_ERROR, "%s: short of data reading mpeg, "
-                                "expected %d, read %d\n", 
+                                "expected %d, read %d\n",
                __func__, vidDat->size, n);
         return ADPIC_MPEG4_PIC_BODY_ERROR;
     }
-    
+
     if (vidDat->vid_format & (PIC_MODE_MPEG4_411_I | PIC_MODE_MPEG4_411_GOV_I))
-        pkt->flags |= AV_PKT_FLAG_KEY;    
-    
+        pkt->flags |= AV_PKT_FLAG_KEY;
+
     return errorVal;
 }
 
@@ -398,9 +398,9 @@ static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
     memset(vidDat, 0, sizeof(NetVuImageData));
     vidDat->session_time  = get_be32(pb);
     vidDat->milliseconds  = get_be16(pb);
-    
+
     if ( url_ferror(pb) || (vidDat->session_time == 0) )  {
-        av_log(s, AV_LOG_ERROR, "%s: Reading header, errorcode %d\n", 
+        av_log(s, AV_LOG_ERROR, "%s: Reading header, errorcode %d\n",
                __func__, url_ferror(pb));
         return ADPIC_MPEG4_MINIMAL_GET_BUFFER_ERROR;
     }
@@ -454,7 +454,7 @@ static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
     // Now get the actual audio data
     if( (n = ad_get_buffer( pb, pkt->data, data->sizeOfAudioData)) != data->sizeOfAudioData )
         return ADPIC_AUDIO_ADPCM_MIME_GET_BUFFER_ERROR;
-    
+
     audiodata_network2host(pkt->data, data->sizeOfAudioData);
 
     return errorVal;
@@ -475,7 +475,7 @@ static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb,
     data->msecs = get_be16(pb);
     data->mode = get_be16(pb);
     if ( url_ferror(pb) || (data->seconds == 0) )  {
-        av_log(s, AV_LOG_ERROR, "%s: Reading header, errorcode %d\n", 
+        av_log(s, AV_LOG_ERROR, "%s: Reading header, errorcode %d\n",
                __func__, url_ferror(pb));
         return ADPIC_MINIMAL_AUDIO_ADPCM_GET_BUFFER_ERROR;
     }
@@ -488,7 +488,7 @@ static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb,
         return ADPIC_MINIMAL_AUDIO_ADPCM_GET_BUFFER_ERROR2;
 
     audiodata_network2host(pkt->data, dataSize);
-    
+
     return errorVal;
 }
 

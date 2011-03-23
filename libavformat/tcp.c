@@ -111,7 +111,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
                 if(TimeOutCount > 100)
                 {
                      ret = AVERROR(EIO);
-                     goto fail1; 
+                     goto fail1;
                 }
             }
             if(ret == -1)
@@ -184,7 +184,7 @@ static int tcp_read(URLContext *h, uint8_t *buf, int size)
             return -1;
         }
         else if(TimeOut<clock())
-        { 
+        {
             return -2;
         }
     }

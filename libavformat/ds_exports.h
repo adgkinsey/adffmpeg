@@ -113,14 +113,14 @@ typedef enum _frameType {
     RTPAudio
 } ADFrameType;
 
-/** This is the data structure that the ffmpeg parser fills in as part of the 
- * parsing routines. It will be shared between adpic and dspic so that our 
+/** This is the data structure that the ffmpeg parser fills in as part of the
+ * parsing routines. It will be shared between adpic and dspic so that our
  * clients can be compatible with either stream more easily
  */
 typedef struct {
     /// Type of frame we have. See ADFrameType enum for supported types
     ADFrameType         frameType;
-    /// Pointer to structure holding the information for the frame. 
+    /// Pointer to structure holding the information for the frame.
     void *              frameData;
     void *              additionalData;
 } ADFrameData;

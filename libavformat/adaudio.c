@@ -20,7 +20,7 @@
  */
 
 /**
- * @file 
+ * @file
  * AD-Holdings demuxer for AD audio stream format
  */
 
@@ -93,7 +93,7 @@ static int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 
                 /* Copy data into packet */
                 memcpy( pkt->data, &ioContext->buf_ptr[SIZEOF_RTP_HEADER], sampleSize );
-                
+
                 audiodata_network2host(pkt->data, sampleSize);
 
                 /* Configure stream info */

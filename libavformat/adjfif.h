@@ -1,7 +1,7 @@
 /*
- * Helper functions for converting between raw JPEG data with 
+ * Helper functions for converting between raw JPEG data with
  * NetVuImageData header and full JFIF image (and vice-versa)
- * 
+ *
  * Copyright (c) 2006-2010 AD-Holdings plc
  *
  * This file is part of FFmpeg.
@@ -23,7 +23,7 @@
 
 /**
  * @file
- * Helper functions for converting between raw JPEG data with 
+ * Helper functions for converting between raw JPEG data with
  * NetVuImageData header and full JFIF image (and vice-versa)
  */
 
@@ -34,7 +34,7 @@
 
 extern unsigned int build_jpeg_header(void *jfif, NetVuImageData *pic,
                                       unsigned int max);
-extern int parse_jfif(AVFormatContext *s, unsigned char *data, 
+extern int parse_jfif(AVFormatContext *s, unsigned char *data,
                       NetVuImageData *pic, int imgSize, char **text);
 
 #endif
