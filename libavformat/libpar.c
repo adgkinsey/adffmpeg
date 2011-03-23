@@ -591,13 +591,13 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
         unsigned long start, end, realStart, realEnd;
         if (parReader_getIndexData(&p->frameInfo, &frameNumber, &frameCount, &start, &end))  {
             realStart = start;
-            av_log(NULL, AV_LOG_DEBUG, "par_read_header:  %s (%d)\n", filelist[0], seqLen - 1);
+            av_log(avf, AV_LOG_DEBUG, "par_read_header:  %s (%d)\n", filelist[0], seqLen - 1);
             res = parReader_loadParFile(NULL, filelist[0], seqLen - 1, &p->frameInfo, 0);
             if (parReader_getIndexData(&p->frameInfo, &frameNumber, &frameCount, &start, &end))  {
                 realEnd = end;
                 seconds = realEnd - realStart;
             }
-            av_log(NULL, AV_LOG_DEBUG, "par_read_header:  %s (%d)\n", filelist[0], -1);
+            av_log(avf, AV_LOG_DEBUG, "par_read_header:  %s (%d)\n", filelist[0], -1);
             res = parReader_loadParFile(NULL, filelist[0], -1, &p->frameInfo, 0);
         }
     }
@@ -665,7 +665,7 @@ static int par_read_seek(AVFormatContext *avf, int stream,
     int isKeyFrame = 0;
     int step;
 
-    av_log(NULL, AV_LOG_DEBUG, "par_read_seek target    = %"PRId64"\n", target);
+    av_log(avf, AV_LOG_DEBUG, "par_read_seek target    = %"PRId64"\n", target);
 
     p->dispSet.cameraNum = streamId;
     if (flags & AVSEEK_FLAG_BACKWARD)
@@ -741,7 +741,7 @@ static int par_read_seek(AVFormatContext *avf, int stream,
     p->dispSet.fileLock = 0;
     p->dispSet.playMode = PLAY;
 
-    av_log(NULL, AV_LOG_DEBUG, "par_read_seek seek_done = %lu\n", p->frameInfo.imageTime);
+    av_log(avf, AV_LOG_DEBUG, "par_read_seek seek_done = %lu\n", p->frameInfo.imageTime);
 
     return p->frameInfo.imageTime;
 }
