@@ -39,7 +39,7 @@ enum pkt_offsets { DATA_TYPE, DATA_CHANNEL,
                    SEPARATOR_SIZE
                  };
 
-static void audioheader_network2host(NetVuAudioData *dst, uint8_t *src);
+static void audioheader_network2host(NetVuAudioData *dst, const uint8_t *src);
 static int ad_read_mpeg(AVFormatContext *s, AVIOContext *pb,
                         AVPacket *pkt,
                         NetVuImageData *vidDat, char **text_data);
@@ -63,15 +63,15 @@ typedef struct  {    // PRC 002
 } MinimalAudioHeader;
 
 
-static void audioheader_network2host(NetVuAudioData *dst, uint8_t *src)
+static void audioheader_network2host(NetVuAudioData *dst, const uint8_t *src)
 {
-    dst->version                = AV_RB32(src);
-    dst->mode                    = AV_RB32(src + 4);
-    dst->channel                = AV_RB32(src + 8);
-    dst->sizeOfAdditionalData    = AV_RB32(src + 12);
-    dst->sizeOfAudioData        = AV_RB32(src + 16);
-    dst->seconds                = AV_RB32(src + 20);
-    dst->msecs                    = AV_RB32(src + 24);
+    dst->version              = AV_RB32(src);
+    dst->mode                 = AV_RB32(src + 4);
+    dst->channel              = AV_RB32(src + 8);
+    dst->sizeOfAdditionalData = AV_RB32(src + 12);
+    dst->sizeOfAudioData      = AV_RB32(src + 16);
+    dst->seconds              = AV_RB32(src + 20);
+    dst->msecs                = AV_RB32(src + 24);
     if ((void*)dst != (void*)src) // Copy additionalData pointer if needed
         memcpy(&dst->additionalData, src + 28, sizeof(unsigned char *));
 }
