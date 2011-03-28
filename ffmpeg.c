@@ -69,12 +69,7 @@
 #include <sys/select.h>
 #endif
 
-#if HAVE_TERMIOS_H
-#include <fcntl.h>
-#include <sys/ioctl.h>
-#include <sys/time.h>
-#include <termios.h>
-#elif HAVE_CONIO_H
+#if HAVE_KBHIT
 #include <conio.h>
 #endif
 #include <time.h>
@@ -172,6 +167,8 @@ static int loop_output = AVFMT_NOOUTPUTLOOP;
 static int qp_hist = 0;
 #if CONFIG_AVFILTER
 static char *vfilters = NULL;
+#else
+static unsigned int sws_flags = SWS_BICUBIC;
 #endif
 
 static int intra_only = 0;
@@ -243,8 +240,6 @@ static int force_fps = 0;
 static char *forced_key_frames = NULL;
 
 static float dts_delta_threshold = 10;
-
-static unsigned int sws_flags = SWS_BICUBIC;
 
 static int64_t timer_start;
 
@@ -343,12 +338,6 @@ typedef struct AVInputFile {
     int nb_streams;       /* nb streams we are aware of */
 } AVInputFile;
 
-#if HAVE_TERMIOS_H
-
-/* init terminal so that we can grab keys */
-static struct termios oldtty;
-#endif
-
 #if CONFIG_AVFILTER
 
 static int configure_filters(AVInputStream *ist, AVOutputStream *ost)
@@ -436,9 +425,6 @@ static int configure_filters(AVInputStream *ist, AVOutputStream *ost)
 static void term_exit(void)
 {
     av_log(NULL, AV_LOG_QUIET, "");
-#if HAVE_TERMIOS_H
-    tcsetattr (0, TCSANOW, &oldtty);
-#endif
 }
 
 static volatile int received_sigterm = 0;
@@ -447,31 +433,12 @@ static void
 sigterm_handler(int sig)
 {
     received_sigterm = sig;
+    q_pressed++;
     term_exit();
 }
 
 static void term_init(void)
 {
-#if HAVE_TERMIOS_H
-    struct termios tty;
-
-    tcgetattr (0, &tty);
-    oldtty = tty;
-    atexit(term_exit);
-
-    tty.c_iflag &= ~(IGNBRK|BRKINT|PARMRK|ISTRIP
-                          |INLCR|IGNCR|ICRNL|IXON);
-    tty.c_oflag |= OPOST;
-    tty.c_lflag &= ~(ECHO|ECHONL|ICANON|IEXTEN);
-    tty.c_cflag &= ~(CSIZE|PARENB);
-    tty.c_cflag |= CS8;
-    tty.c_cc[VMIN] = 1;
-    tty.c_cc[VTIME] = 0;
-
-    tcsetattr (0, TCSANOW, &tty);
-    signal(SIGQUIT, sigterm_handler); /* Quit (POSIX).  */
-#endif
-
     signal(SIGINT , sigterm_handler); /* Interrupt (ANSI).  */
     signal(SIGTERM, sigterm_handler); /* Termination (ANSI).  */
 #ifdef SIGXCPU
@@ -482,25 +449,7 @@ static void term_init(void)
 /* read a key without blocking */
 static int read_key(void)
 {
-#if HAVE_TERMIOS_H
-    int n = 1;
-    unsigned char ch;
-    struct timeval tv;
-    fd_set rfds;
-
-    FD_ZERO(&rfds);
-    FD_SET(0, &rfds);
-    tv.tv_sec = 0;
-    tv.tv_usec = 0;
-    n = select(1, &rfds, NULL, NULL, &tv);
-    if (n > 0) {
-        n = read(0, &ch, 1);
-        if (n == 1)
-            return ch;
-
-        return n;
-    }
-#elif HAVE_CONIO_H
+#if HAVE_KBHIT
     if(kbhit())
         return(getch());
 #endif
@@ -644,8 +593,14 @@ static void choose_pixel_fmt(AVStream *st, AVCodec *codec)
             if(*p == st->codec->pix_fmt)
                 break;
         }
-        if(*p == -1)
+        if (*p == -1) {
+            av_log(NULL, AV_LOG_WARNING,
+                   "Incompatible pixel format '%s' for codec '%s', auto-selecting format '%s'\n",
+                   av_pix_fmt_descriptors[st->codec->pix_fmt].name,
+                   codec->name,
+                   av_pix_fmt_descriptors[codec->pix_fmts[0]].name);
             st->codec->pix_fmt = codec->pix_fmts[0];
+        }
     }
 }
 
@@ -2174,6 +2129,7 @@ static int transcode(AVFormatContext **output_files,
                 codec->sample_rate = icodec->sample_rate;
                 codec->channels = icodec->channels;
                 codec->frame_size = icodec->frame_size;
+                codec->audio_service_type = icodec->audio_service_type;
                 codec->block_align= icodec->block_align;
                 if(codec->block_align == 1 && codec->codec_id == CODEC_ID_MP3)
                     codec->block_align= 0;
@@ -2511,7 +2467,11 @@ static int transcode(AVFormatContext **output_files,
 
     if (!using_stdin) {
         if(verbose >= 0)
+#if HAVE_KBHIT
             fprintf(stderr, "Press [q] to stop encoding\n");
+#else
+            fprintf(stderr, "Press ctrl-c to stop encoding\n");
+#endif
         url_set_interrupt_cb(decode_interrupt_cb);
     }
     term_init();
@@ -2896,7 +2856,10 @@ static void opt_audio_sample_fmt(const char *arg)
             ffmpeg_exit(1);
         }
     } else {
-        list_fmts(av_get_sample_fmt_string, AV_SAMPLE_FMT_NB);
+        int i;
+        char fmt_str[128];
+        for (i = -1; i < AV_SAMPLE_FMT_NB; i++)
+            printf("%s\n", av_get_sample_fmt_string(fmt_str, sizeof(fmt_str), i));
         ffmpeg_exit(0);
     }
 }

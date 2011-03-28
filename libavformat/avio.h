@@ -415,6 +415,9 @@ attribute_deprecated void         put_tag(AVIOContext *s, const char *tag);
  * @}
  */
 
+attribute_deprecated int     av_url_read_fpause(AVIOContext *h,    int pause);
+attribute_deprecated int64_t av_url_read_fseek (AVIOContext *h,    int stream_index,
+                                                int64_t timestamp, int flags);
 
 /**
  * @defgroup old_url_f_funcs Old url_f* functions
@@ -441,6 +444,9 @@ attribute_deprecated void put_flush_packet(AVIOContext *s);
  */
 
 attribute_deprecated int url_ferror(AVIOContext *s);
+
+attribute_deprecated int udp_set_remote_url(URLContext *h, const char *uri);
+attribute_deprecated int udp_get_local_port(URLContext *h);
 #endif
 
 AVIOContext *avio_alloc_context(
@@ -511,10 +517,6 @@ int64_t avio_size(AVIOContext *s);
  * @return non zero if and only if end of file
  */
 int url_feof(AVIOContext *s);
-
-int av_url_read_fpause(AVIOContext *h, int pause);
-int64_t av_url_read_fseek(AVIOContext *h, int stream_index,
-                          int64_t timestamp, int flags);
 
 /** @warning currently size is limited */
 #ifdef __GNUC__
@@ -622,9 +624,10 @@ int url_resetbuf(AVIOContext *s, int flags);
 int avio_open(AVIOContext **s, const char *url, int flags);
 
 int avio_close(AVIOContext *s);
-URLContext *url_fileno(AVIOContext *s);
 
 #if FF_API_OLD_AVIO
+attribute_deprecated URLContext *url_fileno(AVIOContext *s);
+
 /**
  * @deprecated use AVIOContext.max_packet_size directly.
  */
@@ -674,9 +677,6 @@ void init_checksum(AVIOContext *s,
                    unsigned long (*update_checksum)(unsigned long c, const uint8_t *p, unsigned int len),
                    unsigned long checksum);
 
-/* udp.c */
-int udp_set_remote_url(URLContext *h, const char *uri);
-int udp_get_local_port(URLContext *h);
 #if FF_API_UDP_GET_FILE
 int udp_get_file_handle(URLContext *h);
 #endif

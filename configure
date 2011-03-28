@@ -281,7 +281,7 @@ die(){
 
 If you think configure made a mistake, make sure you are using the latest
 version from Git.  If the latest version fails, report the problem to the
-ffmpeg-user@mplayerhq.hu mailing list or IRC #ffmpeg on irc.freenode.net.
+ffmpeg-user@ffmpeg.org mailing list or IRC #ffmpeg on irc.freenode.net.
 EOF
     if disabled logging; then
         cat <<EOF
@@ -643,7 +643,7 @@ check_ld(){
         test "${f}" = "${f#-l}" && flags="$flags $f" || libs="$libs $f"
     done
     check_cc $($filter_cflags $flags) || return
-    check_cmd $ld $LDFLAGS $flags -o $TMPE $TMPO $extralibs $libs
+    check_cmd $ld $LDFLAGS $flags -o $TMPE $TMPO $libs $extralibs
 }
 
 check_cppflags(){
@@ -1042,7 +1042,6 @@ HAVE_LIST="
     bswap
     closesocket
     cmov
-    conio_h
     dcbzl
     dev_bktr_ioctl_bt848_h
     dev_bktr_ioctl_meteor_h
@@ -1072,6 +1071,7 @@ HAVE_LIST="
     inet_aton
     inline_asm
     isatty
+    kbhit
     ldbrx
     libdc1394_1
     libdc1394_2
@@ -1100,6 +1100,7 @@ HAVE_LIST="
     sdl
     sdl_video_size
     setmode
+    sndio_h
     socklen_t
     soundcard_h
     poll_h
@@ -1120,7 +1121,6 @@ HAVE_LIST="
     sys_soundcard_h
     sys_videoio_h
     ten_operands
-    termios_h
     threads
     truncf
     vfp_args
@@ -1453,6 +1453,8 @@ jack_indev_deps="jack_jack_h"
 libdc1394_indev_deps="libdc1394"
 oss_indev_deps_any="soundcard_h sys_soundcard_h"
 oss_outdev_deps_any="soundcard_h sys_soundcard_h"
+sndio_indev_deps="sndio_h"
+sndio_outdev_deps="sndio_h"
 v4l_indev_deps="linux_videodev_h"
 v4l2_indev_deps_any="linux_videodev2_h sys_videoio_h"
 vfwcap_indev_deps="capCreateCaptureWindow vfwcap_defines"
@@ -1483,8 +1485,8 @@ frei0r_filter_deps="frei0r dlopen strtok_r"
 frei0r_src_filter_deps="frei0r dlopen strtok_r"
 hqdn3d_filter_deps="gpl"
 mp_filter_deps="gpl"
-scale_filter_deps="swscale"
 ocv_filter_deps="libopencv"
+scale_filter_deps="swscale"
 yadif_filter_deps="gpl"
 
 # libraries
@@ -1497,7 +1499,7 @@ ffmpeg_select="buffer_filter"
 ffplay_deps="avcodec avformat swscale sdl"
 ffplay_select="rdft"
 ffprobe_deps="avcodec avformat"
-ffserver_deps="avformat ffm_muxer rtp_protocol rtsp_demuxer"
+ffserver_deps="avformat ffm_muxer fork rtp_protocol rtsp_demuxer"
 ffserver_extralibs='$ldl'
 
 doc_deps="texi2html"
@@ -2431,17 +2433,16 @@ case $target_os in
         LIBTARGET=i386
         if enabled x86_64; then
             enable malloc_aligned
-            LIBTARGET=x64
+            LIBTARGET="i386:x86-64"
         elif enabled arm; then
-            LIBTARGET=arm
+            LIBTARGET=arm-wince
         fi
         shlibdir_default="$bindir_default"
-        disable ffserver
         SLIBPREF=""
         SLIBSUF=".dll"
         SLIBNAME_WITH_VERSION='$(SLIBPREF)$(FULLNAME)-$(LIBVERSION)$(SLIBSUF)'
         SLIBNAME_WITH_MAJOR='$(SLIBPREF)$(FULLNAME)-$(LIBMAJOR)$(SLIBSUF)'
-        SLIB_EXTRA_CMD=-'$(DLLTOOL) -m $(LIBTARGET) -d $$(@:$(SLIBSUF)=.def) -l $(SUBDIR)$(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.lib)'
+        SLIB_EXTRA_CMD=-'$(DLLTOOL) -m $(LIBTARGET) -d $$(@:$(SLIBSUF)=.def) -l $(SUBDIR)$(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.lib) -D $(SLIBNAME_WITH_MAJOR)'
         SLIB_INSTALL_EXTRA_CMD='-install -m 644 $(SUBDIR)$(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.lib) "$(SHLIBDIR)/$(SLIBNAME:$(SLIBSUF)=.lib)"; \
             install -m 644 $(SUBDIR)$(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.lib) "$(SHLIBDIR)/$(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.lib)"; \
             install -d "$(LIBDIR)"; \
@@ -2455,6 +2456,7 @@ case $target_os in
         check_cpp_condition _mingw.h "defined (__MINGW64_VERSION_MAJOR) || (__MINGW32_MAJOR_VERSION > 3) \
                                       || (__MINGW32_MAJOR_VERSION == 3 && __MINGW32_MINOR_VERSION >= 15)" ||
                 die "ERROR: MinGW runtime version must be >= 3.15."
+        add_cppflags -U__STRICT_ANSI__
         ;;
     cygwin*)
         target_os=cygwin
@@ -2469,8 +2471,6 @@ case $target_os in
         check_cflags -fno-common
         ;;
     *-dos|freedos|opendos)
-        disable ffplay ffserver
-        disable $INDEV_LIST $OUTDEV_LIST
         network_extralibs="-lsocket"
         objformat="coff"
         enable dos_paths
@@ -2751,6 +2751,8 @@ if enabled asm; then
         $nogas "GNU assembler not found, install gas-preprocessor"
 fi
 
+check_ldflags -Wl,--as-needed
+
 if check_func dlopen; then
     ldl=
 elif check_func dlopen -ldl; then
@@ -2802,6 +2804,7 @@ check_func  ${malloc_prefix}posix_memalign      && enable posix_memalign
 check_func  setrlimit
 check_func  strerror_r
 check_func  strtok_r
+check_func_headers conio.h kbhit
 check_func_headers io.h setmode
 check_func_headers lzo/lzo1x.h lzo1x_999_compress
 check_lib2 "windows.h psapi.h" GetProcessMemoryInfo -lpsapi
@@ -2809,7 +2812,6 @@ check_func_headers windows.h GetProcessTimes
 check_func_headers windows.h MapViewOfFile
 check_func_headers windows.h VirtualAlloc
 
-check_header conio.h
 check_header dlfcn.h
 check_header dxva2api.h
 check_header libcrystalhd/libcrystalhd_if.h
@@ -2818,7 +2820,6 @@ check_header poll.h
 check_header sys/mman.h
 check_header sys/resource.h
 check_header sys/select.h
-check_header termios.h
 check_header vdpau/vdpau.h
 check_header vdpau/vdpau_x11.h
 check_header X11/extensions/XvMClib.h
@@ -2945,12 +2946,15 @@ check_cpp_condition vfw.h "WM_CAP_DRIVER_CONNECT > WM_USER" && enable vfwcap_def
   check_header dev/video/bktr/ioctl_bt848.h; } ||
 check_header dev/ic/bt8xx.h
 
+check_header sndio.h
 check_header sys/soundcard.h
 check_header soundcard.h
 
 enabled_any alsa_indev alsa_outdev && check_lib2 alsa/asoundlib.h snd_pcm_htimestamp -lasound
 
 enabled jack_indev && check_lib2 jack/jack.h jack_client_open -ljack
+
+enabled_any sndio_indev sndio_outdev && check_lib2 sndio.h sio_open -lsndio
 
 enabled x11grab                         &&
 check_header X11/Xlib.h                 &&
@@ -2987,7 +2991,6 @@ enabled extra_warnings && check_cflags -Winline
 
 # add some linker flags
 check_ldflags -Wl,--warn-common
-check_ldflags -Wl,--as-needed
 check_ldflags '-Wl,-rpath-link,\$(BUILD_ROOT)/libpostproc -Wl,-rpath-link,\$(BUILD_ROOT)/libswscale -Wl,-rpath-link,\$(BUILD_ROOT)/libavfilter -Wl,-rpath-link,\$(BUILD_ROOT)/libavdevice -Wl,-rpath-link,\$(BUILD_ROOT)/libavformat -Wl,-rpath-link,\$(BUILD_ROOT)/libavcodec -Wl,-rpath-link,\$(BUILD_ROOT)/libavutil'
 test_ldflags -Wl,-Bsymbolic && append SHFLAGS -Wl,-Bsymbolic
 
@@ -3020,10 +3023,11 @@ if enabled icc; then
     check_cflags -w1
     # -wd: Disable following warnings
     # 144, 167, 556: -Wno-pointer-sign
+    # 1292: attribute "foo" ignored
     # 10006: ignoring unknown option -fno-signed-zeros
     # 10148: ignoring unknown option -Wno-parentheses
     # 10156: ignoring option '-W'; no argument required
-    check_cflags -wd144,167,556,10006,10148,10156
+    check_cflags -wd144,167,556,1292,10006,10148,10156
     # 11030: Warning unknown option --as-needed
     # 10156: ignoring option '-export'; no argument required
     check_ldflags -wd10156,11030
@@ -3322,7 +3326,7 @@ get_version(){
 
 get_version LIBSWSCALE  libswscale/swscale.h
 get_version LIBPOSTPROC libpostproc/postprocess.h
-get_version LIBAVCODEC  libavcodec/avcodec.h
+get_version LIBAVCODEC  libavcodec/version.h
 get_version LIBAVDEVICE libavdevice/avdevice.h
 get_version LIBAVFORMAT libavformat/version.h
 get_version LIBAVUTIL   libavutil/avutil.h

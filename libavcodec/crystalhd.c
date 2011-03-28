@@ -1,7 +1,7 @@
 /*
  * - CrystalHD decoder module -
  *
- * Copyright(C) 2010 Philip Langdale <ffmpeg.philipl@overt.org>
+ * Copyright(C) 2010,2011 Philip Langdale <ffmpeg.philipl@overt.org>
  *
  * This file is part of FFmpeg.
  *
@@ -597,8 +597,7 @@ static inline CopyRet copy_frame(AVCodecContext *avctx,
 
         for (sY = 0; sY < height; dY++, sY++) {
             memcpy(&(dst[dY * dStride]), &(src[sY * sStride]), bwidth);
-            if (interlaced)
-                dY++;
+            dY++;
         }
     } else {
         av_image_copy_plane(dst, dStride, src, sStride, bwidth, height);

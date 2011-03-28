@@ -492,8 +492,10 @@ typedef struct DSPContext {
 #define BASIS_SHIFT 16
 #define RECON_SHIFT 6
 
-    void (*draw_edges)(uint8_t *buf, int wrap, int width, int height, int w);
+    void (*draw_edges)(uint8_t *buf, int wrap, int width, int height, int w, int sides);
 #define EDGE_WIDTH 16
+#define EDGE_TOP    1
+#define EDGE_BOTTOM 2
 
     void (*prefetch)(void *mem, int stride, int h);
 
@@ -523,6 +525,20 @@ typedef struct DSPContext {
      * @param len length of vectors, should be multiple of 16
      */
     int32_t (*scalarproduct_and_madd_int16)(int16_t *v1/*align 16*/, const int16_t *v2, const int16_t *v3, int len, int mul);
+
+    /**
+     * Apply symmetric window in 16-bit fixed-point.
+     * @param output destination array
+     *               constraints: 16-byte aligned
+     * @param input  source array
+     *               constraints: 16-byte aligned
+     * @param window window array
+     *               constraints: 16-byte aligned, at least len/2 elements
+     * @param len    full window length
+     *               constraints: multiple of ? greater than zero
+     */
+    void (*apply_window_int16)(int16_t *output, const int16_t *input,
+                               const int16_t *window, unsigned int len);
 
     /* rv30 functions */
     qpel_mc_func put_rv30_tpel_pixels_tab[4][16];

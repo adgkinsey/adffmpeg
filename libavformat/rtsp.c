@@ -743,9 +743,9 @@ static void rtsp_parse_rtp_info(RTSPState *rt, const char *p)
         if (!strcmp(key, "url"))
             av_strlcpy(url, value, sizeof(url));
         else if (!strcmp(key, "seq"))
-            seq = strtol(value, NULL, 10);
+            seq = strtoul(value, NULL, 10);
         else if (!strcmp(key, "rtptime"))
-            rtptime = strtol(value, NULL, 10);
+            rtptime = strtoul(value, NULL, 10);
         if (*p == ',') {
             handle_rtp_info(rt, url, seq, rtptime);
             url[0] = '\0';
@@ -1157,7 +1157,7 @@ int ff_rtsp_make_setup_request(AVFormatContext *s, const char *host, int port,
                 continue;
             snprintf(transport, sizeof(transport) - 1,
                      "%s/TCP;", trans_pref);
-            if (rt->server_type == RTSP_SERVER_WMS)
+            if (rt->transport != RTSP_TRANSPORT_RDT)
                 av_strlcat(transport, "unicast;", sizeof(transport));
             av_strlcatf(transport, sizeof(transport),
                         "interleaved=%d-%d",

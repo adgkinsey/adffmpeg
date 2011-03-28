@@ -67,16 +67,6 @@ static const uint8_t quantization_tab[16] = {
 static float dynamic_range_tab[256];
 
 /** Adjustments in dB gain */
-#define LEVEL_PLUS_3DB          1.4142135623730950
-#define LEVEL_PLUS_1POINT5DB    1.1892071150027209
-#define LEVEL_MINUS_1POINT5DB   0.8408964152537145
-#define LEVEL_MINUS_3DB         0.7071067811865476
-#define LEVEL_MINUS_4POINT5DB   0.5946035575013605
-#define LEVEL_MINUS_6DB         0.5000000000000000
-#define LEVEL_MINUS_9DB         0.3535533905932738
-#define LEVEL_ZERO              0.0000000000000000
-#define LEVEL_ONE               1.0000000000000000
-
 static const float gain_levels[9] = {
     LEVEL_PLUS_3DB,
     LEVEL_PLUS_1POINT5DB,
@@ -208,6 +198,11 @@ static av_cold int ac3_decode_init(AVCodecContext *avctx)
     }
     s->downmixed = 1;
 
+    /* allocate context input buffer */
+        s->input_buffer = av_mallocz(AC3_FRAME_BUFFER_SIZE + FF_INPUT_BUFFER_PADDING_SIZE);
+        if (!s->input_buffer)
+            return AVERROR(ENOMEM);
+
     avctx->sample_fmt = AV_SAMPLE_FMT_S16;
     return 0;
 }
@@ -268,6 +263,7 @@ static int parse_frame_header(AC3DecodeContext *s)
 
     /* get decoding parameters from header info */
     s->bit_alloc_params.sr_code     = hdr.sr_code;
+    s->bitstream_mode               = hdr.bitstream_mode;
     s->channel_mode                 = hdr.channel_mode;
     s->channel_layout               = hdr.channel_layout;
     s->lfe_on                       = hdr.lfe_on;
@@ -1306,26 +1302,17 @@ static int ac3_decode_frame(AVCodecContext * avctx, void *data, int *data_size,
     int blk, ch, err;
     const uint8_t *channel_map;
     const float *output[AC3_MAX_CHANNELS];
-    // if it seems to be byte-swapped AC-3 (aka DNET)
-    int is_swapped = buf_size >= 2 && AV_RB16(buf) == 0x770B;
 
-    /* initialize the GetBitContext with the start of valid AC-3 Frame */
-    if (is_swapped || avctx->error_recognition >= FF_ER_CAREFUL) {
-        /* allocate context input buffer */
-        if (!s->input_buffer)
-            s->input_buffer = av_mallocz(AC3_FRAME_BUFFER_SIZE + FF_INPUT_BUFFER_PADDING_SIZE);
-        if (!s->input_buffer)
-            return AVERROR(ENOMEM);
-
-        /* copy input buffer to decoder context to avoid reading past the end
-           of the buffer, which can be caused by a damaged input stream. */
-        if (is_swapped) {
-            int cnt = FFMIN(buf_size, AC3_FRAME_BUFFER_SIZE) >> 1;
-            s->dsp.bswap16_buf((uint16_t *)s->input_buffer, (const uint16_t *)buf, cnt);
-        } else
+    /* copy input buffer to decoder context to avoid reading past the end
+       of the buffer, which can be caused by a damaged input stream. */
+    if (buf_size >= 2 && AV_RB16(buf) == 0x770B) {
+        // seems to be byte-swapped AC-3
+        int cnt = FFMIN(buf_size, AC3_FRAME_BUFFER_SIZE) >> 1;
+        s->dsp.bswap16_buf((uint16_t *)s->input_buffer, (const uint16_t *)buf, cnt);
+    } else
         memcpy(s->input_buffer, buf, FFMIN(buf_size, AC3_FRAME_BUFFER_SIZE));
-        buf = s->input_buffer;
-    }
+    buf = s->input_buffer;
+    /* initialize the GetBitContext with the start of valid AC-3 Frame */
     init_get_bits(&s->gbc, buf, buf_size * 8);
 
     /* parse the syncinfo */
@@ -1403,6 +1390,10 @@ static int ac3_decode_frame(AVCodecContext * avctx, void *data, int *data_size,
         if(s->out_channels < s->channels)
             s->output_mode  = s->out_channels == 1 ? AC3_CHMODE_MONO : AC3_CHMODE_STEREO;
     }
+    /* set audio service type based on bitstream mode for AC-3 */
+    avctx->audio_service_type = s->bitstream_mode;
+    if (s->bitstream_mode == 0x7 && s->channels > 1)
+        avctx->audio_service_type = AV_AUDIO_SERVICE_TYPE_KARAOKE;
 
     /* decode the audio blocks */
     channel_map = ff_ac3_dec_channel_map[s->output_mode & ~AC3_OUTPUT_LFEON][s->lfe_on];

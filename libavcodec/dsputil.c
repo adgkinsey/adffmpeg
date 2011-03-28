@@ -298,17 +298,11 @@ static int sse16_c(void *v, uint8_t *pix1, uint8_t *pix2, int line_size, int h)
 
 /* draw the edges of width 'w' of an image of size width, height */
 //FIXME check that this is ok for mpeg4 interlaced
-static void draw_edges_c(uint8_t *buf, int wrap, int width, int height, int w)
+static void draw_edges_c(uint8_t *buf, int wrap, int width, int height, int w, int sides)
 {
     uint8_t *ptr, *last_line;
     int i;
 
-    last_line = buf + (height - 1) * wrap;
-    for(i=0;i<w;i++) {
-        /* top and bottom */
-        memcpy(buf - (i + 1) * wrap, buf, width);
-        memcpy(last_line + (i + 1) * wrap, last_line, width);
-    }
     /* left and right */
     ptr = buf;
     for(i=0;i<height;i++) {
@@ -316,13 +310,16 @@ static void draw_edges_c(uint8_t *buf, int wrap, int width, int height, int w)
         memset(ptr + width, ptr[width-1], w);
         ptr += wrap;
     }
-    /* corners */
-    for(i=0;i<w;i++) {
-        memset(buf - (i + 1) * wrap - w, buf[0], w); /* top left */
-        memset(buf - (i + 1) * wrap + width, buf[width-1], w); /* top right */
-        memset(last_line + (i + 1) * wrap - w, last_line[0], w); /* top left */
-        memset(last_line + (i + 1) * wrap + width, last_line[width-1], w); /* top right */
-    }
+
+    /* top and bottom + corners */
+    buf -= w;
+    last_line = buf + (height - 1) * wrap;
+    if (sides & EDGE_TOP)
+        for(i = 0; i < w; i++)
+            memcpy(buf - (i + 1) * wrap, buf, width + w + w); // top
+    if (sides & EDGE_BOTTOM)
+        for (i = 0; i < w; i++)
+            memcpy(last_line + (i + 1) * wrap, last_line, width + w + w); // bottom
 }
 
 /**
@@ -3890,6 +3887,19 @@ static int32_t scalarproduct_and_madd_int16_c(int16_t *v1, const int16_t *v2, co
     return res;
 }
 
+static void apply_window_int16_c(int16_t *output, const int16_t *input,
+                                 const int16_t *window, unsigned int len)
+{
+    int i;
+    int len2 = len >> 1;
+
+    for (i = 0; i < len2; i++) {
+        int16_t w       = window[i];
+        output[i]       = (MUL16(input[i],       w) + (1 << 14)) >> 15;
+        output[len-i-1] = (MUL16(input[len-i-1], w) + (1 << 14)) >> 15;
+    }
+}
+
 #define W0 2048
 #define W1 2841 /* 2048*sqrt (2)*cos (1*pi/16) */
 #define W2 2676 /* 2048*sqrt (2)*cos (2*pi/16) */
@@ -4364,6 +4374,7 @@ av_cold void dsputil_init(DSPContext* c, AVCodecContext *avctx)
     c->vector_clipf = vector_clipf_c;
     c->scalarproduct_int16 = scalarproduct_int16_c;
     c->scalarproduct_and_madd_int16 = scalarproduct_and_madd_int16_c;
+    c->apply_window_int16 = apply_window_int16_c;
     c->scalarproduct_float = scalarproduct_float_c;
     c->butterflies_float = butterflies_float_c;
     c->vector_fmul_scalar = vector_fmul_scalar_c;
