@@ -428,6 +428,7 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
     fd_set rfds;
     int ret;
     struct timeval tv;
+    clock_t TimeOut = clock () + (2.0 /*0.5*/ * CLOCKS_PER_SEC);
 
     for(;;) {
         if (url_interrupt_cb())
@@ -442,8 +443,11 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
                 continue;
             return AVERROR(EIO);
         }
-        if (!(ret > 0 && FD_ISSET(s->udp_fd, &rfds)))
+        if (!(ret > 0 && FD_ISSET(s->udp_fd, &rfds)))  {
+            if(TimeOut<clock())
+                return -2;
             continue;
+        }
         len = recv(s->udp_fd, buf, size, 0);
         if (len < 0) {
             if (ff_neterrno() != FF_NETERROR(EAGAIN) &&
