@@ -533,8 +533,7 @@ static int process_mp4data_line( char *line, int line_count,
 static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     ByteIOContext *         pb = s->pb;
-    NetVuAudioData *        audDat = NULL;
-    NetVuImageData *        vidDat = NULL;
+    void *                  payload = NULL;
     char *                  txtDat = NULL;
     int                     data_type = MAX_DATA_TYPE;
     int                     size = -1;
@@ -557,29 +556,29 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     // Prepare for video or audio read
-    errorVal = initADData(data_type, &frameType, &vidDat, &audDat);
+    errorVal = initADData(data_type, &frameType, &payload);
     if (errorVal < 0)  {
-        if (vidDat != NULL )
-            av_free(vidDat);
+        if (payload != NULL )
+            av_free(payload);
         return errorVal;
     }
 
     // Proceed based on the type of data in this frame
     switch(data_type) {
         case DATA_JPEG:
-            errorVal = ad_read_jpeg(s, pb, pkt, vidDat, &txtDat);
+            errorVal = ad_read_jpeg(s, pb, pkt, payload, &txtDat);
             break;
         case DATA_JFIF:
-            errorVal = ad_read_jfif(s, pb, pkt, imgLoaded, size, vidDat, &txtDat);
+            errorVal = ad_read_jfif(s, pb, pkt, imgLoaded, size, payload, &txtDat);
             break;
         case DATA_MPEG4I:
         case DATA_MPEG4P:
         case DATA_H264I:
         case DATA_H264P:
-            errorVal = ad_read_mpeg(s, pb, pkt, size, &extra, vidDat, &txtDat);
+            errorVal = ad_read_mpeg(s, pb, pkt, size, &extra, payload, &txtDat);
             break;
         case DATA_AUDIO_ADPCM:
-            errorVal = ad_read_audio(s, pb, pkt, size, extra, audDat);
+            errorVal = ad_read_audio(s, pb, pkt, size, extra, payload);
             break;
         case DATA_INFO:
         case DATA_XML_INFO:
@@ -597,21 +596,15 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     if (errorVal >= 0)  {
-        if (frameType == NetVuAudio)
-            errorVal = ad_read_packet(s, pb, pkt, frameType, audDat, txtDat);
-        else
-            errorVal = ad_read_packet(s, pb, pkt, frameType, vidDat, txtDat);
+        errorVal = ad_read_packet(s, pb, pkt, frameType, payload, txtDat);
     }
     else  {
         // If there was an error, release any memory that has been allocated
         av_log(s, AV_LOG_DEBUG, "admime_read_packet: Error %d\n", errorVal);
-        if (vidDat != NULL )
-            av_free( vidDat );
+        if (payload != NULL)
+            av_free(payload);
 
-        if (audDat != NULL )
-            av_free( audDat );
-
-        if (txtDat != NULL )
+        if (txtDat != NULL)
             av_free( txtDat );
     }
 

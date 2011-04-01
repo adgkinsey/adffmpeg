@@ -83,16 +83,13 @@ static int adraw_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     av_free(buf);
 
     if (errorVal > 0)  {
-        // Prepare for video or audio read
-        errorVal = initADData(DATA_JPEG, &frameType, &vidDat, NULL);
+        frameType = NetVuVideo;
+        errorVal = ad_read_jpeg(s, pb, pkt, vidDat, &txtDat);
     }
     if (errorVal >= 0)
-        errorVal = ad_read_jpeg(s, pb, pkt, vidDat, &txtDat);
-    if (errorVal >= 0)
         errorVal = ad_read_packet(s, pb, pkt, frameType, vidDat, txtDat);
-
-    if (errorVal < 0)  {
-        // If there was an error, release any memory has been allocated
+    else  {
+        // If there was an error, release any allocated memory
         if( vidDat != NULL )
             av_free( vidDat );
 
