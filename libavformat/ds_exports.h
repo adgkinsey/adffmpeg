@@ -122,8 +122,27 @@ typedef struct {
     ADFrameType         frameType;
     /// Pointer to structure holding the information for the frame.
     void *              frameData;
+    /// Pointer to text block
     void *              additionalData;
+    /// Data parsed out of text (if exists)
+    int                 activeZones;
+    /// Data parsed out of text (if exists)
+    uint32_t            frameNum;
+    /// Data parsed out of text (if exists)
+    uint16_t            activityMask[16];
+    /// Data parsed out of text (if exists)
+    int                 vsd[9][16];
 } ADFrameData;
+
+#define VSD_M0  0
+#define VSD_M1  1
+#define VSD_M2  2
+#define VSD_M3  3
+#define VSD_M4  4
+#define VSD_M5  5
+#define VSD_M6  6
+#define VSD_FM0 7
+#define VSD_F   8
 
 #define RTP_PAYLOAD_TYPE_8000HZ_ADPCM                       5
 #define RTP_PAYLOAD_TYPE_11025HZ_ADPCM                      16

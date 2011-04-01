@@ -338,11 +338,11 @@ static int find_q(unsigned char *qy)
 /**
  * Analyses a JFIF header and fills out a NetVuImageData structure with the info
  *
- * \param data                Input buffer
- * \param pic                NetVuImageData structure
- * \param imglength            Total length of input buffer
- * \param additionalText    Buffer in which is placed text from the JFIF comment
- *                          that doesn't have a specific field in NetVuImageData
+ * \param data        Input buffer
+ * \param pic         NetVuImageData structure
+ * \param imgSize     Total length of input buffer
+ * \param text        Buffer in which is placed text from the JFIF comment
+ *                    that doesn't have a specific field in NetVuImageData
  * \return Length of JFIF header in bytes
  */
 int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic,

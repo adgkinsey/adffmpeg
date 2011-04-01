@@ -54,8 +54,7 @@ int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset);
 void ad_network2host(NetVuImageData *pic, uint8_t *data);
 int ad_new_packet(AVPacket *pkt, int size);
 int ad_get_buffer(AVIOContext *s, uint8_t *buf, int size);
-int initADData(int data_type, ADFrameType *frameType,
-               NetVuImageData **vidDat, NetVuAudioData **audDat);
+int initADData(int data_type, ADFrameType *frameType, void **payload);
 int ad_read_jpeg(AVFormatContext *s, AVIOContext *pb,
                  AVPacket *pkt,
                  NetVuImageData *video_data, char **text_data);

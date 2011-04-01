@@ -19,8 +19,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <strings.h>
+
 #include "libavutil/avstring.h"
 #include "libavutil/intreadwrite.h"
+
 #include "adpic.h"
 #include "adjfif.h"
 #include "netvu.h"
@@ -33,6 +36,7 @@
 AVStream * netvu_get_stream(AVFormatContext *s, NetVuImageData *pic);
 AVStream * ad_get_data_stream(AVFormatContext *s);
 void ad_release_packet(AVPacket *pkt);
+static void ad_parseText(ADFrameData *frameData);
 
 
 int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
@@ -347,6 +351,9 @@ void ad_release_packet( AVPacket *pkt )
 
 int ad_get_buffer(AVIOContext *s, uint8_t *buf, int size)
 {
+#ifdef FF_API_OLD_AVIO
+    return avio_read(s, buf, size);
+#else
     int TotalDataRead = 0;
     int DataReadThisTime = 0;
     int RetryBoundry = 200;
@@ -364,12 +371,11 @@ int ad_get_buffer(AVIOContext *s, uint8_t *buf, int size)
         TotalDataRead += DataReadThisTime;
         retrys++;
     }
-
     return TotalDataRead;
+#endif
 }
 
-int initADData(int data_type, ADFrameType *frameType,
-               NetVuImageData **vidDat, NetVuAudioData **audDat)
+int initADData(int data_type, ADFrameType *frameType, void **payload)
 {
     if( (data_type == DATA_JPEG)          || (data_type == DATA_JFIF)   ||
         (data_type == DATA_MPEG4I)        || (data_type == DATA_MPEG4P) ||
@@ -377,17 +383,15 @@ int initADData(int data_type, ADFrameType *frameType,
         (data_type == DATA_MINIMAL_MPEG4)                               )
     {
         *frameType = NetVuVideo;
-
-        if (*vidDat == NULL)
-            *vidDat = av_malloc( sizeof(NetVuImageData) );
-        if( *vidDat == NULL )
+        *payload = av_malloc( sizeof(NetVuImageData) );
+        if( *payload == NULL )
             return AVERROR(ENOMEM);
     }
     else if ( (data_type == DATA_AUDIO_ADPCM) ||
               (data_type == DATA_MINIMAL_AUDIO_ADPCM) ) {
         *frameType = NetVuAudio;
-        *audDat = av_malloc( sizeof(NetVuAudioData) );
-        if( *audDat == NULL )
+        *payload = av_malloc( sizeof(NetVuAudioData) );
+        if( *payload == NULL )
             return AVERROR(ENOMEM);
     }
     else if ( (data_type == DATA_INFO) || (data_type == DATA_XML_INFO) )
@@ -528,6 +532,10 @@ int ad_read_info(AVFormatContext *s, AVIOContext *pb,
     if( (status = ad_new_packet( pkt, size )) < 0 )
         return ADPIC_INFO_NEW_PACKET_ERROR;
 
+    // Skip first byte
+    get_byte(pb);
+    --size;
+    
     // Get the data
     if( (n = ad_get_buffer( pb, pkt->data, size)) != size )
         return ADPIC_INFO_GET_BUFFER_ERROR;
@@ -610,30 +618,159 @@ int ad_read_packet(AVFormatContext *s, AVIOContext *pb, AVPacket *pkt,
     }
 
     pkt->stream_index = st->index;
-    frameData = av_malloc(sizeof(*frameData));
+    frameData = av_mallocz(sizeof(*frameData));
     if( frameData == NULL )
         return AVERROR(ENOMEM);
 
-    frameData->additionalData = NULL;
     frameData->frameType = frameType;
 
-    if ( (frameData->frameType == NetVuVideo) || (frameData->frameType == NetVuAudio) )
+    if ( (frameType == NetVuVideo) || (frameType == NetVuAudio) )  {
         frameData->frameData = data;
-    else if( frameData->frameType == NetVuDataInfo || frameData->frameType == NetVuDataLayout )
-        frameData->frameData = NULL;
-    else { // Shouldn't really get here...
-        frameData->frameType = FrameTypeUnknown;
-        frameData->frameData = NULL;
+        if (text_data != NULL)  {
+            frameData->additionalData = text_data;
+
+            /// Todo: AVOption to allow toggling parsing of text on and off
+            ad_parseText(frameData);
+        }
     }
-
-    if((frameData->frameType==NetVuAudio || frameData->frameType==NetVuVideo) && text_data != NULL )
-        frameData->additionalData = text_data;
-
+    else if (frameType == NetVuDataInfo || frameType == NetVuDataLayout)
+        frameData->frameData = NULL;
+    else  // Shouldn't really get here...
+        frameData->frameType = FrameTypeUnknown;
+    
     pkt->priv = frameData;
     pkt->duration = 0;
     pkt->pos = -1;
 
     return 0;
+}
+
+static void ad_keyvalsplit(const char *line, char *key, char *val)
+{
+    int ii, jj = 0;
+    int len = strlen(line);
+    int inKey, inVal;
+    
+    inKey = 1;
+    inVal = 0;
+    for (ii = 0; ii < len; ii++)  {
+        if (inKey)  {
+            if (line[ii] == ':')  {
+                key[jj++] = '\0';
+                inKey = 0;
+                inVal = 1;
+                jj = 0;
+            }
+            else  {
+                key[jj++] = line[ii];
+            }
+        }
+        else if (inVal)  {
+            val[jj++] = line[ii];
+        }
+    }
+    val[jj++] = '\0';
+}
+
+static int ad_splitcsv(const char *csv, int *results, int maxElements)
+{
+    int ii, jj, ee;
+    char element[8];
+    int len = strlen(csv);
+    
+    for (ii = 0, jj = 0, ee = 0; ii < len; ii++)  {
+        if ((csv[ii] == ',') || (csv[ii] == ';') || (ii == (len -1)))  {
+            element[jj++] = '\0';
+            sscanf(element, "%d", &results[ee++]);
+            if (ee >= maxElements)
+                break;
+            jj = 0;
+        }
+        else
+            element[jj++] = csv[ii];
+    }
+    return ee;
+}
+
+static void ad_parseVSD(const char *vsd, ADFrameData *frame)
+{
+    char key[64], val[128];
+    ad_keyvalsplit(vsd, key, val);
+    
+    if ((strlen(key) == 2) && (key[0] == 'M'))  {
+        switch(key[1])  {
+            case('0'):
+                ad_splitcsv(val, frame->vsd[VSD_M0], 16);
+                break;
+            case('1'):
+                ad_splitcsv(val, frame->vsd[VSD_M1], 16);
+                break;
+            case('2'):
+                ad_splitcsv(val, frame->vsd[VSD_M2], 16);
+                break;
+            case('3'):
+                ad_splitcsv(val, frame->vsd[VSD_M3], 16);
+                break;
+            case('4'):
+                ad_splitcsv(val, frame->vsd[VSD_M4], 16);
+                break;
+            case('5'):
+                ad_splitcsv(val, frame->vsd[VSD_M5], 16);
+                break;
+            case('6'):
+                ad_splitcsv(val, frame->vsd[VSD_M6], 16);
+                break;
+        }
+    }
+    else if ((strlen(key) == 3) && (strncasecmp(key, "FM0", 3) == 0))  {
+        ad_splitcsv(val, frame->vsd[VSD_FM0], 16);
+    }
+    else if ((strlen(key) == 1) && (key[0] == 'F')) {
+        ad_splitcsv(val, frame->vsd[VSD_F], 16);
+    }
+}
+
+static void ad_parseLine(const char *line, ADFrameData *frame)
+{
+    char key[128], val[128];
+    ad_keyvalsplit(line, key, val);
+    
+    if (strncasecmp(key, "Active-zones", 12) == 0)  {
+        sscanf(val, "%d", &frame->activeZones);
+    }
+    else if (strncasecmp(key, "FrameNum", 8) == 0)  {
+        sscanf(val, "%u", &frame->frameNum);
+    }
+//    else if (strncasecmp(key, "Site-ID", 7) == 0)  {
+//    }
+    else if (strncasecmp(key, "ActMask", 7) == 0)  {
+        for (int ii = 0, jj = 0; (ii < 16) && (jj < strlen(val)); ii++)  {
+            sscanf(&val[jj], "0x%04hx", &frame->activityMask[ii]);
+            jj += 7;
+        }
+    }
+    else if (strncasecmp(key, "VSD", 3) == 0)  {
+        ad_parseVSD(val, frame);
+    }
+}
+
+static void ad_parseText(ADFrameData *frameData)
+{
+    const char *src = frameData->additionalData;
+    int len = strlen(src);
+    char line[512];
+    int ii, jj = 0;
+    
+    for (ii = 0; ii < len; ii++)  {
+        if ( (src[ii] == '\r') || (src[ii] == '\n') )  {
+            line[jj++] = '\0';
+            if (strlen(line) > 0)
+                ad_parseLine(line, frameData);
+            jj = 0;
+        }
+        else
+            line[jj++] = src[ii];
+    }
 }
 
 void audiodata_network2host(uint8_t *data, int size)
