@@ -52,13 +52,12 @@ static int wav_write_header(AVFormatContext *s)
     if (ff_put_wav_header(pb, s->streams[0]->codec) < 0) {
         av_log(s, AV_LOG_ERROR, "%s codec not supported in WAVE format\n",
                s->streams[0]->codec->codec ? s->streams[0]->codec->codec->name : "NONE");
-        av_free(wav);
         return -1;
     }
     ff_end_tag(pb, fmt);
 
     if (s->streams[0]->codec->codec_tag != 0x01 /* hence for all other than PCM */
-        && !url_is_streamed(s->pb)) {
+        && s->pb->seekable) {
         fact = ff_start_tag(pb, "fact");
         avio_wl32(pb, 0);
         ff_end_tag(pb, fact);
@@ -98,7 +97,7 @@ static int wav_write_trailer(AVFormatContext *s)
 
     avio_flush(pb);
 
-    if (!url_is_streamed(s->pb)) {
+    if (s->pb->seekable) {
         ff_end_tag(pb, wav->data);
 
         /* update file size */

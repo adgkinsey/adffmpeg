@@ -125,6 +125,59 @@ static int amf_get_string(AVIOContext *ioc, char *buffer, int buffsize) {
     return length;
 }
 
+static int parse_keyframes_index(AVFormatContext *s, AVIOContext *ioc, AVStream *vstream, int64_t max_pos) {
+    unsigned int timeslen = 0, fileposlen = 0, i;
+    char str_val[256];
+    int64_t *times = NULL;
+    int64_t *filepositions = NULL;
+    int ret = 0;
+
+    while (avio_tell(ioc) < max_pos - 2 && amf_get_string(ioc, str_val, sizeof(str_val)) > 0) {
+        int64_t** current_array;
+        unsigned int arraylen;
+
+        // Expect array object in context
+        if (avio_r8(ioc) != AMF_DATA_TYPE_ARRAY)
+            break;
+
+        arraylen = avio_rb32(ioc);
+        if(arraylen>>28)
+            break;
+
+        if       (!strcmp(KEYFRAMES_TIMESTAMP_TAG , str_val) && !times){
+            current_array= &times;
+            timeslen= arraylen;
+        }else if (!strcmp(KEYFRAMES_BYTEOFFSET_TAG, str_val) && !filepositions){
+            current_array= &filepositions;
+            fileposlen= arraylen;
+        }else // unexpected metatag inside keyframes, will not use such metadata for indexing
+            break;
+
+        if (!(*current_array = av_mallocz(sizeof(**current_array) * arraylen))) {
+            ret = AVERROR(ENOMEM);
+            goto finish;
+        }
+
+        for (i = 0; i < arraylen && avio_tell(ioc) < max_pos - 1; i++) {
+            if (avio_r8(ioc) != AMF_DATA_TYPE_NUMBER)
+                goto finish;
+            current_array[0][i] = av_int2dbl(avio_rb64(ioc));
+        }
+    }
+
+    if (timeslen == fileposlen) {
+         for(i = 0; i < timeslen; i++)
+             av_add_index_entry(vstream, filepositions[i], times[i]*1000, 0, 0, AVINDEX_KEYFRAME);
+    } else
+        av_log(s, AV_LOG_WARNING, "Invalid keyframes object, skipping.\n");
+
+finish:
+    av_freep(&times);
+    av_freep(&filepositions);
+    avio_seek(ioc, max_pos, SEEK_SET);
+    return ret;
+}
+
 static int amf_parse_object(AVFormatContext *s, AVStream *astream, AVStream *vstream, const char *key, int64_t max_pos, int depth) {
     AVCodecContext *acodec, *vcodec;
     AVIOContext *ioc;
@@ -148,6 +201,10 @@ static int amf_parse_object(AVFormatContext *s, AVStream *astream, AVStream *vst
             break;
         case AMF_DATA_TYPE_OBJECT: {
             unsigned int keylen;
+
+            if (key && !strcmp(KEYFRAMES_TAG, key) && depth == 1)
+                if (parse_keyframes_index(s, ioc, vstream, max_pos) < 0)
+                    return -1;
 
             while(avio_tell(ioc) < max_pos - 2 && (keylen = avio_rb16(ioc))) {
                 avio_skip(ioc, keylen); //skip key string
@@ -371,7 +428,7 @@ static int flv_read_packet(AVFormatContext *s, AVPacket *pkt)
  }
 
     // if not streamed and no duration from metadata then seek to end to find the duration from the timestamps
-    if(!url_is_streamed(s->pb) && (!s->duration || s->duration==AV_NOPTS_VALUE)){
+    if(s->pb->seekable && (!s->duration || s->duration==AV_NOPTS_VALUE)){
         int size;
         const int64_t pos= avio_tell(s->pb);
         const int64_t fsize= avio_size(s->pb);
@@ -473,7 +530,7 @@ static int flv_read_seek2(AVFormatContext *s, int stream_index,
 
     if (ts - min_ts > (uint64_t)(max_ts - ts)) flags |= AVSEEK_FLAG_BACKWARD;
 
-    if (url_is_streamed(s->pb)) {
+    if (!s->pb->seekable) {
         if (stream_index < 0) {
             stream_index = av_find_default_stream_index(s);
             if (stream_index < 0)

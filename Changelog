@@ -4,6 +4,11 @@ releases are sorted from youngest to oldest.
 
 version <next>:
 
+- many many things we forgot because we rather write code than changelogs
+- libmpcodecs video filter support (3 times as many filters than before)
+- mpeg2 aspect ratio dection fixed
+- libxvid aspect pickiness fixed
+- Frame multithreaded decoding
 - WebM support in Matroska de/muxer
 - low overhead Ogg muxing
 - MMS-TCP support
@@ -78,9 +83,12 @@ version <next>:
 - movie source added
 - Bink version 'b' audio and video decoder
 - Bitmap Brothers JV playback system
-- Linux framebuffer input device added
 - Apple HTTP Live Streaming protocol handler
 - sndio support for playback and record
+- Linux framebuffer input device added
+- Chronomaster DFA decoder
+- DPX image encoder
+- MicroDVD subtitle file muxer and demuxer
 
 
 version 0.6:

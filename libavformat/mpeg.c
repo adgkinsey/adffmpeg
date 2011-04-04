@@ -71,6 +71,7 @@ static int mpegps_probe(AVProbeData *p)
             // and audio streams
             else if((code & 0xe0) == AUDIO_ID &&  pes) {audio++; i+=len;}
             else if(code == PRIVATE_STREAM_1  &&  pes) {priv1++; i+=len;}
+            else if(code == 0x1fd             &&  pes) vid++; //VC1
 
             else if((code & 0xf0) == VIDEO_ID && !pes) invalid++;
             else if((code & 0xe0) == AUDIO_ID && !pes) invalid++;
@@ -78,7 +79,7 @@ static int mpegps_probe(AVProbeData *p)
         }
     }
 
-    if(vid+audio > invalid)     /* invalid VDR files nd short PES streams */
+    if(vid+audio > invalid+1)     /* invalid VDR files nd short PES streams */
         score= AVPROBE_SCORE_MAX/4;
 
 //av_log(NULL, AV_LOG_ERROR, "%d %d %d %d %d %d len:%d\n", sys, priv1, pspack,vid, audio, invalid, p->buf_size);
@@ -402,7 +403,7 @@ static int mpegps_read_pes_header(AVFormatContext *s,
         int i;
         for(i=0; i<s->nb_streams; i++){
             if(startcode == s->streams[i]->id &&
-               !url_is_streamed(s->pb) /* index useless on streams anyway */) {
+               s->pb->seekable /* index useless on streams anyway */) {
                 ff_reduce_index(s, i);
                 av_add_index_entry(s->streams[i], *ppos, dts, 0, 0, AVINDEX_KEYFRAME /* FIXME keyframe? */);
             }
@@ -421,6 +422,7 @@ static int mpegps_read_packet(AVFormatContext *s,
     MpegDemuxContext *m = s->priv_data;
     AVStream *st;
     int len, startcode, i, es_type;
+    int request_probe= 0;
     enum CodecID codec_id = CODEC_ID_NONE;
     enum AVMediaType type;
     int64_t pts, dts, dummy_pos; //dummy_pos is needed for the index building to work
@@ -479,7 +481,7 @@ static int mpegps_read_packet(AVFormatContext *s,
         if(!memcmp(buf, avs_seqh, 4) && (buf[6] != 0 || buf[7] != 1))
             codec_id = CODEC_ID_CAVS;
         else
-            codec_id = CODEC_ID_PROBE;
+            request_probe= 1;
         type = AVMEDIA_TYPE_VIDEO;
     } else if (startcode >= 0x1c0 && startcode <= 0x1df) {
         type = AVMEDIA_TYPE_AUDIO;
@@ -534,6 +536,7 @@ static int mpegps_read_packet(AVFormatContext *s,
         goto skip;
     st->codec->codec_type = type;
     st->codec->codec_id = codec_id;
+    st->request_probe     = request_probe;
     if (codec_id != CODEC_ID_PCM_S16BE)
         st->need_parsing = AVSTREAM_PARSE_FULL;
  found:

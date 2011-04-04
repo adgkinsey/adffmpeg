@@ -986,7 +986,7 @@ int ff_h264_decode_extradata(H264Context *h)
         cnt = *(p++); // Number of pps
         for (i = 0; i < cnt; i++) {
             nalsize = AV_RB16(p) + 2;
-            if(decode_nal_units(h, p, nalsize)  != nalsize) {
+            if(decode_nal_units(h, p, nalsize) < 0) {
                 av_log(avctx, AV_LOG_ERROR, "Decoding pps %d from avcC failed\n", i);
                 return -1;
             }
@@ -1612,8 +1612,11 @@ static av_always_inline void hl_decode_mb_internal(H264Context *h, int simple){
                                             idct_dc_add(ptr, h->mb + i*16, linesize);
                                         else
                                             idct_add   (ptr, h->mb + i*16, linesize);
-                                    }else
+                                    }
+#if CONFIG_SVQ3_DECODER
+                                    else
                                         ff_svq3_add_idct_c(ptr, h->mb + i*16, linesize, s->qscale, 0);
+#endif
                                 }
                             }
                         }
@@ -1632,8 +1635,11 @@ static av_always_inline void hl_decode_mb_internal(H264Context *h, int simple){
                                 h->mb[dc_mapping[i]] = h->mb_luma_dc[i];
                         }
                     }
-                }else
+                }
+#if CONFIG_SVQ3_DECODER
+                else
                     ff_svq3_luma_dc_dequant_idct_c(h->mb, h->mb_luma_dc, s->qscale);
+#endif
             }
             if(h->deblocking_filter)
                 xchg_mb_border(h, dest_y, dest_cb, dest_cr, linesize, uvlinesize, 0, simple);
@@ -1677,7 +1683,9 @@ static av_always_inline void hl_decode_mb_internal(H264Context *h, int simple){
                         }
                     }
                 }
-            }else{
+            }
+#if CONFIG_SVQ3_DECODER
+            else{
                 for(i=0; i<16; i++){
                     if(h->non_zero_count_cache[ scan8[i] ] || h->mb[i*16]){ //FIXME benchmark weird rule, & below
                         uint8_t * const ptr= dest_y + block_offset[i];
@@ -1685,6 +1693,7 @@ static av_always_inline void hl_decode_mb_internal(H264Context *h, int simple){
                     }
                 }
             }
+#endif
         }
 
         if((simple || !CONFIG_GRAY || !(s->flags&CODEC_FLAG_GRAY)) && (h->cbp&0x30)){
@@ -1709,7 +1718,9 @@ static av_always_inline void hl_decode_mb_internal(H264Context *h, int simple){
                     h->h264dsp.h264_idct_add8(dest, block_offset,
                                               h->mb, uvlinesize,
                                               h->non_zero_count_cache);
-                }else{
+                }
+#if CONFIG_SVQ3_DECODER
+                else{
                     chroma_dc_dequant_idct_c(h->mb + 16*16     , h->dequant4_coeff[IS_INTRA(mb_type) ? 1:4][h->chroma_qp[0]][0]);
                     chroma_dc_dequant_idct_c(h->mb + 16*16+4*16, h->dequant4_coeff[IS_INTRA(mb_type) ? 2:5][h->chroma_qp[1]][0]);
                     for(i=16; i<16+8; i++){
@@ -1719,6 +1730,7 @@ static av_always_inline void hl_decode_mb_internal(H264Context *h, int simple){
                         }
                     }
                 }
+#endif
             }
         }
     }
@@ -2232,8 +2244,10 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
         MPV_common_end(s);
     }
     if (!s->context_initialized) {
-        if(h != h0)
-            return -1;  // we cant (re-)initialize context during parallel decoding
+        if(h != h0){
+            av_log(h->s.avctx, AV_LOG_ERROR, "we cant (re-)initialize context during parallel decoding\n");
+            return -1;
+        }
 
         avcodec_set_dimensions(s->avctx, s->width, s->height);
         s->avctx->sample_aspect_ratio= h->sps.sar;
@@ -2263,8 +2277,10 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
                                                  ff_hwaccel_pixfmt_list_420);
         s->avctx->hwaccel = ff_find_hwaccel(s->avctx->codec->id, s->avctx->pix_fmt);
 
-        if (MPV_common_init(s) < 0)
+        if (MPV_common_init(s) < 0){
+            av_log(h->s.avctx, AV_LOG_ERROR, "MPV_common_init() failed\n");
             return -1;
+        }
         s->first_field = 0;
         h->prev_interlaced_frame = 1;
 
@@ -2272,8 +2288,10 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
         ff_h264_alloc_tables(h);
 
         if (!HAVE_THREADS || !(s->avctx->active_thread_type&FF_THREAD_SLICE)) {
-            if (context_init(h) < 0)
+            if (context_init(h) < 0){
+                av_log(h->s.avctx, AV_LOG_ERROR, "context_init() failed\n");
                 return -1;
+            }
         } else {
             for(i = 1; i < s->avctx->thread_count; i++) {
                 H264Context *c;
@@ -2288,8 +2306,10 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
             }
 
             for(i = 0; i < s->avctx->thread_count; i++)
-                if(context_init(h->thread_context[i]) < 0)
+                if(context_init(h->thread_context[i]) < 0){
+                    av_log(h->s.avctx, AV_LOG_ERROR, "context_init() failed\n");
                     return -1;
+                }
         }
     }
 
@@ -2585,8 +2605,10 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
                 av_log(s->avctx, AV_LOG_INFO, "Cannot parallelize deblocking type 1, decoding such frames in sequential order\n");
                 h0->single_decode_warning = 1;
             }
-            if(h != h0)
-                return 1; // deblocking switched inside frame
+            if(h != h0){
+                av_log(h->s.avctx, AV_LOG_ERROR, "deblocking switched inside frame\n");
+                return 1;
+            }
         }
     }
     h->qp_thresh= 15 + 52 - FFMIN(h->slice_alpha_c0_offset, h->slice_beta_offset) - FFMAX3(0, h->pps.chroma_qp_index_offset[0], h->pps.chroma_qp_index_offset[1]);
@@ -3094,7 +3116,8 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg){
                 if(s->mb_y >= s->mb_height){
                     tprintf(s->avctx, "slice end %d %d\n", get_bits_count(&s->gb), s->gb.size_in_bits);
 
-                    if(get_bits_count(&s->gb) == s->gb.size_in_bits ) {
+                    if(   get_bits_count(&s->gb) == s->gb.size_in_bits
+                       || get_bits_count(&s->gb) <  s->gb.size_in_bits && s->avctx->error_recognition < FF_ER_AGGRESSIVE) {
                         ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x-1, s->mb_y, (AC_END|DC_END|MV_END)&part_mask);
 
                         return 0;
@@ -3290,8 +3313,12 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size){
 
         buf_index += consumed;
 
-        if(  (s->hurry_up == 1 && h->nal_ref_idc  == 0) //FIXME do not discard SEI id
-           ||(avctx->skip_frame >= AVDISCARD_NONREF && h->nal_ref_idc  == 0))
+        //FIXME do not discard SEI id
+        if(
+#if FF_API_HURRY_UP
+           (s->hurry_up == 1 && h->nal_ref_idc  == 0) ||
+#endif
+           (avctx->skip_frame >= AVDISCARD_NONREF && h->nal_ref_idc  == 0))
             continue;
 
       again:
@@ -3327,7 +3354,10 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size){
                     ff_vdpau_h264_picture_start(s);
             }
 
-            if(hx->redundant_pic_count==0 && hx->s.hurry_up < 5
+            if(hx->redundant_pic_count==0
+#if FF_API_HURRY_UP
+               && hx->s.hurry_up < 5
+#endif
                && (avctx->skip_frame < AVDISCARD_NONREF || hx->nal_ref_idc)
                && (avctx->skip_frame < AVDISCARD_BIDIR  || hx->slice_type_nos!=FF_B_TYPE)
                && (avctx->skip_frame < AVDISCARD_NONKEY || hx->slice_type_nos==FF_I_TYPE)
@@ -3365,7 +3395,9 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size){
 
             if(hx->redundant_pic_count==0 && hx->intra_gb_ptr && hx->s.data_partitioning
                && s->context_initialized
+#if FF_API_HURRY_UP
                && s->hurry_up < 5
+#endif
                && (avctx->skip_frame < AVDISCARD_NONREF || hx->nal_ref_idc)
                && (avctx->skip_frame < AVDISCARD_BIDIR  || hx->slice_type_nos!=FF_B_TYPE)
                && (avctx->skip_frame < AVDISCARD_NONKEY || hx->slice_type_nos==FF_I_TYPE)
@@ -3488,7 +3520,12 @@ static int decode_frame(AVCodecContext *avctx,
     }
 
     if(!(s->flags2 & CODEC_FLAG2_CHUNKS) && !s->current_picture_ptr){
-        if (avctx->skip_frame >= AVDISCARD_NONREF || s->hurry_up) return 0;
+        if (avctx->skip_frame >= AVDISCARD_NONREF
+#if FF_API_HURRY_UP
+                || s->hurry_up
+#endif
+           )
+            return 0;
         av_log(avctx, AV_LOG_ERROR, "no frame!\n");
         return -1;
     }

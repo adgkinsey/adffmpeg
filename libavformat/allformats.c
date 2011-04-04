@@ -75,6 +75,7 @@ void av_register_all(void)
     REGISTER_DEMUXER  (CDG, cdg);
     REGISTER_MUXER    (CRC, crc);
     REGISTER_MUXDEMUX (DAUD, daud);
+    REGISTER_DEMUXER  (DFA, dfa);
     REGISTER_MUXDEMUX (DIRAC, dirac);
     REGISTER_MUXDEMUX (DNXHD, dnxhd);
     REGISTER_DEMUXER  (DSICIN, dsicin);
@@ -117,6 +118,7 @@ void av_register_all(void)
     REGISTER_MUXER    (MD5, md5);
     REGISTER_MUXDEMUX (MATROSKA, matroska);
     REGISTER_MUXER    (MATROSKA_AUDIO, matroska_audio);
+    REGISTER_MUXDEMUX (MICRODVD, microdvd);
     REGISTER_MUXDEMUX (MJPEG, mjpeg);
     REGISTER_MUXDEMUX (MLP, mlp);
     REGISTER_DEMUXER  (MM, mm);

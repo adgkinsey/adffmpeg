@@ -125,6 +125,7 @@ Codecs:
   cinepak.c                             Roberto Togni
   cljr                                  Alex Beregszaszi
   cook.c, cookdata.h                    Benjamin Larsson
+  crystalhd.c                           Philip Langdale
   cscd.c                                Reimar Doeffinger
   dca.c                                 Kostya Shishkov, Benjamin Larsson
   dnxhd*                                Baptiste Coudurier
@@ -293,6 +294,7 @@ Muxers/Demuxers:
   matroskadec.c                         Aurelien Jacobs
   matroskaenc.c                         David Conrad
   metadata*                             Aurelien Jacobs
+  microdvd*                             Aurelien Jacobs
   mm.c                                  Peter Ross
   mov.c                                 Michael Niedermayer, Baptiste Coudurier
   movenc.c                              Michael Niedermayer, Baptiste Coudurier

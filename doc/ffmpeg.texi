@@ -168,7 +168,10 @@ Set the number of video frames to record.
 @item -r @var{fps}
 Set frame rate (Hz value, fraction or abbreviation), (default = 25).
 @item -s @var{size}
-Set frame size. The format is @samp{wxh} (ffserver default = 160x128, ffmpeg default = same as source).
+Set frame size. The format is @samp{wxh} (ffserver default = 160x128).
+There is no default for input streams,
+for output streams it is set by default to the size of the source stream.
+If the input file has video streams with different resolutions, the behaviour is undefined.
 The following abbreviations are recognized:
 @table @samp
 @item sqcif
@@ -232,7 +235,13 @@ The following abbreviations are recognized:
 @end table
 
 @item -aspect @var{aspect}
-Set aspect ratio (4:3, 16:9 or 1.3333, 1.7777).
+Set the video display aspect ratio specified by @var{aspect}.
+
+@var{aspect} can be a floating point number string, or a string of the
+form @var{num}:@var{den}, where @var{num} and @var{den} are the
+numerator and denominator of the aspect ratio. For example "4:3",
+"16:9", "1.3333", and "1.7777" are valid argument values.
+
 @item -croptop @var{size}
 @item -cropbottom @var{size}
 @item -cropleft @var{size}

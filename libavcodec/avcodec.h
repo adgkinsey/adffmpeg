@@ -212,6 +212,7 @@ enum CodecID {
     CODEC_ID_LAGARITH,
     CODEC_ID_PRORES,
     CODEC_ID_JV,
+    CODEC_ID_DFA,
 
     /* various PCM "codecs" */
     CODEC_ID_PCM_S16LE= 0x10000,
@@ -352,6 +353,7 @@ enum CodecID {
     CODEC_ID_HDMV_PGS_SUBTITLE,
     CODEC_ID_DVB_TELETEXT,
     CODEC_ID_SRT,
+    CODEC_ID_MICRODVD,
 
     /* other specific kind of codecs (generally used for attachments) */
     CODEC_ID_TTF= 0x18000,
@@ -1217,13 +1219,15 @@ typedef struct AVCodecContext {
      */
     enum PixelFormat pix_fmt;
 
+#if FF_API_RATE_EMU
     /**
      * Frame rate emulation. If not zero, the lower layer (i.e. format handler)
      * has to read frames at native frame rate.
      * - encoding: Set by user.
      * - decoding: unused
      */
-    int rate_emu;
+    attribute_deprecated int rate_emu;
+#endif
 
     /**
      * If non NULL, 'draw_horiz_band' is called by the libavcodec
@@ -1329,13 +1333,15 @@ typedef struct AVCodecContext {
 
     int b_frame_strategy;
 
+#if FF_API_HURRY_UP
     /**
      * hurry up amount
      * - encoding: unused
      * - decoding: Set by user. 1-> Skip B-frames, 2-> Skip IDCT/dequant too, 5-> Skip everything except header
      * @deprecated Deprecated in favor of skip_idct and skip_frame.
      */
-    int hurry_up;
+    attribute_deprecated int hurry_up;
+#endif
 
     struct AVCodec *codec;
 
@@ -1823,19 +1829,21 @@ typedef struct AVCodecContext {
      */
     uint64_t error[4];
 
+#if FF_API_MB_Q
     /**
      * minimum MB quantizer
      * - encoding: unused
      * - decoding: unused
      */
-    int mb_qmin;
+    attribute_deprecated int mb_qmin;
 
     /**
      * maximum MB quantizer
      * - encoding: unused
      * - decoding: unused
      */
-    int mb_qmax;
+    attribute_deprecated int mb_qmax;
+#endif
 
     /**
      * motion estimation comparison function
@@ -2156,16 +2164,19 @@ typedef struct AVCodecContext {
      */
     int error_rate;
 
+#if FF_API_ANTIALIAS_ALGO
     /**
      * MP3 antialias algorithm, see FF_AA_* below.
      * - encoding: unused
      * - decoding: Set by user.
      */
-    int antialias_algo;
+    attribute_deprecated int antialias_algo;
 #define FF_AA_AUTO    0
 #define FF_AA_FASTINT 1 //not implemented yet
 #define FF_AA_INT     2
 #define FF_AA_FLOAT   3
+#endif
+
     /**
      * quantizer noise shaping
      * - encoding: Set by user.
@@ -3303,7 +3314,9 @@ void av_resample_compensate(struct AVResampleContext *c, int sample_delta, int c
 void av_resample_close(struct AVResampleContext *c);
 
 /**
- * Allocate memory for a picture.  Call avpicture_free to free it.
+ * Allocate memory for a picture.  Call avpicture_free() to free it.
+ *
+ * \see avpicture_fill()
  *
  * @param picture the picture to be filled in
  * @param pix_fmt the format of the picture
@@ -3315,6 +3328,8 @@ int avpicture_alloc(AVPicture *picture, enum PixelFormat pix_fmt, int width, int
 
 /**
  * Free a picture previously allocated by avpicture_alloc().
+ * The data buffer used by the AVPicture is freed, but the AVPicture structure
+ * itself is not.
  *
  * @param picture the AVPicture to be freed
  */
@@ -3330,6 +3345,9 @@ void avpicture_free(AVPicture *picture);
  * will be stored in the lines_sizes array.
  * Call with ptr == NULL to get the required size for the ptr buffer.
  *
+ * To allocate the buffer and fill in the AVPicture fields in one call,
+ * use avpicture_alloc().
+ *
  * @param picture AVPicture whose fields are to be filled in
  * @param ptr Buffer which will contain or contains the actual image data
  * @param pix_fmt The format in which the picture data is stored.
@@ -3339,6 +3357,22 @@ void avpicture_free(AVPicture *picture);
  */
 int avpicture_fill(AVPicture *picture, uint8_t *ptr,
                    enum PixelFormat pix_fmt, int width, int height);
+
+/**
+ * Copy pixel data from an AVPicture into a buffer.
+ * The data is stored compactly, without any gaps for alignment or padding
+ * which may be applied by avpicture_fill().
+ *
+ * \see avpicture_get_size()
+ *
+ * @param[in] src AVPicture containing image data
+ * @param[in] pix_fmt The format in which the picture data is stored.
+ * @param[in] width the width of the image in pixels.
+ * @param[in] height the height of the image in pixels.
+ * @param[out] dest A buffer into which picture data will be copied.
+ * @param[in] dest_size The size of 'dest'.
+ * @return The number of bytes written to dest, or a negative value (error code) on error.
+ */
 int avpicture_layout(const AVPicture* src, enum PixelFormat pix_fmt, int width, int height,
                      unsigned char *dest, int dest_size);
 
@@ -3346,8 +3380,8 @@ int avpicture_layout(const AVPicture* src, enum PixelFormat pix_fmt, int width, 
  * Calculate the size in bytes that a picture of the given width and height
  * would occupy if stored in the given picture format.
  * Note that this returns the size of a compact representation as generated
- * by avpicture_layout, which can be smaller than the size required for e.g.
- * avpicture_fill.
+ * by avpicture_layout(), which can be smaller than the size required for e.g.
+ * avpicture_fill().
  *
  * @param pix_fmt the given picture format
  * @param width the width of the image
@@ -3356,7 +3390,14 @@ int avpicture_layout(const AVPicture* src, enum PixelFormat pix_fmt, int width, 
  */
 int avpicture_get_size(enum PixelFormat pix_fmt, int width, int height);
 void avcodec_get_chroma_sub_sample(enum PixelFormat pix_fmt, int *h_shift, int *v_shift);
+
+/**
+ * Return the short name for a pixel format.
+ *
+ * \see av_get_pix_fmt(), av_get_pix_fmt_string().
+ */
 const char *avcodec_get_pix_fmt_name(enum PixelFormat pix_fmt);
+
 void avcodec_set_dimensions(AVCodecContext *s, int width, int height);
 
 #if LIBAVCODEC_VERSION_MAJOR < 53
@@ -3493,9 +3534,12 @@ const char *avcodec_license(void);
 
 /**
  * Initialize libavcodec.
+ * If called more than once, does nothing.
  *
  * @warning This function must be called before any other libavcodec
  * function.
+ *
+ * @warning This function is not thread-safe.
  */
 void avcodec_init(void);
 
@@ -3509,7 +3553,7 @@ attribute_deprecated void register_avcodec(AVCodec *codec);
 /**
  * Register the codec codec and initialize libavcodec.
  *
- * @see avcodec_init()
+ * @see avcodec_init(), avcodec_register_all()
  */
 void avcodec_register(AVCodec *codec);
 
@@ -3697,7 +3741,7 @@ int avcodec_default_execute2(AVCodecContext *c, int (*func)(AVCodecContext *c2, 
  * @param avctx The context which will be set up to use the given codec.
  * @param codec The codec to use within the context.
  * @return zero on success, a negative value on error
- * @see avcodec_alloc_context, avcodec_find_decoder, avcodec_find_encoder
+ * @see avcodec_alloc_context, avcodec_find_decoder, avcodec_find_encoder, avcodec_close
  */
 int avcodec_open(AVCodecContext *avctx, AVCodec *codec);
 

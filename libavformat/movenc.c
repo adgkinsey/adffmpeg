@@ -238,16 +238,9 @@ static int mov_write_enda_tag(AVIOContext *pb)
     return 10;
 }
 
-static unsigned int descrLength(unsigned int len)
-{
-    int i;
-    for(i=1; len>>(7*i); i++);
-    return len + 1 + i;
-}
-
 static void putDescr(AVIOContext *pb, int tag, unsigned int size)
 {
-    int i= descrLength(size) - size - 2;
+    int i = 3;
     avio_w8(pb, tag);
     for(; i>0; i--)
         avio_w8(pb, (size>>(7*i)) | 0x80);
@@ -257,15 +250,14 @@ static void putDescr(AVIOContext *pb, int tag, unsigned int size)
 static int mov_write_esds_tag(AVIOContext *pb, MOVTrack *track) // Basic
 {
     int64_t pos = avio_tell(pb);
-    int decoderSpecificInfoLen = track->vosLen ? descrLength(track->vosLen):0;
+    int decoderSpecificInfoLen = track->vosLen ? 5+track->vosLen : 0;
 
     avio_wb32(pb, 0); // size
     ffio_wfourcc(pb, "esds");
     avio_wb32(pb, 0); // Version
 
     // ES descriptor
-    putDescr(pb, 0x03, 3 + descrLength(13 + decoderSpecificInfoLen) +
-             descrLength(1));
+    putDescr(pb, 0x03, 3 + 5+13 + decoderSpecificInfoLen + 5+1);
     avio_wb16(pb, track->trackID);
     avio_w8(pb, 0x00); // flags (= no flags)
 
@@ -535,7 +527,7 @@ static int mov_write_avid_tag(AVIOContext *pb, MOVTrack *track)
     ffio_wfourcc(pb, "ACLR");
     ffio_wfourcc(pb, "ACLR");
     ffio_wfourcc(pb, "0001");
-    avio_wb32(pb, 1); /* yuv 1 / rgb 2 ? */
+    avio_wb32(pb, 2); /* yuv range: full 1 / normal 2 */
     avio_wb32(pb, 0); /* unknown */
 
     avio_wb32(pb, 24); /* size */
@@ -1661,7 +1653,7 @@ static int mov_write_udta_tag(AVIOContext *pb, MOVMuxContext *mov,
             return 0;
         }
 
-    ret = url_open_dyn_buf(&pb_buf);
+    ret = avio_open_dyn_buf(&pb_buf);
     if(ret < 0)
         return ret;
 
@@ -1692,7 +1684,7 @@ static int mov_write_udta_tag(AVIOContext *pb, MOVMuxContext *mov,
         if (s->nb_chapters)
             mov_write_chpl_tag(pb_buf, s);
 
-    if ((size = url_close_dyn_buf(pb_buf, &buf)) > 0) {
+    if ((size = avio_close_dyn_buf(pb_buf, &buf)) > 0) {
         avio_wb32(pb, size+8);
         ffio_wfourcc(pb, "udta");
         avio_write(pb, buf, size);
@@ -1956,7 +1948,7 @@ int ff_mov_write_packet(AVFormatContext *s, AVPacket *pkt)
     unsigned int samplesInChunk = 0;
     int size= pkt->size;
 
-    if (url_is_streamed(s->pb)) return 0; /* Can't handle that */
+    if (!s->pb->seekable) return 0; /* Can't handle that */
     if (!size) return 0; /* Discard 0 sized packets */
 
     if (enc->codec_id == CODEC_ID_AMR_NB) {
@@ -2091,7 +2083,7 @@ static int mov_write_header(AVFormatContext *s)
     MOVMuxContext *mov = s->priv_data;
     int i, hint_track = 0;
 
-    if (url_is_streamed(s->pb)) {
+    if (!s->pb->seekable) {
         av_log(s, AV_LOG_ERROR, "muxer does not support non seekable output\n");
         return -1;
     }

@@ -55,6 +55,7 @@ OBJS-$(CONFIG_CDG_DEMUXER)               += cdg.o
 OBJS-$(CONFIG_CRC_MUXER)                 += crcenc.o
 OBJS-$(CONFIG_DAUD_DEMUXER)              += daud.o
 OBJS-$(CONFIG_DAUD_MUXER)                += daud.o
+OBJS-$(CONFIG_DFA_DEMUXER)               += dfa.o
 OBJS-$(CONFIG_DIRAC_DEMUXER)             += diracdec.o rawdec.o
 OBJS-$(CONFIG_DIRAC_MUXER)               += rawenc.o
 OBJS-$(CONFIG_DNXHD_DEMUXER)             += dnxhddec.o rawdec.o
@@ -121,6 +122,8 @@ OBJS-$(CONFIG_MATROSKA_MUXER)            += matroskaenc.o matroska.o \
                                             riff.o isom.o avc.o \
                                             flacenc_header.o avlanguage.o
 OBJS-$(CONFIG_MD5_MUXER)                 += md5enc.o
+OBJS-$(CONFIG_MICRODVD_DEMUXER)          += microdvddec.o
+OBJS-$(CONFIG_MICRODVD_MUXER)            += microdvdenc.o rawenc.o
 OBJS-$(CONFIG_MJPEG_DEMUXER)             += rawdec.o
 OBJS-$(CONFIG_MJPEG_MUXER)               += rawenc.o
 OBJS-$(CONFIG_MLP_DEMUXER)               += rawdec.o

@@ -1121,6 +1121,7 @@ HAVE_LIST="
     sys_soundcard_h
     sys_videoio_h
     ten_operands
+    termios_h
     threads
     truncf
     vfp_args
@@ -1244,7 +1245,7 @@ rdft_select="fft"
 aac_decoder_select="mdct rdft sinewin"
 aac_encoder_select="mdct sinewin"
 aac_latm_decoder_select="aac_decoder aac_latm_parser"
-ac3_decoder_select="mdct ac3_parser"
+ac3_decoder_select="mdct ac3dsp ac3_parser"
 ac3_encoder_select="mdct ac3dsp"
 ac3_fixed_encoder_select="ac3dsp"
 alac_encoder_select="lpc"
@@ -1302,9 +1303,11 @@ mpeg4_decoder_select="h263_decoder mpeg4video_parser"
 mpeg4_encoder_select="h263_encoder"
 mpeg_vdpau_decoder_select="vdpau mpegvideo_decoder"
 mpeg1_vdpau_decoder_select="vdpau mpeg1video_decoder"
+mpeg1_vdpau_hwaccel_select="vdpau mpeg1video_decoder"
 mpeg2_crystalhd_decoder_select="crystalhd"
 mpeg2_dxva2_hwaccel_deps="dxva2api_h"
 mpeg2_dxva2_hwaccel_select="dxva2 mpeg2video_decoder"
+mpeg2_vdpau_hwaccel_select="vdpau mpeg2video_decoder"
 mpeg2_vaapi_hwaccel_select="vaapi mpeg2video_decoder"
 mpeg4_crystalhd_decoder_select="crystalhd"
 mpeg4_vaapi_hwaccel_select="vaapi mpeg4_decoder"
@@ -1852,7 +1855,7 @@ set_default host_cc
 
 exesuf() {
     case $1 in
-        mingw32*|cygwin*|*-dos|freedos|opendos|os/2*) echo .exe ;;
+        mingw32*|cygwin*|*-dos|freedos|opendos|os/2*|symbian) echo .exe ;;
     esac
 }
 
@@ -2442,7 +2445,7 @@ case $target_os in
         SLIBSUF=".dll"
         SLIBNAME_WITH_VERSION='$(SLIBPREF)$(FULLNAME)-$(LIBVERSION)$(SLIBSUF)'
         SLIBNAME_WITH_MAJOR='$(SLIBPREF)$(FULLNAME)-$(LIBMAJOR)$(SLIBSUF)'
-        SLIB_EXTRA_CMD=-'$(DLLTOOL) -m $(LIBTARGET) -d $$(@:$(SLIBSUF)=.def) -l $(SUBDIR)$(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.lib) -D $(SLIBNAME_WITH_MAJOR)'
+        SLIB_EXTRA_CMD='-lib.exe /machine:$(LIBTARGET) /def:$$(@:$(SLIBSUF)=.def) /out:$(SUBDIR)$(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.lib)'
         SLIB_INSTALL_EXTRA_CMD='-install -m 644 $(SUBDIR)$(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.lib) "$(SHLIBDIR)/$(SLIBNAME:$(SLIBSUF)=.lib)"; \
             install -m 644 $(SUBDIR)$(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.lib) "$(SHLIBDIR)/$(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.lib)"; \
             install -d "$(LIBDIR)"; \
@@ -2450,7 +2453,6 @@ case $target_os in
         SLIB_UNINSTALL_EXTRA_CMD='rm -f "$(SHLIBDIR)/$(SLIBNAME:$(SLIBSUF)=.lib)"'
         SHFLAGS='-shared -Wl,--output-def,$$(@:$(SLIBSUF)=.def) -Wl,--out-implib,$(SUBDIR)lib$(SLIBNAME:$(SLIBSUF)=.dll.a) -Wl,--enable-runtime-pseudo-reloc -Wl,--enable-auto-image-base'
         objformat="win32"
-        dlltool="${cross_prefix}dlltool"
         enable dos_paths
         check_cflags -fno-common
         check_cpp_condition _mingw.h "defined (__MINGW64_VERSION_MAJOR) || (__MINGW32_MAJOR_VERSION > 3) \
@@ -2512,6 +2514,11 @@ case $target_os in
     qnx)
         add_cppflags -D_QNX_SOURCE
         network_extralibs="-lsocket"
+        ;;
+    symbian)
+        SLIBSUF=".dll"
+        enable dos_paths
+        add_cflags --include=$sysinclude/gcce/gcce.h
         ;;
     none)
         ;;
@@ -2820,6 +2827,7 @@ check_header poll.h
 check_header sys/mman.h
 check_header sys/resource.h
 check_header sys/select.h
+check_header termios.h
 check_header vdpau/vdpau.h
 check_header vdpau/vdpau_x11.h
 check_header X11/extensions/XvMClib.h
@@ -2862,8 +2870,7 @@ for thread in $THREADS_LIST; do
 done
 
 check_lib math.h sin -lm
-disabled crystalhd || check_lib libcrystalhd/libcrystalhd_if.h DtsGetVersion -lcrystalhd
-disabled vaapi || check_lib va/va.h vaInitialize -lva
+disabled crystalhd || check_lib libcrystalhd/libcrystalhd_if.h DtsCrystalHDVersion -lcrystalhd || disable crystalhd
 
 check_mathfunc exp2
 check_mathfunc exp2f
@@ -2963,6 +2970,13 @@ check_header X11/extensions/Xfixes.h    &&
 check_func XOpenDisplay -lX11           &&
 check_func XShmCreateImage -lX11 -lXext &&
 check_func XFixesGetCursorImage -lX11 -lXext -lXfixes
+
+if ! disabled vaapi; then
+    check_lib va/va.h vaInitialize -lva && {
+        check_cpp_condition va/va_version.h "VA_CHECK_VERSION(0,32,0)" ||
+        warn "Please upgrade to VA-API >= 0.32 if you would like full VA-API support.";
+    } || disable vaapi
+fi
 
 if ! disabled vdpau && enabled vdpau_vdpau_h; then
 check_cpp_condition \
@@ -3272,7 +3286,6 @@ CPPFLAGS=$CPPFLAGS
 CFLAGS=$CFLAGS
 ASFLAGS=$ASFLAGS
 CC_O=$CC_O
-DLLTOOL=$dlltool
 LDFLAGS=$LDFLAGS
 FFSERVERLDFLAGS=$FFSERVERLDFLAGS
 SHFLAGS=$SHFLAGS
@@ -3311,7 +3324,7 @@ SLIB_CREATE_DEF_CMD=${SLIB_CREATE_DEF_CMD}
 SLIB_EXTRA_CMD=${SLIB_EXTRA_CMD}
 SLIB_INSTALL_EXTRA_CMD=${SLIB_INSTALL_EXTRA_CMD}
 SLIB_UNINSTALL_EXTRA_CMD=${SLIB_UNINSTALL_EXTRA_CMD}
-SAMPLES=${samples:-\$(FATE_SAMPLES)}
+SAMPLES:=${samples:-\$(FATE_SAMPLES)}
 EOF
 
 get_version(){

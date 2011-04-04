@@ -704,10 +704,10 @@ static int mpegts_push_data(MpegTSFilter *filter,
                         code != 0x1ff && code != 0x1f2 && /* program_stream_directory, DSMCC_stream */
                         code != 0x1f8) {                  /* ITU-T Rec. H.222.1 type E stream */
                         pes->state = MPEGTS_PESHEADER;
-                        if (pes->st->codec->codec_id == CODEC_ID_NONE) {
+                        if (!pes->st->request_probe) {
                             av_dlog(pes->stream, "pid=%x stream_type=%x probing\n",
                                     pes->pid, pes->stream_type);
-                            pes->st->codec->codec_id = CODEC_ID_PROBE;
+                            pes->st->request_probe= 1;
                         }
                     } else {
                         pes->state = MPEGTS_PAYLOAD;
@@ -1350,7 +1350,7 @@ static int read_packet(AVFormatContext *s, uint8_t *buf, int raw_packet_size)
     for(;;) {
         len = avio_read(pb, buf, TS_PACKET_SIZE);
         if (len != TS_PACKET_SIZE)
-            return AVERROR(EIO);
+            return len < 0 ? len : AVERROR_EOF;
         /* check paquet sync byte */
         if (buf[0] != 0x47) {
             /* find a new packet start */

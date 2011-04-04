@@ -69,7 +69,12 @@
 #include <sys/select.h>
 #endif
 
-#if HAVE_KBHIT
+#if HAVE_TERMIOS_H
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include <sys/time.h>
+#include <termios.h>
+#elif HAVE_KBHIT
 #include <conio.h>
 #endif
 #include <time.h>
@@ -144,7 +149,9 @@ static int nb_streamid_map = 0;
 static int frame_width  = 0;
 static int frame_height = 0;
 static float frame_aspect_ratio = 0;
+static int frame_aspect_ratio_override = 0;
 static enum PixelFormat frame_pix_fmt = PIX_FMT_NONE;
+static int frame_bits_per_raw_sample = 0;
 static enum AVSampleFormat audio_sample_fmt = AV_SAMPLE_FMT_NONE;
 static int max_frames[4] = {INT_MAX, INT_MAX, INT_MAX, INT_MAX};
 static AVRational frame_rate;
@@ -338,6 +345,12 @@ typedef struct AVInputFile {
     int nb_streams;       /* nb streams we are aware of */
 } AVInputFile;
 
+#if HAVE_TERMIOS_H
+
+/* init terminal so that we can grab keys */
+static struct termios oldtty;
+#endif
+
 #if CONFIG_AVFILTER
 
 static int configure_filters(AVInputStream *ist, AVOutputStream *ost)
@@ -425,6 +438,9 @@ static int configure_filters(AVInputStream *ist, AVOutputStream *ost)
 static void term_exit(void)
 {
     av_log(NULL, AV_LOG_QUIET, "");
+#if HAVE_TERMIOS_H
+    tcsetattr (0, TCSANOW, &oldtty);
+#endif
 }
 
 static volatile int received_sigterm = 0;
@@ -439,6 +455,26 @@ sigterm_handler(int sig)
 
 static void term_init(void)
 {
+#if HAVE_TERMIOS_H
+    struct termios tty;
+
+    tcgetattr (0, &tty);
+    oldtty = tty;
+    atexit(term_exit);
+
+    tty.c_iflag &= ~(IGNBRK|BRKINT|PARMRK|ISTRIP
+                          |INLCR|IGNCR|ICRNL|IXON);
+    tty.c_oflag |= OPOST;
+    tty.c_lflag &= ~(ECHO|ECHONL|ICANON|IEXTEN);
+    tty.c_cflag &= ~(CSIZE|PARENB);
+    tty.c_cflag |= CS8;
+    tty.c_cc[VMIN] = 1;
+    tty.c_cc[VTIME] = 0;
+
+    tcsetattr (0, TCSANOW, &tty);
+    signal(SIGQUIT, sigterm_handler); /* Quit (POSIX).  */
+#endif
+
     signal(SIGINT , sigterm_handler); /* Interrupt (ANSI).  */
     signal(SIGTERM, sigterm_handler); /* Termination (ANSI).  */
 #ifdef SIGXCPU
@@ -449,7 +485,25 @@ static void term_init(void)
 /* read a key without blocking */
 static int read_key(void)
 {
-#if HAVE_KBHIT
+#if HAVE_TERMIOS_H
+    int n = 1;
+    unsigned char ch;
+    struct timeval tv;
+    fd_set rfds;
+
+    FD_ZERO(&rfds);
+    FD_SET(0, &rfds);
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
+    n = select(1, &rfds, NULL, NULL, &tv);
+    if (n > 0) {
+        n = read(0, &ch, 1);
+        if (n == 1)
+            return ch;
+
+        return n;
+    }
+#elif HAVE_KBHIT
     if(kbhit())
         return(getch());
 #endif
@@ -1571,9 +1625,10 @@ static int output_packet(AVInputStream *ist, int ist_index,
                     if (ist->st->sample_aspect_ratio.num) sar = ist->st->sample_aspect_ratio;
                     else                                  sar = ist->st->codec->sample_aspect_ratio;
                     // add it to be filtered
-                    av_vsrc_buffer_add_frame(ost->input_video_filter, &picture,
+                    av_vsrc_buffer_add_frame2(ost->input_video_filter, &picture,
                                              ist->pts,
-                                             sar);
+                                             sar, ist->st->codec->width, ist->st->codec->height,
+                                             ist->st->codec->pix_fmt, "0:0"); //TODO user setable params
                 }
             }
         }
@@ -1895,7 +1950,7 @@ static int transcode(AVFormatContext **output_files,
                      int nb_input_files,
                      AVStreamMap *stream_maps, int nb_stream_maps)
 {
-    int ret = 0, i, j, k, n, nb_istreams = 0, nb_ostreams = 0;
+    int ret = 0, i, j, k, n, nb_istreams = 0, nb_ostreams = 0, step;
     AVFormatContext *is, *os;
     AVCodecContext *codec, *icodec;
     AVOutputStream *ost, **ost_table = NULL;
@@ -1906,6 +1961,8 @@ static int transcode(AVFormatContext **output_files,
     int want_sdp = 1;
     uint8_t no_packet[MAX_FILES]={0};
     int no_packet_count=0;
+    int nb_frame_threshold[AVMEDIA_TYPE_NB]={0};
+    int nb_streams[AVMEDIA_TYPE_NB]={0};
 
     file_table= av_mallocz(nb_input_files * sizeof(AVInputFile));
     if (!file_table)
@@ -1990,6 +2047,43 @@ static int transcode(AVFormatContext **output_files,
     ost_table = av_mallocz(sizeof(AVOutputStream *) * nb_ostreams);
     if (!ost_table)
         goto fail;
+
+    for(k=0;k<nb_output_files;k++) {
+        os = output_files[k];
+        for(i=0;i<os->nb_streams;i++,n++) {
+            nb_streams[os->streams[i]->codec->codec_type]++;
+        }
+    }
+    for(step=1<<30; step; step>>=1){
+        int found_streams[AVMEDIA_TYPE_NB]={0};
+        for(j=0; j<AVMEDIA_TYPE_NB; j++)
+            nb_frame_threshold[j] += step;
+
+        for(j=0; j<nb_istreams; j++) {
+            int skip=0;
+            ist = ist_table[j];
+            if(opt_programid){
+                int pi,si;
+                AVFormatContext *f= input_files[ ist->file_index ];
+                skip=1;
+                for(pi=0; pi<f->nb_programs; pi++){
+                    AVProgram *p= f->programs[pi];
+                    if(p->id == opt_programid)
+                        for(si=0; si<p->nb_stream_indexes; si++){
+                            if(f->streams[ p->stream_index[si] ] == ist->st)
+                                skip=0;
+                        }
+                }
+            }
+            if (ist->discard && ist->st->discard != AVDISCARD_ALL && !skip
+                && nb_frame_threshold[ist->st->codec->codec_type] <= ist->st->codec_info_nb_frames){
+                found_streams[ist->st->codec->codec_type]++;
+            }
+        }
+        for(j=0; j<AVMEDIA_TYPE_NB; j++)
+            if(found_streams[j] < nb_streams[j])
+                nb_frame_threshold[j] -= step;
+    }
     n = 0;
     for(k=0;k<nb_output_files;k++) {
         os = output_files[k];
@@ -2012,7 +2106,6 @@ static int transcode(AVFormatContext **output_files,
                 }
 
             } else {
-                int best_nb_frames=-1;
                 /* get corresponding input stream index : we select the first one with the right type */
                 found = 0;
                 for(j=0;j<nb_istreams;j++) {
@@ -2032,12 +2125,11 @@ static int transcode(AVFormatContext **output_files,
                         }
                     }
                     if (ist->discard && ist->st->discard != AVDISCARD_ALL && !skip &&
-                        ist->st->codec->codec_type == ost->st->codec->codec_type) {
-                        if(best_nb_frames < ist->st->codec_info_nb_frames){
-                            best_nb_frames= ist->st->codec_info_nb_frames;
+                        ist->st->codec->codec_type == ost->st->codec->codec_type &&
+                        nb_frame_threshold[ist->st->codec->codec_type] <= ist->st->codec_info_nb_frames) {
                             ost->source_index = j;
                             found = 1;
-                        }
+                            break;
                     }
                 }
 
@@ -2197,7 +2289,7 @@ static int transcode(AVFormatContext **output_files,
                     ost->original_height = icodec->height;
                     ost->original_width  = icodec->width;
 #endif
-                    codec->bits_per_raw_sample= 0;
+                    codec->bits_per_raw_sample= frame_bits_per_raw_sample;
                 }
                 ost->resample_height = icodec->height;
                 ost->resample_width  = icodec->width;
@@ -2248,8 +2340,9 @@ static int transcode(AVFormatContext **output_files,
             }
         }
         if(codec->codec_type == AVMEDIA_TYPE_VIDEO){
+            /* maximum video buffer size is 6-bytes per pixel, plus DPX header size */
             int size= codec->width * codec->height;
-            bit_buffer_size= FFMAX(bit_buffer_size, 6*size + 200);
+            bit_buffer_size= FFMAX(bit_buffer_size, 6*size + 1664);
         }
     }
 
@@ -2467,11 +2560,7 @@ static int transcode(AVFormatContext **output_files,
 
     if (!using_stdin) {
         if(verbose >= 0)
-#if HAVE_KBHIT
             fprintf(stderr, "Press [q] to stop encoding\n");
-#else
-            fprintf(stderr, "Press ctrl-c to stop encoding\n");
-#endif
         url_set_interrupt_cb(decode_interrupt_cb);
     }
     term_init();
@@ -2805,6 +2894,7 @@ static void opt_frame_aspect_ratio(const char *arg)
         ffmpeg_exit(1);
     }
     frame_aspect_ratio = ar;
+    frame_aspect_ratio_override = 1;
 }
 
 static int opt_metadata(const char *opt, const char *arg)
@@ -3245,6 +3335,7 @@ static void opt_input_file(const char *filename)
             else
                 frame_aspect_ratio=av_q2d(dec->sample_aspect_ratio);
             frame_aspect_ratio *= (float) dec->width / dec->height;
+            frame_aspect_ratio_override = 0;
             frame_pix_fmt = dec->pix_fmt;
             rfps      = ic->streams[i]->r_frame_rate.num;
             rfps_base = ic->streams[i]->r_frame_rate.den;
@@ -3370,11 +3461,12 @@ static void new_video_stream(AVFormatContext *oc, int file_idx)
             codec = avcodec_find_encoder(codec_id);
         }
 #if CONFIG_AVFILTER
-        if(frame_aspect_ratio > 0){
+        if(frame_aspect_ratio_override){
             i = vfilters ? strlen(vfilters) : 0;
             vfilters = av_realloc(vfilters, i+100);
-            snprintf(vfilters+i, i+100, "%csetdar=%f\n", i?',':' ', frame_aspect_ratio);
+            snprintf(vfilters+i, 100, "%csetdar=%f\n", i?',':' ', frame_aspect_ratio);
             frame_aspect_ratio=0;
+            frame_aspect_ratio_override=0;
         }
 
         ost->avfilter= vfilters;
@@ -3425,6 +3517,7 @@ static void new_video_stream(AVFormatContext *oc, int file_idx)
         video_enc->height = frame_height;
         video_enc->sample_aspect_ratio = av_d2q(frame_aspect_ratio*video_enc->height/video_enc->width, 255);
         video_enc->pix_fmt = frame_pix_fmt;
+        video_enc->bits_per_raw_sample = frame_bits_per_raw_sample;
         st->sample_aspect_ratio = video_enc->sample_aspect_ratio;
 
         choose_pixel_fmt(st, codec);
@@ -4224,6 +4317,7 @@ static const OptionDef options[] = {
     { "s", HAS_ARG | OPT_VIDEO, {(void*)opt_frame_size}, "set frame size (WxH or abbreviation)", "size" },
     { "aspect", HAS_ARG | OPT_VIDEO, {(void*)opt_frame_aspect_ratio}, "set aspect ratio (4:3, 16:9 or 1.3333, 1.7777)", "aspect" },
     { "pix_fmt", HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_frame_pix_fmt}, "set pixel format, 'list' as argument shows all the pixel formats supported", "format" },
+    { "bits_per_raw_sample", OPT_INT | HAS_ARG | OPT_VIDEO, {(void*)&frame_bits_per_raw_sample}, "set the number of bits per raw sample", "number" },
     { "croptop", OPT_FUNC2 | HAS_ARG | OPT_VIDEO, {(void*)opt_frame_crop}, "Removed, use the crop filter instead", "size" },
     { "cropbottom", OPT_FUNC2 | HAS_ARG | OPT_VIDEO, {(void*)opt_frame_crop}, "Removed, use the crop filter instead", "size" },
     { "cropleft", OPT_FUNC2 | HAS_ARG | OPT_VIDEO, {(void*)opt_frame_crop}, "Removed, use the crop filter instead", "size" },

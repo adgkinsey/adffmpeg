@@ -380,7 +380,9 @@ static void update_context_from_user(AVCodecContext *dst, AVCodecContext *src)
     dst->release_buffer = src->release_buffer;
 
     dst->opaque   = src->opaque;
+#if FF_API_HURRY_UP
     dst->hurry_up = src->hurry_up;
+#endif
     dst->dsp_mask = src->dsp_mask;
     dst->debug    = src->debug;
     dst->debug_mv = src->debug_mv;
@@ -880,7 +882,7 @@ static void validate_thread_parameters(AVCodecContext *avctx)
     }
 }
 
-int ff_thread_init(AVCodecContext *avctx, int thread_count)
+int ff_thread_init(AVCodecContext *avctx)
 {
     if (avctx->thread_opaque) {
         av_log(avctx, AV_LOG_ERROR, "avcodec_thread_init is ignored after avcodec_open\n");

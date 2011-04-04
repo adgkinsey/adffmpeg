@@ -88,7 +88,7 @@ static av_cold ff_reorder_func find_reorder_func(int codec_id,
     return
     codec_id == CODEC_ID_PCM_S16LE || codec_id == CODEC_ID_PCM_S16BE ?
         layout == AV_CH_LAYOUT_QUAD ? REORDER_DUMMY :
-        layout == AV_CH_LAYOUT_5POINT1_BACK ?
+        layout == AV_CH_LAYOUT_5POINT1_BACK || layout == AV_CH_LAYOUT_5POINT1 ?
             out ? alsa_reorder_s16_out_51 : NULL :
         layout == AV_CH_LAYOUT_7POINT1 ?
             out ? alsa_reorder_s16_out_71 : NULL :
@@ -234,7 +234,7 @@ av_cold int ff_alsa_close(AVFormatContext *s1)
 {
     AlsaData *s = s1->priv_data;
 
-    av_freep(s->reorder_buf);
+    av_freep(&s->reorder_buf);
     snd_pcm_close(s->h);
     return 0;
 }
