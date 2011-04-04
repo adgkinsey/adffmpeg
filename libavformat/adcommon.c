@@ -533,7 +533,7 @@ int ad_read_info(AVFormatContext *s, AVIOContext *pb,
         return ADPIC_INFO_NEW_PACKET_ERROR;
 
     // Skip first byte
-    get_byte(pb);
+    avio_r8(pb);
     --size;
     
     // Get the data
