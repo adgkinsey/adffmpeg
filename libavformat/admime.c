@@ -37,27 +37,6 @@
 #define DATA_PLAINTEXT          (MAX_DATA_TYPE + 1)
 
 
-static int parse_mime_header(ByteIOContext *pb, uint8_t *buf, int *bufSize,
-                             int *dataType, int *size, long *extra );
-static int process_line( char *line, int* line_count, int *dataType,
-                         int *size, long *extra );
-static int parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize,
-                                NetVuImageData *vidDat, char **txtDat );
-static int process_mp4data_line(char *line, int line_count,
-                                NetVuImageData *vidDat, struct tm *tim,
-                                char ** txtDat );
-static int is_valid_separator( unsigned char * buf, int bufLen );
-static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
-                        AVPacket *pkt, int size, long *extra,
-                        NetVuImageData *vidDat, char **txtDat);
-static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
-                         AVPacket *pkt, int size, long extra,
-                         NetVuAudioData *audDat);
-static int handleInvalidMime(AVFormatContext *s, ByteIOContext *pb,
-                             uint8_t *preRead, int preReadSize, AVPacket *pkt,
-                             int *data_type, int *size, int *imgLoaded);
-
-
 static const char *     BOUNDARY_PREFIX1 = "--0plm(";
 static const char *     BOUNDARY_PREFIX2 = "Í-0plm(";
 static const char *     BOUNDARY_PREFIX3 = "ÍÍ0plm(";
@@ -78,50 +57,6 @@ static const uint8_t rawJfifHeader[] = { 0xff, 0xd8, 0xff, 0xe0,
                                          0x00, 0x10, 0x4a, 0x46,
                                          0x49, 0x46, 0x00, 0x01 };
 
-/**
- * Identify if the stream as an AD MIME stream
- */
-static int admime_probe(AVProbeData *p)
-{
-    int offset = 0;
-    int ii, matchedBytes = 0;
-
-    if (p->buf_size <= sizeof(BOUNDARY_PREFIX1))
-        return 0;
-
-    // This is nasty but it's got to go here as we don't want to try and deal
-    // with fixes for certain server nuances in the HTTP layer.
-    // DS2 servers seem to end their HTTP header section with the byte sequence,
-    // 0x0d, 0x0a, 0x0d, 0x0a, 0x0a
-    // Eco9 server ends its HTTP headers section with the sequence,
-    // 0x0d, 0x0a, 0x0d, 0x0a, 0x0d, 0x0a
-    // Both of which are incorrect. We'll try and detect these cases here and
-    // make adjustments to the buffers so that a standard validation routine
-    // can be called...
-
-    if (p->buf[0] == 0x0a )                             // DS2 detection
-        offset = 1;
-    else if (p->buf[0] == 0x0d &&  p->buf[1] == 0x0a )  // Eco 9 detection
-        offset = 2;
-
-    // Now check whether we have the start of a MIME boundary separator
-    if (is_valid_separator( &p->buf[offset], p->buf_size - offset ) > 0 )
-        return AVPROBE_SCORE_MAX;
-
-    // If server is only sending a single frame (i.e. fields=1) then it
-    // sometimes just sends the raw JPEG with no MIME or other header, check
-    // for this
-    if (p->buf_size >= sizeof(rawJfifHeader))  {
-        for(ii = 0; ii < sizeof(rawJfifHeader); ii++)  {
-            if (p->buf[ii] == rawJfifHeader[ii])
-                ++matchedBytes;
-        }
-        if (matchedBytes == sizeof(rawJfifHeader))
-            return AVPROBE_SCORE_MAX;
-    }
-
-    return 0;
-}
 
 /**
  * Validates a multipart MIME boundary separator against the convention used by
@@ -164,75 +99,6 @@ static int is_valid_separator( unsigned char * buf, int bufLen )
     return FALSE;
 }
 
-static int admime_read_header(AVFormatContext *s, AVFormatParameters *ap)
-{
-    s->ctx_flags |= AVFMTCTX_NOHEADER;
-    return ad_read_header(s, ap, NULL);
-}
-
-/**
- * Read and process MIME header information
- *
- * \return Zero on successful decode, -2 if a raw JPEG, anything else indicates
- *         failure
- */
-static int parse_mime_header(ByteIOContext *pb, uint8_t *buffer, int *bufSize,
-                             int *dataType, int *size, long *extra)
-{
-    unsigned char *             q = NULL;
-    int                         ch, err, lineCount = 0;
-    const int                   maxBufSize = *bufSize;
-
-    *bufSize = 0;
-
-    // Check for JPEG header first
-    do {
-        ch = url_fgetc(pb);
-        if (buffer && (ch == rawJfifHeader[*bufSize]))  {
-            buffer[*bufSize] = ch;
-            ++(*bufSize);
-            if ((*bufSize) == sizeof(rawJfifHeader))
-                return -2;
-        }
-        else
-            break;
-    } while( (*bufSize) < sizeof(rawJfifHeader));
-
-    q = buffer;
-    // Try and parse the header
-    for(;;) {
-        if (ch < 0)
-            return ADPIC_PARSE_MIME_HEADER_ERROR;
-
-        if (ch == '\n') {
-            // process line
-            if (q > buffer && q[-1] == '\r')
-                q--;
-            *q = '\0';
-
-            err = process_line( buffer, &lineCount, dataType, size, extra );
-            // First line contains a \n
-            if (!(err == 0 && lineCount == 0) ) {
-                if (err < 0 )
-                    return err;
-
-                if (err == 0 )
-                    return 0;
-                lineCount++;
-            }
-
-            q = buffer;
-        }
-        else {
-            if ((q - buffer) < (maxBufSize - 1))
-                *q++ = ch;
-        }
-
-        ch = url_fgetc( pb );
-    }
-
-    return ADPIC_PARSE_MIME_HEADER_ERROR;
-}
 
 /**
  * Parse a line of MIME data
@@ -362,27 +228,38 @@ static int process_line(char *line, int *line_count, int *dataType,
 }
 
 /**
- * Parse MIME data that is sent after each MPEG video frame
+ * Read and process MIME header information
+ *
+ * \return Zero on successful decode, -2 if a raw JPEG, anything else indicates
+ *         failure
  */
-static int parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize,
-                                NetVuImageData *vidDat, char **txtDat )
+static int parse_mime_header(ByteIOContext *pb, uint8_t *buffer, int *bufSize,
+                             int *dataType, int *size, long *extra)
 {
-    unsigned char               buffer[TEMP_BUFFER_SIZE];
-    int                         ch, err;
     unsigned char *             q = NULL;
-    int                         lineCount = 0;
-    unsigned char *             currentChar = mp4TextData;
-    struct tm                   tim;
+    int                         ch, err, lineCount = 0;
+    const int                   maxBufSize = *bufSize;
 
-    memset( &tim, 0, sizeof(struct tm) );
+    *bufSize = 0;
 
-    // Try and parse the header
+    // Check for JPEG header first
+    do {
+        ch = url_fgetc(pb);
+        if (buffer && (ch == rawJfifHeader[*bufSize]))  {
+            buffer[*bufSize] = ch;
+            ++(*bufSize);
+            if ((*bufSize) == sizeof(rawJfifHeader))
+                return -2;
+        }
+        else
+            break;
+    } while( (*bufSize) < sizeof(rawJfifHeader));
+
     q = buffer;
+    // Try and parse the header
     for(;;) {
-        ch = *currentChar++;
-
         if (ch < 0)
-            return 1;
+            return ADPIC_PARSE_MIME_HEADER_ERROR;
 
         if (ch == '\n') {
             // process line
@@ -390,51 +267,30 @@ static int parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize,
                 q--;
             *q = '\0';
 
-            err = process_mp4data_line(buffer, lineCount, vidDat, &tim, txtDat);
+            err = process_line( buffer, &lineCount, dataType, size, extra );
+            // First line contains a \n
+            if (!(err == 0 && lineCount == 0) ) {
+                if (err < 0 )
+                    return err;
 
-            if (err < 0 )
-                return err;
-
-            if (err == 0 )
-                return 0;
-
-            // Check we're not at the end of the buffer. If the following
-            // statement is true and we haven't encountered an error then we've
-            // finished parsing the buffer
-            if (err == 1 ) {
-                // Not particularly happy with this code but it seems there's
-                // little consistency in the way these buffers end. This block
-                // catches all of those variations. The variations that indicate
-                // the end of a MP4 MIME text block are:
-                //
-                // 1. The amount of buffer parsed successfully is equal to the
-                //    total buffer size
-                //
-                // 2. The buffer ends with two NULL characters
-                //
-                // 3. The buffer ends with the sequence \r\n\0
-
-                if (currentChar - mp4TextData == bufferSize )
+                if (err == 0 )
                     return 0;
-
-                // CS - I *think* lines should end either when we've processed
-                // all the buffer OR it's padded with 0s
-                // Is detection of a NULL character here sufficient?
-                if (*currentChar == '\0' )
-                    return 0;
+                lineCount++;
             }
 
-            lineCount++;
             q = buffer;
         }
         else {
-            if ((q - buffer) < sizeof(buffer) - 1)
+            if ((q - buffer) < (maxBufSize - 1))
                 *q++ = ch;
         }
+
+        ch = url_fgetc( pb );
     }
 
-    return 1;
+    return ADPIC_PARSE_MIME_HEADER_ERROR;
 }
+
 
 /**
  * Parse a line of MIME data for MPEG video frames
@@ -530,93 +386,88 @@ static int process_mp4data_line( char *line, int line_count,
     return 1;
 }
 
-static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
+/**
+ * Parse MIME data that is sent after each MPEG video frame
+ */
+static int parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize,
+                                NetVuImageData *vidDat, char **txtDat )
 {
-    ByteIOContext *         pb = s->pb;
-    void *                  payload = NULL;
-    char *                  txtDat = NULL;
-    int                     data_type = MAX_DATA_TYPE;
-    int                     size = -1;
-    long                    extra = 0;
-    int                     errorVal = ADPIC_UNKNOWN_ERROR;
-    ADFrameType             frameType = FrameTypeUnknown;
-    int                     imgLoaded = FALSE;
-    uint8_t                 buf[TEMP_BUFFER_SIZE];
-    int                     bufSize = TEMP_BUFFER_SIZE;
+    unsigned char               buffer[TEMP_BUFFER_SIZE];
+    int                         ch, err;
+    unsigned char *             q = NULL;
+    int                         lineCount = 0;
+    unsigned char *             currentChar = mp4TextData;
+    struct tm                   tim;
 
-    errorVal = parse_mime_header(pb, buf, &bufSize, &data_type, &size, &extra);
-    if(errorVal != 0 )  {
-        if (errorVal == -2)
-            errorVal = handleInvalidMime(s, pb, buf, bufSize, pkt,
-                                         &data_type, &size, &imgLoaded);
+    memset( &tim, 0, sizeof(struct tm) );
 
-        if (errorVal < 0)  {
-            return errorVal;
+    // Try and parse the header
+    q = buffer;
+    for(;;) {
+        ch = *currentChar++;
+
+        if (ch < 0)
+            return 1;
+
+        if (ch == '\n') {
+            // process line
+            if (q > buffer && q[-1] == '\r')
+                q--;
+            *q = '\0';
+
+            err = process_mp4data_line(buffer, lineCount, vidDat, &tim, txtDat);
+
+            if (err < 0 )
+                return err;
+
+            if (err == 0 )
+                return 0;
+
+            // Check we're not at the end of the buffer. If the following
+            // statement is true and we haven't encountered an error then we've
+            // finished parsing the buffer
+            if (err == 1 ) {
+                // Not particularly happy with this code but it seems there's
+                // little consistency in the way these buffers end. This block
+                // catches all of those variations. The variations that indicate
+                // the end of a MP4 MIME text block are:
+                //
+                // 1. The amount of buffer parsed successfully is equal to the
+                //    total buffer size
+                //
+                // 2. The buffer ends with two NULL characters
+                //
+                // 3. The buffer ends with the sequence \r\n\0
+
+                if (currentChar - mp4TextData == bufferSize )
+                    return 0;
+
+                // CS - I *think* lines should end either when we've processed
+                // all the buffer OR it's padded with 0s
+                // Is detection of a NULL character here sufficient?
+                if (*currentChar == '\0' )
+                    return 0;
+            }
+
+            lineCount++;
+            q = buffer;
+        }
+        else {
+            if ((q - buffer) < sizeof(buffer) - 1)
+                *q++ = ch;
         }
     }
 
-    // Prepare for video or audio read
-    errorVal = initADData(data_type, &frameType, &payload);
-    if (errorVal < 0)  {
-        if (payload != NULL )
-            av_free(payload);
-        return errorVal;
-    }
-
-    // Proceed based on the type of data in this frame
-    switch(data_type) {
-        case DATA_JPEG:
-            errorVal = ad_read_jpeg(s, pb, pkt, payload, &txtDat);
-            break;
-        case DATA_JFIF:
-            errorVal = ad_read_jfif(s, pb, pkt, imgLoaded, size, payload, &txtDat);
-            break;
-        case DATA_MPEG4I:
-        case DATA_MPEG4P:
-        case DATA_H264I:
-        case DATA_H264P:
-            errorVal = ad_read_mpeg(s, pb, pkt, size, &extra, payload, &txtDat);
-            break;
-        case DATA_AUDIO_ADPCM:
-            errorVal = ad_read_audio(s, pb, pkt, size, extra, payload);
-            break;
-        case DATA_INFO:
-        case DATA_XML_INFO:
-            errorVal = ad_read_info(s, pb, pkt, size);
-            break;
-        case DATA_LAYOUT:
-            errorVal = ad_read_layout(s, pb, pkt, size);
-            break;
-        default: {
-            av_log(s, AV_LOG_WARNING, "admime_read_packet: No handler for "
-                   "data_type=%d\n", data_type);
-            errorVal = ADPIC_DEFAULT_ERROR;
-        }
-        break;
-    }
-
-    if (errorVal >= 0)  {
-        errorVal = ad_read_packet(s, pb, pkt, frameType, payload, txtDat);
-    }
-    else  {
-        // If there was an error, release any memory that has been allocated
-        av_log(s, AV_LOG_DEBUG, "admime_read_packet: Error %d\n", errorVal);
-        if (payload != NULL)
-            av_free(payload);
-
-        if (txtDat != NULL)
-            av_free( txtDat );
-    }
-
-    return errorVal;
+    return 1;
 }
+
 
 /**
  * MPEG4 or H264 video frame with a MIME trailer
  */
-static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
-                        AVPacket *pkt, int size, long *extra,
-                        NetVuImageData *vidDat, char **txtDat)
+static int admime_mpeg(AVFormatContext *s, ByteIOContext *pb,
+                       AVPacket *pkt, int size, long *extra,
+                       NetVuImageData *vidDat, char **txtDat)
 {
     int errorVal = 0;
     int mimeBlockType = 0;
@@ -669,6 +520,7 @@ static int ad_read_mpeg(AVFormatContext *s, ByteIOContext *pb,
     return errorVal;
 }
 
+
 /**
  * Audio frame
  */
@@ -698,6 +550,7 @@ static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
 
     return 0;
 }
+
 
 /**
  * Invalid mime header.
@@ -744,6 +597,140 @@ static int handleInvalidMime(AVFormatContext *s, ByteIOContext *pb,
 
     memcpy(pkt->data, imageData, *size);
     *imgLoaded = TRUE;
+
+    return errorVal;
+}
+
+
+/**
+ * Identify if the stream as an AD MIME stream
+ */
+static int admime_probe(AVProbeData *p)
+{
+    int offset = 0;
+    int ii, matchedBytes = 0;
+
+    if (p->buf_size <= sizeof(BOUNDARY_PREFIX1))
+        return 0;
+
+    // This is nasty but it's got to go here as we don't want to try and deal
+    // with fixes for certain server nuances in the HTTP layer.
+    // DS2 servers seem to end their HTTP header section with the byte sequence,
+    // 0x0d, 0x0a, 0x0d, 0x0a, 0x0a
+    // Eco9 server ends its HTTP headers section with the sequence,
+    // 0x0d, 0x0a, 0x0d, 0x0a, 0x0d, 0x0a
+    // Both of which are incorrect. We'll try and detect these cases here and
+    // make adjustments to the buffers so that a standard validation routine
+    // can be called...
+
+    if (p->buf[0] == 0x0a )                             // DS2 detection
+        offset = 1;
+    else if (p->buf[0] == 0x0d &&  p->buf[1] == 0x0a )  // Eco 9 detection
+        offset = 2;
+
+    // Now check whether we have the start of a MIME boundary separator
+    if (is_valid_separator( &p->buf[offset], p->buf_size - offset ) > 0 )
+        return AVPROBE_SCORE_MAX;
+
+    // If server is only sending a single frame (i.e. fields=1) then it
+    // sometimes just sends the raw JPEG with no MIME or other header, check
+    // for this
+    if (p->buf_size >= sizeof(rawJfifHeader))  {
+        for(ii = 0; ii < sizeof(rawJfifHeader); ii++)  {
+            if (p->buf[ii] == rawJfifHeader[ii])
+                ++matchedBytes;
+        }
+        if (matchedBytes == sizeof(rawJfifHeader))
+            return AVPROBE_SCORE_MAX;
+    }
+
+    return 0;
+}
+
+static int admime_read_header(AVFormatContext *s, AVFormatParameters *ap)
+{
+    s->ctx_flags |= AVFMTCTX_NOHEADER;
+    return ad_read_header(s, ap, NULL);
+}
+
+
+static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
+{
+    ByteIOContext *         pb = s->pb;
+    void *                  payload = NULL;
+    char *                  txtDat = NULL;
+    int                     data_type = MAX_DATA_TYPE;
+    int                     size = -1;
+    long                    extra = 0;
+    int                     errorVal = ADPIC_UNKNOWN_ERROR;
+    ADFrameType             frameType = FrameTypeUnknown;
+    int                     imgLoaded = FALSE;
+    uint8_t                 buf[TEMP_BUFFER_SIZE];
+    int                     bufSize = TEMP_BUFFER_SIZE;
+
+    errorVal = parse_mime_header(pb, buf, &bufSize, &data_type, &size, &extra);
+    if(errorVal != 0 )  {
+        if (errorVal == -2)
+            errorVal = handleInvalidMime(s, pb, buf, bufSize, pkt,
+                                         &data_type, &size, &imgLoaded);
+
+        if (errorVal < 0)  {
+            return errorVal;
+        }
+    }
+
+    // Prepare for video or audio read
+    errorVal = initADData(data_type, &frameType, &payload);
+    if (errorVal < 0)  {
+        if (payload != NULL )
+            av_free(payload);
+        return errorVal;
+    }
+
+    // Proceed based on the type of data in this frame
+    switch(data_type) {
+        case DATA_JPEG:
+            errorVal = ad_read_jpeg(s, pb, pkt, payload, &txtDat);
+            break;
+        case DATA_JFIF:
+            errorVal = ad_read_jfif(s, pb, pkt, imgLoaded, size, payload, &txtDat);
+            break;
+        case DATA_MPEG4I:
+        case DATA_MPEG4P:
+        case DATA_H264I:
+        case DATA_H264P:
+            errorVal = admime_mpeg(s, pb, pkt, size, &extra, payload, &txtDat);
+            break;
+        case DATA_AUDIO_ADPCM:
+            errorVal = ad_read_audio(s, pb, pkt, size, extra, payload);
+            break;
+        case DATA_INFO:
+        case DATA_XML_INFO:
+            errorVal = ad_read_info(s, pb, pkt, size);
+            break;
+        case DATA_LAYOUT:
+            errorVal = ad_read_layout(s, pb, pkt, size);
+            break;
+        default: {
+            av_log(s, AV_LOG_WARNING, "admime_read_packet: No handler for "
+                   "data_type=%d\n", data_type);
+            errorVal = ADPIC_DEFAULT_ERROR;
+        }
+        break;
+    }
+
+    if (errorVal >= 0)  {
+        errorVal = ad_read_packet(s, pb, pkt, frameType, payload, txtDat);
+    }
+    else  {
+        // If there was an error, release any memory that has been allocated
+        av_log(s, AV_LOG_DEBUG, "admime_read_packet: Error %d\n", errorVal);
+        if (payload != NULL)
+            av_free(payload);
+
+        if (txtDat != NULL)
+            av_free( txtDat );
+    }
 
     return errorVal;
 }

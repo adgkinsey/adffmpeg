@@ -71,6 +71,7 @@ AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h,
                          uint8_t cam, int format, const char *title);
 AVStream * ad_get_audio_stream(AVFormatContext *s, NetVuAudioData* audioHeader);
 void audiodata_network2host(uint8_t *data, int size);
+int ad_adFormatToCodecId(AVFormatContext *s, int32_t adFormat);
 
 
 #define PIC_REVISION 1

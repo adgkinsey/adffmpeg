@@ -118,6 +118,38 @@ AVStream * netvu_get_stream(AVFormatContext *s, NetVuImageData *p)
     return stream;
 }
 
+int ad_adFormatToCodecId(AVFormatContext *s, int32_t adFormat)
+{
+    int codec_id = CODEC_ID_NONE;
+    
+    switch(adFormat) {
+        case PIC_MODE_JPEG_422:
+        case PIC_MODE_JPEG_411:
+            codec_id = CODEC_ID_MJPEG;
+            break;
+
+        case PIC_MODE_MPEG4_411:
+        case PIC_MODE_MPEG4_411_I:
+        case PIC_MODE_MPEG4_411_GOV_P:
+        case PIC_MODE_MPEG4_411_GOV_I:
+            codec_id = CODEC_ID_MPEG4;
+            break;
+
+        case PIC_MODE_H264I:
+        case PIC_MODE_H264P:
+        case PIC_MODE_H264J:
+            codec_id = CODEC_ID_H264;
+            break;
+
+        default:
+            av_log(s, AV_LOG_WARNING,
+                   "ad_get_stream: unrecognised vid_format %d\n",
+                   adFormat);
+            codec_id = CODEC_ID_NONE;
+    }
+    return codec_id;
+}
+
 AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t cam, int32_t format, const char *title)
 {
     uint8_t codec_type;
@@ -126,34 +158,13 @@ AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t cam
     char textbuffer[4];
     AVStream *st;
 
-    switch(format) {
-        case PIC_MODE_JPEG_422:
-        case PIC_MODE_JPEG_411:
-            codec_id = CODEC_ID_MJPEG;
-            codec_type = 0;
-            break;
-
-        case PIC_MODE_MPEG4_411:
-        case PIC_MODE_MPEG4_411_I:
-        case PIC_MODE_MPEG4_411_GOV_P:
-        case PIC_MODE_MPEG4_411_GOV_I:
-            codec_id = CODEC_ID_MPEG4;
-            codec_type = 1;
-            break;
-
-        case PIC_MODE_H264I:
-        case PIC_MODE_H264P:
-        case PIC_MODE_H264J:
-            codec_id = CODEC_ID_H264;
-            codec_type = 2;
-            break;
-
-        default:
-            av_log(s, AV_LOG_WARNING,
-                   "ad_get_stream: unrecognised vid_format %d\n",
-                   format);
-            return NULL;
-    }
+    codec_id = ad_adFormatToCodecId(s, format);
+    if (codec_id == CODEC_ID_MJPEG)
+        codec_type = 0;
+    else if (codec_id == CODEC_ID_MPEG4)
+        codec_type = 1;
+    else if (codec_id)
+        codec_type = 2;
 
     id = (codec_type << 29)     |
          ((cam - 1) << 24) |
