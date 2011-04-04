@@ -39,19 +39,6 @@ enum pkt_offsets { DATA_TYPE, DATA_CHANNEL,
                    SEPARATOR_SIZE
                  };
 
-static void audioheader_network2host(NetVuAudioData *dst, const uint8_t *src);
-static int ad_read_mpeg(AVFormatContext *s, AVIOContext *pb,
-                        AVPacket *pkt,
-                        NetVuImageData *vidDat, char **text_data);
-static int ad_read_mpeg_minimal(AVFormatContext *s, AVIOContext *pb,
-                                AVPacket *pkt, int size, int channel,
-                                NetVuImageData *vidDat, char **text_data);
-static int ad_read_audio(AVFormatContext *s, AVIOContext *pb,
-                         AVPacket *pkt, int size, NetVuAudioData *data);
-static int ad_read_audio_minimal(AVFormatContext *s, AVIOContext *pb,
-                                 AVPacket *pkt, int size, NetVuAudioData *data);
-
-
 typedef struct {
     int utc_offset;     ///< Only used in minimal video case
 } AdbinaryContext;
@@ -75,6 +62,178 @@ static void audioheader_network2host(NetVuAudioData *dst, const uint8_t *src)
     if ((void*)dst != (void*)src) // Copy additionalData pointer if needed
         memcpy(&dst->additionalData, src + 28, sizeof(unsigned char *));
 }
+
+/**
+ * MPEG4 or H264 video frame with a Netvu header
+ */
+static int adbinary_mpeg(AVFormatContext *s, AVIOContext *pb,
+                         AVPacket *pkt, NetVuImageData *vidDat, char **txtDat)
+{
+    static const int hdrSize = NetVuImageDataHeaderSize;
+    int textSize = 0;
+    int n, status, errorVal = 0;
+
+    if ((n = ad_get_buffer(pb, (uint8_t *)vidDat, hdrSize)) != hdrSize) {
+        av_log(s, AV_LOG_ERROR, "%s: short of data reading header, "
+                                "expected %d, read %d\n",
+               __func__, hdrSize, n);
+        return ADPIC_MPEG4_GET_BUFFER_ERROR;
+    }
+    ad_network2host(vidDat, (uint8_t *)vidDat);
+    if (!pic_version_valid(vidDat->version)) {
+        av_log(s, AV_LOG_ERROR, "%s: invalid pic version 0x%08X\n", __func__,
+               vidDat->version);
+        return ADPIC_MPEG4_PIC_VERSION_VALID_ERROR;
+    }
+
+    // Get the additional text block
+    textSize = vidDat->start_offset;
+    *txtDat = av_malloc( textSize + 1 );
+
+    if( *txtDat == NULL )
+        return AVERROR(ENOMEM);
+
+    // Copy the additional text block
+    if( (n = ad_get_buffer( pb, *txtDat, textSize)) != textSize) {
+        av_log(s, AV_LOG_ERROR, "%s: short of data reading text, "
+                                "expected %d, read %d\n", __func__,
+               textSize, n);
+        return ADPIC_MPEG4_GET_TEXT_BUFFER_ERROR;
+    }
+
+    // Somtimes the buffer seems to end with a NULL terminator,
+    // other times it doesn't.  Adding a terminator here regardless
+    (*txtDat)[textSize] = '\0';
+
+    if ((status = ad_new_packet(pkt, vidDat->size)) < 0) {
+        av_log(s, AV_LOG_ERROR, "%s: ad_new_packet (size %d) failed, status %d\n",
+               __func__, vidDat->size, status);
+        return ADPIC_MPEG4_NEW_PACKET_ERROR;
+    }
+    if ((n = ad_get_buffer(pb, pkt->data, vidDat->size)) != vidDat->size) {
+        av_log(s, AV_LOG_ERROR, "%s: short of data reading mpeg, "
+                                "expected %d, read %d\n",
+               __func__, vidDat->size, n);
+        return ADPIC_MPEG4_PIC_BODY_ERROR;
+    }
+
+    if (vidDat->vid_format & (PIC_MODE_MPEG4_411_I | PIC_MODE_MPEG4_411_GOV_I))
+        pkt->flags |= AV_PKT_FLAG_KEY;
+
+    return errorVal;
+}
+
+/**
+ * MPEG4 or H264 video frame with a minimal header
+ */
+static int ad_read_mpeg_minimal(AVFormatContext *s, AVIOContext *pb,
+                                AVPacket *pkt, int size, int channel,
+                                NetVuImageData *vidDat, char **text_data)
+{
+    static const int titleLen = sizeof(vidDat->title) / sizeof(vidDat->title[0]);
+    AdbinaryContext* adContext = s->priv_data;
+    int              dataSize     = size - 6;
+    int              errorVal     = 0;
+
+    // Get the minimal video header and copy into generic video data structure
+    memset(vidDat, 0, sizeof(NetVuImageData));
+    vidDat->session_time  = avio_rb32(pb);
+    vidDat->milliseconds  = avio_rb16(pb);
+
+    if ( url_ferror(pb) || (vidDat->session_time == 0) )  {
+        av_log(s, AV_LOG_ERROR, "%s: Reading header, errorcode %d\n",
+               __func__, url_ferror(pb));
+        return ADPIC_MPEG4_MINIMAL_GET_BUFFER_ERROR;
+    }
+    vidDat->version = PIC_VERSION;
+    vidDat->cam = channel + 1;
+    vidDat->utc_offset = adContext->utc_offset;
+    vidDat->vid_format = PIC_MODE_MPEG4_411;
+    snprintf(vidDat->title, titleLen, "Camera %d", vidDat->cam);
+
+    // Now get the main frame data into a new packet
+    if( ad_new_packet(pkt, dataSize) < 0 )
+        return ADPIC_MPEG4_MINIMAL_NEW_PACKET_ERROR;
+
+    if( ad_get_buffer(pb, pkt->data, dataSize) != dataSize )
+        return ADPIC_MPEG4_MINIMAL_NEW_PACKET_ERROR2;
+
+    return errorVal;
+}
+
+/**
+ * Audio frame with a Netvu header
+ */
+static int ad_read_audio(AVFormatContext *s, AVIOContext *pb,
+                         AVPacket *pkt, int size, NetVuAudioData *data)
+{
+    int n, status, errorVal = 0;
+
+    // Get the fixed size portion of the audio header
+    size = NetVuAudioDataHeaderSize - sizeof(unsigned char *);
+    if( (n = ad_get_buffer( pb, (uint8_t*)data, size)) != size)
+        return ADPIC_AUDIO_ADPCM_GET_BUFFER_ERROR;
+
+    // endian fix it...
+    audioheader_network2host(data, (uint8_t*)data);
+
+    // Now get the additional bytes
+    if( data->sizeOfAdditionalData > 0 ) {
+        data->additionalData = av_malloc( data->sizeOfAdditionalData );
+        if( data->additionalData == NULL )
+            return AVERROR(ENOMEM);
+
+        if( (n = ad_get_buffer( pb, data->additionalData, data->sizeOfAdditionalData )) != data->sizeOfAdditionalData )
+            return ADPIC_AUDIO_ADPCM_GET_BUFFER_ERROR2;
+    }
+    else
+        data->additionalData = NULL;
+
+    if( (status = ad_new_packet( pkt, data->sizeOfAudioData )) < 0 )
+        return ADPIC_AUDIO_ADPCM_MIME_NEW_PACKET_ERROR;
+
+    // Now get the actual audio data
+    if( (n = ad_get_buffer( pb, pkt->data, data->sizeOfAudioData)) != data->sizeOfAudioData )
+        return ADPIC_AUDIO_ADPCM_MIME_GET_BUFFER_ERROR;
+
+    audiodata_network2host(pkt->data, data->sizeOfAudioData);
+
+    return errorVal;
+}
+
+/**
+ * Audio frame with a minimal header
+ */
+static int ad_read_audio_minimal(AVFormatContext *s, AVIOContext *pb,
+                                 AVPacket *pkt, int size, NetVuAudioData *data)
+{
+    int dataSize = size - sizeof(MinimalAudioHeader);
+    int n, status, errorVal = 0;
+
+    // Get the minimal audio header and copy into generic audio data structure
+    memset(data, 0, sizeof(NetVuAudioData));
+    data->seconds = avio_rb32(pb);
+    data->msecs   = avio_rb16(pb);
+    data->mode    = avio_rb16(pb);
+    if ( url_ferror(pb) || (data->seconds == 0) )  {
+        av_log(s, AV_LOG_ERROR, "%s: Reading header, errorcode %d\n",
+               __func__, url_ferror(pb));
+        return ADPIC_MINIMAL_AUDIO_ADPCM_GET_BUFFER_ERROR;
+    }
+
+    // Now get the main frame data into a new packet
+    if( (status = ad_new_packet( pkt, dataSize )) < 0 )
+        return ADPIC_MINIMAL_AUDIO_ADPCM_NEW_PACKET_ERROR;
+
+    if( (n = ad_get_buffer( pb, pkt->data, dataSize )) != dataSize )
+        return ADPIC_MINIMAL_AUDIO_ADPCM_GET_BUFFER_ERROR2;
+
+    audiodata_network2host(pkt->data, dataSize);
+
+    return errorVal;
+}
+
+
 
 /**
  * Identify if the stream as an AD binary stream
@@ -265,7 +424,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             case DATA_MPEG4P:
             case DATA_H264I:
             case DATA_H264P:
-                errorVal = ad_read_mpeg(s, pb, pkt, payload, &txtDat);
+                errorVal = adbinary_mpeg(s, pb, pkt, payload, &txtDat);
                 break;
             case DATA_MINIMAL_MPEG4:
                 errorVal = ad_read_mpeg_minimal(s, pb, pkt, size, data_channel,
@@ -311,177 +470,6 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 static int adbinary_read_close(AVFormatContext *s)
 {
     return 0;
-}
-
-/**
- * MPEG4 or H264 video frame with a Netvu header
- */
-static int ad_read_mpeg(AVFormatContext *s, AVIOContext *pb,
-                        AVPacket *pkt,
-                        NetVuImageData *vidDat, char **text_data)
-{
-    static const int hdrSize = NetVuImageDataHeaderSize;
-    int textSize = 0;
-    int n, status, errorVal = 0;
-
-    if ((n = ad_get_buffer(pb, (uint8_t *)vidDat, hdrSize)) != hdrSize) {
-        av_log(s, AV_LOG_ERROR, "%s: short of data reading header, "
-                                "expected %d, read %d\n",
-               __func__, hdrSize, n);
-        return ADPIC_MPEG4_GET_BUFFER_ERROR;
-    }
-    ad_network2host(vidDat, (uint8_t *)vidDat);
-    if (!pic_version_valid(vidDat->version)) {
-        av_log(s, AV_LOG_ERROR, "%s: invalid pic version 0x%08X\n", __func__,
-               vidDat->version);
-        return ADPIC_MPEG4_PIC_VERSION_VALID_ERROR;
-    }
-
-    // Get the additional text block
-    textSize = vidDat->start_offset;
-    *text_data = av_malloc( textSize + 1 );
-
-    if( *text_data == NULL )
-        return AVERROR(ENOMEM);
-
-    // Copy the additional text block
-    if( (n = ad_get_buffer( pb, *text_data, textSize)) != textSize) {
-        av_log(s, AV_LOG_ERROR, "%s: short of data reading text, "
-                                "expected %d, read %d\n", __func__,
-               textSize, n);
-        return ADPIC_MPEG4_GET_TEXT_BUFFER_ERROR;
-    }
-
-    // Somtimes the buffer seems to end with a NULL terminator,
-    // other times it doesn't.  Adding a terminator here regardless
-    (*text_data)[textSize] = '\0';
-
-    if ((status = ad_new_packet(pkt, vidDat->size)) < 0) {
-        av_log(s, AV_LOG_ERROR, "%s: ad_new_packet (size %d) failed, status %d\n",
-               __func__, vidDat->size, status);
-        return ADPIC_MPEG4_NEW_PACKET_ERROR;
-    }
-    if ((n = ad_get_buffer(pb, pkt->data, vidDat->size)) != vidDat->size) {
-        av_log(s, AV_LOG_ERROR, "%s: short of data reading mpeg, "
-                                "expected %d, read %d\n",
-               __func__, vidDat->size, n);
-        return ADPIC_MPEG4_PIC_BODY_ERROR;
-    }
-
-    if (vidDat->vid_format & (PIC_MODE_MPEG4_411_I | PIC_MODE_MPEG4_411_GOV_I))
-        pkt->flags |= AV_PKT_FLAG_KEY;
-
-    return errorVal;
-}
-
-/**
- * MPEG4 or H264 video frame with a minimal header
- */
-static int ad_read_mpeg_minimal(AVFormatContext *s, AVIOContext *pb,
-                                AVPacket *pkt, int size, int channel,
-                                NetVuImageData *vidDat, char **text_data)
-{
-    static const int titleLen = sizeof(vidDat->title) / sizeof(vidDat->title[0]);
-    AdbinaryContext* adContext = s->priv_data;
-    int              dataSize     = size - 6;
-    int              errorVal     = 0;
-
-    // Get the minimal video header and copy into generic video data structure
-    memset(vidDat, 0, sizeof(NetVuImageData));
-    vidDat->session_time  = avio_rb32(pb);
-    vidDat->milliseconds  = avio_rb16(pb);
-
-    if ( url_ferror(pb) || (vidDat->session_time == 0) )  {
-        av_log(s, AV_LOG_ERROR, "%s: Reading header, errorcode %d\n",
-               __func__, url_ferror(pb));
-        return ADPIC_MPEG4_MINIMAL_GET_BUFFER_ERROR;
-    }
-    vidDat->version = PIC_VERSION;
-    vidDat->cam = channel + 1;
-    vidDat->utc_offset = adContext->utc_offset;
-    vidDat->vid_format = PIC_MODE_MPEG4_411;
-    snprintf(vidDat->title, titleLen, "Camera %d", vidDat->cam);
-
-    // Now get the main frame data into a new packet
-    if( ad_new_packet(pkt, dataSize) < 0 )
-        return ADPIC_MPEG4_MINIMAL_NEW_PACKET_ERROR;
-
-    if( ad_get_buffer(pb, pkt->data, dataSize) != dataSize )
-        return ADPIC_MPEG4_MINIMAL_NEW_PACKET_ERROR2;
-
-    return errorVal;
-}
-
-/**
- * Audio frame with a Netvu header
- */
-static int ad_read_audio(AVFormatContext *s, AVIOContext *pb,
-                         AVPacket *pkt, int size, NetVuAudioData *data)
-{
-    int n, status, errorVal = 0;
-
-    // Get the fixed size portion of the audio header
-    size = NetVuAudioDataHeaderSize - sizeof(unsigned char *);
-    if( (n = ad_get_buffer( pb, (uint8_t*)data, size)) != size)
-        return ADPIC_AUDIO_ADPCM_GET_BUFFER_ERROR;
-
-    // endian fix it...
-    audioheader_network2host(data, (uint8_t*)data);
-
-    // Now get the additional bytes
-    if( data->sizeOfAdditionalData > 0 ) {
-        data->additionalData = av_malloc( data->sizeOfAdditionalData );
-        if( data->additionalData == NULL )
-            return AVERROR(ENOMEM);
-
-        if( (n = ad_get_buffer( pb, data->additionalData, data->sizeOfAdditionalData )) != data->sizeOfAdditionalData )
-            return ADPIC_AUDIO_ADPCM_GET_BUFFER_ERROR2;
-    }
-    else
-        data->additionalData = NULL;
-
-    if( (status = ad_new_packet( pkt, data->sizeOfAudioData )) < 0 )
-        return ADPIC_AUDIO_ADPCM_MIME_NEW_PACKET_ERROR;
-
-    // Now get the actual audio data
-    if( (n = ad_get_buffer( pb, pkt->data, data->sizeOfAudioData)) != data->sizeOfAudioData )
-        return ADPIC_AUDIO_ADPCM_MIME_GET_BUFFER_ERROR;
-
-    audiodata_network2host(pkt->data, data->sizeOfAudioData);
-
-    return errorVal;
-}
-
-/**
- * Audio frame with a minimal header
- */
-static int ad_read_audio_minimal(AVFormatContext *s, AVIOContext *pb,
-                                 AVPacket *pkt, int size, NetVuAudioData *data)
-{
-    int dataSize = size - sizeof(MinimalAudioHeader);
-    int n, status, errorVal = 0;
-
-    // Get the minimal audio header and copy into generic audio data structure
-    memset(data, 0, sizeof(NetVuAudioData));
-    data->seconds = avio_rb32(pb);
-    data->msecs   = avio_rb16(pb);
-    data->mode    = avio_rb16(pb);
-    if ( url_ferror(pb) || (data->seconds == 0) )  {
-        av_log(s, AV_LOG_ERROR, "%s: Reading header, errorcode %d\n",
-               __func__, url_ferror(pb));
-        return ADPIC_MINIMAL_AUDIO_ADPCM_GET_BUFFER_ERROR;
-    }
-
-    // Now get the main frame data into a new packet
-    if( (status = ad_new_packet( pkt, dataSize )) < 0 )
-        return ADPIC_MINIMAL_AUDIO_ADPCM_NEW_PACKET_ERROR;
-
-    if( (n = ad_get_buffer( pb, pkt->data, dataSize )) != dataSize )
-        return ADPIC_MINIMAL_AUDIO_ADPCM_GET_BUFFER_ERROR2;
-
-    audiodata_network2host(pkt->data, dataSize);
-
-    return errorVal;
 }
 
 

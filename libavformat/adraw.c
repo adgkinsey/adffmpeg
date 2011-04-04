@@ -40,7 +40,8 @@ static int adraw_probe(AVProbeData *p)
         NetVuImageData test;
         ad_network2host(&test, bufPtr);
         if (pic_version_valid(test.version))  {
-            return AVPROBE_SCORE_MAX / 2;
+            if (ad_adFormatToCodecId(NULL, test.vid_format) == CODEC_ID_MJPEG)
+                return AVPROBE_SCORE_MAX / 2;
         }
         --bufferSize;
         ++bufPtr;
@@ -62,7 +63,6 @@ static int adraw_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     NetVuImageData  *vidDat = NULL;
     char            *txtDat = NULL;
     int             errorVal = 0;
-    ADFrameType     frameType;
     int             ii = 0;
 
     vidDat = av_malloc(sizeof(NetVuImageData));
@@ -83,11 +83,21 @@ static int adraw_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     av_free(buf);
 
     if (errorVal > 0)  {
-        frameType = NetVuVideo;
-        errorVal = ad_read_jpeg(s, pb, pkt, vidDat, &txtDat);
+        switch (ad_adFormatToCodecId(s, vidDat->vid_format))  {
+            case(CODEC_ID_MJPEG):
+                errorVal = ad_read_jpeg(s, pb, pkt, vidDat, &txtDat);
+                break;
+            case(CODEC_ID_MPEG4):
+            case(CODEC_ID_H264):
+            default:
+                //errorVal = adbinary_mpeg(s, pb, pkt, vidDat, &txtDat);
+                av_log(s, AV_LOG_ERROR, "Unsupported format for adraw demuxer: "
+                        "%d\n", vidDat->vid_format);
+                break;
+        }
     }
     if (errorVal >= 0)
-        errorVal = ad_read_packet(s, pb, pkt, frameType, vidDat, txtDat);
+        errorVal = ad_read_packet(s, pb, pkt, NetVuVideo, vidDat, txtDat);
     else  {
         // If there was an error, release any allocated memory
         if( vidDat != NULL )
