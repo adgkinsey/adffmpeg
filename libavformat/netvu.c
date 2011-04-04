@@ -203,19 +203,13 @@ static int netvu_write(URLContext *h, const uint8_t *buf, int size)
     return url_write(nv->hd, buf, size);
 }
 
-static int64_t netvu_seek(URLContext *h, int64_t off, int whence)
-{
-    NetvuContext *nv = h->priv_data;
-    return url_seek(nv->hd, off, whence);
-}
-
 
 URLProtocol ff_netvu_protocol = {
     "netvu",
     netvu_open,
     netvu_read,
     netvu_write,
-    netvu_seek,
+    NULL,
     netvu_close,
     .priv_data_size = sizeof(NetvuContext),
 };
