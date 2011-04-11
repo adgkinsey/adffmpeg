@@ -266,7 +266,7 @@ typedef struct MMCO{
 typedef struct H264Context{
     MpegEncContext s;
     H264DSPContext h264dsp;
-    int pixel_size;
+    int pixel_shift;
     int chroma_qp[2]; //QPc
 
     int qp_thresh;      ///< QP threshold to skip loopfilter
@@ -715,6 +715,12 @@ void ff_h264_filter_mb( H264Context *h, int mb_x, int mb_y, uint8_t *img_y, uint
  * @param h H.264 context.
  */
 void ff_h264_reset_sei(H264Context *h);
+
+
+void ff_hl_motion(H264Context *h, uint8_t *dest_y, uint8_t *dest_cb, uint8_t *dest_cr,
+                      qpel_mc_func (*qpix_put)[16], h264_chroma_mc_func (*chroma_put),
+                      qpel_mc_func (*qpix_avg)[16], h264_chroma_mc_func (*chroma_avg),
+                      h264_weight_func *weight_op, h264_biweight_func *weight_avg);
 
 
 /*
