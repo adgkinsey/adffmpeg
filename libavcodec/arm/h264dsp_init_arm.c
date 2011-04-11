@@ -92,9 +92,8 @@ void ff_h264_idct8_add4_neon(uint8_t *dst, const int *block_offset,
                              DCTELEM *block, int stride,
                              const uint8_t nnzc[6*8]);
 
-static void ff_h264dsp_init_neon(H264DSPContext *c, const int bit_depth)
+static void ff_h264dsp_init_neon(H264DSPContext *c)
 {
-    if (bit_depth == 8) {
     c->h264_v_loop_filter_luma   = ff_h264_v_loop_filter_luma_neon;
     c->h264_h_loop_filter_luma   = ff_h264_h_loop_filter_luma_neon;
     c->h264_v_loop_filter_chroma = ff_h264_v_loop_filter_chroma_neon;
@@ -126,10 +125,9 @@ static void ff_h264dsp_init_neon(H264DSPContext *c, const int bit_depth)
     c->h264_idct8_add       = ff_h264_idct8_add_neon;
     c->h264_idct8_dc_add    = ff_h264_idct8_dc_add_neon;
     c->h264_idct8_add4      = ff_h264_idct8_add4_neon;
-    }
 }
 
-void ff_h264dsp_init_arm(H264DSPContext *c, const int bit_depth)
+void ff_h264dsp_init_arm(H264DSPContext *c)
 {
-    if (HAVE_NEON) ff_h264dsp_init_neon(c, bit_depth);
+    if (HAVE_NEON) ff_h264dsp_init_neon(c);
 }
