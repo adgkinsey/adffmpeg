@@ -31,6 +31,7 @@
 #include "libavutil/imgutils.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/samplefmt.h"
+#include "libavutil/avassert.h"
 #include "libavformat/avformat.h"
 #include "libavdevice/avdevice.h"
 #include "libswscale/swscale.h"
@@ -1581,6 +1582,9 @@ static int input_get_buffer(AVCodecContext *codec, AVFrame *pic)
     int perms = AV_PERM_WRITE;
     int i, w, h, stride[4];
     unsigned edge;
+    int pixel_size;
+
+    av_assert0(codec->flags & CODEC_FLAG_EMU_EDGE);
 
     if (codec->codec->capabilities & CODEC_CAP_NEG_LINESIZES)
         perms |= AV_PERM_NEG_LINESIZES;
@@ -1594,6 +1598,10 @@ static int input_get_buffer(AVCodecContext *codec, AVFrame *pic)
 
     w = codec->width;
     h = codec->height;
+
+    if(av_image_check_size(w, h, 0, codec))
+        return -1;
+
     avcodec_align_dimensions2(codec, &w, &h, stride);
     edge = codec->flags & CODEC_FLAG_EMU_EDGE ? 0 : avcodec_get_edge_width();
     w += edge << 1;
@@ -1602,6 +1610,7 @@ static int input_get_buffer(AVCodecContext *codec, AVFrame *pic)
     if(!(ref = avfilter_get_video_buffer(ctx->outputs[0], perms, w, h)))
         return -1;
 
+    pixel_size = av_pix_fmt_descriptors[ref->format].comp[0].step_minus1+1;
     ref->video->w = codec->width;
     ref->video->h = codec->height;
     for(i = 0; i < 4; i ++) {
@@ -1609,7 +1618,7 @@ static int input_get_buffer(AVCodecContext *codec, AVFrame *pic)
         unsigned vshift = (i == 1 || i == 2) ? av_pix_fmt_descriptors[ref->format].log2_chroma_h : 0;
 
         if (ref->data[i]) {
-            ref->data[i]    += (edge >> hshift) + ((edge * ref->linesize[i]) >> vshift);
+            ref->data[i]    += ((edge * pixel_size) >> hshift) + ((edge * ref->linesize[i]) >> vshift);
         }
         pic->data[i]     = ref->data[i];
         pic->linesize[i] = ref->linesize[i];
@@ -1659,7 +1668,9 @@ static int input_init(AVFilterContext *ctx, const char *args, void *opaque)
     priv->is = opaque;
     codec    = priv->is->video_st->codec;
     codec->opaque = ctx;
-    if(codec->codec->capabilities & CODEC_CAP_DR1) {
+    if((codec->codec->capabilities & CODEC_CAP_DR1)
+    ) {
+        codec->flags |= CODEC_FLAG_EMU_EDGE;
         priv->use_dr1 = 1;
         codec->get_buffer     = input_get_buffer;
         codec->release_buffer = input_release_buffer;
@@ -2397,7 +2408,7 @@ static int decode_thread(void *arg)
     is->subtitle_stream = -1;
 
     global_video_state = is;
-    url_set_interrupt_cb(decode_interrupt_cb);
+    avio_set_interrupt_cb(decode_interrupt_cb);
 
     memset(ap, 0, sizeof(*ap));
 
@@ -2617,7 +2628,7 @@ static int decode_thread(void *arg)
         av_close_input_file(is->ic);
         is->ic = NULL; /* safety */
     }
-    url_set_interrupt_cb(NULL);
+    avio_set_interrupt_cb(NULL);
 
     if (ret != 0) {
         SDL_Event event;

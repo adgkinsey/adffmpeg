@@ -31,8 +31,6 @@
 #include "asfcrypt.h"
 #include "avlanguage.h"
 
-void ff_mms_set_stream_selection(URLContext *h, AVFormatContext *format);
-
 typedef struct {
     int asfid2avid[128];                 ///< conversion table from asf ID 2 AVStream ID
     ASFStream streams[128];              ///< it's max number and it's not that big
@@ -132,12 +130,6 @@ static void print_guid(const ff_asf_guid *g)
 #else
 #define print_guid(g)
 #endif
-
-void ff_get_guid(AVIOContext *s, ff_asf_guid *g)
-{
-    assert(sizeof(*g) == 16);
-    avio_read(s, *g, sizeof(*g));
-}
 
 static int asf_probe(AVProbeData *pd)
 {

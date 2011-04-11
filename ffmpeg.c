@@ -47,6 +47,8 @@
 #include "libavutil/libm.h"
 #include "libavformat/os_support.h"
 
+#include "libavformat/ffm.h" // not public API
+
 #if CONFIG_AVFILTER
 # include "libavfilter/avfilter.h"
 # include "libavfilter/avfiltergraph.h"
@@ -353,7 +355,7 @@ static struct termios oldtty;
 
 #if CONFIG_AVFILTER
 
-static int configure_filters(AVInputStream *ist, AVOutputStream *ost)
+static int configure_video_filters(AVInputStream *ist, AVOutputStream *ost)
 {
     AVFilterContext *last_filter, *filter;
     /** filter graph containing all filters including input & output */
@@ -1381,26 +1383,25 @@ static void print_report(AVFormatContext **output_files,
     ti1 = 1e10;
     vid = 0;
     for(i=0;i<nb_ostreams;i++) {
+        float q= -1;
         ost = ost_table[i];
         enc = ost->st->codec;
+        if(!ost->st->stream_copy && enc->coded_frame)
+            q= enc->coded_frame->quality/(float)FF_QP2LAMBDA;
         if (vid && enc->codec_type == AVMEDIA_TYPE_VIDEO) {
-            snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "q=%2.1f ",
-                     !ost->st->stream_copy ?
-                     enc->coded_frame->quality/(float)FF_QP2LAMBDA : -1);
+            snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "q=%2.1f ", q);
         }
         if (!vid && enc->codec_type == AVMEDIA_TYPE_VIDEO) {
             float t = (av_gettime()-timer_start) / 1000000.0;
 
             frame_number = ost->frame_number;
             snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "frame=%5d fps=%3d q=%3.1f ",
-                     frame_number, (t>1)?(int)(frame_number/t+0.5) : 0,
-                     !ost->st->stream_copy ?
-                     enc->coded_frame->quality/(float)FF_QP2LAMBDA : -1);
+                     frame_number, (t>1)?(int)(frame_number/t+0.5) : 0, q);
             if(is_last_report)
                 snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "L");
             if(qp_hist){
                 int j;
-                int qp= lrintf(enc->coded_frame->quality/(float)FF_QP2LAMBDA);
+                int qp= lrintf(q);
                 if(qp>=0 && qp<FF_ARRAY_ELEMS(qp_histogram))
                     qp_histogram[qp]++;
                 for(j=0; j<32; j++)
@@ -1882,7 +1883,7 @@ static void print_sdp(AVFormatContext **avc, int n)
 {
     char sdp[2048];
 
-    avf_sdp_create(avc, n, sdp, sizeof(sdp));
+    av_sdp_create(avc, n, sdp, sizeof(sdp));
     printf("SDP:\n%s\n", sdp);
     fflush(stdout);
 }
@@ -2307,7 +2308,7 @@ static int transcode(AVFormatContext **output_files,
                 ist->decoding_needed = 1;
 
 #if CONFIG_AVFILTER
-                if (configure_filters(ist, ost)) {
+                if (configure_video_filters(ist, ost)) {
                     fprintf(stderr, "Error opening filters!\n");
                     exit(1);
                 }
@@ -2570,7 +2571,7 @@ static int transcode(AVFormatContext **output_files,
     if (!using_stdin) {
         if(verbose >= 0)
             fprintf(stderr, "Press [q] to stop encoding\n");
-        url_set_interrupt_cb(decode_interrupt_cb);
+        avio_set_interrupt_cb(decode_interrupt_cb);
     }
     term_init();
 
@@ -3888,7 +3889,7 @@ static void opt_output_file(const char *filename)
         }
 
         /* open the file */
-        if ((err = avio_open(&oc->pb, filename, URL_WRONLY)) < 0) {
+        if ((err = avio_open(&oc->pb, filename, AVIO_WRONLY)) < 0) {
             print_error(filename, err);
             ffmpeg_exit(1);
         }
@@ -4427,7 +4428,7 @@ int main(int argc, char **argv)
 
 #if HAVE_ISATTY
     if(isatty(STDIN_FILENO))
-        url_set_interrupt_cb(decode_interrupt_cb);
+        avio_set_interrupt_cb(decode_interrupt_cb);
 #endif
 
     init_opts();

@@ -812,7 +812,7 @@ static int rtmp_open(URLContext *s, const char *uri, int flags)
     if (!rt)
         return AVERROR(ENOMEM);
     s->priv_data = rt;
-    rt->is_input = !(flags & URL_WRONLY);
+    rt->is_input = !(flags & AVIO_WRONLY);
 
     av_url_split(proto, sizeof(proto), NULL, 0, hostname, sizeof(hostname), &port,
                  path, sizeof(path), s->filename);
@@ -821,7 +821,7 @@ static int rtmp_open(URLContext *s, const char *uri, int flags)
         port = RTMP_DEFAULT_PORT;
     ff_url_join(buf, sizeof(buf), "tcp", NULL, hostname, port, NULL);
 
-    if (ffurl_open(&rt->stream, buf, URL_RDWR) < 0) {
+    if (ffurl_open(&rt->stream, buf, AVIO_RDWR) < 0) {
         av_log(LOG_CONTEXT, AV_LOG_ERROR, "Cannot open connection %s\n", buf);
         goto fail;
     }
@@ -991,10 +991,9 @@ static int rtmp_write(URLContext *s, const uint8_t *buf, int size)
 }
 
 URLProtocol ff_rtmp_protocol = {
-    "rtmp",
-    rtmp_open,
-    rtmp_read,
-    rtmp_write,
-    NULL, /* seek */
-    rtmp_close,
+    .name      = "rtmp",
+    .url_open  = rtmp_open,
+    .url_read  = rtmp_read,
+    .url_write = rtmp_write,
+    .url_close = rtmp_close,
 };

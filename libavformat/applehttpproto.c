@@ -115,7 +115,7 @@ static int parse_playlist(URLContext *h, const char *url)
     char line[1024];
     const char *ptr;
 
-    if ((ret = avio_open(&in, url, URL_RDONLY)) < 0)
+    if ((ret = avio_open(&in, url, AVIO_RDONLY)) < 0)
         return ret;
 
     read_chomp_line(in, line, sizeof(line));
@@ -180,8 +180,8 @@ static int applehttp_open(URLContext *h, const char *uri, int flags)
     int ret, i;
     const char *nested_url;
 
-    if (flags & (URL_WRONLY | URL_RDWR))
-        return AVERROR_NOTSUPP;
+    if (flags & (AVIO_WRONLY | AVIO_RDWR))
+        return AVERROR(ENOSYS);
 
     s = av_mallocz(sizeof(AppleHTTPContext));
     if (!s)
@@ -275,7 +275,7 @@ retry:
     }
     url = s->segments[s->cur_seq_no - s->start_seq_no]->url,
     av_log(NULL, AV_LOG_DEBUG, "opening %s\n", url);
-    ret = ffurl_open(&s->seg_hd, url, URL_RDONLY);
+    ret = ffurl_open(&s->seg_hd, url, AVIO_RDONLY);
     if (ret < 0) {
         if (url_interrupt_cb(h))
             return AVERROR_EXIT;
@@ -298,11 +298,9 @@ static int applehttp_close(URLContext *h)
 }
 
 URLProtocol ff_applehttp_protocol = {
-    "applehttp",
-    applehttp_open,
-    applehttp_read,
-    NULL, /* write */
-    NULL, /* seek */
-    applehttp_close,
-    .flags = URL_PROTOCOL_FLAG_NESTED_SCHEME,
+    .name      = "applehttp",
+    .url_open  = applehttp_open,
+    .url_read  = applehttp_read,
+    .url_close = applehttp_close,
+    .flags     = URL_PROTOCOL_FLAG_NESTED_SCHEME,
 };

@@ -68,11 +68,12 @@ typedef struct H264DSPContext{
     void (*h264_idct_add8)(uint8_t **dst/*align 16*/, const int *blockoffset, DCTELEM *block/*align 16*/, int stride, const uint8_t nnzc[6*8]);
     void (*h264_idct_add16intra)(uint8_t *dst/*align 16*/, const int *blockoffset, DCTELEM *block/*align 16*/, int stride, const uint8_t nnzc[6*8]);
     void (*h264_luma_dc_dequant_idct)(DCTELEM *output, DCTELEM *input/*align 16*/, int qmul);
+    void (*h264_chroma_dc_dequant_idct)(DCTELEM *block, int qmul);
 }H264DSPContext;
 
-void ff_h264dsp_init(H264DSPContext *c);
-void ff_h264dsp_init_arm(H264DSPContext *c);
-void ff_h264dsp_init_ppc(H264DSPContext *c);
-void ff_h264dsp_init_x86(H264DSPContext *c);
+void ff_h264dsp_init(H264DSPContext *c, const int bit_depth);
+void ff_h264dsp_init_arm(H264DSPContext *c, const int bit_depth);
+void ff_h264dsp_init_ppc(H264DSPContext *c, const int bit_depth);
+void ff_h264dsp_init_x86(H264DSPContext *c, const int bit_depth);
 
 #endif /* AVCODEC_H264DSP_H */

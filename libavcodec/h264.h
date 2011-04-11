@@ -108,6 +108,7 @@
  */
 #define DELAYED_PIC_REF 4
 
+#define QP_MAX_MAX (51 + 2*6)           // The maximum supported qp
 
 /* NAL unit types */
 enum {
@@ -265,6 +266,7 @@ typedef struct MMCO{
 typedef struct H264Context{
     MpegEncContext s;
     H264DSPContext h264dsp;
+    int pixel_shift;
     int chroma_qp[2]; //QPc
 
     int qp_thresh;      ///< QP threshold to skip loopfilter
@@ -296,7 +298,7 @@ typedef struct H264Context{
     unsigned int top_samples_available;
     unsigned int topright_samples_available;
     unsigned int left_samples_available;
-    uint8_t (*top_borders[2])[16+2*8];
+    uint8_t (*top_borders[2])[(16+2*8)*2];
 
     /**
      * non zero coeff count cache.
@@ -353,8 +355,8 @@ typedef struct H264Context{
      */
     PPS pps; //FIXME move to Picture perhaps? (->no) do we need that?
 
-    uint32_t dequant4_buffer[6][52][16]; //FIXME should these be moved down?
-    uint32_t dequant8_buffer[2][52][64];
+    uint32_t dequant4_buffer[6][QP_MAX_MAX+1][16]; //FIXME should these be moved down?
+    uint32_t dequant8_buffer[2][QP_MAX_MAX+1][64];
     uint32_t (*dequant4_coeff[6])[16];
     uint32_t (*dequant8_coeff[2])[64];
 
@@ -406,9 +408,9 @@ typedef struct H264Context{
     GetBitContext *intra_gb_ptr;
     GetBitContext *inter_gb_ptr;
 
-    DECLARE_ALIGNED(16, DCTELEM, mb)[16*24];
-    DECLARE_ALIGNED(16, DCTELEM, mb_luma_dc)[16];
-    DCTELEM mb_padding[256];        ///< as mb is addressed by scantable[i] and scantable is uint8_t we can either check that i is not too large or ensure that there is some unused stuff after mb
+    DECLARE_ALIGNED(16, DCTELEM, mb)[16*24*2]; ///< as a dct coeffecient is int32_t in high depth, we need to reserve twice the space.
+    DECLARE_ALIGNED(16, DCTELEM, mb_luma_dc)[16*2];
+    DCTELEM mb_padding[256*2];        ///< as mb is addressed by scantable[i] and scantable is uint8_t we can either check that i is not too large or ensure that there is some unused stuff after mb
 
     /**
      * Cabac
@@ -602,7 +604,7 @@ typedef struct H264Context{
 }H264Context;
 
 
-extern const uint8_t ff_h264_chroma_qp[52];
+extern const uint8_t ff_h264_chroma_qp[3][QP_MAX_MAX+1]; ///< One chroma qp table for each supported bit depth (8, 9, 10).
 
 /**
  * Decode SEI
@@ -713,6 +715,12 @@ void ff_h264_filter_mb( H264Context *h, int mb_x, int mb_y, uint8_t *img_y, uint
  * @param h H.264 context.
  */
 void ff_h264_reset_sei(H264Context *h);
+
+
+void ff_hl_motion(H264Context *h, uint8_t *dest_y, uint8_t *dest_cb, uint8_t *dest_cr,
+                      qpel_mc_func (*qpix_put)[16], h264_chroma_mc_func (*chroma_put),
+                      qpel_mc_func (*qpix_avg)[16], h264_chroma_mc_func (*chroma_avg),
+                      h264_weight_func *weight_op, h264_biweight_func *weight_avg);
 
 
 /*

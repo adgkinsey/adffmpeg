@@ -232,6 +232,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_WMV3,         MKTAG('W', 'M', 'V', 'P') },
     { CODEC_ID_VC1,          MKTAG('W', 'V', 'C', '1') },
     { CODEC_ID_VC1,          MKTAG('W', 'M', 'V', 'A') },
+    { CODEC_ID_VC1,          MKTAG('W', 'V', 'P', '2') },
     { CODEC_ID_LOCO,         MKTAG('L', 'O', 'C', 'O') },
     { CODEC_ID_WNV1,         MKTAG('W', 'N', 'V', '1') },
     { CODEC_ID_AASC,         MKTAG('A', 'A', 'S', 'C') },
@@ -318,6 +319,14 @@ const AVCodecTag ff_codec_wav_tags[] = {
     { CODEC_ID_MP3,       MKTAG('L', 'A', 'M', 'E') },
     { CODEC_ID_MP3,       MKTAG('M', 'P', '3', ' ') },
     { CODEC_ID_NONE,      0 },
+};
+
+const AVCodecGuid ff_codec_wav_guids[] = {
+    {CODEC_ID_AC3,        {0x2C,0x80,0x6D,0xE0,0x46,0xDB,0xCF,0x11,0xB4,0xD1,0x00,0x80,0x5F,0x6C,0xBB,0xEA}},
+    {CODEC_ID_ATRAC3P,    {0xBF,0xAA,0x23,0xE9,0x58,0xCB,0x71,0x44,0xA1,0x19,0xFF,0xFA,0x01,0xE4,0xCE,0x62}},
+    {CODEC_ID_EAC3,       {0xAF,0x87,0xFB,0xA7,0x02,0x2D,0xFB,0x42,0xA4,0xD4,0x05,0xCD,0x93,0x84,0x3B,0xDD}},
+    {CODEC_ID_MP2,        {0x2B,0x80,0x6D,0xE0,0x46,0xDB,0xCF,0x11,0xB4,0xD1,0x00,0x80,0x5F,0x6C,0xBB,0xEA}},
+    {CODEC_ID_NONE}
 };
 
 #if CONFIG_MUXERS
@@ -485,7 +494,6 @@ void ff_get_wav_header(AVIOContext *pb, AVCodecContext *codec, int size)
 
     id = avio_rl16(pb);
     codec->codec_type = AVMEDIA_TYPE_AUDIO;
-    codec->codec_tag = id;
     codec->channels = avio_rl16(pb);
     codec->sample_rate = avio_rl32(pb);
     codec->bit_rate = avio_rl32(pb) * 8;
@@ -494,15 +502,29 @@ void ff_get_wav_header(AVIOContext *pb, AVCodecContext *codec, int size)
         codec->bits_per_coded_sample = 8;
     }else
         codec->bits_per_coded_sample = avio_rl16(pb);
+    if (id == 0xFFFE) {
+        codec->codec_tag = 0;
+    } else {
+        codec->codec_tag = id;
+        codec->codec_id = ff_wav_codec_get_id(id, codec->bits_per_coded_sample);
+    }
     if (size >= 18) {  /* We're obviously dealing with WAVEFORMATEX */
         int cbSize = avio_rl16(pb); /* cbSize */
         size -= 18;
         cbSize = FFMIN(size, cbSize);
         if (cbSize >= 22 && id == 0xfffe) { /* WAVEFORMATEXTENSIBLE */
+            ff_asf_guid subformat;
             codec->bits_per_coded_sample = avio_rl16(pb);
             codec->channel_layout = avio_rl32(pb); /* dwChannelMask */
-            id = avio_rl32(pb); /* 4 first bytes of GUID */
-            avio_skip(pb, 12); /* skip end of GUID */
+            ff_get_guid(pb, &subformat);
+            if (!memcmp(subformat + 4, (const uint8_t[]){FF_MEDIASUBTYPE_BASE_GUID}, 12)) {
+                codec->codec_tag = AV_RL32(subformat);
+                codec->codec_id = ff_wav_codec_get_id(codec->codec_tag, codec->bits_per_coded_sample);
+            } else {
+                codec->codec_id = ff_codec_guid_get_id(ff_codec_wav_guids, subformat);
+                if (!codec->codec_id)
+                    av_log(codec, AV_LOG_WARNING, "unknown subformat:"FF_PRI_GUID"\n", FF_ARG_GUID(subformat));
+            }
             cbSize -= 22;
             size -= 22;
         }
@@ -517,7 +539,6 @@ void ff_get_wav_header(AVIOContext *pb, AVCodecContext *codec, int size)
         if (size > 0)
             avio_skip(pb, size);
     }
-    codec->codec_id = ff_wav_codec_get_id(id, codec->bits_per_coded_sample);
     if (codec->codec_id == CODEC_ID_AAC_LATM) {
         /* channels and sample_rate values are those prior to applying SBR and/or PS */
         codec->channels    = 0;
@@ -583,4 +604,20 @@ void ff_parse_specific_params(AVCodecContext *stream, int *au_rate, int *au_ssiz
     gcd= av_gcd(*au_scale, *au_rate);
     *au_scale /= gcd;
     *au_rate /= gcd;
+}
+
+void ff_get_guid(AVIOContext *s, ff_asf_guid *g)
+{
+    assert(sizeof(*g) == 16);
+    avio_read(s, *g, sizeof(*g));
+}
+
+enum CodecID ff_codec_guid_get_id(const AVCodecGuid *guids, ff_asf_guid guid)
+{
+    int i;
+    for (i = 0; guids[i].id != CODEC_ID_NONE; i++) {
+        if (!ff_guidcmp(guids[i].guid, guid))
+            return guids[i].id;
+    }
+    return CODEC_ID_NONE;
 }
