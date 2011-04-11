@@ -648,6 +648,7 @@ static void choose_pixel_fmt(AVStream *st, AVCodec *codec)
                 break;
         }
         if (*p == -1) {
+            if(st->codec->pix_fmt != PIX_FMT_NONE)
             av_log(NULL, AV_LOG_WARNING,
                    "Incompatible pixel format '%s' for codec '%s', auto-selecting format '%s'\n",
                    av_pix_fmt_descriptors[st->codec->pix_fmt].name,
@@ -1465,6 +1466,14 @@ static void print_report(AVFormatContext **output_files,
     }
 }
 
+static void generate_silence(uint8_t* buf, enum AVSampleFormat sample_fmt, size_t size)
+{
+    int fill_char = 0x00;
+    if (sample_fmt == AV_SAMPLE_FMT_U8)
+        fill_char = 0x80;
+    memset(buf, fill_char, size);
+}
+
 /* pkt = NULL means EOF (needed to flush decoder buffers) */
 static int output_packet(AVInputStream *ist, int ist_index,
                          AVOutputStream **ost_table, int nb_ostreams,
@@ -1816,7 +1825,7 @@ static int output_packet(AVInputStream *ist, int ist_index,
                                     int frame_bytes = enc->frame_size*osize*enc->channels;
                                     if (allocated_audio_buf_size < frame_bytes)
                                         ffmpeg_exit(1);
-                                    memset(audio_buf+fifo_bytes, 0, frame_bytes - fifo_bytes);
+                                    generate_silence(audio_buf+fifo_bytes, enc->sample_fmt, frame_bytes - fifo_bytes);
                                 }
 
                                 ret = avcodec_encode_audio(enc, bit_buffer, bit_buffer_size, (short *)audio_buf);
@@ -4335,7 +4344,7 @@ static const OptionDef options[] = {
     { "vcodec", HAS_ARG | OPT_VIDEO, {(void*)opt_video_codec}, "force video codec ('copy' to copy stream)", "codec" },
     { "me_threshold", HAS_ARG | OPT_FUNC2 | OPT_EXPERT | OPT_VIDEO, {(void*)opt_me_threshold}, "motion estimaton threshold",  "threshold" },
     { "sameq", OPT_BOOL | OPT_VIDEO, {(void*)&same_quality},
-      "use same video quality as source (implies VBR)" },
+      "use same quantizer as source (implies VBR)" },
     { "pass", HAS_ARG | OPT_VIDEO, {(void*)&opt_pass}, "select the pass number (1 or 2)", "n" },
     { "passlogfile", HAS_ARG | OPT_STRING | OPT_VIDEO, {(void*)&pass_logfilename_prefix}, "select two pass log file name prefix", "prefix" },
     { "deinterlace", OPT_BOOL | OPT_EXPERT | OPT_VIDEO, {(void*)&do_deinterlace},

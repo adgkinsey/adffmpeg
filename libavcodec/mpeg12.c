@@ -1217,21 +1217,31 @@ static void quant_matrix_rebuild(uint16_t *matrix, const uint8_t *old_perm,
 }
 
 static const enum PixelFormat mpeg1_hwaccel_pixfmt_list_420[] = {
+#if CONFIG_MPEG_XVMC_DECODER
     PIX_FMT_XVMC_MPEG2_IDCT,
     PIX_FMT_XVMC_MPEG2_MC,
+#endif
+#if CONFIG_MPEG1_VDPAU_HWACCEL
     PIX_FMT_VDPAU_MPEG1,
-    PIX_FMT_DXVA2_VLD,
-    PIX_FMT_VAAPI_VLD,
+#endif
     PIX_FMT_YUV420P,
     PIX_FMT_NONE
 };
 
 static const enum PixelFormat mpeg2_hwaccel_pixfmt_list_420[] = {
+#if CONFIG_MPEG_XVMC_DECODER
     PIX_FMT_XVMC_MPEG2_IDCT,
     PIX_FMT_XVMC_MPEG2_MC,
+#endif
+#if CONFIG_MPEG2_VDPAU_HWACCEL
     PIX_FMT_VDPAU_MPEG2,
+#endif
+#if CONFIG_MPEG2_DXVA2_HWACCEL
     PIX_FMT_DXVA2_VLD,
+#endif
+#if CONFIG_MPEG2_VAAPI_HWACCEL
     PIX_FMT_VAAPI_VLD,
+#endif
     PIX_FMT_YUV420P,
     PIX_FMT_NONE
 };
@@ -2338,7 +2348,7 @@ static int decode_chunks(AVCodecContext *avctx,
                         s2->error_count += s2->thread_context[i]->error_count;
                 }
 
-                if (CONFIG_MPEG_VDPAU_DECODER && uses_vdpau(avctx))
+                if (CONFIG_VDPAU && uses_vdpau(avctx))
                     ff_vdpau_mpeg_picture_complete(s2, buf, buf_size, s->slice_count);
 
                 if (slice_end(avctx, picture)) {

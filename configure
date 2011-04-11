@@ -902,6 +902,7 @@ CONFIG_LIST="
     $COMPONENT_LIST
     aandct
     ac3dsp
+    audio_float
     avcodec
     avdevice
     avfilter
@@ -2436,7 +2437,7 @@ case $target_os in
         LIBTARGET=i386
         if enabled x86_64; then
             enable malloc_aligned
-            LIBTARGET="i386:x86-64"
+            LIBTARGET=x64
         elif enabled arm; then
             LIBTARGET=arm-wince
         fi
@@ -3179,6 +3180,7 @@ echo "librtmp enabled           ${librtmp-no}"
 echo "libschroedinger enabled   ${libschroedinger-no}"
 echo "libspeex enabled          ${libspeex-no}"
 echo "libtheora enabled         ${libtheora-no}"
+echo "libva enabled             ${vaapi-no}"
 echo "libvorbis enabled         ${libvorbis-no}"
 echo "libvpx enabled            ${libvpx-no}"
 echo "libx264 enabled           ${libx264-no}"

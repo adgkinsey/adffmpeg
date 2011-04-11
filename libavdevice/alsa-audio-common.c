@@ -36,6 +36,10 @@
 static av_cold snd_pcm_format_t codec_id_to_pcm_format(int codec_id)
 {
     switch(codec_id) {
+        case CODEC_ID_PCM_F32LE: return SND_PCM_FORMAT_FLOAT_LE;
+        case CODEC_ID_PCM_F32BE: return SND_PCM_FORMAT_FLOAT_BE;
+        case CODEC_ID_PCM_S32LE: return SND_PCM_FORMAT_S32_LE;
+        case CODEC_ID_PCM_S32BE: return SND_PCM_FORMAT_S32_BE;
         case CODEC_ID_PCM_S16LE: return SND_PCM_FORMAT_S16_LE;
         case CODEC_ID_PCM_S16BE: return SND_PCM_FORMAT_S16_BE;
         case CODEC_ID_PCM_S8:    return SND_PCM_FORMAT_S8;
@@ -43,41 +47,48 @@ static av_cold snd_pcm_format_t codec_id_to_pcm_format(int codec_id)
     }
 }
 
-static void alsa_reorder_s16_out_51(const void *in_v, void *out_v, int n)
-{
-    const int16_t *in = in_v;
-    int16_t *out = out_v;
-
-    while (n-- > 0) {
-        out[0] = in[0];
-        out[1] = in[1];
-        out[2] = in[4];
-        out[3] = in[5];
-        out[4] = in[2];
-        out[5] = in[3];
-        in  += 6;
-        out += 6;
-    }
+#define REORDER_OUT_51(NAME, TYPE) \
+static void alsa_reorder_ ## NAME ## _out_51(const void *in_v, void *out_v, int n) \
+{ \
+    const TYPE *in = in_v; \
+    TYPE * out = out_v; \
+\
+    while (n-- > 0) { \
+        out[0] = in[0]; \
+        out[1] = in[1]; \
+        out[2] = in[4]; \
+        out[3] = in[5]; \
+        out[4] = in[2]; \
+        out[5] = in[3]; \
+        in  += 6; \
+        out += 6; \
+    } \
 }
 
-static void alsa_reorder_s16_out_71(const void *in_v, void *out_v, int n)
-{
-    const int16_t *in = in_v;
-    int16_t *out = out_v;
-
-    while (n-- > 0) {
-        out[0] = in[0];
-        out[1] = in[1];
-        out[2] = in[4];
-        out[3] = in[5];
-        out[4] = in[2];
-        out[5] = in[3];
-        out[6] = in[6];
-        out[7] = in[7];
-        in  += 8;
-        out += 8;
-    }
+#define REORDER_OUT_71(NAME, TYPE) \
+static void alsa_reorder_ ## NAME ## _out_71(const void *in_v, void *out_v, int n) \
+{ \
+    const TYPE *in = in_v; \
+    TYPE * out = out_v; \
+\
+    while (n-- > 0) { \
+        out[0] = in[0]; \
+        out[1] = in[1]; \
+        out[2] = in[4]; \
+        out[3] = in[5]; \
+        out[4] = in[2]; \
+        out[5] = in[3]; \
+        out[6] = in[6]; \
+        out[7] = in[7]; \
+        in  += 8; \
+        out += 8; \
+    } \
 }
+
+REORDER_OUT_51(s16, int16_t)
+REORDER_OUT_71(s16, int16_t)
+REORDER_OUT_51(s32, int32_t)
+REORDER_OUT_71(s32, int32_t)
 
 #define REORDER_DUMMY ((void *)1)
 
@@ -93,6 +104,12 @@ static av_cold ff_reorder_func find_reorder_func(int codec_id,
         layout == AV_CH_LAYOUT_7POINT1 ?
             out ? alsa_reorder_s16_out_71 : NULL :
             NULL :
+    codec_id == CODEC_ID_PCM_S32LE || codec_id == CODEC_ID_PCM_S32BE ?
+        layout == AV_CH_LAYOUT_5POINT1_BACK || layout == AV_CH_LAYOUT_5POINT1 ?
+            out ? alsa_reorder_s32_out_51 : NULL :
+        layout == AV_CH_LAYOUT_7POINT1 ?
+            out ? alsa_reorder_s32_out_71 : NULL :
+           NULL :
         NULL;
 }
 

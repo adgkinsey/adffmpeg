@@ -25,6 +25,7 @@
 #include "avio.h"
 #include "avio_internal.h"
 #include "internal.h"
+#include "url.h"
 #include <stdarg.h>
 
 #define IO_BUFFER_SIZE 32768
@@ -556,7 +557,7 @@ static void fill_buffer(AVIOContext *s)
     }
 
     /* make buffer smaller in case it ended up large after probing */
-    if (s->buffer_size > max_buffer_size) {
+    if (s->read_packet && s->buffer_size > max_buffer_size) {
         ffio_set_buf_size(s, max_buffer_size);
 
         s->checksum_ptr = dst = s->buffer;
@@ -836,7 +837,7 @@ int ffio_fdopen(AVIOContext **s, URLContext *h)
     uint8_t *buffer;
     int buffer_size, max_packet_size;
 
-    max_packet_size = url_get_max_packet_size(h);
+    max_packet_size = h->max_packet_size;
     if (max_packet_size) {
         buffer_size = max_packet_size; /* no need to bufferize more than one packet */
     } else {
@@ -854,7 +855,7 @@ int ffio_fdopen(AVIOContext **s, URLContext *h)
 
     if (ffio_init_context(*s, buffer, buffer_size,
                       (h->flags & URL_WRONLY || h->flags & URL_RDWR), h,
-                      url_read, url_write, url_seek) < 0) {
+                      ffurl_read, ffurl_write, ffurl_seek) < 0) {
         av_free(buffer);
         av_freep(s);
         return AVERROR(EIO);
@@ -953,12 +954,12 @@ int avio_open(AVIOContext **s, const char *filename, int flags)
     URLContext *h;
     int err;
 
-    err = url_open(&h, filename, flags);
+    err = ffurl_open(&h, filename, flags);
     if (err < 0)
         return err;
     err = ffio_fdopen(s, h);
     if (err < 0) {
-        url_close(h);
+        ffurl_close(h);
         return err;
     }
     return 0;
@@ -970,7 +971,7 @@ int avio_close(AVIOContext *s)
 
     av_free(s->buffer);
     av_free(s);
-    return url_close(h);
+    return ffurl_close(h);
 }
 
 #if FF_API_OLD_AVIO
@@ -1048,9 +1049,6 @@ int64_t ffio_read_seek(AVIOContext *s, int stream_index,
     return ret;
 }
 
-/* avio_open_dyn_buf and avio_close_dyn_buf are used in rtp.c to send a response
- * back to the server even if CONFIG_MUXERS is false. */
-#if CONFIG_MUXERS || CONFIG_NETWORK
 /* buffer handling */
 #if FF_API_OLD_AVIO
 int url_open_buf(AVIOContext **s, uint8_t *buf, int buf_size, int flags)
@@ -1197,4 +1195,3 @@ int avio_close_dyn_buf(AVIOContext *s, uint8_t **pbuffer)
     av_free(s);
     return size - padding;
 }
-#endif /* CONFIG_MUXERS || CONFIG_NETWORK */
