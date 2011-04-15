@@ -328,7 +328,7 @@ static AVStream* createStream(AVFormatContext * avf,
         st->codec->channels = 1;
         st->codec->block_align = 0;
         st->codec->bits_per_coded_sample = 4;
-        st->start_time = frameInfo->imageTime * 1000 + frameInfo->imageMS;
+        st->start_time = frameInfo->imageTime * 1000LL + frameInfo->imageMS;
 
         switch(getAudioFrameSubType(frameInfo))  {
             case(FRAME_FORMAT_AUD_ADPCM_8000):
