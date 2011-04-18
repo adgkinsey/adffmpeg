@@ -149,7 +149,7 @@ static int netvu_open(URLContext *h, const char *uri, int flags)
         port = 80;
     ff_url_join(http, sizeof(http), "http", auth, hostname, port, "%s", path);
 
-    err = url_open(&nv->hd, http, URL_RDWR);
+    err = ffurl_open(&nv->hd, http, URL_RDWR);
     if (err >= 0)  {
         char headers[1024];
         char *startOfLine = &headers[0];
@@ -169,7 +169,7 @@ static int netvu_open(URLContext *h, const char *uri, int flags)
     }
     else  {
         if (nv->hd)
-            url_close(nv->hd);
+            ffurl_close(nv->hd);
         nv->hd = NULL;
         return AVERROR(EIO);
     }
@@ -178,7 +178,7 @@ static int netvu_open(URLContext *h, const char *uri, int flags)
 static int netvu_read(URLContext *h, uint8_t *buf, int size)
 {
     NetvuContext *nv = h->priv_data;
-    return url_read(nv->hd, buf, size);
+    return ffurl_read(nv->hd, buf, size);
 }
 
 static int netvu_close(URLContext *h)
@@ -187,7 +187,7 @@ static int netvu_close(URLContext *h)
     int i, ret = 0;
 
     if (nv->hd)
-        ret = url_close(nv->hd);
+        ret = ffurl_close(nv->hd);
 
     for (i = 0; i < NETVU_MAX_HEADERS; i++)  {
         if (nv->hdrs[i])
@@ -197,18 +197,12 @@ static int netvu_close(URLContext *h)
     return ret;
 }
 
-static int netvu_write(URLContext *h, const uint8_t *buf, int size)
-{
-    NetvuContext *nv = h->priv_data;
-    return url_write(nv->hd, buf, size);
-}
-
 
 URLProtocol ff_netvu_protocol = {
     "netvu",
     netvu_open,
     netvu_read,
-    netvu_write,
+    NULL,
     NULL,
     netvu_close,
     .priv_data_size = sizeof(NetvuContext),

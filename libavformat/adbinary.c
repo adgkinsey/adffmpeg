@@ -59,7 +59,7 @@ static void audioheader_network2host(NetVuAudioData *dst, const uint8_t *src)
     dst->sizeOfAudioData      = AV_RB32(src + 16);
     dst->seconds              = AV_RB32(src + 20);
     dst->msecs                = AV_RB32(src + 24);
-    if ((void*)dst != (void*)src) // Copy additionalData pointer if needed
+    if ((void*)dst != (const void*)src) // Copy additionalData pointer if needed
         memcpy(&dst->additionalData, src + 28, sizeof(unsigned char *));
 }
 
@@ -140,9 +140,9 @@ static int ad_read_mpeg_minimal(AVFormatContext *s, AVIOContext *pb,
     vidDat->session_time  = avio_rb32(pb);
     vidDat->milliseconds  = avio_rb16(pb);
 
-    if ( url_ferror(pb) || (vidDat->session_time == 0) )  {
+    if ( pb->error || (vidDat->session_time == 0) )  {
         av_log(s, AV_LOG_ERROR, "%s: Reading header, errorcode %d\n",
-               __func__, url_ferror(pb));
+               __func__, pb->error);
         return ADPIC_MPEG4_MINIMAL_GET_BUFFER_ERROR;
     }
     vidDat->version = PIC_VERSION;
@@ -215,9 +215,9 @@ static int ad_read_audio_minimal(AVFormatContext *s, AVIOContext *pb,
     data->seconds = avio_rb32(pb);
     data->msecs   = avio_rb16(pb);
     data->mode    = avio_rb16(pb);
-    if ( url_ferror(pb) || (data->seconds == 0) )  {
+    if ( pb->error || (data->seconds == 0) )  {
         av_log(s, AV_LOG_ERROR, "%s: Reading header, errorcode %d\n",
-               __func__, url_ferror(pb));
+               __func__, pb->error);
         return ADPIC_MINIMAL_AUDIO_ADPCM_GET_BUFFER_ERROR;
     }
 
@@ -381,7 +381,6 @@ static int adbinary_probe(AVProbeData *p)
 static int adbinary_read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
     AdbinaryContext *adContext = s->priv_data;
-    s->ctx_flags |= AVFMTCTX_NOHEADER;
     return ad_read_header(s, ap, &adContext->utc_offset);
 }
 
@@ -403,7 +402,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             errorVal = AVERROR_EOF;
         else {
             av_log(s, AV_LOG_ERROR, "%s: Reading separator, errorcode %d\n",
-                   __func__, url_ferror(pb));
+                   __func__, pb->error);
             errorVal = ADPIC_READ_6_BYTE_SEPARATOR_ERROR;
         }
         return errorVal;

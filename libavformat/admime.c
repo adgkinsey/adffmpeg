@@ -244,7 +244,7 @@ static int parse_mime_header(AVIOContext *pb, uint8_t *buffer, int *bufSize,
 
     // Check for JPEG header first
     do {
-        ch = url_fgetc(pb);
+        ch = avio_r8(pb);
         if (buffer && (ch == rawJfifHeader[*bufSize]))  {
             buffer[*bufSize] = ch;
             ++(*bufSize);
@@ -285,7 +285,7 @@ static int parse_mime_header(AVIOContext *pb, uint8_t *buffer, int *bufSize,
                 *q++ = ch;
         }
 
-        ch = url_fgetc( pb );
+        ch = avio_r8(pb);
     }
 
     return ADPIC_PARSE_MIME_HEADER_ERROR;
@@ -574,11 +574,11 @@ static int handleInvalidMime(AVFormatContext *s, AVIOContext *pb,
     *data_type = DATA_JFIF;
 
     // Read more data till we find end of image marker
-    for (; !found && !url_feof(pb) && !url_ferror(pb); read++) {
+    for (; !found && (pb->eof_reached==0) && (pb->error==0); read++) {
         if (read >= MAX_IMAGE_SIZE)
             return ADPIC_PARSE_MIME_HEADER_ERROR;
 
-        chkByte = url_fgetc( pb );
+        chkByte = avio_r8(pb);
         if (chkByte < 0)
             break;
         imageData[read] = chkByte;
@@ -647,7 +647,6 @@ static int admime_probe(AVProbeData *p)
 
 static int admime_read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
-    s->ctx_flags |= AVFMTCTX_NOHEADER;
     return ad_read_header(s, ap, NULL);
 }
 

@@ -152,7 +152,7 @@ int ad_adFormatToCodecId(AVFormatContext *s, int32_t adFormat)
 
 AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t cam, int32_t format, const char *title)
 {
-    uint8_t codec_type;
+    uint8_t codec_type = 0;
     int codec_id, id;
     int i, found;
     char textbuffer[4];

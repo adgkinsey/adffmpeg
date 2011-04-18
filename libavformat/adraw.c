@@ -51,9 +51,7 @@ static int adraw_probe(AVProbeData *p)
 
 static int adraw_read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
-    int utc;
-    s->ctx_flags |= AVFMTCTX_NOHEADER;
-    return ad_read_header(s, ap, &utc);
+    return ad_read_header(s, ap, NULL);
 }
 
 static int adraw_read_packet(struct AVFormatContext *s, AVPacket *pkt)

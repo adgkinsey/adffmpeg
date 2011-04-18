@@ -30,7 +30,7 @@
 #include "avformat.h"
 #include "internal.h"
 #include "libavutil/intreadwrite.h"
-#include "./libavutil/parseutils.h"
+#include "libavutil/parseutils.h"
 #include "libpar.h"
 
 
