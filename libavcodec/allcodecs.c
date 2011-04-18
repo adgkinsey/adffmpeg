@@ -234,7 +234,8 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC  (AAC, aac);
     REGISTER_DECODER (AAC_LATM, aac_latm);
     REGISTER_ENCDEC  (AC3, ac3);
-    REGISTER_ENCODER (AC3_FIXED, ac3_fixed);
+    REGISTER_ENCODER (AC3_FIXED, ac3_fixed); //deprecated, just for libav compatibility
+//    REGISTER_ENCODER (AC3_FLOAT, ac3_float); dont remove dont outcomment, for configure
     REGISTER_ENCDEC  (ALAC, alac);
     REGISTER_DECODER (ALS, als);
     REGISTER_DECODER (AMRNB, amrnb);
@@ -375,6 +376,8 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC  (LIBSCHROEDINGER, libschroedinger);
     REGISTER_DECODER (LIBSPEEX, libspeex);
     REGISTER_ENCODER (LIBTHEORA, libtheora);
+    REGISTER_ENCODER (LIBVO_AACENC, libvo_aacenc);
+    REGISTER_ENCODER (LIBVO_AMRWBENC, libvo_amrwbenc);
     REGISTER_ENCODER (LIBVORBIS, libvorbis);
     REGISTER_ENCDEC  (LIBVPX, libvpx);
     REGISTER_ENCODER (LIBX264, libx264);

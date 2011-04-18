@@ -134,6 +134,7 @@ typedef struct URLProtocol {
     int priv_data_size;
     const AVClass *priv_data_class;
     int flags;
+    int (*url_check)(URLContext *h, int mask);
 } URLProtocol;
 
 typedef struct URLPollEntry {
@@ -335,13 +336,31 @@ attribute_deprecated int url_open_buf(AVIOContext **s, uint8_t *buf, int buf_siz
 
 /** return the written or read size */
 attribute_deprecated int url_close_buf(AVIOContext *s);
-#endif // FF_API_OLD_AVIO
 
 /**
  * Return a non-zero value if the resource indicated by url
  * exists, 0 otherwise.
+ * @deprecated Use avio_check instead.
  */
-int url_exist(const char *url);
+attribute_deprecated int url_exist(const char *url);
+#endif // FF_API_OLD_AVIO
+
+/**
+ * Return AVIO_* access flags corresponding to the access permissions
+ * of the resource in url, or a negative value corresponding to an
+ * AVERROR code in case of failure. The returned access flags are
+ * masked by the value in flags.
+ *
+ * @note This function is intrinsically unsafe, in the sense that the
+ * checked resource may change its existence or permission status from
+ * one call to another. Thus you should not trust the returned value,
+ * unless you are sure that no other processes are accessing the
+ * checked resource.
+ *
+ * @note This function is slightly broken until next major bump
+ *       because of AVIO_RDONLY == 0. Don't use it until then.
+ */
+int avio_check(const char *url, int flags);
 
 /**
  * The callback is called in blocking functions to test regulary if
@@ -537,9 +556,15 @@ int url_resetbuf(AVIOContext *s, int flags);
  * constants, optionally ORed with other flags.
  * @{
  */
+#if LIBAVFORMAT_VERSION_MAJOR < 53
 #define AVIO_RDONLY 0  /**< read-only */
 #define AVIO_WRONLY 1  /**< write-only */
 #define AVIO_RDWR   2  /**< read-write */
+#else
+#define AVIO_RDONLY 1  /**< read-only */
+#define AVIO_WRONLY 2  /**< write-only */
+#define AVIO_RDWR   4  /**< read-write */
+#endif
 /**
  * @}
  */
@@ -556,7 +581,11 @@ int url_resetbuf(AVIOContext *s, int flags);
  * Warning: non-blocking protocols is work-in-progress; this flag may be
  * silently ignored.
  */
+#if LIBAVFORMAT_VERSION_MAJOR < 53
 #define AVIO_FLAG_NONBLOCK 4
+#else
+#define AVIO_FLAG_NONBLOCK 8
+#endif
 
 /**
  * Create and initialize a AVIOContext for accessing the
@@ -617,5 +646,32 @@ int udp_get_file_handle(URLContext *h);
  * @return A static string containing the name of current protocol or NULL
  */
 const char *avio_enum_protocols(void **opaque, int output);
+
+/**
+ * Pause and resume playing - only meaningful if using a network streaming
+ * protocol (e.g. MMS).
+ * @param pause 1 for pause, 0 for resume
+ */
+int     avio_pause(AVIOContext *h, int pause);
+
+/**
+ * Seek to a given timestamp relative to some component stream.
+ * Only meaningful if using a network streaming protocol (e.g. MMS.).
+ * @param stream_index The stream index that the timestamp is relative to.
+ *        If stream_index is (-1) the timestamp should be in AV_TIME_BASE
+ *        units from the beginning of the presentation.
+ *        If a stream_index >= 0 is used and the protocol does not support
+ *        seeking based on component streams, the call will fail with ENOTSUP.
+ * @param timestamp timestamp in AVStream.time_base units
+ *        or if there is no stream specified then in AV_TIME_BASE units.
+ * @param flags Optional combination of AVSEEK_FLAG_BACKWARD, AVSEEK_FLAG_BYTE
+ *        and AVSEEK_FLAG_ANY. The protocol may silently ignore
+ *        AVSEEK_FLAG_BACKWARD and AVSEEK_FLAG_ANY, but AVSEEK_FLAG_BYTE will
+ *        fail with ENOTSUP if used and not supported.
+ * @return >= 0 on success
+ * @see AVInputFormat::read_seek
+ */
+int64_t avio_seek_time(AVIOContext *h, int stream_index,
+                       int64_t timestamp, int flags);
 
 #endif /* AVFORMAT_AVIO_H */

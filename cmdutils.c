@@ -106,6 +106,8 @@ double parse_number_or_die(const char *context, const char *numstr, int type, do
         error= "The value for %s was %s which is not within %f - %f\n";
     else if(type == OPT_INT64 && (int64_t)d != d)
         error= "Expected int64 for %s but found %s\n";
+    else if (type == OPT_INT && (int)d != d)
+        error= "Expected int for %s but found %s\n";
     else
         return d;
     fprintf(stderr, error, context, numstr, min, max);
@@ -363,8 +365,9 @@ void set_context_opts(void *ctx, void *opts_ctx, int flags, AVCodec *codec)
         /* We need to use a differnt system to pass options to the private context because
            it is not known which codec and thus context kind that will be when parsing options
            we thus use opt_values directly instead of opts_ctx */
-        if(!str && priv_ctx && av_get_string(priv_ctx, opt_names[i], &opt, buf, sizeof(buf))){
-            av_set_string3(priv_ctx, opt_names[i], opt_values[i], 1, NULL);
+        if(!str && priv_ctx) {
+            if (av_find_opt(priv_ctx, opt_names[i], NULL, flags, flags))
+                av_set_string3(priv_ctx, opt_names[i], opt_values[i], 0, NULL);
         }
     }
 }
@@ -827,6 +830,8 @@ int get_filtered_video_frame(AVFilterContext *ctx, AVFrame *frame,
     memcpy(frame->linesize, picref->linesize, sizeof(frame->linesize));
     frame->interlaced_frame = picref->video->interlaced;
     frame->top_field_first  = picref->video->top_field_first;
+    frame->key_frame        = picref->video->key_frame;
+    frame->pict_type        = picref->video->pict_type;
 
     return 1;
 }

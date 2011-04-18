@@ -2600,7 +2600,7 @@ int av_read_play(AVFormatContext *s)
     if (s->iformat->read_play)
         return s->iformat->read_play(s);
     if (s->pb)
-        return ffio_read_pause(s->pb, 0);
+        return avio_pause(s->pb, 0);
     return AVERROR(ENOSYS);
 }
 
@@ -2609,7 +2609,7 @@ int av_read_pause(AVFormatContext *s)
     if (s->iformat->read_pause)
         return s->iformat->read_pause(s);
     if (s->pb)
-        return ffio_read_pause(s->pb, 1);
+        return avio_pause(s->pb, 1);
     return AVERROR(ENOSYS);
 }
 
@@ -3086,7 +3086,10 @@ static int ff_interleave_compare_dts(AVFormatContext *s, AVPacket *next, AVPacke
     AVStream *st2= s->streams[ next->stream_index];
     int64_t a= st2->time_base.num * (int64_t)st ->time_base.den;
     int64_t b= st ->time_base.num * (int64_t)st2->time_base.den;
-    return av_rescale_rnd(pkt->dts, b, a, AV_ROUND_DOWN) < next->dts;
+    int64_t dts1 = av_rescale_rnd(pkt->dts, b, a, AV_ROUND_DOWN);
+    if (dts1==next->dts && dts1==av_rescale_rnd(pkt->dts, b, a, AV_ROUND_UP))
+        return pkt->stream_index < next->stream_index;
+    return dts1 < next->dts;
 }
 
 int av_interleave_packet_per_dts(AVFormatContext *s, AVPacket *out, AVPacket *pkt, int flush){

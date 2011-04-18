@@ -151,7 +151,6 @@ static int nb_streamid_map = 0;
 static int frame_width  = 0;
 static int frame_height = 0;
 static float frame_aspect_ratio = 0;
-static int frame_aspect_ratio_override = 0;
 static enum PixelFormat frame_pix_fmt = PIX_FMT_NONE;
 static int frame_bits_per_raw_sample = 0;
 static enum AVSampleFormat audio_sample_fmt = AV_SAMPLE_FMT_NONE;
@@ -286,6 +285,8 @@ typedef struct AVOutputStream {
     int resample_height;
     int resample_width;
     int resample_pix_fmt;
+
+    float frame_aspect_ratio;
 
     /* full frame size of first frame */
     int original_height;
@@ -431,6 +432,8 @@ static int configure_video_filters(AVInputStream *ist, AVOutputStream *ost)
     codec->width  = ost->output_video_filter->inputs[0]->w;
     codec->height = ost->output_video_filter->inputs[0]->h;
     codec->sample_aspect_ratio = ost->st->sample_aspect_ratio =
+        ost->frame_aspect_ratio ? // overriden by the -aspect cli option
+        av_d2q(ost->frame_aspect_ratio*codec->height/codec->width, 255) :
         ost->output_video_filter->inputs[0]->sample_aspect_ratio;
 
     return 0;
@@ -1696,7 +1699,7 @@ static int output_packet(AVInputStream *ist, int ist_index,
                             break;
                         case AVMEDIA_TYPE_VIDEO:
 #if CONFIG_AVFILTER
-                            if (ost->picref->video)
+                            if (ost->picref->video && !ost->frame_aspect_ratio)
                                 ost->st->codec->sample_aspect_ratio = ost->picref->video->pixel_aspect;
 #endif
                             do_video_out(os, ost, ist, &picture, &frame_size);
@@ -2243,6 +2246,13 @@ static int transcode(AVFormatContext **output_files,
                 codec->width = icodec->width;
                 codec->height = icodec->height;
                 codec->has_b_frames = icodec->has_b_frames;
+                if (!codec->sample_aspect_ratio.num) {
+                    codec->sample_aspect_ratio =
+                    ost->st->sample_aspect_ratio =
+                        ist->st->sample_aspect_ratio.num ? ist->st->sample_aspect_ratio :
+                        ist->st->codec->sample_aspect_ratio.num ?
+                        ist->st->codec->sample_aspect_ratio : (AVRational){0, 1};
+                }
                 break;
             case AVMEDIA_TYPE_SUBTITLE:
                 codec->width = icodec->width;
@@ -2904,7 +2914,6 @@ static void opt_frame_aspect_ratio(const char *arg)
         ffmpeg_exit(1);
     }
     frame_aspect_ratio = ar;
-    frame_aspect_ratio_override = 1;
 }
 
 static int opt_metadata(const char *opt, const char *arg)
@@ -2922,19 +2931,20 @@ static int opt_metadata(const char *opt, const char *arg)
     return 0;
 }
 
-static void opt_qscale(const char *arg)
+static int opt_qscale(const char *opt, const char *arg)
 {
-    video_qscale = atof(arg);
-    if (video_qscale <= 0 ||
-        video_qscale > 255) {
+    video_qscale = parse_number_or_die(opt, arg, OPT_FLOAT, 0, 255);
+    if (video_qscale <= 0 || video_qscale > 255) {
         fprintf(stderr, "qscale must be > 0.0 and <= 255\n");
-        ffmpeg_exit(1);
+        return AVERROR(EINVAL);
     }
+    return 0;
 }
 
-static void opt_top_field_first(const char *arg)
+static int opt_top_field_first(const char *opt, const char *arg)
 {
-    top_field_first= atoi(arg);
+    top_field_first = parse_number_or_die(opt, arg, OPT_INT, 0, 1);
+    return 0;
 }
 
 static int opt_thread_count(const char *opt, const char *arg)
@@ -2976,9 +2986,10 @@ static int opt_audio_channels(const char *opt, const char *arg)
     return 0;
 }
 
-static void opt_video_channel(const char *arg)
+static int opt_video_channel(const char *opt, const char *arg)
 {
-    video_channel = strtol(arg, NULL, 0);
+    video_channel = parse_number_or_die(opt, arg, OPT_INT64, 0, INT_MAX);
+    return 0;
 }
 
 static void opt_video_standard(const char *arg)
@@ -3340,12 +3351,6 @@ static void opt_input_file(const char *filename)
             set_context_opts(dec, avcodec_opts[AVMEDIA_TYPE_VIDEO], AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_DECODING_PARAM, input_codecs[nb_input_codecs-1]);
             frame_height = dec->height;
             frame_width  = dec->width;
-            if(ic->streams[i]->sample_aspect_ratio.num)
-                frame_aspect_ratio=av_q2d(ic->streams[i]->sample_aspect_ratio);
-            else
-                frame_aspect_ratio=av_q2d(dec->sample_aspect_ratio);
-            frame_aspect_ratio *= (float) dec->width / dec->height;
-            frame_aspect_ratio_override = 0;
             frame_pix_fmt = dec->pix_fmt;
             rfps      = ic->streams[i]->r_frame_rate.num;
             rfps_base = ic->streams[i]->r_frame_rate.den;
@@ -3450,7 +3455,6 @@ static void new_video_stream(AVFormatContext *oc, int file_idx)
     AVCodecContext *video_enc;
     enum CodecID codec_id = CODEC_ID_NONE;
     AVCodec *codec= NULL;
-    int i;
 
     st = av_new_stream(oc, oc->nb_streams < nb_streamid_map ? streamid_map[oc->nb_streams] : 0);
     if (!st) {
@@ -3470,15 +3474,9 @@ static void new_video_stream(AVFormatContext *oc, int file_idx)
             codec_id = av_guess_codec(oc->oformat, NULL, oc->filename, NULL, AVMEDIA_TYPE_VIDEO);
             codec = avcodec_find_encoder(codec_id);
         }
+        ost->frame_aspect_ratio = frame_aspect_ratio;
+        frame_aspect_ratio = 0;
 #if CONFIG_AVFILTER
-        if(frame_aspect_ratio_override){
-            i = vfilters ? strlen(vfilters) : 0;
-            vfilters = av_realloc(vfilters, i+100);
-            snprintf(vfilters+i, 100, "%csetdar=%f\n", i?',':' ', frame_aspect_ratio);
-            frame_aspect_ratio=0;
-            frame_aspect_ratio_override=0;
-        }
-
         ost->avfilter= vfilters;
         vfilters= NULL;
 #endif
@@ -3525,7 +3523,6 @@ static void new_video_stream(AVFormatContext *oc, int file_idx)
 
         video_enc->width = frame_width;
         video_enc->height = frame_height;
-        video_enc->sample_aspect_ratio = av_d2q(frame_aspect_ratio*video_enc->height/video_enc->width, 255);
         video_enc->pix_fmt = frame_pix_fmt;
         video_enc->bits_per_raw_sample = frame_bits_per_raw_sample;
         st->sample_aspect_ratio = video_enc->sample_aspect_ratio;
@@ -3912,15 +3909,10 @@ static void opt_output_file(const char *filename)
 }
 
 /* same option as mencoder */
-static void opt_pass(const char *pass_str)
+static int opt_pass(const char *opt, const char *arg)
 {
-    int pass;
-    pass = atoi(pass_str);
-    if (pass != 1 && pass != 2) {
-        fprintf(stderr, "pass number can be only 1 or 2\n");
-        ffmpeg_exit(1);
-    }
-    do_pass = pass;
+    do_pass = parse_number_or_die(opt, arg, OPT_INT, 1, 2);
+    return 0;
 }
 
 static int64_t getutime(void)
@@ -4340,13 +4332,13 @@ static const OptionDef options[] = {
     { "intra", OPT_BOOL | OPT_EXPERT | OPT_VIDEO, {(void*)&intra_only}, "use only intra frames"},
     { "vn", OPT_BOOL | OPT_VIDEO, {(void*)&video_disable}, "disable video" },
     { "vdt", OPT_INT | HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)&video_discard}, "discard threshold", "n" },
-    { "qscale", HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_qscale}, "use fixed video quantizer scale (VBR)", "q" },
+    { "qscale", HAS_ARG | OPT_FUNC2 | OPT_EXPERT | OPT_VIDEO, {(void*)opt_qscale}, "use fixed video quantizer scale (VBR)", "q" },
     { "rc_override", HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_video_rc_override_string}, "rate control override for specific intervals", "override" },
     { "vcodec", HAS_ARG | OPT_VIDEO, {(void*)opt_video_codec}, "force video codec ('copy' to copy stream)", "codec" },
     { "me_threshold", HAS_ARG | OPT_FUNC2 | OPT_EXPERT | OPT_VIDEO, {(void*)opt_me_threshold}, "motion estimaton threshold",  "threshold" },
     { "sameq", OPT_BOOL | OPT_VIDEO, {(void*)&same_quality},
       "use same quantizer as source (implies VBR)" },
-    { "pass", HAS_ARG | OPT_VIDEO, {(void*)&opt_pass}, "select the pass number (1 or 2)", "n" },
+    { "pass", HAS_ARG | OPT_FUNC2 | OPT_VIDEO, {(void*)opt_pass}, "select the pass number (1 or 2)", "n" },
     { "passlogfile", HAS_ARG | OPT_STRING | OPT_VIDEO, {(void*)&pass_logfilename_prefix}, "select two pass log file name prefix", "prefix" },
     { "deinterlace", OPT_BOOL | OPT_EXPERT | OPT_VIDEO, {(void*)&do_deinterlace},
       "deinterlace pictures" },
@@ -4358,7 +4350,7 @@ static const OptionDef options[] = {
 #endif
     { "intra_matrix", HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_intra_matrix}, "specify intra matrix coeffs", "matrix" },
     { "inter_matrix", HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_inter_matrix}, "specify inter matrix coeffs", "matrix" },
-    { "top", HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_top_field_first}, "top=1/bottom=0/auto=-1 field first", "" },
+    { "top", HAS_ARG | OPT_FUNC2 | OPT_EXPERT | OPT_VIDEO, {(void*)opt_top_field_first}, "top=1/bottom=0/auto=-1 field first", "" },
     { "dc", OPT_INT | HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)&intra_dc_precision}, "intra_dc_precision", "precision" },
     { "vtag", OPT_FUNC2 | HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_codec_tag}, "force video tag/fourcc", "fourcc/tag" },
     { "newvideo", OPT_VIDEO | OPT_FUNC2, {(void*)opt_new_stream}, "add a new video stream to the current output stream" },
@@ -4390,7 +4382,7 @@ static const OptionDef options[] = {
     { "stag", OPT_FUNC2 | HAS_ARG | OPT_EXPERT | OPT_SUBTITLE, {(void*)opt_codec_tag}, "force subtitle tag/fourcc", "fourcc/tag" },
 
     /* grab options */
-    { "vc", HAS_ARG | OPT_EXPERT | OPT_VIDEO | OPT_GRAB, {(void*)opt_video_channel}, "set video grab channel (DV1394 only)", "channel" },
+    { "vc", HAS_ARG | OPT_FUNC2 | OPT_EXPERT | OPT_VIDEO | OPT_GRAB, {(void*)opt_video_channel}, "set video grab channel (DV1394 only)", "channel" },
     { "tvstd", HAS_ARG | OPT_EXPERT | OPT_VIDEO | OPT_GRAB, {(void*)opt_video_standard}, "set television standard (NTSC, PAL (SECAM))", "standard" },
     { "isync", OPT_BOOL | OPT_EXPERT | OPT_GRAB, {(void*)&input_sync}, "sync read on input", "" },
 
