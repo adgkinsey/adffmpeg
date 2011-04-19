@@ -2627,7 +2627,7 @@ elif enabled arm; then
     elif ! check_cpp_condition stddef.h "defined __ARM_PCS || defined __SOFTFP__"; then
         case "${cross_prefix:-$cc}" in
             *hardfloat*)         enable vfp_args;   fpabi=vfp ;;
-            *) check_ld <<EOF && enable vfp_args && fpabi=vfp || fpabi=soft ;;
+            *) check_ld <<EOF && enable vfp_args && fpabi=vfp || fpabi=softfp ;;
 __asm__ (".eabi_attribute 28, 1");
 int main(void) { return 0; }
 EOF
