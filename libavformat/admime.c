@@ -283,6 +283,8 @@ static int parse_mime_header(AVIOContext *pb, uint8_t *buffer, int *bufSize,
         else {
             if ((q - buffer) < (maxBufSize - 1))
                 *q++ = ch;
+            else
+                return ADPIC_PARSE_MIME_HEADER_ERROR;
         }
 
         ch = avio_r8(pb);
