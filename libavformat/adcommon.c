@@ -674,7 +674,7 @@ static void ad_keyvalsplit(const char *line, char *key, char *val)
     val[jj++] = '\0';
 }
 
-static int ad_splitcsv(const char *csv, int *results, int maxElements)
+static int ad_splitcsv(const char *csv, int *results, int maxElements, int base)
 {
     int ii, jj, ee;
     char element[8];
@@ -683,7 +683,10 @@ static int ad_splitcsv(const char *csv, int *results, int maxElements)
     for (ii = 0, jj = 0, ee = 0; ii < len; ii++)  {
         if ((csv[ii] == ',') || (csv[ii] == ';') || (ii == (len -1)))  {
             element[jj++] = '\0';
-            sscanf(element, "%d", &results[ee++]);
+            if (base == 10)
+                sscanf(element, "%d", &results[ee++]);
+            else
+                sscanf(element, "%x", &results[ee++]);
             if (ee >= maxElements)
                 break;
             jj = 0;
@@ -702,33 +705,33 @@ static void ad_parseVSD(const char *vsd, ADFrameData *frame)
     if ((strlen(key) == 2) && (key[0] == 'M'))  {
         switch(key[1])  {
             case('0'):
-                ad_splitcsv(val, frame->vsd[VSD_M0], 16);
+                ad_splitcsv(val, frame->vsd[VSD_M0], 16, 10);
                 break;
             case('1'):
-                ad_splitcsv(val, frame->vsd[VSD_M1], 16);
+                ad_splitcsv(val, frame->vsd[VSD_M1], 16, 10);
                 break;
             case('2'):
-                ad_splitcsv(val, frame->vsd[VSD_M2], 16);
+                ad_splitcsv(val, frame->vsd[VSD_M2], 16, 10);
                 break;
             case('3'):
-                ad_splitcsv(val, frame->vsd[VSD_M3], 16);
+                ad_splitcsv(val, frame->vsd[VSD_M3], 16, 10);
                 break;
             case('4'):
-                ad_splitcsv(val, frame->vsd[VSD_M4], 16);
+                ad_splitcsv(val, frame->vsd[VSD_M4], 16, 10);
                 break;
             case('5'):
-                ad_splitcsv(val, frame->vsd[VSD_M5], 16);
+                ad_splitcsv(val, frame->vsd[VSD_M5], 16, 10);
                 break;
             case('6'):
-                ad_splitcsv(val, frame->vsd[VSD_M6], 16);
+                ad_splitcsv(val, frame->vsd[VSD_M6], 16, 10);
                 break;
         }
     }
     else if ((strlen(key) == 3) && (strncasecmp(key, "FM0", 3) == 0))  {
-        ad_splitcsv(val, frame->vsd[VSD_FM0], 16);
+        ad_splitcsv(val, frame->vsd[VSD_FM0], 16, 10);
     }
     else if ((strlen(key) == 1) && (key[0] == 'F')) {
-        ad_splitcsv(val, frame->vsd[VSD_F], 16);
+        ad_splitcsv(val, frame->vsd[VSD_F], 16, 16);
     }
 }
 
