@@ -462,7 +462,10 @@ static void parse_comment( char *text, int text_len, NetVuImageData *pic, char *
 
         // Skip the \n
         if( text[i] == '\n' ) {
-            result[j-1] = 0;
+            if (j > 0)
+                result[j-1] = '\0';
+            else
+                result[0] = '\0';
             i++;
         }
 
@@ -503,7 +506,7 @@ static void parse_comment( char *text, int text_len, NetVuImageData *pic, char *
         else {
             // Any line we don't explicitly detect for extraction to the pic
             // struct, we must add to the additional text block
-            if( additionalText != NULL ) {
+            if ( (additionalText != NULL) && (strlen(result) > 0) )  {
                 int             strLen  = 0;
                 const char      lineEnd[3] = { '\r', '\n', '\0' };
 
