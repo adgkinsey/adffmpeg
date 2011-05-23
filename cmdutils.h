@@ -22,8 +22,10 @@
 #ifndef FFMPEG_CMDUTILS_H
 #define FFMPEG_CMDUTILS_H
 
-#include <inttypes.h>
+#include <stdint.h>
+
 #include "libavcodec/avcodec.h"
+#include "libavfilter/avfilter.h"
 #include "libavformat/avformat.h"
 #include "libswscale/swscale.h"
 
@@ -122,7 +124,8 @@ typedef struct {
 #define OPT_FUNC2  0x0400
 #define OPT_INT64  0x0800
 #define OPT_EXIT   0x1000
-#define OPT_DUMMY  0x2000
+#define OPT_DATA   0x2000
+#define OPT_DUMMY  0x4000
      union {
         void (*func_arg)(const char *); //FIXME passing error code as int return would be nicer then exit() in the func
         int *int_arg;
@@ -240,7 +243,8 @@ int read_file(const char *filename, char **bufptr, size_t *size);
  * If is_path is non-zero, look for the file in the path preset_name.
  * Otherwise search for a file named arg.ffpreset in the directories
  * $FFMPEG_DATADIR (if set), $HOME/.ffmpeg, and in the datadir defined
- * at configuration time, in that order. If no such file is found and
+ * at configuration time or in a "ffpresets" folder along the executable
+ * on win32, in that order. If no such file is found and
  * codec_name is defined, then search for a file named
  * codec_name-preset_name.ffpreset in the above-mentioned directories.
  *
@@ -253,9 +257,6 @@ int read_file(const char *filename, char **bufptr, size_t *size);
  */
 FILE *get_preset_file(char *filename, size_t filename_size,
                       const char *preset_name, int is_path, const char *codec_name);
-
-#if CONFIG_AVFILTER
-#include "libavfilter/avfilter.h"
 
 typedef struct {
     enum PixelFormat pix_fmt;
@@ -271,7 +272,5 @@ extern AVFilter ffsink;
  */
 int get_filtered_video_frame(AVFilterContext *sink, AVFrame *frame,
                              AVFilterBufferRef **picref, AVRational *pts_tb);
-
-#endif /* CONFIG_AVFILTER */
 
 #endif /* FFMPEG_CMDUTILS_H */

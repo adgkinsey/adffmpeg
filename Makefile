@@ -93,6 +93,7 @@ tools/%.o: tools/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $(CC_O) $<
 
 -include $(wildcard tools/*.d)
+-include $(wildcard tests/*.d)
 
 ffplay.o: CFLAGS += $(SDL_CFLAGS)
 
@@ -185,25 +186,18 @@ check: test
 fulltest test: codectest lavftest lavfitest seektest
 
 FFSERVER_REFFILE = $(SRC_PATH)/tests/ffserver.regression.ref
-SEEK_REFFILE     = $(SRC_PATH)/tests/seek.regression.ref
 
 codectest: fate-codec
 lavftest:  fate-lavf
 lavfitest: fate-lavfi
 seektest:  fate-seek
 
-AREF = tests/data/acodec.ref.wav
-VREF = tests/data/vsynth1.ref.yuv
+AREF = fate-acodec-aref
+VREF = fate-vsynth1-vref fate-vsynth2-vref
 REFS = $(AREF) $(VREF)
 
-$(REFS): TAG = GEN
-
 $(VREF): ffmpeg$(EXESUF) tests/vsynth1/00.pgm tests/vsynth2/00.pgm
-	$(M)$(SRC_PATH)/tests/codec-regression.sh vref vsynth1 tests/vsynth1 "$(TARGET_EXEC)" "$(TARGET_PATH)"
-	$(Q)$(SRC_PATH)/tests/codec-regression.sh vref vsynth2 tests/vsynth2 "$(TARGET_EXEC)" "$(TARGET_PATH)"
-
 $(AREF): ffmpeg$(EXESUF) tests/data/asynth1.sw
-	$(M)$(SRC_PATH)/tests/codec-regression.sh aref acodec tests/acodec "$(TARGET_EXEC)" "$(TARGET_PATH)"
 
 ffservertest: ffserver$(EXESUF) tests/vsynth1/00.pgm tests/data/asynth1.sw
 	@echo
@@ -257,8 +251,8 @@ FATE = $(FATE_ACODEC)                                                   \
        $(FATE_LAVFI)                                                    \
        $(FATE_SEEK)                                                     \
 
-$(FATE_ACODEC): $(AREF)
-$(FATE_VCODEC): $(VREF)
+$(filter-out %-aref,$(FATE_ACODEC)): $(AREF)
+$(filter-out %-vref,$(FATE_VCODEC)): $(VREF)
 $(FATE_LAVF):   $(REFS)
 $(FATE_LAVFI):  $(REFS) tools/lavfi-showfiltfmts$(EXESUF)
 $(FATE_SEEK):   fate-codec fate-lavf tests/seek_test$(EXESUF)
@@ -279,9 +273,13 @@ fate-seek:   $(FATE_SEEK)
 
 ifdef SAMPLES
 FATE += $(FATE_TESTS)
+fate-rsync:
+	rsync -vaLW rsync://fate-suite.libav.org/fate-suite/ $(SAMPLES)
 else
+fate-rsync:
+	@echo "use 'make fate-rsync SAMPLES=/path/to/samples' to sync the fate suite"
 $(FATE_TESTS):
-	@echo "SAMPLES not specified, cannot run FATE"
+	@echo "SAMPLES not specified, cannot run FATE. See doc/fate.txt for more information."
 endif
 
 FATE_UTILS = base64 tiny_psnr
@@ -290,7 +288,7 @@ fate: $(FATE)
 
 $(FATE): ffmpeg$(EXESUF) $(FATE_UTILS:%=tests/%$(HOSTEXESUF))
 	@echo "TEST    $(@:fate-%=%)"
-	$(Q)$(SRC_PATH)/tests/fate-run.sh $@ "$(SAMPLES)" "$(TARGET_EXEC)" "$(TARGET_PATH)" '$(CMD)' '$(CMP)' '$(REF)' '$(FUZZ)' '$(THREADS)'
+	$(Q)$(SRC_PATH)/tests/fate-run.sh $@ "$(SAMPLES)" "$(TARGET_EXEC)" "$(TARGET_PATH)" '$(CMD)' '$(CMP)' '$(REF)' '$(FUZZ)' '$(THREADS)' '$(THREAD_TYPE)'
 
 fate-list:
 	@printf '%s\n' $(sort $(FATE))

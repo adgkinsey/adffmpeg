@@ -985,6 +985,39 @@ given coordinates @var{x}, @var{y}.
 It accepts the following parameters:
 @var{width}:@var{height}:@var{x}:@var{y}:@var{color}.
 
+The parameters @var{width}, @var{height}, @var{x}, and @var{y} are
+expressions containing the following constants:
+
+@table @option
+@item E, PI, PHI
+the corresponding mathematical approximated values for e
+(euler number), pi (greek PI), phi (golden ratio)
+
+@item in_w, in_h
+the input video width and heigth
+
+@item iw, ih
+same as @var{in_w} and @var{in_h}
+
+@item out_w, out_h
+the output width and heigth, that is the size of the padded area as
+specified by the @var{width} and @var{height} expressions
+
+@item ow, oh
+same as @var{out_w} and @var{out_h}
+
+@item x, y
+x and y offsets as specified by the @var{x} and @var{y}
+expressions, or NAN if not yet specified
+
+@item a
+input display aspect ratio, same as @var{iw} / @var{ih}
+
+@item hsub, vsub
+horizontal and vertical chroma subsample values. For example for the
+pixel format "yuv422p" @var{hsub} is 2 and @var{vsub} is 1.
+@end table
+
 Follows the description of the accepted parameters.
 
 @table @option
@@ -994,12 +1027,18 @@ Specify the size of the output image with the paddings added. If the
 value for @var{width} or @var{height} is 0, the corresponding input size
 is used for the output.
 
+The @var{width} expression can reference the value set by the
+@var{height} expression, and viceversa.
+
 The default value of @var{width} and @var{height} is 0.
 
 @item x, y
 
 Specify the offsets where to place the input image in the padded area
 with respect to the top/left border of the output image.
+
+The @var{x} expression can reference the value set by the @var{y}
+expression, and viceversa.
 
 The default value of @var{x} and @var{y} is 0.
 
@@ -1012,13 +1051,29 @@ The default value of @var{color} is "black".
 
 @end table
 
-For example:
+Some examples follow:
 
 @example
 # Add paddings with color "violet" to the input video. Output video
 # size is 640x480, the top-left corner of the input video is placed at
 # column 0, row 40.
 pad=640:480:0:40:violet
+
+# pad the input to get an output with dimensions increased bt 3/2,
+# and put the input video at the center of the padded area
+pad="3/2*iw:3/2*ih:(ow-iw)/2:(oh-ih)/2"
+
+# pad the input to get a squared output with size equal to the maximum
+# value between the input width and height, and put the input video at
+# the center of the padded area
+pad="max(iw\,ih):ow:(ow-iw)/2:(oh-ih)/2"
+
+# pad the input to get a final w/h ratio of 16:9
+pad="ih*16/9:ih:(ow-iw)/2:(oh-ih)/2"
+
+# double output size and put the input video in the bottom-right
+# corner of the output padded area
+pad="2*iw:2*ih:ow-iw:oh-ih"
 @end example
 
 @section pixdesctest
@@ -1254,6 +1309,65 @@ settb=2*intb
 settb=AVTB
 @end example
 
+@section showinfo
+
+Show a line containing various information for each input video frame.
+The input video is not modified.
+
+The shown line contains a sequence of key/value pairs of the form
+@var{key}:@var{value}.
+
+A description of each shown parameter follows:
+
+@table @option
+@item n
+sequential number of the input frame, starting from 0
+
+@item pts
+Presentation TimeStamp of the input frame, expressed as a number of
+time base units. The time base unit depends on the filter input pad.
+
+@item pts_time
+Presentation TimeStamp of the input frame, expressed as a number of
+seconds
+
+@item pos
+position of the frame in the input stream, -1 if this information in
+unavailable and/or meanigless (for example in case of synthetic video)
+
+@item fmt
+pixel format name
+
+@item sar
+sample aspect ratio of the input frame, expressed in the form
+@var{num}/@var{den}
+
+@item s
+size of the input frame, expressed in the form
+@var{width}x@var{height}
+
+@item i
+interlaced mode ("P" for "progressive", "T" for top field first, "B"
+for bottom field first)
+
+@item iskey
+1 if the frame is a key frame, 0 otherwise
+
+@item type
+picture type of the input frame ("I" for an I-frame, "P" for a
+P-frame, "B" for a B-frame, "?" for unknown type).
+Check also the documentation of the @code{AVPictureType} enum and of
+the @code{av_get_picture_type_char} function defined in
+@file{libavutil/avutil.h}.
+
+@item checksum
+Adler-32 checksum of all the planes of the input frame
+
+@item plane_checksum
+Adler-32 checksum of each plane of the input frame, expressed in the form
+"[@var{c0} @var{c1} @var{c2} @var{c3}]"
+@end table
+
 @section slicify
 
 Pass the images of input video on to next video filter as multiple
@@ -1268,6 +1382,21 @@ not specified it will use the default value of 16.
 
 Adding this in the beginning of filter chains should make filtering
 faster due to better use of the memory cache.
+
+@section split
+
+Pass on the input video to two outputs. Both outputs are identical to
+the input video.
+
+For example:
+@example
+[in] split [splitout1][splitout2];
+[splitout1] crop=100:100:0:0    [cropout];
+[splitout2] pad=200:200:100:100 [padout];
+@end example
+
+will create two separate outputs from the same input, one cropped and
+one padded.
 
 @section transpose
 
@@ -1422,9 +1551,10 @@ This source is mainly intended for a programmatic use, in particular
 through the interface defined in @file{libavfilter/vsrc_buffer.h}.
 
 It accepts the following parameters:
-@var{width}:@var{height}:@var{pix_fmt_string}:@var{timebase_num}:@var{timebase_den}:@var{sample_aspect_ratio_num}:@var{sample_aspect_ratio.den}
+@var{width}:@var{height}:@var{pix_fmt_string}:@var{timebase_num}:@var{timebase_den}:@var{sample_aspect_ratio_num}:@var{sample_aspect_ratio.den}:@var{scale_params}
 
-All the parameters need to be explicitely defined.
+All the parameters but @var{scale_params} need to be explicitely
+defined.
 
 Follows the list of the accepted parameters.
 
@@ -1445,6 +1575,11 @@ timestamps of the buffered frames.
 @item sample_aspect_ratio.num, sample_aspect_ratio.den
 Specify numerator and denominator of the sample aspect ratio assumed
 by the video frames.
+
+@item scale_params
+Specify the optional parameters to be used for the scale filter which
+is automatically inserted when an input change is detected in the
+input size or format.
 @end table
 
 For example:
@@ -1459,7 +1594,7 @@ Since the pixel format with name "yuv410p" corresponds to the number 6
 (check the enum PixelFormat definition in @file{libavutil/pixfmt.h}),
 this example corresponds to:
 @example
-buffer=320:240:6:1:24
+buffer=320:240:6:1:24:1:1
 @end example
 
 @section color

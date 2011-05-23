@@ -144,9 +144,12 @@ static int mov_read_udta_string(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     case MKTAG(0xa9,'n','a','m'): key = "title";     break;
     case MKTAG(0xa9,'a','u','t'):
     case MKTAG(0xa9,'A','R','T'): key = "artist";    break;
+    case MKTAG( 'a','A','R','T'): key = "album_artist";break;
     case MKTAG(0xa9,'w','r','t'): key = "composer";  break;
     case MKTAG( 'c','p','r','t'):
     case MKTAG(0xa9,'c','p','y'): key = "copyright"; break;
+    case MKTAG(0xa9,'g','r','p'): key = "grouping"; break;
+    case MKTAG(0xa9,'l','y','r'): key = "lyrics"; break;
     case MKTAG(0xa9,'c','m','t'):
     case MKTAG(0xa9,'i','n','f'): key = "comment";   break;
     case MKTAG(0xa9,'a','l','b'): key = "album";     break;
@@ -588,7 +591,7 @@ static int mov_read_moov(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 static int mov_read_moof(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
     c->fragment.moof_offset = avio_tell(pb) - 8;
-    av_dlog(c->fc, "moof offset %llx\n", c->fragment.moof_offset);
+    av_dlog(c->fc, "moof offset %"PRIx64"\n", c->fragment.moof_offset);
     return mov_read_default(c, pb, atom);
 }
 
@@ -715,7 +718,7 @@ static int mov_read_enda(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         return 0;
     st = c->fc->streams[c->fc->nb_streams-1];
 
-    little_endian = avio_rb16(pb);
+    little_endian = avio_rb16(pb) & 0xFF;
     av_dlog(c->fc, "enda %d\n", little_endian);
     if (little_endian == 1) {
         switch (st->codec->codec_id) {
@@ -1524,7 +1527,7 @@ static void mov_build_index(MOVContext *mov, AVStream *st)
         int rescaled = sc->time_offset < 0 ? av_rescale(sc->time_offset, sc->time_scale, mov->time_scale) : sc->time_offset;
         current_dts = -rescaled;
         if (sc->ctts_data && sc->stts_data &&
-            sc->ctts_data[0].duration / sc->stts_data[0].duration > 16) {
+            sc->ctts_data[0].duration / FFMAX(sc->stts_data[0].duration, 1) > 16) {
             /* more than 16 frames delay, dts are likely wrong
                this happens with files created by iMovie */
             sc->wrong_dts = 1;
@@ -1686,13 +1689,13 @@ static void mov_build_index(MOVContext *mov, AVStream *st)
     }
 }
 
-static int mov_open_dref(AVIOContext **pb, char *src, MOVDref *ref)
+static int mov_open_dref(AVIOContext **pb, const char *src, MOVDref *ref)
 {
     /* try relative path, we do not try the absolute because it can leak information about our
        system to an attacker */
     if (ref->nlvl_to > 0 && ref->nlvl_from > 0) {
         char filename[1024];
-        char *src_path;
+        const char *src_path;
         int i, l;
 
         /* find a source dir */
@@ -1721,7 +1724,7 @@ static int mov_open_dref(AVIOContext **pb, char *src, MOVDref *ref)
 
             av_strlcat(filename, ref->path + l + 1, 1024);
 
-            if (!avio_open(pb, filename, AVIO_RDONLY))
+            if (!avio_open(pb, filename, AVIO_FLAG_READ))
                 return 0;
         }
     }
@@ -2001,6 +2004,7 @@ static int mov_read_trun(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     MOVFragment *frag = &c->fragment;
     AVStream *st = NULL;
     MOVStreamContext *sc;
+    MOVStts *ctts_data;
     uint64_t offset;
     int64_t dts;
     int data_offset = 0;
@@ -2024,18 +2028,33 @@ static int mov_read_trun(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     flags = avio_rb24(pb);
     entries = avio_rb32(pb);
     av_dlog(c->fc, "flags 0x%x entries %d\n", flags, entries);
-    if (flags & 0x001) data_offset        = avio_rb32(pb);
-    if (flags & 0x004) first_sample_flags = avio_rb32(pb);
-    if (flags & 0x800) {
-        MOVStts *ctts_data;
-        if ((uint64_t)entries+sc->ctts_count >= UINT_MAX/sizeof(*sc->ctts_data))
-            return -1;
-        ctts_data = av_realloc(sc->ctts_data,
-                               (entries+sc->ctts_count)*sizeof(*sc->ctts_data));
+
+    /* Always assume the presence of composition time offsets.
+     * Without this assumption, for instance, we cannot deal with a track in fragmented movies that meet the following.
+     *  1) in the initial movie, there are no samples.
+     *  2) in the first movie fragment, there is only one sample without composition time offset.
+     *  3) in the subsequent movie fragments, there are samples with composition time offset. */
+    if (!sc->ctts_count && sc->sample_count)
+    {
+        /* Complement ctts table if moov atom doesn't have ctts atom. */
+        ctts_data = av_malloc(sizeof(*sc->ctts_data));
         if (!ctts_data)
             return AVERROR(ENOMEM);
         sc->ctts_data = ctts_data;
+        sc->ctts_data[sc->ctts_count].count = sc->sample_count;
+        sc->ctts_data[sc->ctts_count].duration = 0;
+        sc->ctts_count++;
     }
+    if ((uint64_t)entries+sc->ctts_count >= UINT_MAX/sizeof(*sc->ctts_data))
+        return -1;
+    ctts_data = av_realloc(sc->ctts_data,
+                           (entries+sc->ctts_count)*sizeof(*sc->ctts_data));
+    if (!ctts_data)
+        return AVERROR(ENOMEM);
+    sc->ctts_data = ctts_data;
+
+    if (flags & 0x001) data_offset        = avio_rb32(pb);
+    if (flags & 0x004) first_sample_flags = avio_rb32(pb);
     dts = st->duration;
     offset = frag->base_data_offset + data_offset;
     distance = 0;
@@ -2049,11 +2068,9 @@ static int mov_read_trun(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         if (flags & 0x100) sample_duration = avio_rb32(pb);
         if (flags & 0x200) sample_size     = avio_rb32(pb);
         if (flags & 0x400) sample_flags    = avio_rb32(pb);
-        if (flags & 0x800) {
-            sc->ctts_data[sc->ctts_count].count = 1;
-            sc->ctts_data[sc->ctts_count].duration = avio_rb32(pb);
-            sc->ctts_count++;
-        }
+        sc->ctts_data[sc->ctts_count].count = 1;
+        sc->ctts_data[sc->ctts_count].duration = (flags & 0x800) ? avio_rb32(pb) : 0;
+        sc->ctts_count++;
         if ((keyframe = st->codec->codec_type == AVMEDIA_TYPE_AUDIO ||
              (flags & 0x004 && !i && !sample_flags) || sample_flags & 0x2000000))
             distance = 0;
@@ -2149,13 +2166,13 @@ free_and_return:
 static int mov_read_elst(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
     MOVStreamContext *sc;
-    int i, edit_count;
+    int i, edit_count, version;
 
     if (c->fc->nb_streams < 1)
         return 0;
     sc = c->fc->streams[c->fc->nb_streams-1]->priv_data;
 
-    avio_r8(pb); /* version */
+    version = avio_r8(pb); /* version */
     avio_rb24(pb); /* flags */
     edit_count = avio_rb32(pb); /* entries */
 
@@ -2163,9 +2180,15 @@ static int mov_read_elst(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         return -1;
 
     for(i=0; i<edit_count; i++){
-        int time;
-        int duration = avio_rb32(pb); /* Track duration */
-        time = avio_rb32(pb); /* Media time */
+        int64_t time;
+        int64_t duration;
+        if (version == 1) {
+            duration = avio_rb64(pb);
+            time     = avio_rb64(pb);
+        } else {
+            duration = avio_rb32(pb); /* segment duration */
+            time     = avio_rb32(pb); /* media time */
+        }
         avio_rb32(pb); /* Media rate */
         if (i == 0 && time >= -1) {
             sc->time_offset = time != -1 ? time : -duration;
@@ -2177,6 +2200,15 @@ static int mov_read_elst(MOVContext *c, AVIOContext *pb, MOVAtom atom)
                "a/v desync might occur, patch welcome\n");
 
     av_dlog(c->fc, "track[%i].edit_count = %i\n", c->fc->nb_streams-1, edit_count);
+    return 0;
+}
+
+static int mov_read_chan(MOVContext *c, AVIOContext *pb, MOVAtom atom)
+{
+    if (atom.size < 16)
+        return AVERROR_INVALIDDATA;
+    avio_skip(pb, 4);
+    ff_mov_read_chan(c->fc, atom.size - 4, c->fc->streams[0]->codec);
     return 0;
 }
 
@@ -2233,6 +2265,7 @@ static const MOVParseTableEntry mov_default_parse_table[] = {
 { MKTAG('d','a','c','3'), mov_read_dac3 }, /* AC-3 info */
 { MKTAG('w','i','d','e'), mov_read_wide }, /* place holder */
 { MKTAG('c','m','o','v'), mov_read_cmov },
+{ MKTAG('c','h','a','n'), mov_read_chan },
 { 0, NULL }
 };
 
@@ -2367,7 +2400,7 @@ static int mov_read_header(AVFormatContext *s, AVFormatParameters *ap)
         av_log(s, AV_LOG_ERROR, "moov atom not found\n");
         return -1;
     }
-    av_dlog(mov->fc, "on_parse_exit_offset=%lld\n", avio_tell(pb));
+    av_dlog(mov->fc, "on_parse_exit_offset=%"PRId64"\n", avio_tell(pb));
 
     if (pb->seekable && mov->chapter_track > 0)
         mov_read_chapters(s);
@@ -2416,7 +2449,7 @@ static int mov_read_packet(AVFormatContext *s, AVPacket *pkt)
             mov_read_default(mov, s->pb, (MOVAtom){ AV_RL32("root"), INT64_MAX }) < 0 ||
             url_feof(s->pb))
             return AVERROR_EOF;
-        av_dlog(s, "read fragments, offset 0x%llx\n", avio_tell(s->pb));
+        av_dlog(s, "read fragments, offset 0x%"PRIx64"\n", avio_tell(s->pb));
         goto retry;
     }
     sc = st->priv_data;
@@ -2445,7 +2478,7 @@ static int mov_read_packet(AVFormatContext *s, AVPacket *pkt)
         }
 #if CONFIG_DV_DEMUXER
         if (mov->dv_demux && sc->dv_audio_container) {
-            dv_produce_packet(mov->dv_demux, pkt, pkt->data, pkt->size);
+            dv_produce_packet(mov->dv_demux, pkt, pkt->data, pkt->size, pkt->pos);
             av_free(pkt->data);
             pkt->size = 0;
             ret = dv_get_packet(mov->dv_demux, pkt);

@@ -71,7 +71,7 @@ void av_register_all(void)
     REGISTER_DEMUXER  (BFI, bfi);
     REGISTER_DEMUXER  (BINK, bink);
     REGISTER_DEMUXER  (C93, c93);
-    REGISTER_DEMUXER  (CAF, caf);
+    REGISTER_MUXDEMUX (CAF, caf);
     REGISTER_MUXDEMUX (CAVSVIDEO, cavsvideo);
     REGISTER_DEMUXER  (CDG, cdg);
     REGISTER_MUXER    (CRC, crc);
@@ -244,6 +244,7 @@ void av_register_all(void)
     /* protocols */
     REGISTER_PROTOCOL (APPLEHTTP, applehttp);
     REGISTER_PROTOCOL (CONCAT, concat);
+    REGISTER_PROTOCOL (CRYPTO, crypto);
     REGISTER_PROTOCOL (FILE, file);
     REGISTER_PROTOCOL (GOPHER, gopher);
     REGISTER_PROTOCOL (HTTP, http);

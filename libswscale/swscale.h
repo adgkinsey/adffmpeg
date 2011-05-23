@@ -30,7 +30,7 @@
 #include "libavutil/avutil.h"
 
 #define LIBSWSCALE_VERSION_MAJOR 0
-#define LIBSWSCALE_VERSION_MINOR 13
+#define LIBSWSCALE_VERSION_MINOR 14
 #define LIBSWSCALE_VERSION_MICRO 0
 
 #define LIBSWSCALE_VERSION_INT  AV_VERSION_INT(LIBSWSCALE_VERSION_MAJOR, \
@@ -187,6 +187,7 @@ void sws_freeContext(struct SwsContext *swsContext);
  * @return a pointer to an allocated context, or NULL in case of error
  * @note this function is to be removed after a saner alternative is
  *       written
+ * @deprecated Use sws_getCachedContext() instead.
  */
 struct SwsContext *sws_getContext(int srcW, int srcH, enum PixelFormat srcFormat,
                                   int dstW, int dstH, enum PixelFormat dstFormat,

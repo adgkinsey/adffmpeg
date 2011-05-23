@@ -45,17 +45,15 @@
 #include FT_FREETYPE_H
 #include FT_GLYPH_H
 
-#define MAX_EXPANDED_TEXT_SIZE 2048
-
 typedef struct {
     const AVClass *class;
-    char *fontfile;                 ///< font to be used
-    char *text;                     ///< text to be drawn
+    uint8_t *fontfile;              ///< font to be used
+    uint8_t *text;                  ///< text to be drawn
+    uint8_t *expanded_text;         ///< used to contain the strftime()-expanded text
+    size_t   expanded_text_size;    ///< size in bytes of the expanded_text buffer
     int ft_load_flags;              ///< flags used for loading fonts, see FT_LOAD_*
-    /** buffer containing the text expanded by strftime */
-    char expanded_text[MAX_EXPANDED_TEXT_SIZE];
-    /** positions for each element in the text */
-    FT_Vector positions[MAX_EXPANDED_TEXT_SIZE];
+    FT_Vector *positions;           ///< positions for each element in the text
+    size_t nb_positions;            ///< number of elements of positions array
     char *textfile;                 ///< file with text to be drawn
     unsigned int x;                 ///< x position to start drawing text
     unsigned int y;                 ///< y position to start drawing text
@@ -88,37 +86,37 @@ typedef struct {
 #define OFFSET(x) offsetof(DrawTextContext, x)
 
 static const AVOption drawtext_options[]= {
-{"fontfile", "set font file",        OFFSET(fontfile),         FF_OPT_TYPE_STRING, 0,  CHAR_MIN, CHAR_MAX },
-{"text",     "set text",             OFFSET(text),             FF_OPT_TYPE_STRING, 0,  CHAR_MIN, CHAR_MAX },
-{"textfile", "set text file",        OFFSET(textfile),         FF_OPT_TYPE_STRING, 0,  CHAR_MIN, CHAR_MAX },
-{"fontcolor","set foreground color", OFFSET(fontcolor_string), FF_OPT_TYPE_STRING, 0,  CHAR_MIN, CHAR_MAX },
-{"boxcolor", "set box color",        OFFSET(boxcolor_string),  FF_OPT_TYPE_STRING, 0,  CHAR_MIN, CHAR_MAX },
-{"shadowcolor", "set shadow color",  OFFSET(shadowcolor_string),  FF_OPT_TYPE_STRING, 0,  CHAR_MIN, CHAR_MAX },
-{"box",      "set box",              OFFSET(draw_box),         FF_OPT_TYPE_INT,    0,         0,        1 },
-{"fontsize", "set font size",        OFFSET(fontsize),         FF_OPT_TYPE_INT,   16,         1,       72 },
-{"x",        "set x",                OFFSET(x),                FF_OPT_TYPE_INT,    0,         0,  INT_MAX },
-{"y",        "set y",                OFFSET(y),                FF_OPT_TYPE_INT,    0,         0,  INT_MAX },
-{"shadowx",  "set x",                OFFSET(shadowx),          FF_OPT_TYPE_INT,    0,   INT_MIN,  INT_MAX },
-{"shadowy",  "set y",                OFFSET(shadowy),          FF_OPT_TYPE_INT,    0,   INT_MIN,  INT_MAX },
-{"tabsize",  "set tab size",         OFFSET(tabsize),          FF_OPT_TYPE_INT,    4,         0,  INT_MAX },
+{"fontfile", "set font file",        OFFSET(fontfile),           FF_OPT_TYPE_STRING, {.str=NULL},  CHAR_MIN, CHAR_MAX },
+{"text",     "set text",             OFFSET(text),               FF_OPT_TYPE_STRING, {.str=NULL},  CHAR_MIN, CHAR_MAX },
+{"textfile", "set text file",        OFFSET(textfile),           FF_OPT_TYPE_STRING, {.str=NULL},  CHAR_MIN, CHAR_MAX },
+{"fontcolor","set foreground color", OFFSET(fontcolor_string),   FF_OPT_TYPE_STRING, {.str=NULL},  CHAR_MIN, CHAR_MAX },
+{"boxcolor", "set box color",        OFFSET(boxcolor_string),    FF_OPT_TYPE_STRING, {.str=NULL},  CHAR_MIN, CHAR_MAX },
+{"shadowcolor", "set shadow color",  OFFSET(shadowcolor_string), FF_OPT_TYPE_STRING, {.str=NULL},  CHAR_MIN, CHAR_MAX },
+{"box",      "set box",              OFFSET(draw_box),           FF_OPT_TYPE_INT,    {.dbl=0},     0,        1        },
+{"fontsize", "set font size",        OFFSET(fontsize),           FF_OPT_TYPE_INT,    {.dbl=16},    1,        72       },
+{"x",        "set x",                OFFSET(x),                  FF_OPT_TYPE_INT,    {.dbl=0},     0,        INT_MAX  },
+{"y",        "set y",                OFFSET(y),                  FF_OPT_TYPE_INT,    {.dbl=0},     0,        INT_MAX  },
+{"shadowx",  "set x",                OFFSET(shadowx),            FF_OPT_TYPE_INT,    {.dbl=0},     INT_MIN,  INT_MAX  },
+{"shadowy",  "set y",                OFFSET(shadowy),            FF_OPT_TYPE_INT,    {.dbl=0},     INT_MIN,  INT_MAX  },
+{"tabsize",  "set tab size",         OFFSET(tabsize),            FF_OPT_TYPE_INT,    {.dbl=4},     0,        INT_MAX  },
 
 /* FT_LOAD_* flags */
-{"ft_load_flags", "set font loading flags for libfreetype",   OFFSET(ft_load_flags),  FF_OPT_TYPE_FLAGS,  FT_LOAD_DEFAULT|FT_LOAD_RENDER, 0, INT_MAX, 0, "ft_load_flags" },
-{"default",                     "set default",                     0, FF_OPT_TYPE_CONST, FT_LOAD_DEFAULT,                     INT_MIN, INT_MAX, 0, "ft_load_flags" },
-{"no_scale",                    "set no_scale",                    0, FF_OPT_TYPE_CONST, FT_LOAD_NO_SCALE,                    INT_MIN, INT_MAX, 0, "ft_load_flags" },
-{"no_hinting",                  "set no_hinting",                  0, FF_OPT_TYPE_CONST, FT_LOAD_NO_HINTING,                  INT_MIN, INT_MAX, 0, "ft_load_flags" },
-{"render",                      "set render",                      0, FF_OPT_TYPE_CONST, FT_LOAD_RENDER,                      INT_MIN, INT_MAX, 0, "ft_load_flags" },
-{"no_bitmap",                   "set no_bitmap",                   0, FF_OPT_TYPE_CONST, FT_LOAD_NO_BITMAP,                   INT_MIN, INT_MAX, 0, "ft_load_flags" },
-{"vertical_layout",             "set vertical_layout",             0, FF_OPT_TYPE_CONST, FT_LOAD_VERTICAL_LAYOUT,             INT_MIN, INT_MAX, 0, "ft_load_flags" },
-{"force_autohint",              "set force_autohint",              0, FF_OPT_TYPE_CONST, FT_LOAD_FORCE_AUTOHINT,              INT_MIN, INT_MAX, 0, "ft_load_flags" },
-{"crop_bitmap",                 "set crop_bitmap",                 0, FF_OPT_TYPE_CONST, FT_LOAD_CROP_BITMAP,                 INT_MIN, INT_MAX, 0, "ft_load_flags" },
-{"pedantic",                    "set pedantic",                    0, FF_OPT_TYPE_CONST, FT_LOAD_PEDANTIC,                    INT_MIN, INT_MAX, 0, "ft_load_flags" },
-{"ignore_global_advance_width", "set ignore_global_advance_width", 0, FF_OPT_TYPE_CONST, FT_LOAD_IGNORE_GLOBAL_ADVANCE_WIDTH, INT_MIN, INT_MAX, 0, "ft_load_flags" },
-{"no_recurse",                  "set no_recurse",                  0, FF_OPT_TYPE_CONST, FT_LOAD_NO_RECURSE,                  INT_MIN, INT_MAX, 0, "ft_load_flags" },
-{"ignore_transform",            "set ignore_transform",            0, FF_OPT_TYPE_CONST, FT_LOAD_IGNORE_TRANSFORM,            INT_MIN, INT_MAX, 0, "ft_load_flags" },
-{"monochrome",                  "set monochrome",                  0, FF_OPT_TYPE_CONST, FT_LOAD_MONOCHROME,                  INT_MIN, INT_MAX, 0, "ft_load_flags" },
-{"linear_design",               "set linear_design",               0, FF_OPT_TYPE_CONST, FT_LOAD_LINEAR_DESIGN,               INT_MIN, INT_MAX, 0, "ft_load_flags" },
-{"no_autohint",                 "set no_autohint",                 0, FF_OPT_TYPE_CONST, FT_LOAD_NO_AUTOHINT,                 INT_MIN, INT_MAX, 0, "ft_load_flags" },
+{"ft_load_flags", "set font loading flags for libfreetype",   OFFSET(ft_load_flags),  FF_OPT_TYPE_FLAGS,  {.dbl=FT_LOAD_DEFAULT|FT_LOAD_RENDER}, 0, INT_MAX, 0, "ft_load_flags" },
+{"default",                     "set default",                     0, FF_OPT_TYPE_CONST, {.dbl=FT_LOAD_DEFAULT},                     INT_MIN, INT_MAX, 0, "ft_load_flags" },
+{"no_scale",                    "set no_scale",                    0, FF_OPT_TYPE_CONST, {.dbl=FT_LOAD_NO_SCALE},                    INT_MIN, INT_MAX, 0, "ft_load_flags" },
+{"no_hinting",                  "set no_hinting",                  0, FF_OPT_TYPE_CONST, {.dbl=FT_LOAD_NO_HINTING},                  INT_MIN, INT_MAX, 0, "ft_load_flags" },
+{"render",                      "set render",                      0, FF_OPT_TYPE_CONST, {.dbl=FT_LOAD_RENDER},                      INT_MIN, INT_MAX, 0, "ft_load_flags" },
+{"no_bitmap",                   "set no_bitmap",                   0, FF_OPT_TYPE_CONST, {.dbl=FT_LOAD_NO_BITMAP},                   INT_MIN, INT_MAX, 0, "ft_load_flags" },
+{"vertical_layout",             "set vertical_layout",             0, FF_OPT_TYPE_CONST, {.dbl=FT_LOAD_VERTICAL_LAYOUT},             INT_MIN, INT_MAX, 0, "ft_load_flags" },
+{"force_autohint",              "set force_autohint",              0, FF_OPT_TYPE_CONST, {.dbl=FT_LOAD_FORCE_AUTOHINT},              INT_MIN, INT_MAX, 0, "ft_load_flags" },
+{"crop_bitmap",                 "set crop_bitmap",                 0, FF_OPT_TYPE_CONST, {.dbl=FT_LOAD_CROP_BITMAP},                 INT_MIN, INT_MAX, 0, "ft_load_flags" },
+{"pedantic",                    "set pedantic",                    0, FF_OPT_TYPE_CONST, {.dbl=FT_LOAD_PEDANTIC},                    INT_MIN, INT_MAX, 0, "ft_load_flags" },
+{"ignore_global_advance_width", "set ignore_global_advance_width", 0, FF_OPT_TYPE_CONST, {.dbl=FT_LOAD_IGNORE_GLOBAL_ADVANCE_WIDTH}, INT_MIN, INT_MAX, 0, "ft_load_flags" },
+{"no_recurse",                  "set no_recurse",                  0, FF_OPT_TYPE_CONST, {.dbl=FT_LOAD_NO_RECURSE},                  INT_MIN, INT_MAX, 0, "ft_load_flags" },
+{"ignore_transform",            "set ignore_transform",            0, FF_OPT_TYPE_CONST, {.dbl=FT_LOAD_IGNORE_TRANSFORM},            INT_MIN, INT_MAX, 0, "ft_load_flags" },
+{"monochrome",                  "set monochrome",                  0, FF_OPT_TYPE_CONST, {.dbl=FT_LOAD_MONOCHROME},                  INT_MIN, INT_MAX, 0, "ft_load_flags" },
+{"linear_design",               "set linear_design",               0, FF_OPT_TYPE_CONST, {.dbl=FT_LOAD_LINEAR_DESIGN},               INT_MIN, INT_MAX, 0, "ft_load_flags" },
+{"no_autohint",                 "set no_autohint",                 0, FF_OPT_TYPE_CONST, {.dbl=FT_LOAD_NO_AUTOHINT},                 INT_MIN, INT_MAX, 0, "ft_load_flags" },
 {NULL},
 };
 
@@ -157,9 +155,10 @@ typedef struct {
     int bitmap_top;
 } Glyph;
 
-static int glyph_cmp(const Glyph *a, const Glyph *b)
+static int glyph_cmp(void *key, const void *b)
 {
-    int64_t diff = (int64_t)a->code - (int64_t)b->code;
+    const Glyph *a = key, *bb = b;
+    int64_t diff = (int64_t)a->code - (int64_t)bb->code;
     return diff > 0 ? 1 : diff < 0 ? -1 : 0;
 }
 
@@ -169,21 +168,26 @@ static int glyph_cmp(const Glyph *a, const Glyph *b)
 static int load_glyph(AVFilterContext *ctx, Glyph **glyph_ptr, uint32_t code)
 {
     DrawTextContext *dtext = ctx->priv;
-    Glyph *glyph = av_mallocz(sizeof(Glyph));
+    Glyph *glyph;
     struct AVTreeNode *node = NULL;
     int ret;
 
     /* load glyph into dtext->face->glyph */
-    ret = FT_Load_Char(dtext->face, code, dtext->ft_load_flags);
-    if (ret)
+    if (FT_Load_Char(dtext->face, code, dtext->ft_load_flags))
         return AVERROR(EINVAL);
 
     /* save glyph */
+    if (!(glyph = av_mallocz(sizeof(*glyph))) ||
+        !(glyph->glyph = av_mallocz(sizeof(*glyph->glyph)))) {
+        ret = AVERROR(ENOMEM);
+        goto error;
+    }
     glyph->code  = code;
-    glyph->glyph = av_mallocz(sizeof(FT_Glyph));
-    ret = FT_Get_Glyph(dtext->face->glyph, glyph->glyph);
-    if (ret)
-        return AVERROR(EINVAL);
+
+    if (FT_Get_Glyph(dtext->face->glyph, glyph->glyph)) {
+        ret = AVERROR(EINVAL);
+        goto error;
+    }
 
     glyph->bitmap      = dtext->face->glyph->bitmap;
     glyph->bitmap_left = dtext->face->glyph->bitmap_left;
@@ -194,19 +198,29 @@ static int load_glyph(AVFilterContext *ctx, Glyph **glyph_ptr, uint32_t code)
     FT_Glyph_Get_CBox(*glyph->glyph, ft_glyph_bbox_pixels, &glyph->bbox);
 
     /* cache the newly created glyph */
-    if (!node)
-        node = av_mallocz(av_tree_node_size);
-    av_tree_insert(&dtext->glyphs, glyph, (void *)glyph_cmp, &node);
+    if (!(node = av_mallocz(av_tree_node_size))) {
+        ret = AVERROR(ENOMEM);
+        goto error;
+    }
+    av_tree_insert(&dtext->glyphs, glyph, glyph_cmp, &node);
 
     if (glyph_ptr)
         *glyph_ptr = glyph;
     return 0;
+
+error:
+    if (glyph)
+        av_freep(&glyph->glyph);
+    av_freep(&glyph);
+    av_freep(&node);
+    return ret;
 }
 
 static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
 {
     int err;
     DrawTextContext *dtext = ctx->priv;
+    Glyph *glyph;
 
     dtext->class = &drawtext_class;
     av_opt_set_defaults2(dtext, 0, 0);
@@ -294,14 +308,15 @@ static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
     /* load the fallback glyph with code 0 */
     load_glyph(ctx, NULL, 0);
 
+    /* set the tabsize in pixels */
+    if ((err = load_glyph(ctx, &glyph, ' ') < 0)) {
+        av_log(ctx, AV_LOG_ERROR, "Could not set tabsize.\n");
+        return err;
+    }
+    dtext->tabsize *= glyph->advance;
+
 #if !HAVE_LOCALTIME_R
     av_log(ctx, AV_LOG_WARNING, "strftime() expansion unavailable!\n");
-#else
-    if (strlen(dtext->text) >= MAX_EXPANDED_TEXT_SIZE) {
-        av_log(ctx, AV_LOG_ERROR,
-               "Impossible to print text, string is too big\n");
-        return AVERROR(EINVAL);
-    }
 #endif
 
     return 0;
@@ -336,8 +351,10 @@ static av_cold void uninit(AVFilterContext *ctx)
 
     av_freep(&dtext->fontfile);
     av_freep(&dtext->text);
+    av_freep(&dtext->expanded_text);
     av_freep(&dtext->fontcolor_string);
     av_freep(&dtext->boxcolor_string);
+    av_freep(&dtext->positions);
     av_freep(&dtext->shadowcolor_string);
     av_tree_enumerate(dtext->glyphs, NULL, NULL, glyph_enu_free);
     av_tree_destroy(dtext->glyphs);
@@ -393,7 +410,7 @@ static int config_input(AVFilterLink *inlink)
     luma_pos    = ((x)          ) + ((y)          ) * picref->linesize[0]; \
     alpha = yuva_color[3] * (val) * 129;                               \
     picref->data[0][luma_pos]    = (alpha * yuva_color[0] + (255*255*129 - alpha) * picref->data[0][luma_pos]   ) >> 23; \
-    if(((x) & ((1<<(hsub))-1))==0 && ((y) & ((1<<(vsub))-1))==0){\
+    if (((x) & ((1<<(hsub)) - 1)) == 0 && ((y) & ((1<<(vsub)) - 1)) == 0) {\
         chroma_pos1 = ((x) >> (hsub)) + ((y) >> (vsub)) * picref->linesize[1]; \
         chroma_pos2 = ((x) >> (hsub)) + ((y) >> (vsub)) * picref->linesize[2]; \
         picref->data[1][chroma_pos1] = (alpha * yuva_color[1] + (255*255*129 - alpha) * picref->data[1][chroma_pos1]) >> 23; \
@@ -403,7 +420,7 @@ static int config_input(AVFilterLink *inlink)
 
 static inline int draw_glyph_yuv(AVFilterBufferRef *picref, FT_Bitmap *bitmap, unsigned int x,
                                  unsigned int y, unsigned int width, unsigned int height,
-                                 unsigned char yuva_color[4], int hsub, int vsub)
+                                 const uint8_t yuva_color[4], int hsub, int vsub)
 {
     int r, c, alpha;
     unsigned int luma_pos, chroma_pos1, chroma_pos2;
@@ -439,7 +456,7 @@ static inline int draw_glyph_yuv(AVFilterBufferRef *picref, FT_Bitmap *bitmap, u
 static inline int draw_glyph_rgb(AVFilterBufferRef *picref, FT_Bitmap *bitmap,
                                  unsigned int x, unsigned int y,
                                  unsigned int width, unsigned int height, int pixel_step,
-                                 unsigned char rgba_color[4], uint8_t rgba_map[4])
+                                 const uint8_t rgba_color[4], const uint8_t rgba_map[4])
 {
     int r, c, alpha;
     uint8_t *p;
@@ -495,6 +512,11 @@ static inline void drawbox(AVFilterBufferRef *picref, unsigned int x, unsigned i
     }
 }
 
+static inline int is_newline(uint32_t c)
+{
+    return (c == '\n' || c == '\r' || c == '\f' || c == '\v');
+}
+
 static int draw_glyphs(DrawTextContext *dtext, AVFilterBufferRef *picref,
                        int width, int height, const uint8_t rgbcolor[4], const uint8_t yuvcolor[4], int x, int y)
 {
@@ -537,12 +559,12 @@ static int draw_text(AVFilterContext *ctx, AVFilterBufferRef *picref,
                      int width, int height)
 {
     DrawTextContext *dtext = ctx->priv;
-    char *text = dtext->text;
     uint32_t code = 0, prev_code = 0;
     int x = 0, y = 0, i = 0, ret;
     int text_height, baseline;
+    char *text = dtext->text;
     uint8_t *p;
-    int str_w, str_w_max;
+    int str_w = 0, len;
     int y_min = 32000, y_max = -32000;
     FT_Vector delta;
     Glyph *glyph = NULL, *prev_glyph = NULL;
@@ -551,20 +573,35 @@ static int draw_text(AVFilterContext *ctx, AVFilterBufferRef *picref,
 #if HAVE_LOCALTIME_R
     time_t now = time(0);
     struct tm ltime;
-    size_t expanded_text_len;
+    uint8_t *buf = dtext->expanded_text;
+    int buf_size = dtext->expanded_text_size;
 
-    dtext->expanded_text[0] = '\1';
-    expanded_text_len = strftime(dtext->expanded_text, MAX_EXPANDED_TEXT_SIZE,
-                                 text, localtime_r(&now, &ltime));
-    text = dtext->expanded_text;
-    if (expanded_text_len == 0 && dtext->expanded_text[0] != '\0') {
-        av_log(ctx, AV_LOG_ERROR,
-               "Impossible to print text, string is too big\n");
-        return AVERROR(EINVAL);
+    if (!buf) {
+        buf_size = 2*strlen(dtext->text)+1;
+        buf = av_malloc(buf_size);
     }
-#endif
 
-    str_w = str_w_max = 0;
+    localtime_r(&now, &ltime);
+
+    do {
+        *buf = 1;
+        if (strftime(buf, buf_size, dtext->text, &ltime) != 0 || *buf == 0)
+            break;
+        buf_size *= 2;
+    } while ((buf = av_realloc(buf, buf_size)));
+
+    if (!buf)
+        return AVERROR(ENOMEM);
+    text = dtext->expanded_text = buf;
+    dtext->expanded_text_size = buf_size;
+#endif
+    if ((len = strlen(text)) > dtext->nb_positions) {
+        if (!(dtext->positions =
+              av_realloc(dtext->positions, len*sizeof(*dtext->positions))))
+            return AVERROR(ENOMEM);
+        dtext->nb_positions = len;
+    }
+
     x = dtext->x;
     y = dtext->y;
 
@@ -574,7 +611,7 @@ static int draw_text(AVFilterContext *ctx, AVFilterBufferRef *picref,
 
         /* get glyph */
         dummy.code = code;
-        glyph = av_tree_find(dtext->glyphs, &dummy, (void *)glyph_cmp, NULL);
+        glyph = av_tree_find(dtext->glyphs, &dummy, glyph_cmp, NULL);
         if (!glyph)
             load_glyph(ctx, &glyph, code);
 
@@ -593,10 +630,18 @@ static int draw_text(AVFilterContext *ctx, AVFilterBufferRef *picref,
         if (prev_code == '\r' && code == '\n')
             continue;
 
+        prev_code = code;
+        if (is_newline(code)) {
+            str_w = FFMAX(str_w, x - dtext->x);
+            y += text_height;
+            x = dtext->x;
+            continue;
+        }
+
         /* get glyph */
         prev_glyph = glyph;
         dummy.code = code;
-        glyph = av_tree_find(dtext->glyphs, &dummy, (void *)glyph_cmp, NULL);
+        glyph = av_tree_find(dtext->glyphs, &dummy, glyph_cmp, NULL);
 
         /* kerning */
         if (dtext->use_kerning && prev_glyph && glyph->code) {
@@ -605,9 +650,8 @@ static int draw_text(AVFilterContext *ctx, AVFilterBufferRef *picref,
             x += delta.x >> 6;
         }
 
-        if (x + glyph->advance >= width || code == '\r' || code == '\n') {
-            if (x + glyph->advance >= width)
-                str_w_max = width - dtext->x - 1;
+        if (x + glyph->bbox.xMax >= width) {
+            str_w = FFMAX(str_w, x - dtext->x);
             y += text_height;
             x = dtext->x;
         }
@@ -615,38 +659,27 @@ static int draw_text(AVFilterContext *ctx, AVFilterBufferRef *picref,
         /* save position */
         dtext->positions[i].x = x + glyph->bitmap_left;
         dtext->positions[i].y = y - glyph->bitmap_top + baseline;
-        if (code != '\n' && code != '\r') {
-            int advance = glyph->advance;
-            if (code == '\t')
-                advance *= dtext->tabsize;
-            x     += advance;
-            str_w += advance;
-        }
-        prev_code = code;
+        if (code == '\t') x  = (x / dtext->tabsize + 1)*dtext->tabsize;
+        else              x += glyph->advance;
     }
 
-    y += text_height;
-    if (str_w_max == 0)
-        str_w_max = str_w;
+    str_w = FFMIN(width - dtext->x - 1, FFMAX(str_w, x - dtext->x));
+    y     = FFMIN(y + text_height, height - 1);
 
     /* draw box */
-    if (dtext->draw_box) {
-        /* check if it doesn't pass the limits */
-        str_w_max = FFMIN(str_w_max, width - dtext->x - 1);
-        y = FFMIN(y, height - 1);
-
-        /* draw background */
-        drawbox(picref, dtext->x, dtext->y, str_w_max, y-dtext->y,
+    if (dtext->draw_box)
+        drawbox(picref, dtext->x, dtext->y, str_w, y-dtext->y,
                 dtext->box_line, dtext->pixel_step, dtext->boxcolor,
                 dtext->hsub, dtext->vsub, dtext->is_packed_rgb, dtext->rgba_map);
-    }
 
-    if(dtext->shadowx || dtext->shadowy){
-        if((ret=draw_glyphs(dtext, picref, width, height, dtext->shadowcolor_rgba, dtext->shadowcolor, dtext->shadowx, dtext->shadowy))<0)
+    if (dtext->shadowx || dtext->shadowy) {
+        if ((ret = draw_glyphs(dtext, picref, width, height, dtext->shadowcolor_rgba,
+                               dtext->shadowcolor, dtext->shadowx, dtext->shadowy)) < 0)
             return ret;
     }
 
-    if((ret=draw_glyphs(dtext, picref, width, height, dtext->fontcolor_rgba, dtext->fontcolor, 0, 0))<0)
+    if ((ret = draw_glyphs(dtext, picref, width, height, dtext->fontcolor_rgba,
+                           dtext->fontcolor, 0, 0)) < 0)
         return ret;
 
     return 0;

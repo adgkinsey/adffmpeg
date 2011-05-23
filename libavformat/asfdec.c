@@ -21,6 +21,7 @@
 
 //#define DEBUG
 
+#include "libavutil/bswap.h"
 #include "libavutil/common.h"
 #include "libavutil/avstring.h"
 #include "libavcodec/mpegaudio.h"
@@ -842,11 +843,24 @@ static int asf_read_frame_header(AVFormatContext *s, AVIOContext *pb){
         av_log(s, AV_LOG_ERROR, "unexpected packet_replic_size of %d\n", asf->packet_replic_size);
         return -1;
     }
+    if (rsize > asf->packet_size_left) {
+        av_log(s, AV_LOG_ERROR, "packet_replic_size is invalid\n");
+        return -1;
+    }
     if (asf->packet_flags & 0x01) {
         DO_2BITS(asf->packet_segsizetype >> 6, asf->packet_frag_size, 0); // 0 is illegal
-        if(asf->packet_frag_size > asf->packet_size_left - rsize){
-            av_log(s, AV_LOG_ERROR, "packet_frag_size is invalid\n");
+        if (rsize > asf->packet_size_left) {
+            av_log(s, AV_LOG_ERROR, "packet_replic_size is invalid\n");
             return -1;
+        } else if(asf->packet_frag_size > asf->packet_size_left - rsize){
+            if (asf->packet_frag_size > asf->packet_size_left - rsize + asf->packet_padsize) {
+                av_log(s, AV_LOG_ERROR, "packet_frag_size is invalid (%d-%d)\n", asf->packet_size_left, rsize);
+                return -1;
+            } else {
+                int diff = asf->packet_frag_size - (asf->packet_size_left - rsize);
+                asf->packet_size_left += diff;
+                asf->packet_padsize   -= diff;
+            }
         }
         //printf("Fragsize %d\n", asf->packet_frag_size);
     } else {
@@ -1251,42 +1265,22 @@ static int asf_read_seek(AVFormatContext *s, int stream_index, int64_t pts, int 
     if (!asf->index_read)
         asf_build_simple_index(s, stream_index);
 
-    if(!(asf->index_read && st->index_entries)){
-        if(av_seek_frame_binary(s, stream_index, pts, flags)<0)
-            return -1;
-    }else{
+    if((asf->index_read && st->index_entries)){
         index= av_index_search_timestamp(st, pts, flags);
-        if(index<0)
-            return -1;
+        if(index >= 0) {
+            /* find the position */
+            pos = st->index_entries[index].pos;
 
-        /* find the position */
-        pos = st->index_entries[index].pos;
-
-    // various attempts to find key frame have failed so far
-    //    asf_reset_header(s);
-    //    avio_seek(s->pb, pos, SEEK_SET);
-    //    key_pos = pos;
-    //     for(i=0;i<16;i++){
-    //         pos = avio_tell(s->pb);
-    //         if (av_read_frame(s, &pkt) < 0){
-    //             av_log(s, AV_LOG_INFO, "seek failed\n");
-    //             return -1;
-    //         }
-    //         asf_st = s->streams[stream_index]->priv_data;
-    //         pos += st->parser->frame_offset;
-    //
-    //         if (pkt.size > b) {
-    //             b = pkt.size;
-    //             key_pos = pos;
-    //         }
-    //
-    //         av_free_packet(&pkt);
-    //     }
-
-        /* do the seek */
-        av_log(s, AV_LOG_DEBUG, "SEEKTO: %"PRId64"\n", pos);
-        avio_seek(s->pb, pos, SEEK_SET);
+            /* do the seek */
+            av_log(s, AV_LOG_DEBUG, "SEEKTO: %"PRId64"\n", pos);
+            avio_seek(s->pb, pos, SEEK_SET);
+            asf_reset_header(s);
+            return 0;
+        }
     }
+    /* no index or seeking by index failed */
+    if(av_seek_frame_binary(s, stream_index, pts, flags)<0)
+        return -1;
     asf_reset_header(s);
     return 0;
 }
@@ -1301,4 +1295,5 @@ AVInputFormat ff_asf_demuxer = {
     asf_read_close,
     asf_read_seek,
     asf_read_pts,
+    .flags = AVFMT_NOBINSEARCH | AVFMT_NOGENSEARCH,
 };

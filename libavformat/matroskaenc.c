@@ -403,8 +403,6 @@ static int64_t mkv_write_cues(AVIOContext *pb, mkv_cues *cues, int num_tracks)
     }
     end_ebml_master(pb, cues_element);
 
-    av_free(cues->entries);
-    av_free(cues);
     return currentpos;
 }
 
@@ -588,6 +586,61 @@ static int mkv_write_tracks(AVFormatContext *s)
                 // XXX: interlace flag?
                 put_ebml_uint (pb, MATROSKA_ID_VIDEOPIXELWIDTH , codec->width);
                 put_ebml_uint (pb, MATROSKA_ID_VIDEOPIXELHEIGHT, codec->height);
+
+                if ((tag = av_metadata_get(st->metadata, "STEREO_MODE", NULL, 0)) ||
+                    (tag = av_metadata_get( s->metadata, "STEREO_MODE", NULL, 0))) {
+                    // save stereomode flag
+                    uint64_t stereo_fmt = -1;
+                    int valid_fmt = 0;
+
+                    if (!strcmp(tag->value, "mono")) {
+                        stereo_fmt = MATROSKA_VIDEO_STEREOMODE_MONO;
+                    } else if (!strcmp(tag->value, "left_right")) {
+                        stereo_fmt = MATROSKA_VIDEO_STEREOMODE_LEFT_RIGHT;
+                    } else if (!strcmp(tag->value, "bottom_top")) {
+                        stereo_fmt = MATROSKA_VIDEO_STEREOMODE_BOTTOM_TOP;
+                    } else if (!strcmp(tag->value, "top_bottom")) {
+                        stereo_fmt = MATROSKA_VIDEO_STEREOMODE_TOP_BOTTOM;
+                    } else if (!strcmp(tag->value, "checkerboard_rl")) {
+                        stereo_fmt = MATROSKA_VIDEO_STEREOMODE_CHECKERBOARD_RL;
+                    } else if (!strcmp(tag->value, "checkerboard_lr")) {
+                        stereo_fmt = MATROSKA_VIDEO_STEREOMODE_CHECKERBOARD_LR;
+                    } else if (!strcmp(tag->value, "row_interleaved_rl")) {
+                        stereo_fmt = MATROSKA_VIDEO_STEREOMODE_ROW_INTERLEAVED_RL;
+                    } else if (!strcmp(tag->value, "row_interleaved_lr")) {
+                        stereo_fmt = MATROSKA_VIDEO_STEREOMODE_ROW_INTERLEAVED_LR;
+                    } else if (!strcmp(tag->value, "col_interleaved_rl")) {
+                        stereo_fmt = MATROSKA_VIDEO_STEREOMODE_COL_INTERLEAVED_RL;
+                    } else if (!strcmp(tag->value, "col_interleaved_lr")) {
+                        stereo_fmt = MATROSKA_VIDEO_STEREOMODE_COL_INTERLEAVED_LR;
+                    } else if (!strcmp(tag->value, "anaglyph_cyan_red")) {
+                        stereo_fmt = MATROSKA_VIDEO_STEREOMODE_ANAGLYPH_CYAN_RED;
+                    } else if (!strcmp(tag->value, "right_left")) {
+                        stereo_fmt = MATROSKA_VIDEO_STEREOMODE_RIGHT_LEFT;
+                    } else if (!strcmp(tag->value, "anaglyph_green_magenta")) {
+                        stereo_fmt = MATROSKA_VIDEO_STEREOMODE_ANAGLYPH_GREEN_MAG;
+                    } else if (!strcmp(tag->value, "block_lr")) {
+                        stereo_fmt = MATROSKA_VIDEO_STEREOMODE_BOTH_EYES_BLOCK_LR;
+                    } else if (!strcmp(tag->value, "block_rl")) {
+                        stereo_fmt = MATROSKA_VIDEO_STEREOMODE_BOTH_EYES_BLOCK_RL;
+                    }
+
+                    switch (mkv->mode) {
+                        case MODE_WEBM:
+                            if (stereo_fmt <= MATROSKA_VIDEO_STEREOMODE_TOP_BOTTOM
+                             || stereo_fmt == MATROSKA_VIDEO_STEREOMODE_RIGHT_LEFT)
+                            valid_fmt = 1;
+                            break;
+                        case MODE_MATROSKAv2:
+                            if (stereo_fmt <= MATROSKA_VIDEO_STEREOMODE_BOTH_EYES_BLOCK_RL)
+                                valid_fmt = 1;
+                            break;
+                    }
+
+                    if (valid_fmt)
+                        put_ebml_uint (pb, MATROSKA_ID_VIDEOSTEREOMODE, stereo_fmt);
+                }
+
                 if (st->sample_aspect_ratio.num) {
                     int d_width = codec->width*av_q2d(st->sample_aspect_ratio);
                     put_ebml_uint(pb, MATROSKA_ID_VIDEODISPLAYWIDTH , d_width);
@@ -618,7 +671,7 @@ static int mkv_write_tracks(AVFormatContext *s)
                 put_ebml_uint(pb, MATROSKA_ID_TRACKTYPE, MATROSKA_TRACK_TYPE_SUBTITLE);
                 if (!native_id) {
                     av_log(s, AV_LOG_ERROR, "Subtitle codec %d is not supported.\n", codec->codec_id);
-                    return AVERROR_NOTSUPP;
+                    return AVERROR(ENOSYS);
                 }
                 break;
             default:
@@ -1164,6 +1217,8 @@ static int mkv_write_trailer(AVFormatContext *s)
 
     end_ebml_master(pb, mkv->segment);
     av_free(mkv->tracks);
+    av_freep(&mkv->cues->entries);
+    av_freep(&mkv->cues);
     av_destruct_packet(&mkv->cur_audio_pkt);
     avio_flush(pb);
     return 0;

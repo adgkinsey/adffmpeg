@@ -1,8 +1,8 @@
 \input texinfo @c -*- texinfo -*-
 
-@settitle FFplay Documentation
+@settitle ffplay Documentation
 @titlepage
-@center @titlefont{FFplay Documentation}
+@center @titlefont{ffplay Documentation}
 @end titlepage
 
 @top
@@ -174,6 +174,7 @@ Seek to percentage in file corresponding to fraction of width.
 @c man end
 
 @include eval.texi
+@include decoders.texi
 @include demuxers.texi
 @include muxers.texi
 @include indevs.texi

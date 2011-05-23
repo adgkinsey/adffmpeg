@@ -1,6 +1,5 @@
 /*
- * G.729 decoder
- * Copyright (c) 2008 Vladimir Voroshilov
+ * Copyright (c) 2011 Mans Rullgard
  *
  * This file is part of FFmpeg.
  *
@@ -18,12 +17,24 @@
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#ifndef AVCODEC_G729_H
-#define AVCODEC_G729_H
 
-/**
- * subframe size
- */
-#define SUBFRAME_SIZE 40
+#include "config.h"
+#include "mpegaudiodsp.h"
+#include "dct.h"
+#include "dct32.h"
 
-#endif // AVCODEC_G729_H
+void ff_mpadsp_init(MPADSPContext *s)
+{
+    DCTContext dct;
+
+    ff_dct_init(&dct, 5, DCT_II);
+
+    s->apply_window_float = ff_mpadsp_apply_window_float;
+    s->apply_window_fixed = ff_mpadsp_apply_window_fixed;
+
+    s->dct32_float = dct.dct32;
+    s->dct32_fixed = ff_dct32_fixed;
+
+    if (HAVE_MMX)     ff_mpadsp_init_mmx(s);
+    if (HAVE_ALTIVEC) ff_mpadsp_init_altivec(s);
+}
