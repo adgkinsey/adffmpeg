@@ -30,6 +30,7 @@
 #include <time.h>
 #include "internal.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/avstring.h"
 
 #include "adjfif.h"
 #include "adpic.h"
@@ -473,8 +474,7 @@ static void parse_comment( char *text, int text_len, NetVuImageData *pic, char *
         else if ( !memcmp( result, comment_version, strlen(comment_version_0_1) - 2 ) )
             pic->version = 0xdecade10;
         else if( !memcmp( result, camera_title, strlen(camera_title) ) )  {
-            strncpy( pic->title, &result[strlen(camera_title)], sizeof(pic->title) );
-            pic->title[sizeof(pic->title)-1] = 0;
+            av_strlcpy( pic->title, &result[strlen(camera_title)], sizeof(pic->title) );
         }
         else if( !memcmp( result, camera_number, strlen(camera_number) ) )
             sscanf( &result[strlen(camera_number)], "%d", &pic->cam );
@@ -490,7 +490,7 @@ static void parse_comment( char *text, int text_len, NetVuImageData *pic, char *
         else if( !memcmp( result, q_factor, strlen(q_factor) ) )
             sscanf( &result[strlen(q_factor)], "%d", &pic->factor );
         else if( !memcmp( result, alarm_comment, strlen(alarm_comment) ) )
-            strncpy( pic->alarm, &result[strlen(alarm_comment)], sizeof(pic->title) );
+            av_strlcpy( pic->alarm, &result[strlen(alarm_comment)], sizeof(pic->alarm) );
         else if( !memcmp( result, active_alarms, strlen(active_alarms) ) )
             sscanf( &result[strlen(active_alarms)], "%X", &pic->alm_bitmask );
         else if( !memcmp( result, active_detectors, strlen(active_detectors) ) )
@@ -498,7 +498,7 @@ static void parse_comment( char *text, int text_len, NetVuImageData *pic, char *
         else if( !memcmp( result, script_msg, strlen(script_msg) ) ) {
         }
         else if( !memcmp( result, time_zone, strlen(time_zone) ) )
-            strncpy( pic->locale, &result[strlen(time_zone)], sizeof(pic->locale) );
+            av_strlcpy( pic->locale, &result[strlen(time_zone)], sizeof(pic->locale) );
         else if( !memcmp( result, utc_offset, strlen(utc_offset) ) )
             sscanf( &result[strlen(utc_offset)], "%d", &pic->utc_offset );
         else {

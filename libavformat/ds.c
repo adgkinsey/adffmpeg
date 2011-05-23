@@ -353,7 +353,7 @@ static int DSOpen( URLContext *h, const char *uri, int flags )
     h->priv_data = s;
 
     /* Crack the URL */
-    ff_url_split( NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port, path1, sizeof(path1), uri );
+    av_url_split( NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port, path1, sizeof(path1), uri );
 
     if (port > 0) {
         snprintf( hoststr, sizeof(hoststr), "%s:%d", hostname, port );
@@ -420,7 +420,7 @@ static int DSRead( URLContext *h, uint8_t *buf, int size )
     if( context != NULL )
         return url_read( context->TCPContext, buf, size );
 
-    return AVERROR_IO;
+    return AVERROR(EIO);
 }
 
 /****************************************************************************************************************
@@ -441,7 +441,7 @@ static int DSWrite( URLContext *h, const uint8_t *buf, int size )
     if( context != NULL )
         return url_write( context->TCPContext, buf, size );
 
-    return AVERROR_IO;
+    return AVERROR(EIO);
 }
 
 /****************************************************************************************************************
@@ -523,7 +523,7 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
             if( encCredentials != NULL )
                 av_free( encCredentials );
 
-            return AVERROR_NOMEM;
+            return AVERROR(ENOMEM);
         }
 
         /* Set up the connection request */
@@ -558,7 +558,7 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
                             /* Encrypt the username / password */
                             if( strlen( user ) > 0 && strlen( password ) > 0 ) {
                                 if( (encCredentials = EncryptPasswordString( user, password, msg->timestamp, msg->macAddr, msg->appVersion )) == NULL )
-                                    retVal = AVERROR_NOMEM;
+                                    retVal = AVERROR(ENOMEM);
                             }
                             else {
                                 /* If we haven't got a user and password string then we have to notify the client */
@@ -569,7 +569,7 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
                             retVal = ADFFMPEG_ERROR_INVALID_CREDENTIALS;
                         }
                         else { /* Fail */
-                            retVal = AVERROR_IO;
+                            retVal = AVERROR(EIO);
                             isConnecting = 0;
                         }
                     }
@@ -600,7 +600,7 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
                             }
                         }
                         else
-                            retVal = AVERROR_IO;
+                            retVal = AVERROR(EIO);
 
                         if( retVal == 0 ) {
                             /* Fire the request message off */
@@ -613,7 +613,7 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
 
                     /* Anything other than a connect reply is failure */
                     default: {
-                        retVal = AVERROR_UNKNOWN;
+                        retVal = -1;
                         isConnecting = 0;
                     }
                     break;
@@ -687,7 +687,7 @@ static int GetUserAndPassword( const char * auth, char *user, char *password  )
                 authStr = NULL;
             }
             else
-                retVal = AVERROR_NOMEM;
+                retVal = AVERROR(ENOMEM);
         }
     }
 
@@ -777,7 +777,7 @@ static int CrackURI( const char *path, int *streamType, int *res, int *cam, time
             pathStr = NULL;
         }
         else
-            retVal = AVERROR_NOMEM;
+            retVal = AVERROR(ENOMEM);
     }
 
     return retVal;
@@ -801,7 +801,7 @@ static int ReceiveNetworkMessage( URLContext *h, NetworkMessage **message )
     *message = av_mallocz( sizeof(NetworkMessage) );
 
     if( *message == NULL )
-        return AVERROR_NOMEM;
+        return AVERROR(ENOMEM);
 
     if( (retVal = ReadNetworkMessageHeader( h, &(*message)->header )) != 0 ) {
         FreeNetworkMessage( message );
@@ -839,25 +839,25 @@ static int ReadNetworkMessageHeader( URLContext *h, MessageHeader *header )
 {
     /* Read the header in a piece at a time... */
     if( DSReadBuffer( h, (uint8_t *)&header->magicNumber, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&header->length, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&header->channelID, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&header->sequence, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&header->messageVersion, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&header->checksum, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&header->messageType, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     /* Now adjust the endianess */
     NToHMessageHeader( header );
@@ -902,7 +902,7 @@ static int ReadNetworkMessageBody( URLContext * h, NetworkMessage *message )
 
             default:
                 /* We shouldn't get into this state so we'd better return an error here... */
-                retVal = AVERROR_IO;
+                retVal = AVERROR(EIO);
                 break;
         }
 
@@ -917,25 +917,25 @@ static int ReadConnectRejectMessage( URLContext * h, NetworkMessage *message )
 
     /* Allocate the message body */
     if( (message->body = av_malloc( sizeof(SrvConnectRejectMsg) )) == NULL )
-        return AVERROR_NOMEM;
+        return AVERROR(ENOMEM);
 
     /* Now read from the stream into the message */
     bodyPtr = (SrvConnectRejectMsg *)message->body;
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->reason, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->timestamp, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->macAddr, MAC_ADDR_LENGTH ) != MAC_ADDR_LENGTH )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->appVersion, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->minViewerVersion, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     /* Correct the byte ordering */
     bodyPtr->reason = av_be2ne32(bodyPtr->reason);
@@ -952,57 +952,57 @@ static int ReadConnectReplyMessage( URLContext * h, NetworkMessage *message )
 
     /* Allocate memory in which to store the message body */
     if( (message->body = av_malloc( sizeof(SrvConnectReplyMsg) )) == NULL )
-        return AVERROR_NOMEM;
+        return AVERROR(ENOMEM);
 
     bodyPtr = (SrvConnectReplyMsg *)message->body;
 
     /* Now read the message body, a field at a time */
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->numCameras, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->viewableCamMask, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->telemetryCamMask, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->failedCamMask, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->maxMsgInterval, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->timestamp, sizeof(int64_t) ) != sizeof(int64_t) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->cameraTitles, (16 * 28) ) != (16 * 28) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->unitType, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->applicationVersion, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->videoStandard, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->macAddr, MAC_ADDR_LENGTH ) != MAC_ADDR_LENGTH )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->unitName, UNIT_NAME_LENGTH ) != UNIT_NAME_LENGTH )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->numFixedRealms, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     bodyPtr->numFixedRealms = av_be2ne32(bodyPtr->numFixedRealms);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->realmFlags, (sizeof(unsigned long) * bodyPtr->numFixedRealms) ) != (sizeof(unsigned long) * bodyPtr->numFixedRealms) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->minimumViewerVersion, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     /* Correct the byte ordering */
     bodyPtr->numCameras = av_be2ne32(bodyPtr->numCameras);
@@ -1024,68 +1024,68 @@ static int ReadFeatureConnectReplyMessage( URLContext * h, NetworkMessage *messa
     SrvFeatureConnectReplyMsg *        bodyPtr = NULL;
 
     if( (message->body = av_malloc( sizeof(SrvFeatureConnectReplyMsg) )) == NULL )
-        return AVERROR_NOMEM;
+        return AVERROR(ENOMEM);
 
     bodyPtr = (SrvFeatureConnectReplyMsg *)message->body;
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->numCameras, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->viewableCamMask, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->telemetryCamMask, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->failedCamMask, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->maxMsgInterval, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->timestamp, sizeof(int64_t) ) != sizeof(int64_t) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->cameraTitles, (16 * 28) ) != (16 * 28) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->unitType, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->applicationVersion, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->videoStandard, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->macAddr, MAC_ADDR_LENGTH ) != MAC_ADDR_LENGTH )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->unitName, UNIT_NAME_LENGTH ) != UNIT_NAME_LENGTH )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->minimumViewerVersion, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->unitFeature01, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->unitFeature02, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->unitFeature03, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->unitFeature04, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->numFixedRealms, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     bodyPtr->numFixedRealms = av_be2ne32(bodyPtr->numFixedRealms);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->realmFlags, (sizeof(unsigned long) * bodyPtr->numFixedRealms) ) != (sizeof(unsigned long) * bodyPtr->numFixedRealms) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     /* Correct the byte ordering */
     bodyPtr->numCameras = av_be2ne32(bodyPtr->numCameras);

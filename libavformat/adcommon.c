@@ -182,7 +182,7 @@ AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t cam
     if (!found) {
         st = av_new_stream( s, id);
         if (st) {
-            st->codec->codec_type = CODEC_TYPE_VIDEO;
+            st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
             st->codec->codec_id = codec_id;
             st->codec->width = w;
             st->codec->height = h;
@@ -231,7 +231,7 @@ AVStream * ad_get_audio_stream(AVFormatContext *s, NetVuAudioData* audioHeader)
     if( !found ) {
         st = av_new_stream( s, id );
         if (st) {
-            st->codec->codec_type = CODEC_TYPE_AUDIO;
+            st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
             st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
             st->codec->channels = 1;
             st->codec->block_align = 0;
@@ -306,7 +306,7 @@ AVStream * ad_get_data_stream( AVFormatContext *s )
     if( !found ) {
         st = av_new_stream( s, id );
         if (st) {
-            st->codec->codec_type = CODEC_TYPE_DATA;
+            st->codec->codec_type = AVMEDIA_TYPE_DATA;
             st->codec->codec_id = CODEC_ID_TEXT;
 
             // Use milliseconds as the time base

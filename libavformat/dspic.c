@@ -92,7 +92,7 @@ static int dspicReadPacket( AVFormatContext *s, AVPacket *pkt )
                 return retVal;
 
             if( avio_read( ioContext, pkt->data, dataSize ) != dataSize )
-                return AVERROR_IO;
+                return AVERROR(EIO);
         }
         else if( header.messageType == TCP_SRV_IMG_DATA ) {
             frameType = DMVideo;
@@ -106,20 +106,20 @@ static int dspicReadPacket( AVFormatContext *s, AVPacket *pkt )
 
             /* Read the jfif data out of the buffer */
             if( avio_read( ioContext, pkt->data, dataSize ) != dataSize )
-                return AVERROR_IO;
+                return AVERROR(EIO);
 
             /* Now extract the frame info that's in there */
             if( (videoFrameData = parseDSJFIFHeader( pkt->data, dataSize )) == NULL )
-                return AVERROR_IO;
+                return AVERROR(EIO);
 
             /* if( audioFrameData != NULL ) frameType |= DS1_PACKET_TYPE_AUDIO; */
 
             if ( (stream = ad_get_stream(s, 0, 0, 1, PIC_MODE_JPEG_422, NULL)) == NULL )
-                return AVERROR_IO;
+                return AVERROR(EIO);
         }
     }
     else
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     /* Now create a wrapper to hold this frame's data which we'll store in the packet's private member field */
     if( (frameData = av_malloc( sizeof(*frameData) )) != NULL ) {
@@ -141,7 +141,7 @@ fail_mem:
     /* Make sure everything that might have been allocated is released before we return... */
     av_free( frameData );
     av_free( videoFrameData );
-    return AVERROR_NOMEM;
+    return AVERROR(ENOMEM);
 }
 
 static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize )
@@ -224,7 +224,7 @@ static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize )
 
 static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData )
 {
-    int         retVal = AVERROR_IO;
+    int         retVal = AVERROR(EIO);
     int         bufIdx = 0;
 
     if( buffer != NULL ) {

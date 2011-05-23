@@ -69,7 +69,7 @@ static int adaudio_read_header(AVFormatContext *s, AVFormatParameters *ap)
 static int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
     AVIOContext *         ioContext = s->pb;
-    int                     retVal = AVERROR_IO;
+    int                     retVal = AVERROR(EIO);
     int                     packetSize = 0;
     int                     sampleSize = 0;
     AVStream *              st = NULL;

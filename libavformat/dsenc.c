@@ -389,7 +389,7 @@ static void GetFingerPrint(char* FingerPrint, const char* Source, unsigned int L
 
     MD5Print (local_fp, 32 + 1, digest);
 
-    strncpy (FingerPrint, local_fp, 32) ;
+    av_strlcpy (FingerPrint, local_fp, 32) ;
 
 }
 
