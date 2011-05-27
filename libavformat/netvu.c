@@ -149,7 +149,7 @@ static int netvu_open(URLContext *h, const char *uri, int flags)
         port = 80;
     ff_url_join(http, sizeof(http), "http", auth, hostname, port, "%s", path);
 
-    err = ffurl_open(&nv->hd, http, URL_RDWR);
+    err = ffurl_open(&nv->hd, http, URL_RDONLY);
     if (err >= 0)  {
         char headers[1024];
         char *startOfLine = &headers[0];
