@@ -23,6 +23,9 @@
 #include "avformat.h"
 #include "avio_internal.h"
 #include "rawdec.h"
+#include "libavutil/opt.h"
+#include "libavutil/parseutils.h"
+#include "libavutil/pixdesc.h"
 
 /* raw input */
 int ff_raw_read_header(AVFormatContext *s, AVFormatParameters *ap)
@@ -43,26 +46,63 @@ int ff_raw_read_header(AVFormatContext *s, AVFormatParameters *ap)
         st->codec->codec_id = id;
 
         switch(st->codec->codec_type) {
-        case AVMEDIA_TYPE_AUDIO:
-            st->codec->sample_rate = ap->sample_rate;
-            if(ap->channels) st->codec->channels = ap->channels;
-            else             st->codec->channels = 1;
+        case AVMEDIA_TYPE_AUDIO: {
+            RawAudioDemuxerContext *s1 = s->priv_data;
+
+#if FF_API_FORMAT_PARAMETERS
+            if (ap->sample_rate)
+                st->codec->sample_rate = ap->sample_rate;
+            if (ap->channels)
+                st->codec->channels    = ap->channels;
+            else st->codec->channels   = 1;
+#endif
+
+            if (s1->sample_rate)
+                st->codec->sample_rate = s1->sample_rate;
+            if (s1->channels)
+                st->codec->channels    = s1->channels;
+
             st->codec->bits_per_coded_sample = av_get_bits_per_sample(st->codec->codec_id);
             assert(st->codec->bits_per_coded_sample > 0);
             st->codec->block_align = st->codec->bits_per_coded_sample*st->codec->channels/8;
             av_set_pts_info(st, 64, 1, st->codec->sample_rate);
             break;
-        case AVMEDIA_TYPE_VIDEO:
+            }
+        case AVMEDIA_TYPE_VIDEO: {
+            FFRawVideoDemuxerContext *s1 = s->priv_data;
+            int width = 0, height = 0, ret;
+            enum PixelFormat pix_fmt;
+
             if(ap->time_base.num)
                 av_set_pts_info(st, 64, ap->time_base.num, ap->time_base.den);
             else
                 av_set_pts_info(st, 64, 1, 25);
-            st->codec->width = ap->width;
-            st->codec->height = ap->height;
-            st->codec->pix_fmt = ap->pix_fmt;
-            if(st->codec->pix_fmt == PIX_FMT_NONE)
-                st->codec->pix_fmt= PIX_FMT_YUV420P;
+            if (s1->video_size && (ret = av_parse_video_size(&width, &height, s1->video_size)) < 0) {
+                av_log(s, AV_LOG_ERROR, "Couldn't parse video size.\n");
+                goto fail;
+            }
+            if ((pix_fmt = av_get_pix_fmt(s1->pixel_format)) == PIX_FMT_NONE) {
+                av_log(s, AV_LOG_ERROR, "No such pixel format: %s.\n", s1->pixel_format);
+                ret = AVERROR(EINVAL);
+                goto fail;
+            }
+#if FF_API_FORMAT_PARAMETERS
+            if (ap->width > 0)
+                width = ap->width;
+            if (ap->height > 0)
+                height = ap->height;
+            if (ap->pix_fmt)
+                pix_fmt = ap->pix_fmt;
+#endif
+            st->codec->width  = width;
+            st->codec->height = height;
+            st->codec->pix_fmt = pix_fmt;
             break;
+fail:
+            av_freep(&s1->video_size);
+            av_freep(&s1->pixel_format);
+            return ret;
+            }
         default:
             return -1;
         }
@@ -139,17 +179,48 @@ int ff_raw_video_read_header(AVFormatContext *s,
 
 /* Note: Do not forget to add new entries to the Makefile as well. */
 
+static const AVOption audio_options[] = {
+    { "sample_rate", "", offsetof(RawAudioDemuxerContext, sample_rate), FF_OPT_TYPE_INT, {.dbl = 0}, 0, INT_MAX, AV_OPT_FLAG_DECODING_PARAM },
+    { "channels",    "", offsetof(RawAudioDemuxerContext, channels),    FF_OPT_TYPE_INT, {.dbl = 0}, 0, INT_MAX, AV_OPT_FLAG_DECODING_PARAM },
+    { NULL },
+};
+
+const AVClass ff_rawaudio_demuxer_class = {
+    .class_name     = "rawaudio demuxer",
+    .item_name      = av_default_item_name,
+    .option         = audio_options,
+    .version        = LIBAVUTIL_VERSION_INT,
+};
+
+#define OFFSET(x) offsetof(FFRawVideoDemuxerContext, x)
+#define DEC AV_OPT_FLAG_DECODING_PARAM
+static const AVOption video_options[] = {
+    { "video_size", "A string describing frame size, such as 640x480 or hd720.", OFFSET(video_size), FF_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
+    { "pixel_format", "", OFFSET(pixel_format), FF_OPT_TYPE_STRING, {.str = "yuv420p"}, 0, 0, DEC },
+    { NULL },
+};
+#undef OFFSET
+#undef DEC
+
+const AVClass ff_rawvideo_demuxer_class = {
+    .class_name     = "rawvideo demuxer",
+    .item_name      = av_default_item_name,
+    .option         = video_options,
+    .version        = LIBAVUTIL_VERSION_INT,
+};
+
 #if CONFIG_G722_DEMUXER
 AVInputFormat ff_g722_demuxer = {
     "g722",
     NULL_IF_CONFIG_SMALL("raw G.722"),
-    0,
+    sizeof(RawAudioDemuxerContext),
     NULL,
     ff_raw_read_header,
     ff_raw_read_partial_packet,
     .flags= AVFMT_GENERIC_INDEX,
     .extensions = "g722,722",
     .value = CODEC_ID_ADPCM_G722,
+    .priv_class = &ff_rawaudio_demuxer_class,
 };
 #endif
 
@@ -168,17 +239,7 @@ AVInputFormat ff_gsm_demuxer = {
 #endif
 
 #if CONFIG_MJPEG_DEMUXER
-AVInputFormat ff_mjpeg_demuxer = {
-    "mjpeg",
-    NULL_IF_CONFIG_SMALL("raw MJPEG video"),
-    0,
-    NULL,
-    ff_raw_video_read_header,
-    ff_raw_read_partial_packet,
-    .flags= AVFMT_GENERIC_INDEX,
-    .extensions = "mjpg,mjpeg",
-    .value = CODEC_ID_MJPEG,
-};
+FF_DEF_RAWVIDEO_DEMUXER(mjpeg, "raw MJPEG video", NULL, "mjpg,mjpeg", CODEC_ID_MJPEG)
 #endif
 
 #if CONFIG_MLP_DEMUXER
@@ -224,14 +285,5 @@ AVInputFormat ff_shorten_demuxer = {
 #endif
 
 #if CONFIG_VC1_DEMUXER
-AVInputFormat ff_vc1_demuxer = {
-    "vc1",
-    NULL_IF_CONFIG_SMALL("raw VC-1"),
-    0,
-    NULL /* vc1_probe */,
-    ff_raw_video_read_header,
-    ff_raw_read_partial_packet,
-    .extensions = "vc1",
-    .value = CODEC_ID_VC1,
-};
+FF_DEF_RAWVIDEO_DEMUXER(vc1, "raw VC-1", NULL, "vc1", CODEC_ID_VC1)
 #endif

@@ -26,14 +26,17 @@
 
 #include "libavutil/intreadwrite.h"
 #include "libavutil/avstring.h"
+#include "libavutil/log.h"
+#include "libavutil/opt.h"
+#include "libavutil/parseutils.h"
 #include "avformat.h"
 #include "sauce.h"
 
-#define LINE_RATE 6000 /* characters per second */
-
 typedef struct {
+    AVClass *class;
     int chars_per_frame;
     uint64_t fsize;  /**< file size less metadata buffer */
+    char *video_size;/**< A string describing video size, set by a private option. */
 } TtyDemuxContext;
 
 /**
@@ -70,14 +73,30 @@ static int read_header(AVFormatContext *avctx,
                        AVFormatParameters *ap)
 {
     TtyDemuxContext *s = avctx->priv_data;
+    int width = 0, height = 0, ret;
     AVStream *st = av_new_stream(avctx, 0);
     if (!st)
         return AVERROR(ENOMEM);
     st->codec->codec_tag   = 0;
     st->codec->codec_type  = AVMEDIA_TYPE_VIDEO;
     st->codec->codec_id    = CODEC_ID_ANSI;
-    if (ap->width)  st->codec->width  = ap->width;
-    if (ap->height) st->codec->height = ap->height;
+
+    if (s->video_size) {
+        ret = av_parse_video_size(&width, &height, s->video_size);
+        av_freep(&s->video_size);
+        if (ret < 0) {
+            av_log (avctx, AV_LOG_ERROR, "Couldn't parse video size.\n");
+            return ret;
+        }
+    }
+#if FF_API_FORMAT_PARAMETERS
+    if (ap->width > 0)
+        width = ap->width;
+    if (ap->height > 0)
+        height = ap->height;
+#endif
+    st->codec->width  = width;
+    st->codec->height = height;
 
     if (!ap->time_base.num) {
         av_set_pts_info(st, 60, 1, 25);
@@ -86,7 +105,11 @@ static int read_header(AVFormatContext *avctx,
     }
 
     /* simulate tty display speed */
-    s->chars_per_frame = FFMAX(av_q2d(st->time_base) * (ap->sample_rate ? ap->sample_rate : LINE_RATE), 1);
+#if FF_API_FORMAT_PARAMETERS
+    if (ap->sample_rate)
+        s->chars_per_frame = ap->sample_rate;
+#endif
+    s->chars_per_frame = FFMAX(av_q2d(st->time_base)*s->chars_per_frame, 1);
 
     if (avctx->pb->seekable) {
         s->fsize = avio_size(avctx->pb);
@@ -124,6 +147,21 @@ static int read_packet(AVFormatContext *avctx, AVPacket *pkt)
     return 0;
 }
 
+#define OFFSET(x) offsetof(TtyDemuxContext, x)
+#define DEC AV_OPT_FLAG_DECODING_PARAM
+static const AVOption options[] = {
+    { "chars_per_frame", "", offsetof(TtyDemuxContext, chars_per_frame), FF_OPT_TYPE_INT, {.dbl = 6000}, 1, INT_MAX, AV_OPT_FLAG_DECODING_PARAM},
+    { "video_size", "A string describing frame size, such as 640x480 or hd720.", OFFSET(video_size), FF_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
+    { NULL },
+};
+
+static const AVClass tty_demuxer_class = {
+    .class_name     = "TTY demuxer",
+    .item_name      = av_default_item_name,
+    .option         = options,
+    .version        = LIBAVUTIL_VERSION_INT,
+};
+
 AVInputFormat ff_tty_demuxer = {
     .name           = "tty",
     .long_name      = NULL_IF_CONFIG_SMALL("Tele-typewriter"),
@@ -131,4 +169,5 @@ AVInputFormat ff_tty_demuxer = {
     .read_header    = read_header,
     .read_packet    = read_packet,
     .extensions     = "ans,art,asc,diz,ice,nfo,txt,vt",
+    .priv_class     = &tty_demuxer_class,
 };

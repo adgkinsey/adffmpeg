@@ -79,15 +79,15 @@ typedef struct MOVParseTableEntry {
 
 static const MOVParseTableEntry mov_default_parse_table[];
 
-static int mov_metadata_trkn(MOVContext *c, AVIOContext *pb, unsigned len)
+static int mov_metadata_track_or_disc_number(MOVContext *c, AVIOContext *pb, unsigned len, const char *type)
 {
     char buf[16];
 
     avio_rb16(pb); // unknown
     snprintf(buf, sizeof(buf), "%d", avio_rb16(pb));
-    av_metadata_set2(&c->fc->metadata, "track", buf, 0);
+    av_metadata_set2(&c->fc->metadata, type, buf, 0);
 
-    avio_rb16(pb); // total tracks
+    avio_rb16(pb); // total tracks/discs
 
     return 0;
 }
@@ -138,7 +138,7 @@ static int mov_read_udta_string(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     const char *key = NULL;
     uint16_t str_size, langcode = 0;
     uint32_t data_type = 0;
-    int (*parse)(MOVContext*, AVIOContext*, unsigned) = NULL;
+    int (*parse)(MOVContext*, AVIOContext*, unsigned, const char *) = NULL;
 
     switch (atom.type) {
     case MKTAG(0xa9,'n','a','m'): key = "title";     break;
@@ -164,7 +164,9 @@ static int mov_read_udta_string(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     case MKTAG( 't','v','e','n'): key = "episode_id";break;
     case MKTAG( 't','v','n','n'): key = "network";   break;
     case MKTAG( 't','r','k','n'): key = "track";
-        parse = mov_metadata_trkn; break;
+        parse = mov_metadata_track_or_disc_number; break;
+    case MKTAG( 'd','i','s','k'): key = "disc";
+        parse = mov_metadata_track_or_disc_number; break;
     }
 
     if (c->itunes_metadata && atom.size > 8) {
@@ -199,7 +201,7 @@ static int mov_read_udta_string(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     str_size = FFMIN3(sizeof(str)-1, str_size, atom.size);
 
     if (parse)
-        parse(c, pb, str_size);
+        parse(c, pb, str_size, key);
     else {
         if (data_type == 3 || (data_type == 0 && langcode < 0x800)) { // MAC Encoded
             mov_read_mac_string(c, pb, str_size, str, sizeof(str));
@@ -467,21 +469,21 @@ static int mov_read_hdlr(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 int ff_mov_read_esds(AVFormatContext *fc, AVIOContext *pb, MOVAtom atom)
 {
     AVStream *st;
-    int tag, len;
+    int tag;
 
     if (fc->nb_streams < 1)
         return 0;
     st = fc->streams[fc->nb_streams-1];
 
     avio_rb32(pb); /* version + flags */
-    len = ff_mp4_read_descr(fc, pb, &tag);
+    ff_mp4_read_descr(fc, pb, &tag);
     if (tag == MP4ESDescrTag) {
         avio_rb16(pb); /* ID */
         avio_r8(pb); /* priority */
     } else
         avio_rb16(pb); /* ID */
 
-    len = ff_mp4_read_descr(fc, pb, &tag);
+    ff_mp4_read_descr(fc, pb, &tag);
     if (tag == MP4DecConfigDescrTag)
         ff_mp4_read_dec_config_descr(fc, st, pb);
     return 0;

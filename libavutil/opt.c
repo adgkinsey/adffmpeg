@@ -45,7 +45,7 @@ const AVOption *av_find_opt(void *v, const char *name, const char *unit, int mas
 const AVOption *av_next_option(void *obj, const AVOption *last)
 {
     if (last && last[1].name) return ++last;
-    else if (last)            return NULL;
+    else if (last || !(*(AVClass**)obj)->option->name) return NULL;
     else                      return (*(AVClass**)obj)->option;
 }
 
@@ -290,7 +290,8 @@ double av_get_double(void *obj, const char *name, const AVOption **o_out)
     double num=1;
     int den=1;
 
-    av_get_number(obj, name, o_out, &num, &den, &intnum);
+    if (av_get_number(obj, name, o_out, &num, &den, &intnum) < 0)
+        return NAN;
     return num*intnum/den;
 }
 
@@ -300,7 +301,8 @@ AVRational av_get_q(void *obj, const char *name, const AVOption **o_out)
     double num=1;
     int den=1;
 
-    av_get_number(obj, name, o_out, &num, &den, &intnum);
+    if (av_get_number(obj, name, o_out, &num, &den, &intnum) < 0)
+        return (AVRational){0, 0};
     if (num == 1.0 && (int)intnum == intnum)
         return (AVRational){intnum, den};
     else
@@ -441,8 +443,10 @@ void av_opt_set_defaults2(void *s, int mask, int flags)
             }
             break;
             case FF_OPT_TYPE_STRING:
+                av_set_string3(s, opt->name, opt->default_val.str, 1, NULL);
+                break;
             case FF_OPT_TYPE_BINARY:
-                /* Cannot set default for string as default_val is of type * double */
+                /* Cannot set default for binary */
             break;
             default:
                 av_log(s, AV_LOG_DEBUG, "AVOption type %d of option %s not implemented yet\n", opt->type, opt->name);

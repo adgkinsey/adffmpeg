@@ -26,6 +26,7 @@
 #include "avio_internal.h"
 #include "pcm.h"
 #include "riff.h"
+#include "metadata.h"
 
 typedef struct {
     int64_t data;
@@ -194,7 +195,7 @@ static int wav_parse_fmt_tag(AVFormatContext *s, int64_t size, AVStream **st)
     if (!*st)
         return AVERROR(ENOMEM);
 
-    ff_get_wav_header(pb, (*st)->codec, size);
+    ret = ff_get_wav_header(pb, (*st)->codec, size);
     if (ret < 0)
         return ret;
     (*st)->need_parsing = AVSTREAM_PARSE_FULL;
@@ -235,7 +236,7 @@ static int wav_parse_bext_tag(AVFormatContext *s, int64_t size)
         return ret;
 
     time_reference = avio_rl64(s->pb);
-    snprintf(temp, sizeof(temp), "%lu", time_reference);
+    snprintf(temp, sizeof(temp), "%"PRIu64, time_reference);
     if ((ret = av_metadata_set2(&s->metadata, "time_reference", temp, 0)) < 0)
         return ret;
 
@@ -248,11 +249,12 @@ static int wav_parse_bext_tag(AVFormatContext *s, int64_t size)
             /* the string formatting below is per SMPTE 330M-2004 Annex C */
             if (umid_parts[4] == 0 && umid_parts[5] == 0 && umid_parts[6] == 0 && umid_parts[7] == 0) {
                 /* basic UMID */
-                snprintf(temp, sizeof(temp), "0x%016lX%016lX%016lX%016lX",
+                snprintf(temp, sizeof(temp), "0x%016"PRIX64"%016"PRIX64"%016"PRIX64"%016"PRIX64,
                          umid_parts[0], umid_parts[1], umid_parts[2], umid_parts[3]);
             } else {
                 /* extended UMID */
-                snprintf(temp, sizeof(temp), "0x%016lX%016lX%016lX%016lX%016lX%016lX%016lX%016lX",
+                snprintf(temp, sizeof(temp), "0x%016"PRIX64"%016"PRIX64"%016"PRIX64"%016"PRIX64
+                                             "0x%016"PRIX64"%016"PRIX64"%016"PRIX64"%016"PRIX64,
                          umid_parts[0], umid_parts[1], umid_parts[2], umid_parts[3],
                          umid_parts[4], umid_parts[5], umid_parts[6], umid_parts[7]);
             }
@@ -283,6 +285,14 @@ static int wav_parse_bext_tag(AVFormatContext *s, int64_t size)
 
     return 0;
 }
+
+static const AVMetadataConv wav_metadata_conv[] = {
+    {"description",      "comment"      },
+    {"originator",       "encoded_by"   },
+    {"origination_date", "date"         },
+    {"origination_time", "creation_time"},
+    {0},
+};
 
 /* wav input */
 static int wav_read_header(AVFormatContext *s,
@@ -320,7 +330,7 @@ static int wav_read_header(AVFormatContext *s,
         sample_count = avio_rl64(pb);
         if (data_size < 0 || sample_count < 0) {
             av_log(s, AV_LOG_ERROR, "negative data_size and/or sample_count in "
-                   "ds64: data_size = %li, sample_count = %li\n",
+                   "ds64: data_size = %"PRId64", sample_count = %"PRId64"\n",
                    data_size, sample_count);
             return AVERROR_INVALIDDATA;
         }
@@ -331,14 +341,8 @@ static int wav_read_header(AVFormatContext *s,
         size = next_tag(pb, &tag);
         next_tag_ofs = avio_tell(pb) + size;
 
-        if (url_feof(pb)) {
-            if (data_ofs < 0) {
-                av_log(s, AV_LOG_ERROR, "no 'data' tag found\n");
-                return AVERROR_INVALIDDATA;
-            }
-
+        if (url_feof(pb))
             break;
-        }
 
         switch (tag) {
         case MKTAG('f', 'm', 't', ' '):
@@ -360,16 +364,16 @@ static int wav_read_header(AVFormatContext *s,
                 next_tag_ofs = wav->data_end = avio_tell(pb) + data_size;
             } else {
                 data_size = size;
-                wav->data_end = size ? next_tag_ofs : INT64_MAX;
+                next_tag_ofs = wav->data_end = size ? next_tag_ofs : INT64_MAX;
             }
+
+            data_ofs = avio_tell(pb);
 
             /* don't look for footer metadata if we can't seek or if we don't
              * know where the data tag ends
              */
             if (!pb->seekable || (!rf64 && !size))
                 goto break_loop;
-
-            data_ofs = avio_tell(pb);
             break;
         case MKTAG('f','a','c','t'):
             if(!sample_count)
@@ -380,16 +384,28 @@ static int wav_read_header(AVFormatContext *s,
                 return ret;
             break;
         }
-        avio_seek(pb, next_tag_ofs, SEEK_SET);
+
+        /* seek to next tag unless we know that we'll run into EOF */
+        if ((avio_size(pb) > 0 && next_tag_ofs >= avio_size(pb)) ||
+            avio_seek(pb, next_tag_ofs, SEEK_SET) < 0) {
+            break;
+        }
     }
 break_loop:
-    if (data_ofs >= 0)
-        avio_seek(pb, data_ofs, SEEK_SET);
+    if (data_ofs < 0) {
+        av_log(s, AV_LOG_ERROR, "no 'data' tag found\n");
+        return AVERROR_INVALIDDATA;
+    }
+
+    avio_seek(pb, data_ofs, SEEK_SET);
 
     if (!sample_count && st->codec->channels && av_get_bits_per_sample(st->codec->codec_id))
         sample_count = (data_size<<3) / (st->codec->channels * (uint64_t)av_get_bits_per_sample(st->codec->codec_id));
     if (sample_count)
         st->duration = sample_count;
+
+    ff_metadata_conv_ctx(s, NULL, wav_metadata_conv);
+
     return 0;
 }
 

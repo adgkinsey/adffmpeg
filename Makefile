@@ -174,7 +174,7 @@ clean:: testclean
 
 distclean::
 	$(RM) $(DISTCLEANSUFFIXES)
-	$(RM) version.h config.* libavutil/avconfig.h
+	$(RM) config.* .version version.h libavutil/avconfig.h
 
 config:
 	$(SRC_PATH)/configure $(value FFMPEG_CONFIGURATION)
@@ -208,15 +208,15 @@ ffservertest: ffserver$(EXESUF) tests/vsynth1/00.pgm tests/data/asynth1.sw
 
 tests/vsynth1/00.pgm: tests/videogen$(HOSTEXESUF)
 	@mkdir -p tests/vsynth1
-	$(M)$(BUILD_ROOT)/$< 'tests/vsynth1/'
+	$(M)./$< 'tests/vsynth1/'
 
 tests/vsynth2/00.pgm: tests/rotozoom$(HOSTEXESUF)
 	@mkdir -p tests/vsynth2
-	$(M)$(BUILD_ROOT)/$< 'tests/vsynth2/' $(SRC_PATH)/tests/lena.pnm
+	$(M)./$< 'tests/vsynth2/' $(SRC_PATH)/tests/lena.pnm
 
 tests/data/asynth1.sw: tests/audiogen$(HOSTEXESUF)
 	@mkdir -p tests/data
-	$(M)$(BUILD_ROOT)/$< $@
+	$(M)./$< $@
 
 tests/data/asynth1.sw tests/vsynth%/00.pgm: TAG = GEN
 

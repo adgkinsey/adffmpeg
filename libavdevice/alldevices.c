@@ -19,7 +19,6 @@
  */
 
 #include "config.h"
-#include "libavformat/avformat.h"
 #include "avdevice.h"
 
 #define REGISTER_OUTDEV(X,x) { \
@@ -46,9 +45,12 @@ void avdevice_register_all(void)
     REGISTER_INDEV    (FBDEV, fbdev);
     REGISTER_INDEV    (JACK, jack);
     REGISTER_INOUTDEV (OSS, oss);
+    REGISTER_OUTDEV   (SDL, sdl);
     REGISTER_INOUTDEV (SNDIO, sndio);
     REGISTER_INDEV    (V4L2, v4l2);
+#if FF_API_V4L
     REGISTER_INDEV    (V4L, v4l);
+#endif
     REGISTER_INDEV    (VFWCAP, vfwcap);
     REGISTER_INDEV    (X11_GRAB_DEVICE, x11_grab_device);
 

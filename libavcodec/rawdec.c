@@ -56,7 +56,7 @@ static const PixelFormatTag pix_fmt_bps_avi[] = {
     { PIX_FMT_RGB555, 15 },
     { PIX_FMT_RGB555, 16 },
     { PIX_FMT_BGR24,  24 },
-    { PIX_FMT_RGB32,  32 },
+    { PIX_FMT_BGRA,   32 },
     { PIX_FMT_NONE, 0 },
 };
 
@@ -90,10 +90,17 @@ static av_cold int raw_init_decoder(AVCodecContext *avctx)
 
     if (avctx->codec_tag == MKTAG('r','a','w',' '))
         avctx->pix_fmt = ff_find_pix_fmt(pix_fmt_bps_mov, avctx->bits_per_coded_sample);
+    else if (avctx->codec_tag == MKTAG('W','R','A','W'))
+        avctx->pix_fmt = ff_find_pix_fmt(pix_fmt_bps_avi, avctx->bits_per_coded_sample);
     else if (avctx->codec_tag)
         avctx->pix_fmt = ff_find_pix_fmt(ff_raw_pix_fmt_tags, avctx->codec_tag);
     else if (avctx->pix_fmt == PIX_FMT_NONE && avctx->bits_per_coded_sample)
         avctx->pix_fmt = ff_find_pix_fmt(pix_fmt_bps_avi, avctx->bits_per_coded_sample);
+
+    if (avctx->pix_fmt == PIX_FMT_NONE) {
+        av_log(avctx, AV_LOG_ERROR, "Pixel format was not specified and cannot be detected\n");
+        return AVERROR(EINVAL);
+    }
 
     ff_set_systematic_pal2(context->palette, avctx->pix_fmt);
     context->length = avpicture_get_size(avctx->pix_fmt, avctx->width, avctx->height);
@@ -110,7 +117,7 @@ static av_cold int raw_init_decoder(AVCodecContext *avctx)
     avctx->coded_frame= &context->pic;
 
     if((avctx->extradata_size >= 9 && !memcmp(avctx->extradata + avctx->extradata_size - 9, "BottomUp", 9)) ||
-       avctx->codec_tag == MKTAG( 3 ,  0 ,  0 ,  0 ))
+        avctx->codec_tag == MKTAG(3, 0, 0, 0) || avctx->codec_tag == MKTAG('W','R','A','W'))
         context->flip=1;
 
     return 0;
