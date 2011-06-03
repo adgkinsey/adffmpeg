@@ -29,16 +29,16 @@ extern "C" {
 #include <stdint.h>
 
 
-typedef struct {
+struct NetVuPicture {
     uint16_t src_pixels;        ///< Input image size (horizontal)
     uint16_t src_lines;         ///< Input image size (vertical)
     uint16_t target_pixels;     ///< Output image size (horizontal)
     uint16_t target_lines;      ///< Output image size (vertical)
     uint16_t pixel_offset;      ///< Image start offset (horizontal)
     uint16_t line_offset;       ///< Image start offset (vertical)
-} NetVuPicture;
+};
 
-typedef struct {
+struct NetVuImageData {
     uint32_t version;                ///<  structure version number */
 
     /** mode: in PIC_REVISION 0 this was the DFT style FULL_HI etc
@@ -63,10 +63,10 @@ typedef struct {
     char locale[30];            ///< Timezone name
     int32_t utc_offset;         ///< Timezone difference in minutes
     uint32_t alm_bitmask;
-} NetVuImageData;
+};
 #define NetVuImageDataHeaderSize 168
 
-typedef struct _audioHeader {
+struct NetVuAudioData {
     uint32_t            version;
     int32_t             mode;
     int32_t             channel;
@@ -75,7 +75,7 @@ typedef struct _audioHeader {
     uint32_t            seconds;
     uint32_t            msecs;
     unsigned char *     additionalData;
-} NetVuAudioData;
+};
 #define NetVuAudioDataHeaderSize (28 + sizeof(unsigned char *))
 
 #define ID_LENGTH                       8
@@ -83,7 +83,7 @@ typedef struct _audioHeader {
 #define CAM_TITLE_LENGTH                24
 #define ALARM_TEXT_LENGTH               24
 
-typedef struct _dmImageData {
+struct DMImageData {
     char            identifier[ID_LENGTH];
     unsigned long   jpegLength;
     int64_t         imgSeq;
@@ -99,10 +99,10 @@ typedef struct _dmImageData {
     unsigned short  subHeaderMask;
     char            camTitle[CAM_TITLE_LENGTH];
     char            alarmText[ALARM_TEXT_LENGTH];
-} DMImageData;
+};
 
 
-typedef enum _frameType {
+enum ADFrameType {
     FrameTypeUnknown = 0,
     NetVuVideo,
     NetVuAudio,
@@ -111,13 +111,13 @@ typedef enum _frameType {
     NetVuDataInfo,
     NetVuDataLayout,
     RTPAudio
-} ADFrameType;
+};
 
 /** This is the data structure that the ffmpeg parser fills in as part of the
  * parsing routines. It will be shared between adpic and dspic so that our
  * clients can be compatible with either stream more easily
  */
-typedef struct {
+struct ADFrameData {
     /// Type of frame we have. See ADFrameType enum for supported types
     ADFrameType         frameType;
     /// Pointer to structure holding the information for the frame.
@@ -132,7 +132,7 @@ typedef struct {
     uint16_t            activityMask[16];
     /// Data parsed out of text (if exists)
     int                 vsd[9][16];
-} ADFrameData;
+};
 
 #define VSD_M0  0
 #define VSD_M1  1
