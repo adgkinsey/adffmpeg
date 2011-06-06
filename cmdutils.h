@@ -29,6 +29,10 @@
 #include "libavformat/avformat.h"
 #include "libswscale/swscale.h"
 
+#ifdef __MINGW32__
+#undef main /* We don't want SDL to override our main() */
+#endif
+
 /**
  * program name, defined by the program for show_version().
  */
@@ -124,7 +128,6 @@ typedef struct {
 #define OPT_INT64  0x0400
 #define OPT_EXIT   0x0800
 #define OPT_DATA   0x1000
-#define OPT_DUMMY  0x2000
      union {
         int *int_arg;
         char **str_arg;
@@ -147,7 +150,7 @@ void show_help_options(const OptionDef *options, const char *msg, int mask, int 
  * not have to be processed.
  */
 void parse_options(int argc, char **argv, const OptionDef *options,
-                   void (* parse_arg_function)(const char*));
+                   int (* parse_arg_function)(const char *opt, const char *arg));
 
 void set_context_opts(void *ctx, void *opts_ctx, int flags, AVCodec *codec);
 

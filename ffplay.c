@@ -43,14 +43,10 @@
 # include "libavfilter/avfiltergraph.h"
 #endif
 
-#include "cmdutils.h"
-
 #include <SDL.h>
 #include <SDL_thread.h>
 
-#ifdef __MINGW32__
-#undef main /* We don't want SDL to override our main() */
-#endif
+#include "cmdutils.h"
 
 #include <unistd.h>
 #include <assert.h>
@@ -1740,7 +1736,7 @@ static int video_thread(void *arg)
 {
     VideoState *is = arg;
     AVFrame *frame= avcodec_alloc_frame();
-    int64_t pts_int, pos;
+    int64_t pts_int = AV_NOPTS_VALUE, pos = -1;
     double pts;
     int ret;
 
@@ -2162,6 +2158,10 @@ static int stream_component_open(VideoState *is, int stream_index)
 
     /* prepare audio output */
     if (avctx->codec_type == AVMEDIA_TYPE_AUDIO) {
+        if(avctx->sample_rate <= 0 || avctx->channels <= 0){
+            fprintf(stderr, "Invalid sample rate or channel count\n");
+            return -1;
+        }
         wanted_spec.freq = avctx->sample_rate;
         wanted_spec.format = AUDIO_S16SYS;
         wanted_spec.channels = avctx->channels;
@@ -2916,6 +2916,19 @@ static int opt_show_mode(const char *opt, const char *arg)
     return 0;
 }
 
+static int opt_input_file(const char *opt, const char *filename)
+{
+    if (input_filename) {
+        fprintf(stderr, "Argument '%s' provided as input filename, but '%s' was already specified.\n",
+                filename, input_filename);
+        exit(1);
+    }
+    if (!strcmp(filename, "-"))
+        filename = "pipe:";
+    input_filename = filename;
+    return 0;
+}
+
 static const OptionDef options[] = {
 #include "cmdutils_common_opts.h"
     { "x", HAS_ARG, {(void*)opt_width}, "force displayed width", "width" },
@@ -2961,7 +2974,7 @@ static const OptionDef options[] = {
     { "rdftspeed", OPT_INT | HAS_ARG| OPT_AUDIO | OPT_EXPERT, {(void*)&rdftspeed}, "rdft speed", "msecs" },
     { "showmode", HAS_ARG, {(void*)opt_show_mode}, "select show mode (0 = video, 1 = waves, 2 = RDFT)", "mode" },
     { "default", HAS_ARG | OPT_AUDIO | OPT_VIDEO | OPT_EXPERT, {(void*)opt_default}, "generic catch all option", "" },
-    { "i", OPT_DUMMY, {NULL}, "ffmpeg compatibility dummy option", ""},
+    { "i", HAS_ARG, {(void *)opt_input_file}, "read specified file", "input_file"},
     { NULL, },
 };
 
@@ -3004,18 +3017,6 @@ static void show_help(void)
            "down/up             seek backward/forward 1 minute\n"
            "mouse click         seek to percentage in file corresponding to fraction of width\n"
            );
-}
-
-static void opt_input_file(const char *filename)
-{
-    if (input_filename) {
-        fprintf(stderr, "Argument '%s' provided as input filename, but '%s' was already specified.\n",
-                filename, input_filename);
-        exit(1);
-    }
-    if (!strcmp(filename, "-"))
-        filename = "pipe:";
-    input_filename = filename;
 }
 
 /* Called from the main */

@@ -1208,8 +1208,8 @@ static void do_video_out(AVFormatContext *s,
         av_log(NULL, AV_LOG_INFO,
                "Input stream #%d.%d frame changed from size:%dx%d fmt:%s to size:%dx%d fmt:%s\n",
                ist->file_index, ist->st->index,
-               ost->resample_width, ost->resample_height, avcodec_get_pix_fmt_name(ost->resample_pix_fmt),
-               dec->width         , dec->height         , avcodec_get_pix_fmt_name(dec->pix_fmt));
+               ost->resample_width, ost->resample_height, av_get_pix_fmt_name(ost->resample_pix_fmt),
+               dec->width         , dec->height         , av_get_pix_fmt_name(dec->pix_fmt));
         ost->resample_width   = dec->width;
         ost->resample_height  = dec->height;
         ost->resample_pix_fmt = dec->pix_fmt;
@@ -1242,7 +1242,7 @@ static void do_video_out(AVFormatContext *s,
             }
         }
         sws_scale(ost->img_resample_ctx, formatted_picture->data, formatted_picture->linesize,
-                  0, ost->resample_height, ost->resample_frame.data, ost->resample_frame.linesize);
+              0, ost->resample_height, final_picture->data, final_picture->linesize);
     }
 #endif
 
@@ -1379,7 +1379,8 @@ static void print_report(AVFormatContext **output_files,
     int64_t total_size;
     AVCodecContext *enc;
     int frame_number, vid, i;
-    double bitrate, ti1, pts;
+    double bitrate;
+    int64_t pts = INT64_MAX;
     static int64_t last_time = -1;
     static int qp_histogram[52];
 
@@ -1404,7 +1405,6 @@ static void print_report(AVFormatContext **output_files,
         total_size= avio_tell(oc->pb);
 
     buf[0] = '\0';
-    ti1 = 1e10;
     vid = 0;
     for(i=0;i<nb_ostreams;i++) {
         float q = -1;
@@ -1455,19 +1455,28 @@ static void print_report(AVFormatContext **output_files,
             vid = 1;
         }
         /* compute min output value */
-        pts = (double)ost->st->pts.val * av_q2d(ost->st->time_base);
-        if ((pts < ti1) && (pts > 0))
-            ti1 = pts;
+        pts = FFMIN(pts, av_rescale_q(ost->st->pts.val,
+                                      ost->st->time_base, AV_TIME_BASE_Q));
     }
-    if (ti1 < 0.01)
-        ti1 = 0.01;
 
     if (verbose > 0 || is_last_report) {
-        bitrate = (double)(total_size * 8) / ti1 / 1000.0;
+        int hours, mins, secs, us;
+        secs = pts / AV_TIME_BASE;
+        us = pts % AV_TIME_BASE;
+        mins = secs / 60;
+        secs %= 60;
+        hours = mins / 60;
+        mins %= 60;
+
+        bitrate = pts ? total_size * 8 / (pts / 1000.0) : 0;
 
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf),
-            "size=%8.0fkB time=%0.2f bitrate=%6.1fkbits/s",
-            (double)total_size / 1024, ti1, bitrate);
+                 "size=%8.0fkB time=", total_size / 1024.0);
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf),
+                 "%02d:%02d:%02d.%02d ", hours, mins, secs,
+                 (100 * us) / AV_TIME_BASE);
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf),
+                 "bitrate=%6.1fkbits/s", bitrate);
 
         if (nb_frames_dup || nb_frames_drop)
           snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), " dup=%d drop=%d",
@@ -1648,7 +1657,8 @@ static int output_packet(AVInputStream *ist, int ist_index,
         }
 
 #if CONFIG_AVFILTER
-        if(ist->st->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
+        if(ist->st->codec->codec_type == AVMEDIA_TYPE_VIDEO)
+        if (start_time == 0 || ist->pts >= start_time) {
             for(i=0;i<nb_ostreams;i++) {
                 ost = ost_table[i];
                 if (ost->input_video_filter && ost->source_index == ist_index) {
@@ -1656,7 +1666,7 @@ static int output_packet(AVInputStream *ist, int ist_index,
                         picture.sample_aspect_ratio = ist->st->sample_aspect_ratio;
                     picture.pts = ist->pts;
 
-                    av_vsrc_buffer_add_frame(ost->input_video_filter, &picture);
+                    av_vsrc_buffer_add_frame(ost->input_video_filter, &picture, AV_VSRC_BUF_FLAG_OVERWRITE);
                 }
             }
         }
@@ -1731,6 +1741,7 @@ static int output_packet(AVInputStream *ist, int ist_index,
                         }
                     } else {
                         AVFrame avframe; //FIXME/XXX remove this
+                        AVPicture pict;
                         AVPacket opkt;
                         int64_t ost_tb_start_time= av_rescale_q(start_time, AV_TIME_BASE_Q, ost->st->time_base);
 
@@ -1784,6 +1795,13 @@ static int output_packet(AVInputStream *ist, int ist_index,
                             opkt.size = data_size;
                         }
 
+                        if (os->oformat->flags & AVFMT_RAWPICTURE) {
+                            /* store AVPicture in AVPacket, as expected by the output format */
+                            avpicture_fill(&pict, opkt.data, ost->st->codec->pix_fmt, ost->st->codec->width, ost->st->codec->height);
+                            opkt.data = (uint8_t *)&pict;
+                            opkt.size = sizeof(AVPicture);
+                            opkt.flags |= AV_PKT_FLAG_KEY;
+                        }
                         write_frame(os, &opkt, ost->st->codec, ost->bitstream_filters);
                         ost->st->codec->frame_number++;
                         ost->frame_number++;
@@ -3706,7 +3724,6 @@ static void new_audio_stream(AVFormatContext *oc, int file_idx)
 static void new_data_stream(AVFormatContext *oc, int file_idx)
 {
     AVStream *st;
-    AVOutputStream *ost av_unused;
     AVCodec *codec=NULL;
     AVCodecContext *data_enc;
 
@@ -3715,7 +3732,7 @@ static void new_data_stream(AVFormatContext *oc, int file_idx)
         fprintf(stderr, "Could not alloc stream\n");
         ffmpeg_exit(1);
     }
-    ost = new_output_stream(oc, file_idx);
+    new_output_stream(oc, file_idx);
     data_enc = st->codec;
     output_codecs = grow_array(output_codecs, sizeof(*output_codecs), &nb_output_codecs, nb_output_codecs + 1);
     if (!data_stream_copy) {
@@ -3839,13 +3856,18 @@ static int opt_streamid(const char *opt, const char *arg)
     return 0;
 }
 
-static void opt_output_file(const char *filename)
+static int opt_output_file(const char *opt, const char *filename)
 {
     AVFormatContext *oc;
     int err, use_video, use_audio, use_subtitle, use_data;
     int input_has_video, input_has_audio, input_has_subtitle, input_has_data;
     AVFormatParameters params, *ap = &params;
     AVOutputFormat *file_oformat;
+
+    if(nb_output_files >= FF_ARRAY_ELEMS(output_files)){
+        fprintf(stderr, "Too many output files\n");
+        ffmpeg_exit(1);
+    }
 
     if (!strcmp(filename, "-"))
         filename = "pipe:";
@@ -3963,6 +3985,7 @@ static void opt_output_file(const char *filename)
     av_freep(&forced_key_frames);
     uninit_opts();
     init_opts();
+    return 0;
 }
 
 /* same option as mencoder */
@@ -4159,7 +4182,7 @@ static int opt_target(const char *opt, const char *arg)
 
     if(!strcmp(arg, "vcd")) {
         opt_codec("vcodec", "mpeg1video");
-        opt_codec("vcodec", "mp2");
+        opt_codec("acodec", "mp2");
         opt_format("f", "vcd");
 
         opt_frame_size("s", norm == PAL ? "352x288" : "352x240");
@@ -4209,7 +4232,7 @@ static int opt_target(const char *opt, const char *arg)
     } else if(!strcmp(arg, "dvd")) {
 
         opt_codec("vcodec", "mpeg2video");
-        opt_codec("vcodec", "ac3");
+        opt_codec("acodec", "ac3");
         opt_format("f", "dvd");
 
         opt_frame_size("vcodec", norm == PAL ? "720x576" : "720x480");

@@ -43,7 +43,7 @@ static int read_atom(AVFormatContext *s, Atom *atom)
     if (atom->size < 8)
         return -1;
     atom->tag = avio_rl32(s->pb);
-    av_dlog(s, "atom %d %.4s offset %#"PRIx64"\n",
+    av_dlog(s, "atom %u %.4s offset %#"PRIx64"\n",
             atom->size, (char*)&atom->tag, atom->offset);
     return atom->size;
 }
@@ -52,7 +52,8 @@ static int r3d_read_red1(AVFormatContext *s)
 {
     AVStream *st = av_new_stream(s, 0);
     char filename[258];
-    int tmp, tmp2;
+    int tmp;
+    int av_unused tmp2;
 
     if (!st)
         return AVERROR(ENOMEM);
@@ -139,7 +140,7 @@ static int r3d_read_rdvo(AVFormatContext *s, Atom *atom)
 static void r3d_read_reos(AVFormatContext *s)
 {
     R3DContext *r3d = s->priv_data;
-    int tmp;
+    int av_unused tmp;
 
     r3d->rdvo_offset = avio_rb32(s->pb);
     avio_rb32(s->pb); // rdvs offset
@@ -209,7 +210,8 @@ static int r3d_read_header(AVFormatContext *s, AVFormatParameters *ap)
 static int r3d_read_redv(AVFormatContext *s, AVPacket *pkt, Atom *atom)
 {
     AVStream *st = s->streams[0];
-    int tmp, tmp2;
+    int tmp;
+    int av_unused tmp2;
     uint64_t pos = avio_tell(s->pb);
     unsigned dts;
     int ret;
@@ -263,7 +265,8 @@ static int r3d_read_redv(AVFormatContext *s, AVPacket *pkt, Atom *atom)
 static int r3d_read_reda(AVFormatContext *s, AVPacket *pkt, Atom *atom)
 {
     AVStream *st = s->streams[1];
-    int tmp, tmp2, samples, size;
+    int av_unused tmp, tmp2;
+    int samples, size;
     uint64_t pos = avio_tell(s->pb);
     unsigned dts;
     int ret;
@@ -356,7 +359,8 @@ static int r3d_seek(AVFormatContext *s, int stream_index, int64_t sample_time, i
 
     frame_num = sample_time*st->codec->time_base.den/
         ((int64_t)st->codec->time_base.num*st->time_base.den);
-    av_dlog(s, "seek frame num %d timestamp %"PRId64"\n", frame_num, sample_time);
+    av_dlog(s, "seek frame num %d timestamp %"PRId64"\n",
+            frame_num, sample_time);
 
     if (frame_num < r3d->video_offsets_count) {
         avio_seek(s->pb, r3d->video_offsets_count, SEEK_SET);

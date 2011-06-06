@@ -527,7 +527,7 @@ int ff_mpeg_update_thread_context(AVCodecContext *dst, const AVCodecContext *src
         s->last_pict_type= s1->pict_type;
         if (s1->current_picture_ptr) s->last_lambda_for[s1->pict_type] = s1->current_picture_ptr->quality;
 
-        if(s1->pict_type!=AV_PICTURE_TYPE_B){
+        if(s1->pict_type!=FF_B_TYPE){
             s->last_non_b_pict_type= s1->pict_type;
         }
     }
@@ -586,7 +586,7 @@ av_cold int MPV_common_init(MpegEncContext *s)
         return -1;
     }
 
-    if(s->avctx->active_thread_type&FF_THREAD_SLICE &&
+    if((s->encoding || (s->avctx->active_thread_type & FF_THREAD_SLICE)) &&
        (s->avctx->thread_count > MAX_THREADS || (s->avctx->thread_count > s->mb_height && s->mb_height))){
         av_log(s->avctx, AV_LOG_ERROR, "too many threads\n");
         return -1;
@@ -745,7 +745,7 @@ av_cold int MPV_common_init(MpegEncContext *s)
     s->context_initialized = 1;
     s->thread_context[0]= s;
 
-    if (HAVE_THREADS && s->avctx->active_thread_type&FF_THREAD_SLICE) {
+    if (s->encoding || (HAVE_THREADS && s->avctx->active_thread_type&FF_THREAD_SLICE)) {
         threads = s->avctx->thread_count;
 
         for(i=1; i<threads; i++){
@@ -763,6 +763,7 @@ av_cold int MPV_common_init(MpegEncContext *s)
         if(init_duplicate_context(s, s) < 0) goto fail;
         s->start_mb_y = 0;
         s->end_mb_y   = s->mb_height;
+
     }
 
     return 0;
@@ -776,7 +777,7 @@ void MPV_common_end(MpegEncContext *s)
 {
     int i, j, k;
 
-    if (HAVE_THREADS && s->avctx->active_thread_type&FF_THREAD_SLICE) {
+    if (s->encoding || (HAVE_THREADS && s->avctx->active_thread_type&FF_THREAD_SLICE)) {
         for(i=0; i<s->avctx->thread_count; i++){
             free_duplicate_context(s->thread_context[i]);
         }
@@ -2634,6 +2635,6 @@ void ff_set_qscale(MpegEncContext * s, int qscale)
 
 void MPV_report_decode_progress(MpegEncContext *s)
 {
-    if (s->pict_type != AV_PICTURE_TYPE_B && !s->partitioned_frame)
+    if (s->pict_type != FF_B_TYPE && !s->partitioned_frame && !s->error_occurred)
         ff_thread_report_progress((AVFrame*)s->current_picture_ptr, s->mb_y, 0);
 }

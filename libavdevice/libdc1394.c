@@ -41,9 +41,10 @@ typedef struct dc1394_data {
     dc1394camera_t *camera;
     dc1394video_frame_t *frame;
     int current_frame;
-    int fps;
+    int  frame_rate;        /**< frames per 1000 seconds (fps * 1000) */
     char *video_size;       /**< String describing video size, set by a private option. */
     char *pixel_format;     /**< Set by a private option. */
+    char *framerate;        /**< Set by a private option. */
 
     AVPacket packet;
 } dc1394_data;
@@ -85,6 +86,7 @@ struct dc1394_frame_rate {
 static const AVOption options[] = {
     { "video_size", "A string describing frame size, such as 640x480 or hd720.", OFFSET(video_size), FF_OPT_TYPE_STRING, {.str = "qvga"}, 0, 0, DEC },
     { "pixel_format", "", OFFSET(pixel_format), FF_OPT_TYPE_STRING, {.str = "uyvy422"}, 0, 0, DEC },
+    { "framerate", "", OFFSET(framerate), FF_OPT_TYPE_STRING, {.str = "ntsc"}, 0, 0, DEC },
     { NULL },
 };
 
@@ -269,7 +271,7 @@ static int dc1394_read_header(AVFormatContext *c, AVFormatParameters * ap)
     dc1394->packet.flags |= AV_PKT_FLAG_KEY;
 
     dc1394->current_frame = 0;
-    dc1394->fps = final_frame_rate;
+    dc1394->frame_rate = final_frame_rate;
 
     vst->codec->bit_rate = av_rescale(dc1394->packet.size * 8, final_frame_rate, 1000);
 
@@ -314,8 +316,6 @@ out_camera:
     dc1394_video_set_transmission(dc1394->camera, DC1394_OFF);
     dc1394_camera_free (dc1394->camera);
 out:
-    av_freep(&dc1394->video_size);
-    av_freep(&dc1394->pixel_format);
     dc1394_free(dc1394->d);
     return ret;
 }
@@ -334,7 +334,7 @@ static int dc1394_read_packet(AVFormatContext *c, AVPacket *pkt)
     res = dc1394_capture_dequeue(dc1394->camera, DC1394_CAPTURE_POLICY_WAIT, &dc1394->frame);
     if (res == DC1394_SUCCESS) {
         dc1394->packet.data = (uint8_t *)(dc1394->frame->image);
-        dc1394->packet.pts = (dc1394->current_frame  * 1000000) / (dc1394->fps);
+        dc1394->packet.pts = (dc1394->current_frame  * 1000000) / (dc1394->frame_rate);
         res = dc1394->frame->image_bytes;
     } else {
         av_log(c, AV_LOG_ERROR, "DMA capture failed\n");

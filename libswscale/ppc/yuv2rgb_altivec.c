@@ -96,6 +96,7 @@ adjustment.
 #include "libswscale/swscale_internal.h"
 #include "libavutil/cpu.h"
 #include "libavutil/pixdesc.h"
+#include "yuv2rgb_altivec.h"
 
 #undef PROFILE_THE_BEAST
 #undef INC_SCALING
@@ -298,7 +299,7 @@ static int altivec_##name (SwsContext *c,                               \
     vector signed short R1,G1,B1;                                       \
     vector unsigned char R,G,B;                                         \
                                                                         \
-    vector const unsigned char *y1ivP, *y2ivP, *uivP, *vivP;            \
+    const vector unsigned char *y1ivP, *y2ivP, *uivP, *vivP;            \
     vector unsigned char align_perm;                                    \
                                                                         \
     vector signed short                                                 \
@@ -335,10 +336,10 @@ static int altivec_##name (SwsContext *c,                               \
                                                                         \
         for (j=0;j<w/16;j++) {                                          \
                                                                         \
-            y1ivP = (vector const unsigned char *)y1i;                  \
-            y2ivP = (vector const unsigned char *)y2i;                  \
-            uivP  = (vector const unsigned char *)ui;                   \
-            vivP  = (vector const unsigned char *)vi;                   \
+            y1ivP = (const vector unsigned char *)y1i;                  \
+            y2ivP = (const vector unsigned char *)y2i;                  \
+            uivP  = (const vector unsigned char *)ui;                   \
+            vivP  = (const vector unsigned char *)vi;                   \
                                                                         \
             align_perm = vec_lvsl (0, y1i);                             \
             y0 = (vector unsigned char)                                 \
@@ -631,7 +632,8 @@ ff_yuv2packedX_altivec(SwsContext *c, const int16_t *lumFilter,
                        const int16_t **lumSrc, int lumFilterSize,
                        const int16_t *chrFilter, const int16_t **chrUSrc,
                        const int16_t **chrVSrc, int chrFilterSize,
-                       uint8_t *dest, int dstW, int dstY)
+                       const int16_t **alpSrc, uint8_t *dest,
+                       int dstW, int dstY)
 {
     int i,j;
     vector signed short X,X0,X1,Y0,U0,V0,Y1,U1,V1,U,V;
