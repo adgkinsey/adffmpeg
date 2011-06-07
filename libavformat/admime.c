@@ -296,7 +296,7 @@ static int parse_mime_header(ByteIOContext *pb, uint8_t *buffer, int *bufSize,
  * Parse a line of MIME data for MPEG video frames
  */
 static int process_mp4data_line( char *line, int line_count,
-                                 NetVuImageData *vidDat, struct tm *tim,
+                                 struct NetVuImageData *vidDat, struct tm *tim,
                                  char ** txtDat )
 {
     static const int titleLen = sizeof(vidDat->title) / sizeof(vidDat->title[0]);
@@ -390,7 +390,7 @@ static int process_mp4data_line( char *line, int line_count,
  * Parse MIME data that is sent after each MPEG video frame
  */
 static int parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize,
-                                NetVuImageData *vidDat, char **txtDat )
+                                struct NetVuImageData *vidDat, char **txtDat )
 {
     unsigned char               buffer[TEMP_BUFFER_SIZE];
     int                         ch, err;
@@ -467,7 +467,7 @@ static int parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize,
  */
 static int admime_mpeg(AVFormatContext *s, ByteIOContext *pb,
                        AVPacket *pkt, int size, long *extra,
-                       NetVuImageData *vidDat, char **txtDat)
+                       struct NetVuImageData *vidDat, char **txtDat)
 {
     int errorVal = 0;
     int mimeBlockType = 0;
@@ -477,7 +477,7 @@ static int admime_mpeg(AVFormatContext *s, ByteIOContext *pb,
     // Fields are set manually from MIME data with these types so need
     // to set everything to zero initially in case some values aren't
     // available
-    memset(vidDat, 0, sizeof(NetVuImageData));
+    memset(vidDat, 0, sizeof(struct NetVuImageData));
 
     // Allocate a new packet to hold the frame's image data
     if (ad_new_packet(pkt, size) < 0 )
@@ -526,7 +526,7 @@ static int admime_mpeg(AVFormatContext *s, ByteIOContext *pb,
  */
 static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
                          AVPacket *pkt, int size, long extra,
-                         NetVuAudioData *audDat)
+                         struct NetVuAudioData *audDat)
 {
     // No presentation information is sent with audio frames in a mime
     // stream so there's not a lot we can do here other than ensure the
@@ -663,7 +663,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     int                     size = -1;
     long                    extra = 0;
     int                     errorVal = ADPIC_UNKNOWN_ERROR;
-    ADFrameType             frameType = FrameTypeUnknown;
+    enum ADFrameType             frameType = FrameTypeUnknown;
     int                     imgLoaded = FALSE;
     uint8_t                 buf[TEMP_BUFFER_SIZE];
     int                     bufSize = TEMP_BUFFER_SIZE;

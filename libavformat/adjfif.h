@@ -32,9 +32,9 @@
 
 #include "ds_exports.h"
 
-extern unsigned int build_jpeg_header(void *jfif, NetVuImageData *pic,
+extern unsigned int build_jpeg_header(void *jfif, struct NetVuImageData *pic,
                                       unsigned int max);
 extern int parse_jfif(AVFormatContext *s, unsigned char *data,
-                      NetVuImageData *pic, int imgSize, char **text);
+                      struct NetVuImageData *pic, int imgSize, char **text);
 
 #endif

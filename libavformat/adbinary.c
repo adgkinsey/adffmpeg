@@ -50,7 +50,7 @@ typedef struct  {	// PRC 002
 } MinimalAudioHeader;
 
 
-static void audioheader_network2host(NetVuAudioData *dst, uint8_t *src)
+static void audioheader_network2host(struct NetVuAudioData *dst, uint8_t *src)
 {
     dst->version				= AV_RB32(src);
     dst->mode					= AV_RB32(src + 4);
@@ -67,7 +67,7 @@ static void audioheader_network2host(NetVuAudioData *dst, uint8_t *src)
  * MPEG4 or H264 video frame with a Netvu header
  */
 static int adbinary_mpeg(AVFormatContext *s, ByteIOContext *pb,
-                         AVPacket *pkt, NetVuImageData *vidDat, char **txtDat)
+                         AVPacket *pkt, struct NetVuImageData *vidDat, char **txtDat)
 {
     static const int hdrSize = NetVuImageDataHeaderSize;
     int textSize = 0;
@@ -128,7 +128,7 @@ static int adbinary_mpeg(AVFormatContext *s, ByteIOContext *pb,
  */
 static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
                                 AVPacket *pkt, int size, int channel,
-                                NetVuImageData *vidDat, char **text_data)
+                                struct NetVuImageData *vidDat, char **text_data)
 {
     static const int titleLen = sizeof(vidDat->title) / sizeof(vidDat->title[0]);
     AdbinaryContext* adContext = s->priv_data;
@@ -136,7 +136,7 @@ static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
     int              errorVal     = 0;
 
     // Get the minimal video header and copy into generic video data structure
-    memset(vidDat, 0, sizeof(NetVuImageData));
+    memset(vidDat, 0, sizeof(struct NetVuImageData));
     vidDat->session_time  = get_be32(pb);
     vidDat->milliseconds  = get_be16(pb);
 
@@ -165,7 +165,7 @@ static int ad_read_mpeg_minimal(AVFormatContext *s, ByteIOContext *pb,
  * Audio frame with a Netvu header
  */
 static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
-                         AVPacket *pkt, int size, NetVuAudioData *data)
+                         AVPacket *pkt, int size, struct NetVuAudioData *data)
 {
     int n, status, errorVal = 0;
 
@@ -205,13 +205,13 @@ static int ad_read_audio(AVFormatContext *s, ByteIOContext *pb,
  * Audio frame with a minimal header
  */
 static int ad_read_audio_minimal(AVFormatContext *s, ByteIOContext *pb,
-                                 AVPacket *pkt, int size, NetVuAudioData *data)
+                                 AVPacket *pkt, int size, struct NetVuAudioData *data)
 {
     int dataSize = size - sizeof(MinimalAudioHeader);
     int n, status, errorVal = 0;
 
     // Get the minimal audio header and copy into generic audio data structure
-    memset(data, 0, sizeof(NetVuAudioData));
+    memset(data, 0, sizeof(struct NetVuAudioData));
     data->seconds = get_be32(pb);
     data->msecs = get_be16(pb);
     data->mode = get_be16(pb);
@@ -273,7 +273,7 @@ static int adbinary_probe(AVProbeData *p)
             case(DATA_H264I):
             case(DATA_H264P):
                 if (bufferSize >= NetVuImageDataHeaderSize) {
-                    NetVuImageData test;
+                    struct NetVuImageData test;
                     ad_network2host(&test, dataPtr);
                     if (pic_version_valid(test.version))  {
                         av_log(NULL, AV_LOG_DEBUG, "%s: Detected video packet\n", __func__);
@@ -291,7 +291,7 @@ static int adbinary_probe(AVProbeData *p)
                 break;
             case(DATA_AUDIO_ADPCM):
                 if (bufferSize >= NetVuAudioDataHeaderSize)  {
-                    NetVuAudioData test;
+                    struct NetVuAudioData test;
                     audioheader_network2host(&test, dataPtr);
                     if (test.version == AUD_VERSION)  {
                         av_log(NULL, AV_LOG_DEBUG, "%s: Detected audio packet\n", __func__);
@@ -387,12 +387,12 @@ static int adbinary_read_header(AVFormatContext *s, AVFormatParameters *ap)
 
 static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
-    ByteIOContext*  pb = s->pb;
-    void*           payload = NULL;
-    char*           txtDat = NULL;
-    int             data_type, data_channel, size;
-    int             errorVal = 0;
-    ADFrameType     frameType;
+    ByteIOContext*      pb = s->pb;
+    void*               payload = NULL;
+    char*               txtDat = NULL;
+    int                 data_type, data_channel, size;
+    int                 errorVal = 0;
+    enum ADFrameType    frameType;
 
     // First read the 6 byte separator
     data_type    = get_byte(pb);

@@ -33,10 +33,10 @@
 #define DATA_STREAM_ID              2
 
 
-AVStream * netvu_get_stream(AVFormatContext *s, NetVuImageData *pic);
+AVStream * netvu_get_stream(AVFormatContext *s, struct NetVuImageData *pic);
 AVStream * ad_get_data_stream(AVFormatContext *s);
 void ad_release_packet(AVPacket *pkt);
-static void ad_parseText(ADFrameData *frameData);
+static void ad_parseText(struct ADFrameData *frameData);
 
 
 int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
@@ -69,7 +69,7 @@ int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
     return 0;
 }
 
-void ad_network2host(NetVuImageData *pic, uint8_t *data)
+void ad_network2host(struct NetVuImageData *pic, uint8_t *data)
 {
     pic->version				= AV_RB32(data + 0);
     pic->mode					= AV_RB32(data + 4);
@@ -101,7 +101,7 @@ void ad_network2host(NetVuImageData *pic, uint8_t *data)
     pic->alm_bitmask			= AV_RB32(data + 164);
 }
 
-AVStream * netvu_get_stream(AVFormatContext *s, NetVuImageData *p)
+AVStream * netvu_get_stream(AVFormatContext *s, struct NetVuImageData *p)
 {
     time_t dateSec;
     char dateStr[18];
@@ -209,7 +209,7 @@ AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t cam
     return st;
 }
 
-AVStream * ad_get_audio_stream(AVFormatContext *s, NetVuAudioData* audioHeader)
+AVStream * ad_get_audio_stream(AVFormatContext *s, struct NetVuAudioData* audioHeader)
 {
     int id;
     int i, found;
@@ -334,16 +334,16 @@ int ad_new_packet(AVPacket *pkt, int size)
 
 void ad_release_packet( AVPacket *pkt )
 {
-    ADFrameData *frameData;
+    struct ADFrameData *frameData;
 
     if ( (pkt == NULL) || (pkt->priv == NULL) )
         return;
 
     // Have a look what type of frame we have and then free as appropriate
-    frameData = (ADFrameData *)pkt->priv;
+    frameData = (struct ADFrameData *)pkt->priv;
 
     if( frameData->frameType == NetVuAudio ) {
-        NetVuAudioData *audioHeader = (NetVuAudioData *)frameData->frameData;
+        struct NetVuAudioData *audioHeader = (struct NetVuAudioData *)frameData->frameData;
         if( audioHeader->additionalData )
             av_free( audioHeader->additionalData );
     }
@@ -386,7 +386,7 @@ int ad_get_buffer(ByteIOContext *s, uint8_t *buf, int size)
 #endif
 }
 
-int initADData(int data_type, ADFrameType *frameType, void **payload)
+int initADData(int data_type, enum ADFrameType *frameType, void **payload)
 {
     if( (data_type == DATA_JPEG)          || (data_type == DATA_JFIF)   ||
         (data_type == DATA_MPEG4I)        || (data_type == DATA_MPEG4P) ||
@@ -394,14 +394,14 @@ int initADData(int data_type, ADFrameType *frameType, void **payload)
         (data_type == DATA_MINIMAL_MPEG4)                               )
     {
         *frameType = NetVuVideo;
-        *payload = av_malloc( sizeof(NetVuImageData) );
+        *payload = av_malloc( sizeof(struct NetVuImageData) );
         if( *payload == NULL )
             return AVERROR(ENOMEM);
     }
     else if ( (data_type == DATA_AUDIO_ADPCM) ||
               (data_type == DATA_MINIMAL_AUDIO_ADPCM) ) {
         *frameType = NetVuAudio;
-        *payload = av_malloc( sizeof(NetVuAudioData) );
+        *payload = av_malloc( sizeof(struct NetVuAudioData) );
         if( *payload == NULL )
             return AVERROR(ENOMEM);
     }
@@ -417,7 +417,7 @@ int initADData(int data_type, ADFrameType *frameType, void **payload)
 
 int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
                  AVPacket *pkt,
-                 NetVuImageData *video_data, char **text_data)
+                 struct NetVuImageData *video_data, char **text_data)
 {
     static const int nviSize = NetVuImageDataHeaderSize;
     int hdrSize;
@@ -430,7 +430,7 @@ int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
         // Read the pic structure
         if ((n = ad_get_buffer(pb, (uint8_t*)video_data, nviSize)) != nviSize)  {
             av_log(s, AV_LOG_ERROR, "ad_read_jpeg: Short of data reading "
-                                    "NetVuImageData, expected %d, read %d\n",
+                                    "struct NetVuImageData, expected %d, read %d\n",
                                     nviSize, n);
             return ADPIC_JPEG_IMAGE_DATA_READ_ERROR;
         }
@@ -440,7 +440,7 @@ int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
     }
 
     if (!pic_version_valid(video_data->version))  {
-        av_log(s, AV_LOG_ERROR, "%s: invalid NetVuImageData version "
+        av_log(s, AV_LOG_ERROR, "%s: invalid struct NetVuImageData version "
                                 "0x%08X\n", __func__, video_data->version);
         return ADPIC_JPEG_PIC_VERSION_ERROR;
     }
@@ -465,7 +465,7 @@ int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
     // doesn't.  Adding a terminator here regardless
     (*text_data)[textSize] = '\0';
 
-    // Use the NetVuImageData struct to build a JFIF header
+    // Use the struct NetVuImageData struct to build a JFIF header
     if ((hdrSize = build_jpeg_header( jfif, video_data, 2048)) <= 0)  {
         av_log(s, AV_LOG_ERROR, "ad_read_jpeg: build_jpeg_header failed\n");
         return ADPIC_JPEG_HEADER_ERROR;
@@ -497,7 +497,7 @@ int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
 
 int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb,
                  AVPacket *pkt, int imgLoaded, int size,
-                 NetVuImageData *video_data, char **text_data)
+                 struct NetVuImageData *video_data, char **text_data)
 {
     int n, status, errorVal = 0;
 
@@ -526,7 +526,7 @@ int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb,
  * let the client deal with checking its type and parsing its text
  *
  * \todo Parse the string and use the information to add metadata and/or update
- *       the NetVuImageData struct
+ *       the struct NetVuImageData struct
  *
  * Example strings, taken from a minimal mp4 stream: (Prefixed by a zero byte)
  * SITE DVIP3S;CAM 1:TV;(JPEG)TARGSIZE 0:(MPEG)BITRATE 262144;IMAGESIZE 0,0:704,256;
@@ -571,15 +571,15 @@ int ad_read_layout(AVFormatContext *s, ByteIOContext *pb,
 }
 
 int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
-                   ADFrameType frameType, void *data, char *text_data)
+                   enum ADFrameType frameType, void *data, char *text_data)
 {
     AVStream    *st        = NULL;
-    ADFrameData *frameData = NULL;
+    struct ADFrameData *frameData = NULL;
 
     if (frameType == NetVuVideo)  {
-        // At this point We have a legal NetVuImageData structure which we use
+        // At this point We have a legal struct NetVuImageData structure which we use
         // to determine which codec stream to use
-        NetVuImageData *video_data = (NetVuImageData *)data;
+        struct NetVuImageData *video_data = (struct NetVuImageData *)data;
         if ( (st = netvu_get_stream( s, video_data)) == NULL ) {
             av_log(s, AV_LOG_ERROR, "ad_read_packet: Failed get_stream for video\n");
             return ADPIC_GET_STREAM_ERROR;
@@ -596,7 +596,7 @@ int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
     }
     else if( frameType == NetVuAudio ) {
         // Get the audio stream
-        NetVuAudioData *audio_data = (NetVuAudioData *)data;
+        struct NetVuAudioData *audio_data = (struct NetVuAudioData *)data;
         if ( (st = ad_get_audio_stream( s, audio_data )) == NULL ) {
             av_log(s, AV_LOG_ERROR, "ad_read_packet: ad_get_audio_stream failed\n");
             return ADPIC_GET_AUDIO_STREAM_ERROR;
@@ -697,7 +697,7 @@ static int ad_splitcsv(const char *csv, int *results, int maxElements, int base)
     return ee;
 }
 
-static void ad_parseVSD(const char *vsd, ADFrameData *frame)
+static void ad_parseVSD(const char *vsd, struct ADFrameData *frame)
 {
     char key[64], val[128];
     ad_keyvalsplit(vsd, key, val);
@@ -735,7 +735,7 @@ static void ad_parseVSD(const char *vsd, ADFrameData *frame)
     }
 }
 
-static void ad_parseLine(const char *line, ADFrameData *frame)
+static void ad_parseLine(const char *line, struct ADFrameData *frame)
 {
     char key[128], val[128];
     ad_keyvalsplit(line, key, val);
@@ -759,7 +759,7 @@ static void ad_parseLine(const char *line, ADFrameData *frame)
     }
 }
 
-static void ad_parseText(ADFrameData *frameData)
+static void ad_parseText(struct ADFrameData *frameData)
 {
     const char *src = frameData->additionalData;
     int len = strlen(src);

@@ -59,7 +59,7 @@ struct NetVuImageData {
     char res[4];                ///< picture size
     char title[31];             ///< camera title
     char alarm[31];             ///< alarm text - title, comment etc
-    NetVuPicture format;        ///< NOTE: Do not assign to a pointer due to CW-alignment
+    struct NetVuPicture format; ///< NOTE: Do not assign to a pointer due to CW-alignment
     char locale[30];            ///< Timezone name
     int32_t utc_offset;         ///< Timezone difference in minutes
     uint32_t alm_bitmask;
@@ -119,7 +119,7 @@ enum ADFrameType {
  */
 struct ADFrameData {
     /// Type of frame we have. See ADFrameType enum for supported types
-    ADFrameType         frameType;
+    enum ADFrameType    frameType;
     /// Pointer to structure holding the information for the frame.
     void *              frameData;
     /// Pointer to text block
