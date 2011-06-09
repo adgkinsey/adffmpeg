@@ -276,7 +276,7 @@ static int adbinary_probe(AVProbeData *p)
                     NetVuImageData test;
                     ad_network2host(&test, dataPtr);
                     if (pic_version_valid(test.version))  {
-                        av_log(NULL, AV_LOG_DEBUG, "%s: Detected video packet\n", __func__);
+                        av_dlog(NULL, "%s: Detected video packet\n", __func__);
                         score += AVPROBE_SCORE_MAX;
                     }
                 }
@@ -284,7 +284,7 @@ static int adbinary_probe(AVProbeData *p)
             case(DATA_JFIF):
                 if (bufferSize >= 2)  {
                     if ( (*dataPtr == 0xFF) && (*(dataPtr + 1) == 0xD8) )  {
-                        av_log(NULL, AV_LOG_DEBUG, "%s: Detected JFIF packet\n", __func__);
+                        av_dlog(NULL, "%s: Detected JFIF packet\n", __func__);
                         score += AVPROBE_SCORE_MAX;
                     }
                 }
@@ -294,7 +294,7 @@ static int adbinary_probe(AVProbeData *p)
                     NetVuAudioData test;
                     audioheader_network2host(&test, dataPtr);
                     if (test.version == AUD_VERSION)  {
-                        av_log(NULL, AV_LOG_DEBUG, "%s: Detected audio packet\n", __func__);
+                        av_dlog(NULL, "%s: Detected audio packet\n", __func__);
                         score += AVPROBE_SCORE_MAX;
                     }
                 }
@@ -314,7 +314,7 @@ static int adbinary_probe(AVProbeData *p)
                     // servers often send larger values than this,
                     // nonsensical as that is
                     if ((vos >= 0x1B0) && (vos <= 0x1B6) && (sec > 315532800)) {
-                        av_log(NULL, AV_LOG_DEBUG, "%s: Detected minimal MPEG4 packet\n", __func__);
+                        av_dlog(NULL, "%s: Detected minimal MPEG4 packet\n", __func__);
                         score += AVPROBE_SCORE_MAX / 4;
                     }
                 }
@@ -341,16 +341,16 @@ static int adbinary_probe(AVProbeData *p)
                         case(RTP_PAYLOAD_TYPE_32000HZ_PCM):
                         case(RTP_PAYLOAD_TYPE_44100HZ_PCM):
                         case(RTP_PAYLOAD_TYPE_48000HZ_PCM):
-                            av_log(NULL, AV_LOG_DEBUG, "%s: Detected minimal audio packet\n", __func__);
+                            av_dlog(NULL, "%s: Detected minimal audio packet\n", __func__);
                             score += AVPROBE_SCORE_MAX;
                     }
                 }
                 break;
             case(DATA_LAYOUT):
-                av_log(NULL, AV_LOG_DEBUG, "%s: Detected layout packet\n", __func__);
+                av_dlog(NULL, "%s: Detected layout packet\n", __func__);
                 break;
             case(DATA_INFO):
-                av_log(NULL, AV_LOG_DEBUG, "%s: Detected info packet\n", __func__);
+                av_dlog(NULL, "%s: Detected info packet\n", __func__);
                 break;
             case(DATA_XML_INFO):
                 if (bufferSize >= dataSize)  {
@@ -359,7 +359,7 @@ static int adbinary_probe(AVProbeData *p)
                     if (infoStringLen > dataSize)
                         infoStringLen = dataSize;
                     if (strncasecmp(dataPtr, infoString, infoStringLen) == 0)  {
-                        av_log(NULL, AV_LOG_DEBUG, "%s: Detected xml info packet\n", __func__);
+                        av_dlog(NULL, "%s: Detected xml info packet\n", __func__);
                         score += AVPROBE_SCORE_MAX;
                     }
                 }
@@ -373,7 +373,7 @@ static int adbinary_probe(AVProbeData *p)
     if (score > AVPROBE_SCORE_MAX)
         score = AVPROBE_SCORE_MAX;
 
-    av_log(NULL, AV_LOG_DEBUG, "%s: Score %d\n", __func__, score);
+    av_dlog(NULL, "%s: Score %d\n", __func__, score);
 
     return score;
 }

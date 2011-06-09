@@ -723,7 +723,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     }
     else  {
         // If there was an error, release any memory that has been allocated
-        av_log(s, AV_LOG_DEBUG, "admime_read_packet: Error %d\n", errorVal);
+        av_dlog(s, "admime_read_packet: Error %d\n", errorVal);
         if (payload != NULL)
             av_free(payload);
 
