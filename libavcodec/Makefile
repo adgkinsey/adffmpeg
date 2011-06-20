@@ -18,6 +18,7 @@ OBJS = allcodecs.o                                                      \
        options.o                                                        \
        parser.o                                                         \
        raw.o                                                            \
+       rawdec.o                                                         \
        resample.o                                                       \
        resample2.o                                                      \
        simple_idct.o                                                    \
@@ -127,7 +128,8 @@ OBJS-$(CONFIG_DVVIDEO_DECODER)         += dv.o dvdata.o
 OBJS-$(CONFIG_DVVIDEO_ENCODER)         += dv.o dvdata.o
 OBJS-$(CONFIG_DXA_DECODER)             += dxa.o
 OBJS-$(CONFIG_EAC3_DECODER)            += eac3dec.o eac3dec_data.o
-OBJS-$(CONFIG_EAC3_ENCODER)            += ac3enc_float.o ac3tab.o ac3.o kbdwin.o
+OBJS-$(CONFIG_EAC3_ENCODER)            += eac3enc.o ac3enc_float.o ac3tab.o \
+                                          ac3.o kbdwin.o
 OBJS-$(CONFIG_EACMV_DECODER)           += eacmv.o
 OBJS-$(CONFIG_EAMAD_DECODER)           += eamad.o eaidct.o mpeg12.o \
                                           mpeg12data.o mpegvideo.o  \
@@ -175,7 +177,7 @@ OBJS-$(CONFIG_H263_ENCODER)            += mpegvideo_enc.o mpeg4video.o      \
                                           ratecontrol.o h263.o ituh263enc.o \
                                           flvenc.o mpeg12data.o             \
                                           mpegvideo.o error_resilience.o
-OBJS-$(CONFIG_H264_DECODER)            += h264.o h264_hl_motion.o              \
+OBJS-$(CONFIG_H264_DECODER)            += h264.o                               \
                                           h264_loopfilter.o h264_direct.o      \
                                           cabac.o h264_sei.o h264_ps.o         \
                                           h264_refs.o h264_cavlc.o h264_cabac.o\
@@ -366,7 +368,7 @@ OBJS-$(CONFIG_SVQ1_ENCODER)            += svq1enc.o svq1.o    \
                                           mpegvideo.o error_resilience.o \
                                           ituh263enc.o mpegvideo_enc.o   \
                                           ratecontrol.o mpeg12data.o
-OBJS-$(CONFIG_SVQ3_DECODER)            += h264.o svq3.o h264_hl_motion.o      \
+OBJS-$(CONFIG_SVQ3_DECODER)            += h264.o svq3.o                       \
                                           h264_loopfilter.o h264_direct.o     \
                                           h264_sei.o h264_ps.o h264_refs.o    \
                                           h264_cavlc.o h264_cabac.o cabac.o   \
@@ -557,7 +559,7 @@ OBJS-$(CONFIG_OGG_DEMUXER)             += flacdec.o flacdata.o flac.o \
                                           dirac.o mpeg12data.o vorbis_data.o
 OBJS-$(CONFIG_OGG_MUXER)               += xiph.o flacdec.o flacdata.o flac.o \
                                           vorbis_data.o
-OBJS-$(CONFIG_RTP_MUXER)               += mpegvideo.o xiph.o
+OBJS-$(CONFIG_RTP_MUXER)               += mpeg4audio.o mpegvideo.o xiph.o
 OBJS-$(CONFIG_SPDIF_DEMUXER)           += aacadtsdec.o mpeg4audio.o
 OBJS-$(CONFIG_WEBM_MUXER)              += xiph.o mpeg4audio.o \
                                           flacdec.o flacdata.o flac.o \
@@ -610,7 +612,7 @@ OBJS-$(CONFIG_FLAC_PARSER)             += flac_parser.o flacdata.o flac.o \
                                           vorbis_data.o
 OBJS-$(CONFIG_H261_PARSER)             += h261_parser.o
 OBJS-$(CONFIG_H263_PARSER)             += h263_parser.o
-OBJS-$(CONFIG_H264_PARSER)             += h264_parser.o h264.o h264_hl_motion.o \
+OBJS-$(CONFIG_H264_PARSER)             += h264_parser.o h264.o            \
                                           cabac.o                         \
                                           h264_refs.o h264_sei.o h264_direct.o \
                                           h264_loopfilter.o h264_cabac.o \

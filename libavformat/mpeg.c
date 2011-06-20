@@ -23,8 +23,6 @@
 #include "internal.h"
 #include "mpeg.h"
 
-//#define DEBUG_SEEK
-
 #undef NDEBUG
 #include <assert.h>
 
@@ -586,18 +584,13 @@ static int64_t mpegps_read_dts(AVFormatContext *s, int stream_index,
     int64_t pos, pts, dts;
 
     pos = *ppos;
-#ifdef DEBUG_SEEK
-    printf("read_dts: pos=0x%"PRIx64" next=%d -> ", pos, find_next);
-#endif
     if (avio_seek(s->pb, pos, SEEK_SET) < 0)
         return AV_NOPTS_VALUE;
 
     for(;;) {
         len = mpegps_read_pes_header(s, &pos, &startcode, &pts, &dts);
         if (len < 0) {
-#ifdef DEBUG_SEEK
-            printf("none (ret=%d)\n", len);
-#endif
+            av_dlog(s, "none (ret=%d)\n", len);
             return AV_NOPTS_VALUE;
         }
         if (startcode == s->streams[stream_index]->id &&
@@ -606,9 +599,8 @@ static int64_t mpegps_read_dts(AVFormatContext *s, int stream_index,
         }
         avio_skip(s->pb, len);
     }
-#ifdef DEBUG_SEEK
-    printf("pos=0x%"PRIx64" dts=0x%"PRIx64" %0.3f\n", pos, dts, dts / 90000.0);
-#endif
+    av_dlog(s, "pos=0x%"PRIx64" dts=0x%"PRIx64" %0.3f\n",
+            pos, dts, dts / 90000.0);
     *ppos = pos;
     return dts;
 }

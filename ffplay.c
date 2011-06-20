@@ -54,9 +54,6 @@
 const char program_name[] = "ffplay";
 const int program_birth_year = 2003;
 
-//#define DEBUG
-//#define DEBUG_SYNC
-
 #define MAX_QUEUE_SIZE (15 * 1024 * 1024)
 #define MIN_AUDIOQ_SIZE (20 * 16 * 1024)
 #define MIN_FRAMES 5
@@ -239,8 +236,6 @@ static int show_status = 1;
 static int av_sync_type = AV_SYNC_AUDIO_MASTER;
 static int64_t start_time = AV_NOPTS_VALUE;
 static int64_t duration = AV_NOPTS_VALUE;
-static int debug = 0;
-static int debug_mv = 0;
 static int step = 0;
 static int thread_count = 1;
 static int workaround_bugs = 1;
@@ -1054,10 +1049,9 @@ static double compute_target_time(double frame_current_pts, VideoState *is)
         }
     }
     is->frame_timer += delay;
-#if defined(DEBUG_SYNC)
-    printf("video: delay=%0.3f actual_delay=%0.3f pts=%0.3f A-V=%f\n",
-            delay, actual_delay, frame_current_pts, -diff);
-#endif
+
+    av_dlog(NULL, "video: delay=%0.3f pts=%0.3f A-V=%f\n",
+            delay, frame_current_pts, -diff);
 
     return is->frame_timer;
 }
@@ -1622,7 +1616,7 @@ static int input_request_frame(AVFilterLink *link)
     if (ret < 0)
         return -1;
 
-    if(priv->use_dr1) {
+    if(priv->use_dr1 && priv->frame->opaque) {
         picref = avfilter_ref_buffer(priv->frame->opaque, ~0);
     } else {
         picref = avfilter_get_video_buffer(link, AV_PERM_WRITE, link->w, link->h);
@@ -1701,8 +1695,8 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
         goto the_end;
 
     if(vfilters) {
-        AVFilterInOut *outputs = av_malloc(sizeof(AVFilterInOut));
-        AVFilterInOut *inputs  = av_malloc(sizeof(AVFilterInOut));
+        AVFilterInOut *outputs = avfilter_inout_alloc();
+        AVFilterInOut *inputs  = avfilter_inout_alloc();
 
         outputs->name    = av_strdup("in");
         outputs->filter_ctx = filt_src;
@@ -1714,7 +1708,7 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
         inputs->pad_idx = 0;
         inputs->next    = NULL;
 
-        if ((ret = avfilter_graph_parse(graph, vfilters, inputs, outputs, NULL)) < 0)
+        if ((ret = avfilter_graph_parse(graph, vfilters, &inputs, &outputs, NULL)) < 0)
             goto the_end;
         av_freep(&vfilters);
     } else {
@@ -2035,7 +2029,7 @@ static int audio_decode_frame(VideoState *is, double *pts_ptr)
             n = 2 * dec->channels;
             is->audio_clock += (double)data_size /
                 (double)(n * dec->sample_rate);
-#if defined(DEBUG_SYNC)
+#ifdef DEBUG
             {
                 static double last_clock;
                 printf("audio: delay=%0.3f clock=%0.3f pts=%0.3f\n",
@@ -2134,8 +2128,6 @@ static int stream_component_open(VideoState *is, int stream_index)
     if (!codec)
         return -1;
 
-    avctx->debug_mv = debug_mv;
-    avctx->debug = debug;
     avctx->workaround_bugs = workaround_bugs;
     avctx->lowres = lowres;
     if(lowres) avctx->flags |= CODEC_FLAG_EMU_EDGE;
@@ -2885,19 +2877,6 @@ static int opt_duration(const char *opt, const char *arg)
     return 0;
 }
 
-static int opt_debug(const char *opt, const char *arg)
-{
-    av_log_set_level(99);
-    debug = parse_number_or_die(opt, arg, OPT_INT64, 0, INT_MAX);
-    return 0;
-}
-
-static int opt_vismv(const char *opt, const char *arg)
-{
-    debug_mv = parse_number_or_die(opt, arg, OPT_INT64, INT_MIN, INT_MAX);
-    return 0;
-}
-
 static int opt_thread_count(const char *opt, const char *arg)
 {
     thread_count= parse_number_or_die(opt, arg, OPT_INT64, 0, INT_MAX);
@@ -2947,9 +2926,7 @@ static const OptionDef options[] = {
     { "f", HAS_ARG, {(void*)opt_format}, "force format", "fmt" },
     { "pix_fmt", HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_frame_pix_fmt}, "set pixel format", "format" },
     { "stats", OPT_BOOL | OPT_EXPERT, {(void*)&show_status}, "show status", "" },
-    { "debug", HAS_ARG | OPT_EXPERT, {(void*)opt_debug}, "print specific debug info", "" },
     { "bug", OPT_INT | HAS_ARG | OPT_EXPERT, {(void*)&workaround_bugs}, "workaround bugs", "" },
-    { "vismv", HAS_ARG | OPT_EXPERT, {(void*)opt_vismv}, "visualize motion vectors", "" },
     { "fast", OPT_BOOL | OPT_EXPERT, {(void*)&fast}, "non spec compliant optimizations", "" },
     { "genpts", OPT_BOOL | OPT_EXPERT, {(void*)&genpts}, "generate pts", "" },
     { "drp", OPT_INT | HAS_ARG | OPT_EXPERT, {(void*)&decoder_reorder_pts}, "let decoder reorder pts 0=off 1=on -1=auto", ""},

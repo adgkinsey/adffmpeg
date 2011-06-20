@@ -43,15 +43,9 @@ FF_LDFLAGS   := $(FFLDFLAGS)
 FF_EXTRALIBS := $(FFEXTRALIBS)
 FF_DEP_LIBS  := $(DEP_LIBS)
 
-ALL_TARGETS-$(CONFIG_DOC)       += documentation
+all-$(CONFIG_DOC): documentation
 
-ifdef PROGS
-INSTALL_TARGETS-yes             += install-progs install-data
-INSTALL_TARGETS-$(CONFIG_DOC)   += install-man
-endif
-INSTALL_PROGS_TARGETS-$(CONFIG_SHARED) = install-libs
-
-all: $(FF_DEP_LIBS) $(PROGS) $(ALL_TARGETS-yes)
+all: $(FF_DEP_LIBS) $(PROGS)
 
 $(PROGS): %$(EXESUF): %_g$(EXESUF)
 	$(CP) $< $@
@@ -80,11 +74,14 @@ endef
 
 $(foreach D,$(FFLIBS),$(eval $(call DOSUBDIR,lib$(D))))
 
+ffplay.o: CFLAGS += $(SDL_CFLAGS)
 ffplay_g$(EXESUF): FF_EXTRALIBS += $(SDL_LIBS)
 ffserver_g$(EXESUF): FF_LDFLAGS += $(FFSERVERLDFLAGS)
 
 %_g$(EXESUF): %.o cmdutils.o $(FF_DEP_LIBS)
 	$(LD) $(FF_LDFLAGS) -o $@ $< cmdutils.o $(FF_EXTRALIBS)
+
+alltools: $(TOOLS)
 
 tools/%$(EXESUF): tools/%.o
 	$(LD) $(FF_LDFLAGS) -o $@ $< $(FF_EXTRALIBS)
@@ -94,8 +91,6 @@ tools/%.o: tools/%.c
 
 -include $(wildcard tools/*.d)
 -include $(wildcard tests/*.d)
-
-ffplay.o: CFLAGS += $(SDL_CFLAGS)
 
 VERSION_SH  = $(SRC_PATH_BARE)/version.sh
 GIT_LOG     = $(SRC_PATH_BARE)/.git/logs/HEAD
@@ -109,8 +104,6 @@ version.h .version:
 
 # force version.sh to run whenever version might have changed
 -include .version
-
-alltools: $(TOOLS)
 
 DOCS = $(addprefix doc/, developer.html faq.html general.html libavfilter.html) $(HTMLPAGES) $(MANPAGES) $(PODPAGES)
 
@@ -134,9 +127,19 @@ doc/%.1: TAG = MAN
 doc/%.1: doc/%.pod
 	$(M)pod2man --section=1 --center=" " --release=" " $< > $@
 
-install: $(INSTALL_TARGETS-yes)
+ifdef PROGS
+install: install-progs install-data
+endif
 
-install-progs: $(PROGS) $(INSTALL_PROGS_TARGETS-yes)
+install: install-libs install-headers
+
+install-libs: install-libs-yes
+
+install-progs-yes:
+install-progs-$(CONFIG_DOC): install-man
+install-progs-$(CONFIG_SHARED): install-libs
+
+install-progs: install-progs-yes $(PROGS)
 	$(Q)mkdir -p "$(BINDIR)"
 	$(INSTALL) -c -m 755 $(PROGS) "$(BINDIR)"
 
@@ -148,7 +151,7 @@ install-man: $(MANPAGES)
 	$(Q)mkdir -p "$(MANDIR)/man1"
 	$(INSTALL) -m 644 $(MANPAGES) "$(MANDIR)/man1"
 
-uninstall: uninstall-progs uninstall-data uninstall-man
+uninstall: uninstall-libs uninstall-headers uninstall-progs uninstall-data uninstall-man
 
 uninstall-progs:
 	$(RM) $(addprefix "$(BINDIR)/", $(ALLPROGS))
@@ -293,4 +296,5 @@ $(FATE): ffmpeg$(EXESUF) $(FATE_UTILS:%=tests/%$(HOSTEXESUF))
 fate-list:
 	@printf '%s\n' $(sort $(FATE))
 
-.PHONY: documentation *test regtest-* alltools check config
+.PHONY: all alltools *clean check config documentation examples install*
+.PHONY: *test testprogs uninstall*

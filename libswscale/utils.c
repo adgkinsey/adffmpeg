@@ -77,13 +77,17 @@ const char *swscale_license(void)
         || (x)==PIX_FMT_BGR48BE     \
         || (x)==PIX_FMT_BGR48LE     \
         || (x)==PIX_FMT_BGR24       \
-        || (x)==PIX_FMT_BGR565      \
-        || (x)==PIX_FMT_BGR555      \
+        || (x)==PIX_FMT_BGR565LE    \
+        || (x)==PIX_FMT_BGR565BE    \
+        || (x)==PIX_FMT_BGR555LE    \
+        || (x)==PIX_FMT_BGR555BE    \
         || (x)==PIX_FMT_BGR32       \
         || (x)==PIX_FMT_BGR32_1     \
         || (x)==PIX_FMT_RGB24       \
-        || (x)==PIX_FMT_RGB565      \
-        || (x)==PIX_FMT_RGB555      \
+        || (x)==PIX_FMT_RGB565LE    \
+        || (x)==PIX_FMT_RGB565BE    \
+        || (x)==PIX_FMT_RGB555LE    \
+        || (x)==PIX_FMT_RGB555BE    \
         || (x)==PIX_FMT_GRAY8       \
         || (x)==PIX_FMT_GRAY8A      \
         || (x)==PIX_FMT_YUV410P     \
@@ -108,12 +112,18 @@ const char *swscale_license(void)
         || (x)==PIX_FMT_MONOWHITE   \
         || (x)==PIX_FMT_MONOBLACK   \
         || (x)==PIX_FMT_YUV420P9LE    \
+        || (x)==PIX_FMT_YUV444P9LE    \
         || (x)==PIX_FMT_YUV420P10LE   \
+        || (x)==PIX_FMT_YUV422P10LE   \
+        || (x)==PIX_FMT_YUV444P10LE   \
         || (x)==PIX_FMT_YUV420P16LE   \
         || (x)==PIX_FMT_YUV422P16LE   \
         || (x)==PIX_FMT_YUV444P16LE   \
         || (x)==PIX_FMT_YUV420P9BE    \
+        || (x)==PIX_FMT_YUV444P9BE    \
         || (x)==PIX_FMT_YUV420P10BE   \
+        || (x)==PIX_FMT_YUV444P10BE   \
+        || (x)==PIX_FMT_YUV422P10BE   \
         || (x)==PIX_FMT_YUV420P16BE   \
         || (x)==PIX_FMT_YUV422P16BE   \
         || (x)==PIX_FMT_YUV444P16BE   \
@@ -137,7 +147,22 @@ int sws_isSupportedInput(enum PixelFormat pix_fmt)
         || (x)==PIX_FMT_YUVJ422P    \
         || (x)==PIX_FMT_YUVJ440P    \
         || (x)==PIX_FMT_YUVJ444P    \
-        || isAnyRGB(x)              \
+        || isRGBinBytes(x)          \
+        || isBGRinBytes(x)          \
+        || (x)==PIX_FMT_RGB565      \
+        || (x)==PIX_FMT_RGB555      \
+        || (x)==PIX_FMT_RGB444      \
+        || (x)==PIX_FMT_BGR565      \
+        || (x)==PIX_FMT_BGR555      \
+        || (x)==PIX_FMT_BGR444      \
+        || (x)==PIX_FMT_RGB8        \
+        || (x)==PIX_FMT_BGR8        \
+        || (x)==PIX_FMT_RGB4_BYTE   \
+        || (x)==PIX_FMT_BGR4_BYTE   \
+        || (x)==PIX_FMT_RGB4        \
+        || (x)==PIX_FMT_BGR4        \
+        || (x)==PIX_FMT_MONOBLACK   \
+        || (x)==PIX_FMT_MONOWHITE   \
         || (x)==PIX_FMT_NV12        \
         || (x)==PIX_FMT_NV21        \
         || (x)==PIX_FMT_GRAY16BE    \

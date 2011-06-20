@@ -23,11 +23,11 @@
 #include <limits.h>
 
 //#define DEBUG
-//#define DEBUG_METADATA
 //#define MOV_EXPORT_ALL_METADATA
 
 #include "libavutil/intreadwrite.h"
 #include "libavutil/avstring.h"
+#include "libavutil/dict.h"
 #include "avformat.h"
 #include "avio_internal.h"
 #include "riff.h"
@@ -85,7 +85,7 @@ static int mov_metadata_track_or_disc_number(MOVContext *c, AVIOContext *pb, uns
 
     avio_rb16(pb); // unknown
     snprintf(buf, sizeof(buf), "%d", avio_rb16(pb));
-    av_metadata_set2(&c->fc->metadata, type, buf, 0);
+    av_dict_set(&c->fc->metadata, type, buf, 0);
 
     avio_rb16(pb); // total tracks/discs
 
@@ -209,17 +209,15 @@ static int mov_read_udta_string(MOVContext *c, AVIOContext *pb, MOVAtom atom)
             avio_read(pb, str, str_size);
             str[str_size] = 0;
         }
-        av_metadata_set2(&c->fc->metadata, key, str, 0);
+        av_dict_set(&c->fc->metadata, key, str, 0);
         if (*language && strcmp(language, "und")) {
             snprintf(key2, sizeof(key2), "%s-%s", key, language);
-            av_metadata_set2(&c->fc->metadata, key2, str, 0);
+            av_dict_set(&c->fc->metadata, key2, str, 0);
         }
     }
-#ifdef DEBUG_METADATA
-    av_log(c->fc, AV_LOG_DEBUG, "lang \"%3s\" ", language);
-    av_log(c->fc, AV_LOG_DEBUG, "tag \"%s\" value \"%s\" atom \"%.4s\" %d %lld\n",
-           key, str, (char*)&atom.type, str_size, atom.size);
-#endif
+    av_dlog(c->fc, "lang \"%3s\" ", language);
+    av_dlog(c->fc, "tag \"%s\" value \"%s\" atom \"%.4s\" %d %"PRId64"\n",
+            key, str, (char*)&atom.type, str_size, atom.size);
 
     return 0;
 }
@@ -515,6 +513,19 @@ static int mov_read_dac3(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     return 0;
 }
 
+static int mov_read_wfex(MOVContext *c, AVIOContext *pb, MOVAtom atom)
+{
+    AVStream *st;
+
+    if (c->fc->nb_streams < 1)
+        return 0;
+    st = c->fc->streams[c->fc->nb_streams-1];
+
+    ff_get_wav_header(pb, st->codec, atom.size);
+
+    return 0;
+}
+
 static int mov_read_pasp(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
     const int num = avio_rb32(pb);
@@ -560,10 +571,10 @@ static int mov_read_ftyp(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     if (strcmp(type, "qt  "))
         c->isom = 1;
     av_log(c->fc, AV_LOG_DEBUG, "ISO: File Type Major Brand: %.4s\n",(char *)&type);
-    av_metadata_set2(&c->fc->metadata, "major_brand", type, 0);
+    av_dict_set(&c->fc->metadata, "major_brand", type, 0);
     minor_ver = avio_rb32(pb); /* minor version */
     snprintf(minor_ver_str, sizeof(minor_ver_str), "%d", minor_ver);
-    av_metadata_set2(&c->fc->metadata, "minor_version", minor_ver_str, 0);
+    av_dict_set(&c->fc->metadata, "minor_version", minor_ver_str, 0);
 
     comp_brand_size = atom.size - 8;
     if (comp_brand_size < 0)
@@ -573,7 +584,7 @@ static int mov_read_ftyp(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         return AVERROR(ENOMEM);
     avio_read(pb, comp_brands_str, comp_brand_size);
     comp_brands_str[comp_brand_size] = 0;
-    av_metadata_set2(&c->fc->metadata, "compatible_brands", comp_brands_str, 0);
+    av_dict_set(&c->fc->metadata, "compatible_brands", comp_brands_str, 0);
     av_freep(&comp_brands_str);
 
     return 0;
@@ -597,7 +608,7 @@ static int mov_read_moof(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     return mov_read_default(c, pb, atom);
 }
 
-static void mov_metadata_creation_time(AVMetadata **metadata, time_t time)
+static void mov_metadata_creation_time(AVDictionary **metadata, time_t time)
 {
     char buffer[32];
     if (time) {
@@ -606,7 +617,7 @@ static void mov_metadata_creation_time(AVMetadata **metadata, time_t time)
         ptm = gmtime(&time);
         if (!ptm) return;
         strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", ptm);
-        av_metadata_set2(metadata, "creation_time", buffer, 0);
+        av_dict_set(metadata, "creation_time", buffer, 0);
     }
 }
 
@@ -643,7 +654,7 @@ static int mov_read_mdhd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     lang = avio_rb16(pb); /* language */
     if (ff_mov_lang_to_iso639(lang, language))
-        av_metadata_set2(&st->metadata, "language", language, 0);
+        av_dict_set(&st->metadata, "language", language, 0);
     avio_rb16(pb); /* quality */
 
     return 0;
@@ -1526,8 +1537,9 @@ static void mov_build_index(MOVContext *mov, AVStream *st)
 
     /* adjust first dts according to edit list */
     if (sc->time_offset && mov->time_scale > 0) {
-        int rescaled = sc->time_offset < 0 ? av_rescale(sc->time_offset, sc->time_scale, mov->time_scale) : sc->time_offset;
-        current_dts = -rescaled;
+        if (sc->time_offset < 0)
+            sc->time_offset = av_rescale(sc->time_offset, sc->time_scale, mov->time_scale);
+        current_dts = -sc->time_offset;
         if (sc->ctts_data && sc->stts_data &&
             sc->ctts_data[0].duration / FFMAX(sc->stts_data[0].duration, 1) > 16) {
             /* more than 16 frames delay, dts are likely wrong
@@ -1915,6 +1927,10 @@ static int mov_read_tkhd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     sc->width = width >> 16;
     sc->height = height >> 16;
 
+    if (display_matrix[0][0] == -65536 && display_matrix[1][1] == -65536) {
+         av_metadata_set2(&st->metadata, "rotate", "180", 0);
+    }
+
     // transform the display width/height according to the matrix
     // skip this if the display matrix is the default identity matrix
     // or if it is rotating the picture, ex iPhone 3GS
@@ -2057,7 +2073,7 @@ static int mov_read_trun(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     if (flags & 0x001) data_offset        = avio_rb32(pb);
     if (flags & 0x004) first_sample_flags = avio_rb32(pb);
-    dts = st->duration;
+    dts = st->duration - sc->time_offset;
     offset = frag->base_data_offset + data_offset;
     distance = 0;
     av_dlog(c->fc, "first sample flags 0x%x\n", first_sample_flags);
@@ -2086,7 +2102,7 @@ static int mov_read_trun(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         offset += sample_size;
     }
     frag->moof_offset = offset;
-    st->duration = dts;
+    st->duration = dts + sc->time_offset;
     return 0;
 }
 
@@ -2150,9 +2166,6 @@ static int mov_read_cmov(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         goto free_and_return;
     atom.type = MKTAG('m','o','o','v');
     atom.size = moov_len;
-#ifdef DEBUG
-//    { int fd = open("/tmp/uncompheader.mov", O_WRONLY | O_CREAT); write(fd, moov_data, moov_len); close(fd); }
-#endif
     ret = mov_read_default(c, &ctx, atom);
 free_and_return:
     av_free(moov_data);
@@ -2266,6 +2279,7 @@ static const MOVParseTableEntry mov_default_parse_table[] = {
 { MKTAG('e','s','d','s'), mov_read_esds },
 { MKTAG('d','a','c','3'), mov_read_dac3 }, /* AC-3 info */
 { MKTAG('w','i','d','e'), mov_read_wide }, /* place holder */
+{ MKTAG('w','f','e','x'), mov_read_wfex },
 { MKTAG('c','m','o','v'), mov_read_cmov },
 { MKTAG('c','h','a','n'), mov_read_chan },
 { 0, NULL }

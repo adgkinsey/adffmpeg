@@ -107,7 +107,7 @@ Configuration options:
   --disable-mdct           disable MDCT code
   --disable-rdft           disable RDFT code
   --enable-vaapi           enable VAAPI code
-  --disable-vdpau          disable VDPAU code
+  --enable-vdpau           enable VDPAU code
   --disable-dxva2          disable DXVA2 code
   --enable-runtime-cpudetect detect cpu capabilities at runtime (bigger binary)
   --enable-hardcoded-tables use hardcoded tables instead of runtime generation
@@ -193,7 +193,6 @@ External library support:
   --enable-libparreader    enable PAR (de)muxing via libparreader [no]
 
 Advanced options (experts only):
-  --source-path=PATH       path to source code [$source_path]
   --cross-prefix=PREFIX    use PREFIX for compilation tools [$cross_prefix]
   --enable-cross-compile   assume a cross-compiler is used
   --sysroot=PATH           root of cross-build tree
@@ -1192,7 +1191,6 @@ CMDLINE_SET="
     nm
     pkg_config
     samples
-    source_path
     strip
     sysinclude
     sysroot
@@ -1723,13 +1721,12 @@ DEPEND_CMD='$(DEPCC) $(DEPFLAGS) $< | sed -e "/^\#.*/d" -e "s,^[[:space:]]*$(*F)
 DEPFLAGS='$(CPPFLAGS) $(CFLAGS) -MM'
 
 # find source path
-source_path="$(dirname "$0")"
-enable source_path_used
 if test -f configure; then
     source_path="$(pwd)"
     disable source_path_used
 else
-    source_path="$(cd "$source_path"; pwd)"
+    source_path=$(cd $(dirname "$0"); pwd)
+    enable source_path_used
     echo "$source_path" | grep -q '[[:blank:]]' &&
         die "Out of tree builds are impossible with whitespace in source path."
     test -e "$source_path/config.h" &&

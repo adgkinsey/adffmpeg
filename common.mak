@@ -45,8 +45,6 @@ HOSTCFLAGS += $(IFLAGS)
 %.ho: %.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -Wno-unused -c -o $@ -x c $<
 
-%$(EXESUF): %.c
-
 %.ver: %.v
 	$(Q)sed 's/$$MAJOR/$($(basename $(@F))_VERSION_MAJOR)/' $^ > $@
 
@@ -55,13 +53,6 @@ HOSTCFLAGS += $(IFLAGS)
 # Dummy rule to stop make trying to rebuild removed or renamed headers
 %.h:
 	@:
-
-install: install-libs install-headers
-install-libs: install-libs-yes
-
-uninstall: uninstall-libs uninstall-headers
-
-.PHONY: all depend dep *clean install* uninstall* examples testprogs
 
 # Disable suffix rules.  Most of the builtin rules are suffix rules,
 # so this saves some time on slow systems.
@@ -73,7 +64,6 @@ endif
 
 OBJS-$(HAVE_MMX) +=  $(MMX-OBJS-yes)
 
-CFLAGS    += $(CFLAGS-yes)
 OBJS      += $(OBJS-yes)
 FFLIBS    := $(FFLIBS-yes) $(FFLIBS)
 TESTPROGS += $(TESTPROGS-yes)
