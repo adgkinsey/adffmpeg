@@ -614,6 +614,11 @@ static int mkv_write_tracks(AVFormatContext *s)
                     put_ebml_uint(pb, MATROSKA_ID_VIDEODISPLAYHEIGHT, codec->height);
                     put_ebml_uint(pb, MATROSKA_ID_VIDEODISPLAYUNIT, 3);
                 }
+
+                if (codec->codec_id == CODEC_ID_RAWVIDEO) {
+                    uint32_t color_space = av_le2ne32(codec->codec_tag);
+                    put_ebml_binary(pb, MATROSKA_ID_VIDEOCOLORSPACE, &color_space, sizeof(color_space));
+                }
                 end_ebml_master(pb, subinfo);
                 break;
 

@@ -112,7 +112,7 @@ typedef struct {
     uint64_t display_height;
     uint64_t pixel_width;
     uint64_t pixel_height;
-    uint64_t fourcc;
+    EbmlBin color_space;
     uint64_t stereo_mode;
 } MatroskaTrackVideo;
 
@@ -302,7 +302,7 @@ static EbmlSyntax matroska_track_video[] = {
     { MATROSKA_ID_VIDEODISPLAYHEIGHT, EBML_UINT, 0, offsetof(MatroskaTrackVideo,display_height) },
     { MATROSKA_ID_VIDEOPIXELWIDTH,    EBML_UINT, 0, offsetof(MatroskaTrackVideo,pixel_width) },
     { MATROSKA_ID_VIDEOPIXELHEIGHT,   EBML_UINT, 0, offsetof(MatroskaTrackVideo,pixel_height) },
-    { MATROSKA_ID_VIDEOCOLORSPACE,    EBML_UINT, 0, offsetof(MatroskaTrackVideo,fourcc) },
+    { MATROSKA_ID_VIDEOCOLORSPACE,    EBML_BIN,  0, offsetof(MatroskaTrackVideo,color_space) },
     { MATROSKA_ID_VIDEOSTEREOMODE,    EBML_UINT, 0, offsetof(MatroskaTrackVideo,stereo_mode) },
     { MATROSKA_ID_VIDEOPIXELCROPB,    EBML_NONE },
     { MATROSKA_ID_VIDEOPIXELCROPT,    EBML_NONE },
@@ -1281,6 +1281,7 @@ static int matroska_read_header(AVFormatContext *s, AVFormatParameters *ap)
         uint8_t *extradata = NULL;
         int extradata_size = 0;
         int extradata_offset = 0;
+        uint32_t fourcc = 0;
         AVIOContext b;
 
         /* Apply some sanity checks. */
@@ -1302,6 +1303,8 @@ static int matroska_read_header(AVFormatContext *s, AVFormatParameters *ap)
                 track->video.display_width = track->video.pixel_width;
             if (!track->video.display_height)
                 track->video.display_height = track->video.pixel_height;
+            if (track->video.color_space.size == 4)
+                fourcc = AV_RL32(track->video.color_space.data);
         } else if (track->type == MATROSKA_TRACK_TYPE_AUDIO) {
             if (!track->audio.out_samplerate)
                 track->audio.out_samplerate = track->audio.samplerate;
@@ -1361,8 +1364,8 @@ static int matroska_read_header(AVFormatContext *s, AVFormatParameters *ap)
             && track->codec_priv.size >= 40
             && track->codec_priv.data != NULL) {
             track->ms_compat = 1;
-            track->video.fourcc = AV_RL32(track->codec_priv.data + 16);
-            codec_id = ff_codec_get_id(ff_codec_bmp_tags, track->video.fourcc);
+            fourcc = AV_RL32(track->codec_priv.data + 16);
+            codec_id = ff_codec_get_id(ff_codec_bmp_tags, fourcc);
             extradata_offset = 40;
         } else if (!strcmp(track->codec_id, "A_MS/ACM")
                    && track->codec_priv.size >= 14
@@ -1378,8 +1381,8 @@ static int matroska_read_header(AVFormatContext *s, AVFormatParameters *ap)
         } else if (!strcmp(track->codec_id, "V_QUICKTIME")
                    && (track->codec_priv.size >= 86)
                    && (track->codec_priv.data != NULL)) {
-            track->video.fourcc = AV_RL32(track->codec_priv.data);
-            codec_id=ff_codec_get_id(codec_movvideo_tags, track->video.fourcc);
+            fourcc = AV_RL32(track->codec_priv.data);
+            codec_id = ff_codec_get_id(codec_movvideo_tags, fourcc);
         } else if (codec_id == CODEC_ID_PCM_S16BE) {
             switch (track->audio.bitdepth) {
             case  8:  codec_id = CODEC_ID_PCM_U8;     break;
@@ -1500,7 +1503,7 @@ static int matroska_read_header(AVFormatContext *s, AVFormatParameters *ap)
             MatroskaTrackPlane *planes = track->operation.combine_planes.elem;
 
             st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
-            st->codec->codec_tag  = track->video.fourcc;
+            st->codec->codec_tag  = fourcc;
             st->codec->width  = track->video.pixel_width;
             st->codec->height = track->video.pixel_height;
             av_reduce(&st->sample_aspect_ratio.num,
@@ -1515,7 +1518,7 @@ static int matroska_read_header(AVFormatContext *s, AVFormatParameters *ap)
 
             /* export stereo mode flag as metadata tag */
             if (track->video.stereo_mode && track->video.stereo_mode < MATROSKA_VIDEO_STEREO_MODE_COUNT)
-                av_metadata_set2(&st->metadata, "stereo_mode", matroska_video_stereo_mode[track->video.stereo_mode], 0);
+                av_dict_set(&st->metadata, "stereo_mode", matroska_video_stereo_mode[track->video.stereo_mode], 0);
 
             /* if we have virtual track, mark the real tracks */
             for (j=0; j < track->operation.combine_planes.nb_elem; j++) {
@@ -1526,8 +1529,8 @@ static int matroska_read_header(AVFormatContext *s, AVFormatParameters *ap)
                          matroska_video_stereo_plane[planes[j].type], i);
                 for (k=0; k < matroska->tracks.nb_elem; k++)
                     if (planes[j].uid == tracks[k].uid) {
-                        av_metadata_set2(&s->streams[k]->metadata,
-                                         "stereo_mode", buf, 0);
+                        av_dict_set(&s->streams[k]->metadata,
+                                    "stereo_mode", buf, 0);
                         break;
                     }
             }

@@ -796,7 +796,7 @@ static int query_formats(AVFilterContext *ctx)
     }
 
     //We assume all allowed input formats are also allowed output formats
-    avfilter_set_common_formats(ctx, avfmts);
+    avfilter_set_common_pixel_formats(ctx, avfmts);
     return 0;
 }
 
@@ -882,7 +882,7 @@ static void end_frame(AVFilterLink *inlink)
     }
     free_mp_image(mpi);
 
-//    avfilter_unref_buffer(inpic);
+    avfilter_unref_buffer(inpic);
 }
 
 AVFilter avfilter_vf_mp = {
