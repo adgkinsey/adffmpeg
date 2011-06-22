@@ -235,7 +235,7 @@ static AVStream * ad_get_overlay_stream(AVFormatContext *s, const char *title)
     found = FALSE;
     for (i = 0; i < s->nb_streams; i++) {
         st = s->streams[i];
-        if ((st->codec->codec_id == CODEC_ID_PBM) && (st->id == id)) {
+        if ((st->codec->codec_id == codec_id) && (st->id == id)) {
             found = TRUE;
             break;
         }
@@ -413,9 +413,9 @@ void ad_release_packet( AVPacket *pkt )
 
 int ad_get_buffer(AVIOContext *s, uint8_t *buf, int size)
 {
-/*#ifdef FF_API_OLD_AVIO
+#ifdef FF_API_OLD_AVIO
     return avio_read(s, buf, size);
-#else*/
+#else
     int TotalDataRead = 0;
     int DataReadThisTime = 0;
     int RetryBoundry = 200;
@@ -435,45 +435,73 @@ int ad_get_buffer(AVIOContext *s, uint8_t *buf, int size)
         retrys++;
     }
     return TotalDataRead;
-//#endif
+#endif
 }
 
-int initADData(int data_type, ADFrameType *frameType, void **payload)
+int initADData(int data_type, enum AVMediaType *mediaType, enum CodecID *codecId, void **payload)
 {
-    if( (data_type == DATA_JPEG)          || (data_type == DATA_JFIF)   ||
-        (data_type == DATA_MPEG4I)        || (data_type == DATA_MPEG4P) ||
-        (data_type == DATA_H264I)         || (data_type == DATA_H264P)  ||
-        (data_type == DATA_MINIMAL_MPEG4)                               )
-    {
-        *frameType = NetVuVideo;
-        *payload = av_malloc( sizeof(NetVuImageData) );
-        if( *payload == NULL )
-            return AVERROR(ENOMEM);
+    switch(data_type)  {
+        case(DATA_JPEG):
+        case(DATA_JFIF):
+        case(DATA_MPEG4I):
+        case(DATA_MPEG4P):
+        case(DATA_H264I):
+        case(DATA_H264P):
+        case(DATA_MINIMAL_MPEG4):
+            *payload = av_malloc( sizeof(NetVuImageData) );
+            if( *payload == NULL )
+                return AVERROR(ENOMEM);
+            *mediaType = AVMEDIA_TYPE_VIDEO;
+            switch(data_type)  {
+                case(DATA_JPEG):
+                case(DATA_JFIF):
+                    *codecId = CODEC_ID_MJPEG;
+                    break;
+                case(DATA_MPEG4I):
+                case(DATA_MPEG4P):
+                case(DATA_MINIMAL_MPEG4):
+                    *codecId = CODEC_ID_MPEG4;
+                    break;
+                case(DATA_H264I):
+                case(DATA_H264P):
+                    *codecId = CODEC_ID_H264;
+                    break;
+            }
+            break;
+        case(DATA_AUDIO_ADPCM):
+        case(DATA_MINIMAL_AUDIO_ADPCM):
+            *payload = av_malloc( sizeof(NetVuAudioData) );
+            if( *payload == NULL )
+                return AVERROR(ENOMEM);
+            *mediaType = AVMEDIA_TYPE_AUDIO;
+            *codecId = CODEC_ID_ADPCM_IMA_WAV;
+            break;
+        case(DATA_INFO):
+        case(DATA_XML_INFO):
+        case(DATA_LAYOUT):
+            *mediaType = AVMEDIA_TYPE_DATA;
+            *codecId = CODEC_ID_FFMETADATA;
+            break;
+        case(DATA_BMP):
+            *mediaType = AVMEDIA_TYPE_VIDEO;
+            *codecId = CODEC_ID_BMP;
+            break;
+        case(DATA_PBM):
+            *mediaType = AVMEDIA_TYPE_VIDEO;
+            *codecId = CODEC_ID_PBM;
+            break;
+        default:
+            *mediaType = AVMEDIA_TYPE_UNKNOWN;
+            *codecId = CODEC_ID_NONE;
     }
-    else if ( (data_type == DATA_AUDIO_ADPCM) ||
-              (data_type == DATA_MINIMAL_AUDIO_ADPCM) ) {
-        *frameType = NetVuAudio;
-        *payload = av_malloc( sizeof(NetVuAudioData) );
-        if( *payload == NULL )
-            return AVERROR(ENOMEM);
-    }
-    else if ( (data_type == DATA_INFO) || (data_type == DATA_XML_INFO) )
-        *frameType = NetVuDataInfo;
-    else if( data_type == DATA_LAYOUT )
-        *frameType = NetVuDataLayout;
-    else if (data_type == DATA_PBM)
-        *frameType = NetVuOverlay;
-    else
-        *frameType = FrameTypeUnknown;
-
     return 0;
 }
 
-int ad_read_jpeg(AVFormatContext *s, AVIOContext *pb,
-                 AVPacket *pkt,
-                 NetVuImageData *video_data, char **text_data)
+int ad_read_jpeg(AVFormatContext *s, AVPacket *pkt, NetVuImageData *video_data, 
+                 char **text_data)
 {
     static const int nviSize = NetVuImageDataHeaderSize;
+    AVIOContext *pb = s->pb;
     int hdrSize;
     char jfif[2048], *ptr;
     int n, textSize, errorVal = 0;
@@ -549,11 +577,11 @@ int ad_read_jpeg(AVFormatContext *s, AVIOContext *pb,
     return errorVal;
 }
 
-int ad_read_jfif(AVFormatContext *s, AVIOContext *pb,
-                 AVPacket *pkt, int imgLoaded, int size,
+int ad_read_jfif(AVFormatContext *s, AVPacket *pkt, int imgLoaded, int size,
                  NetVuImageData *video_data, char **text_data)
 {
     int n, status, errorVal = 0;
+    AVIOContext *pb = s->pb;
 
     if(!imgLoaded) {
         if ((status = ad_new_packet(pkt, size)) < 0) { // PRC 003
@@ -588,10 +616,10 @@ int ad_read_jfif(AVFormatContext *s, AVIOContext *pb,
  * SITE DVIP3S;CAM 3:Development;(JPEG)TARGSIZE 0:(MPEG)BITRATE 262144;IMAGESIZE 0,0:704,256;
  * SITE DVIP3S;CAM 4:Rear road;(JPEG)TARGSIZE 0:(MPEG)BITRATE 262144;IMAGESIZE 0,0:704,256;
  */
-int ad_read_info(AVFormatContext *s, AVIOContext *pb,
-                 AVPacket *pkt, int size)
+int ad_read_info(AVFormatContext *s, AVPacket *pkt, int size)
 {
     int n, status, errorVal = 0;
+    AVIOContext *pb = s->pb;
 
     // Allocate a new packet
     if( (status = av_new_packet( pkt, size )) < 0 )
@@ -608,10 +636,10 @@ int ad_read_info(AVFormatContext *s, AVIOContext *pb,
     return errorVal;
 }
 
-int ad_read_layout(AVFormatContext *s, AVIOContext *pb,
-                   AVPacket *pkt, int size)
+int ad_read_layout(AVFormatContext *s, AVPacket *pkt, int size)
 {
     int n, status, errorVal = 0;
+    AVIOContext *pb = s->pb;
 
     // Allocate a new packet
     if( (status = av_new_packet( pkt, size )) < 0 )
@@ -624,7 +652,7 @@ int ad_read_layout(AVFormatContext *s, AVIOContext *pb,
     return errorVal;
 }
 
-static int pbm_read_mem(char **comment, uint8_t **src, int size, uint8_t **dst)
+static int pbm_read_mem(char **comment, uint8_t **src, int size, uint8_t **dst, int *width, int *height)
 {
     static const uint8_t pbm[3] = { 0x50, 0x34, 0x0A };
     static const uint8_t rle[4] = { 0x52, 0x4C, 0x45, 0x20 };
@@ -634,7 +662,7 @@ static int pbm_read_mem(char **comment, uint8_t **src, int size, uint8_t **dst)
     uint8_t *dPtr               = NULL;
     int strSize                 = 0;
     const char *strPtr, *endStrPtr;
-    unsigned int width, height, elementsRead;
+    unsigned int elementsRead;
     
     if ((size >= sizeof(pbm)) && (memcmp(ptr, pbm, sizeof(pbm)) == 0) )
         ptr += sizeof(pbm);
@@ -666,18 +694,19 @@ static int pbm_read_mem(char **comment, uint8_t **src, int size, uint8_t **dst)
         ++ptr;
     }
     
-    elementsRead = sscanf(ptr, "%u", &width);
-    ptr += sizeof(width) * elementsRead;
-    elementsRead = sscanf(ptr, "%u", &height);
-    ptr += sizeof(width) * elementsRead;
+    elementsRead = sscanf(ptr, "%d", width);
+    ptr += sizeof(*width) * elementsRead;
+    elementsRead = sscanf(ptr, "%d", height);
+    ptr += sizeof(*height) * elementsRead;
     
     if (isrle)  {
+        // Data is Runlength Encoded, alloc a new buffer and decode into it
         int len;
         uint8_t val;
         unsigned int headerSize   = (ptr - *src) - sizeof(rle);
         unsigned int headerP1Size = sizeof(pbm) + 1;
         unsigned int headerP2Size = headerSize - headerP1Size;
-        unsigned int dataSize = (width * height) / 8;
+        unsigned int dataSize = ((*width) * (*height)) / 8;
         
         *dst = av_malloc(headerSize + dataSize);
         dPtr = *dst;
@@ -708,8 +737,8 @@ int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int insize, char **text_d
 {
     AVIOContext *pb = s->pb;
     AVStream *st    = NULL;
-    int n           = 0;
     uint8_t *inbuf  = NULL;
+    int n, w, h;
     
     av_dlog(s, "PBM overlay\n");
     
@@ -720,27 +749,36 @@ int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int insize, char **text_d
         return ADPIC_OVERLAY_GET_BUFFER_ERROR;
     }
     
-    pkt->size = pbm_read_mem(text_data, &inbuf, insize, &pkt->data);
+    pkt->size = pbm_read_mem(text_data, &inbuf, insize, &pkt->data, &w, &h);
     if (pkt->size <= 0) {
 		av_log(s, AV_LOG_ERROR, "ADPIC: pbm_read_mem failed\n");
 		return ADPIC_OVERLAY_PBM_READ_ERROR_ERROR;
 	}
     
     st = ad_get_overlay_stream(s, *text_data);
+    st->codec->width = w;
+    st->codec->height = h;
     
     pkt->pts = lastVideoPTS;
     
     return 0;
 }
                 
-int ad_read_packet(AVFormatContext *s, AVIOContext *pb, AVPacket *pkt,
-                   ADFrameType frameType, void *data, char *text_data, 
-                   int64_t *videoFramePTS)
+int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
+                   enum AVMediaType media, enum CodecID codecId, 
+                   void *data, char *text_data, int64_t *videoFramePTS)
 {
     AVStream    *st        = NULL;
     ADFrameData *frameData = NULL;
 
-    if (frameType == NetVuVideo)  {
+    if ((media == AVMEDIA_TYPE_VIDEO) && (codecId == CODEC_ID_PBM))  {
+        // Get or create a data stream
+        if ( (st = ad_get_overlay_stream(s, text_data)) == NULL ) {
+            av_log(s, AV_LOG_ERROR, "%s: ad_get_overlay_stream failed\n", __func__);
+            return ADPIC_GET_OVERLAY_STREAM_ERROR;
+        }
+    }
+    else if (media == AVMEDIA_TYPE_VIDEO)  {
         // At this point We have a legal NetVuImageData structure which we use
         // to determine which codec stream to use
         NetVuImageData *video_data = (NetVuImageData *)data;
@@ -769,7 +807,7 @@ int ad_read_packet(AVFormatContext *s, AVIOContext *pb, AVPacket *pkt,
             }
         }
     }
-    else if( frameType == NetVuAudio ) {
+    else if (media == AVMEDIA_TYPE_AUDIO) {
         // Get the audio stream
         NetVuAudioData *audio_data = (NetVuAudioData *)data;
         if ( (st = ad_get_audio_stream( s, audio_data )) == NULL ) {
@@ -786,31 +824,29 @@ int ad_read_packet(AVFormatContext *s, AVIOContext *pb, AVPacket *pkt,
                 pkt->pts = AV_NOPTS_VALUE;
         }
     }
-    else if( frameType == NetVuDataInfo || frameType == NetVuDataLayout ) {
+    else if (media == AVMEDIA_TYPE_DATA) {
         // Get or create a data stream
         if ( (st = ad_get_data_stream( s )) == NULL ) {
-            av_log(s, AV_LOG_ERROR, "ad_read_packet: ad_get_data_stream failed\n");
+            av_log(s, AV_LOG_ERROR, "%s: ad_get_data_stream failed\n", __func__);
             return ADPIC_GET_INFO_LAYOUT_STREAM_ERROR;
-        }
-    }
-    else if (frameType == NetVuOverlay)  {
-        // Get or create a data stream
-        if ( (st = ad_get_overlay_stream(s, text_data)) == NULL ) {
-            av_log(s, AV_LOG_ERROR, "%s: ad_get_overlay_stream failed\n", __func__);
-            return ADPIC_GET_OVERLAY_STREAM_ERROR;
         }
     }
 
     if (st)  {
         pkt->stream_index = st->index;
 
-        if ( (frameType == NetVuVideo) || (frameType == NetVuAudio) )  {
+        if ( (media == AVMEDIA_TYPE_VIDEO) || (media == AVMEDIA_TYPE_AUDIO) )  {
             frameData = av_mallocz(sizeof(*frameData));
             if( frameData == NULL )
                 return AVERROR(ENOMEM);
 
-            frameData->frameType = frameType;
+            if (media == AVMEDIA_TYPE_VIDEO)
+                frameData->frameType = NetVuVideo;
+            else
+                frameData->frameType = NetVuAudio;
+            
             frameData->frameData = data;
+            
             if (text_data != NULL)  {
                 frameData->additionalData = text_data;
 

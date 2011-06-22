@@ -41,7 +41,7 @@ enum pkt_offsets { DATA_TYPE, DATA_CHANNEL,
 
 typedef struct {
     int     utc_offset;     ///< Only used in minimal video case
-    int64_t lastVideoFrame;
+    int64_t lastVideoPTS;
 } AdbinaryContext;
 
 typedef struct  {    // PRC 002
@@ -67,10 +67,11 @@ static void audioheader_network2host(NetVuAudioData *dst, const uint8_t *src)
 /**
  * MPEG4 or H264 video frame with a Netvu header
  */
-static int adbinary_mpeg(AVFormatContext *s, AVIOContext *pb,
+static int adbinary_mpeg(AVFormatContext *s,
                          AVPacket *pkt, NetVuImageData *vidDat, char **txtDat)
 {
     static const int hdrSize = NetVuImageDataHeaderSize;
+    AVIOContext *pb = s->pb;
     int textSize = 0;
     int n, status, errorVal = 0;
 
@@ -127,14 +128,15 @@ static int adbinary_mpeg(AVFormatContext *s, AVIOContext *pb,
 /**
  * MPEG4 or H264 video frame with a minimal header
  */
-static int ad_read_mpeg_minimal(AVFormatContext *s, AVIOContext *pb,
+static int ad_read_mpeg_minimal(AVFormatContext *s,
                                 AVPacket *pkt, int size, int channel,
                                 NetVuImageData *vidDat, char **text_data)
 {
-    static const int titleLen = sizeof(vidDat->title) / sizeof(vidDat->title[0]);
+    static const int titleLen  = sizeof(vidDat->title) / sizeof(vidDat->title[0]);
     AdbinaryContext* adContext = s->priv_data;
-    int              dataSize     = size - 6;
-    int              errorVal     = 0;
+    AVIOContext *    pb        = s->pb;
+    int              dataSize  = size - 6;
+    int              errorVal  = 0;
 
     // Get the minimal video header and copy into generic video data structure
     memset(vidDat, 0, sizeof(NetVuImageData));
@@ -165,9 +167,10 @@ static int ad_read_mpeg_minimal(AVFormatContext *s, AVIOContext *pb,
 /**
  * Audio frame with a Netvu header
  */
-static int ad_read_audio(AVFormatContext *s, AVIOContext *pb,
+static int ad_read_audio(AVFormatContext *s,
                          AVPacket *pkt, int size, NetVuAudioData *data)
 {
+    AVIOContext *pb = s->pb;
     int n, status, errorVal = 0;
 
     // Get the fixed size portion of the audio header
@@ -205,9 +208,10 @@ static int ad_read_audio(AVFormatContext *s, AVIOContext *pb,
 /**
  * Audio frame with a minimal header
  */
-static int ad_read_audio_minimal(AVFormatContext *s, AVIOContext *pb,
+static int ad_read_audio_minimal(AVFormatContext *s,
                                  AVPacket *pkt, int size, NetVuAudioData *data)
 {
+    AVIOContext *pb = s->pb;
     int dataSize = size - sizeof(MinimalAudioHeader);
     int n, status, errorVal = 0;
 
@@ -399,7 +403,8 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     char *              txtDat    = NULL;
     int                 errorVal  = 0;
     unsigned char *     tempbuf   = NULL;
-    ADFrameType         frameType;
+    enum AVMediaType    mediaType = AVMEDIA_TYPE_UNKNOWN;
+    enum CodecID        codecId   = CODEC_ID_NONE;
     int                 data_type, data_channel, size;
 
     // First read the 6 byte separator
@@ -418,39 +423,39 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     }
 
     // Prepare for video or audio read
-    errorVal = initADData(data_type, &frameType, &payload);
+    errorVal = initADData(data_type, &mediaType, &codecId, &payload);
     if (errorVal >= 0)  {
         // Proceed based on the type of data in this frame
         switch(data_type) {
             case DATA_JPEG:
-                errorVal = ad_read_jpeg(s, pb, pkt, payload, &txtDat);
+                errorVal = ad_read_jpeg(s, pkt, payload, &txtDat);
                 break;
             case DATA_JFIF:
-                errorVal = ad_read_jfif(s, pb, pkt, 0, size, payload, &txtDat);
+                errorVal = ad_read_jfif(s, pkt, 0, size, payload, &txtDat);
                 break;
             case DATA_MPEG4I:
             case DATA_MPEG4P:
             case DATA_H264I:
             case DATA_H264P:
-                errorVal = adbinary_mpeg(s, pb, pkt, payload, &txtDat);
+                errorVal = adbinary_mpeg(s, pkt, payload, &txtDat);
                 break;
             case DATA_MINIMAL_MPEG4:
-                errorVal = ad_read_mpeg_minimal(s, pb, pkt, size, data_channel,
+                errorVal = ad_read_mpeg_minimal(s, pkt, size, data_channel,
                                                 payload, &txtDat);
                 break;
             case DATA_MINIMAL_AUDIO_ADPCM:
-                errorVal = ad_read_audio_minimal(s, pb, pkt, size, payload);
+                errorVal = ad_read_audio_minimal(s, pkt, size, payload);
                 break;
             case DATA_AUDIO_ADPCM:
-                errorVal = ad_read_audio(s, pb, pkt, size, payload);
+                errorVal = ad_read_audio(s, pkt, size, payload);
                 break;
             case DATA_INFO:
             case DATA_XML_INFO:
                 // May want to handle INFO and XML_INFO separately in future
-                errorVal = ad_read_info(s, pb, pkt, size);
+                errorVal = ad_read_info(s, pkt, size);
                 break;
             case DATA_LAYOUT:
-                errorVal = ad_read_layout(s, pb, pkt, size);
+                errorVal = ad_read_layout(s, pkt, size);
                 break;
             case DATA_BMP:
                 av_dlog(s, "Bitmap overlay\n");
@@ -459,7 +464,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 av_free(tempbuf);
                 return ADPIC_DEFAULT_ERROR;
             case DATA_PBM:
-                errorVal = ad_read_overlay(s, pkt, size, &txtDat, adContext->lastVideoFrame);
+                errorVal = ad_read_overlay(s, pkt, size, &txtDat, adContext->lastVideoPTS);
                 break;
             default:
                 av_log(s, AV_LOG_WARNING, "%s: No handler for data_type = %d\n",
@@ -476,8 +481,8 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     }
 
     if (errorVal >= 0)  {
-        errorVal = ad_read_packet(s, pb, pkt, frameType, payload, txtDat, 
-                                  &adContext->lastVideoFrame);
+        errorVal = ad_read_packet(s, pkt, mediaType, codecId, payload, txtDat, 
+                                  &adContext->lastVideoPTS);
     }
     else  {
         // If there was an error, release any allocated memory

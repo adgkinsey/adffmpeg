@@ -52,10 +52,16 @@ static const char *     MIME_TYPE_TEXT   = "text/plain";
 static const char *     MIME_TYPE_XML    = "text/xml";
 static const char *     MIME_TYPE_ADPCM  = "audio/adpcm";
 static const char *     MIME_TYPE_LAYOUT = "data/layout";
+static const char *     MIME_TYPE_PBM    = "image/pbm";
 
 static const uint8_t rawJfifHeader[] = { 0xff, 0xd8, 0xff, 0xe0,
                                          0x00, 0x10, 0x4a, 0x46,
                                          0x49, 0x46, 0x00, 0x01 };
+
+
+typedef struct {
+    int64_t lastVideoPTS;
+} AdmimeContext;
 
 
 /**
@@ -221,6 +227,9 @@ static int process_line(char *line, int *line_count, int *dataType,
                     *extra = RTP_PAYLOAD_TYPE_48000HZ_ADPCM;
                 else
                     *extra = RTP_PAYLOAD_TYPE_8000HZ_ADPCM; // Default
+            }
+            else if (strcasecmp(p, MIME_TYPE_PBM ) == 0 )  {
+                *dataType = DATA_PBM;
             }
             else  {
                 *dataType = MAX_DATA_TYPE;
@@ -469,10 +478,11 @@ static int parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize,
 /**
  * MPEG4 or H264 video frame with a MIME trailer
  */
-static int admime_mpeg(AVFormatContext *s, AVIOContext *pb,
+static int admime_mpeg(AVFormatContext *s,
                        AVPacket *pkt, int size, long *extra,
                        NetVuImageData *vidDat, char **txtDat)
 {
+    AVIOContext *pb = s->pb;
     int errorVal = 0;
     int mimeBlockType = 0;
     uint8_t buf[TEMP_BUFFER_SIZE];
@@ -528,10 +538,12 @@ static int admime_mpeg(AVFormatContext *s, AVIOContext *pb,
 /**
  * Audio frame
  */
-static int ad_read_audio(AVFormatContext *s, AVIOContext *pb,
+static int ad_read_audio(AVFormatContext *s,
                          AVPacket *pkt, int size, long extra,
                          NetVuAudioData *audDat)
 {
+    AVIOContext *pb = s->pb;
+    
     // No presentation information is sent with audio frames in a mime
     // stream so there's not a lot we can do here other than ensure the
     // struct contains the size of the audio data
@@ -562,10 +574,11 @@ static int ad_read_audio(AVFormatContext *s, AVIOContext *pb,
  * However sometimes the header is missing and then there is a valid image so
  * try and parse a frame out anyway.
  */
-static int handleInvalidMime(AVFormatContext *s, AVIOContext *pb,
+static int handleInvalidMime(AVFormatContext *s,
                              uint8_t *preRead, int preReadSize, AVPacket *pkt,
                              int *data_type, int *size, int *imgLoaded)
 {
+    AVIOContext *pb = s->pb;
     int errorVal = 0;
     int chkByte;
     int status, read, found = FALSE;
@@ -658,6 +671,7 @@ static int admime_read_header(AVFormatContext *s, AVFormatParameters *ap)
 
 static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
+    AdmimeContext*          adContext = s->priv_data;
     AVIOContext *           pb = s->pb;
     void *                  payload = NULL;
     char *                  txtDat = NULL;
@@ -665,7 +679,8 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     int                     size = -1;
     long                    extra = 0;
     int                     errorVal = ADPIC_UNKNOWN_ERROR;
-    ADFrameType             frameType = FrameTypeUnknown;
+    enum AVMediaType        mediaType = AVMEDIA_TYPE_UNKNOWN;
+    enum CodecID            codecId   = CODEC_ID_NONE;
     int                     imgLoaded = FALSE;
     uint8_t                 buf[TEMP_BUFFER_SIZE];
     int                     bufSize = TEMP_BUFFER_SIZE;
@@ -674,7 +689,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     errorVal = parse_mime_header(pb, buf, &bufSize, &data_type, &size, &extra);
     if(errorVal != 0 )  {
         if (errorVal == -2)
-            errorVal = handleInvalidMime(s, pb, buf, bufSize, pkt,
+            errorVal = handleInvalidMime(s, buf, bufSize, pkt,
                                          &data_type, &size, &imgLoaded);
 
         if (errorVal < 0)  {
@@ -683,7 +698,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     // Prepare for video or audio read
-    errorVal = initADData(data_type, &frameType, &payload);
+    errorVal = initADData(data_type, &mediaType, &codecId, &payload);
     if (errorVal < 0)  {
         if (payload != NULL )
             av_free(payload);
@@ -693,29 +708,31 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     // Proceed based on the type of data in this frame
     switch(data_type) {
         case DATA_JPEG:
-            errorVal = ad_read_jpeg(s, pb, pkt, payload, &txtDat);
+            errorVal = ad_read_jpeg(s, pkt, payload, &txtDat);
             break;
         case DATA_JFIF:
-            errorVal = ad_read_jfif(s, pb, pkt, imgLoaded, size, payload, &txtDat);
+            errorVal = ad_read_jfif(s, pkt, imgLoaded, size, payload, &txtDat);
             break;
         case DATA_MPEG4I:
         case DATA_MPEG4P:
         case DATA_H264I:
         case DATA_H264P:
-            errorVal = admime_mpeg(s, pb, pkt, size, &extra, payload, &txtDat);
+            errorVal = admime_mpeg(s, pkt, size, &extra, payload, &txtDat);
             break;
         case DATA_AUDIO_ADPCM:
-            errorVal = ad_read_audio(s, pb, pkt, size, extra, payload);
+            errorVal = ad_read_audio(s, pkt, size, extra, payload);
             break;
         case DATA_INFO:
         case DATA_XML_INFO:
-            errorVal = ad_read_info(s, pb, pkt, size);
+            errorVal = ad_read_info(s, pkt, size);
             break;
         case DATA_LAYOUT:
-            errorVal = ad_read_layout(s, pb, pkt, size);
+            errorVal = ad_read_layout(s, pkt, size);
+            break;
+        case DATA_PBM:
+            errorVal = ad_read_overlay(s, pkt, size, &txtDat, adContext->lastVideoPTS);
             break;
         case DATA_BMP:
-        case DATA_PBM:
         default: {
             av_log(s, AV_LOG_WARNING, "admime_read_packet: No handler for "
                    "data_type=%d\n", data_type);
@@ -732,7 +749,8 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     if (errorVal >= 0)  {
-        errorVal = ad_read_packet(s, pb, pkt, frameType, payload, txtDat, NULL);
+        errorVal = ad_read_packet(s, pkt, mediaType, codecId, payload, txtDat, 
+                                  &adContext->lastVideoPTS);
     }
     else  {
         // If there was an error, release any memory that has been allocated
@@ -756,7 +774,7 @@ static int admime_read_close(AVFormatContext *s)
 AVInputFormat ff_admime_demuxer = {
     .name           = "admime",
     .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings video format (MIME)"),
-    .priv_data_size = 0,
+    .priv_data_size = sizeof(AdmimeContext),
     .read_probe     = admime_probe,
     .read_header    = admime_read_header,
     .read_packet    = admime_read_packet,

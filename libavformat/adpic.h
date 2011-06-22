@@ -56,20 +56,16 @@ int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset);
 void ad_network2host(NetVuImageData *pic, uint8_t *data);
 int ad_new_packet(AVPacket *pkt, int size);
 int ad_get_buffer(AVIOContext *s, uint8_t *buf, int size);
-int initADData(int data_type, ADFrameType *frameType, void **payload);
-int ad_read_jpeg(AVFormatContext *s, AVIOContext *pb,
-                 AVPacket *pkt,
+int initADData(int data_type, enum AVMediaType *media, enum CodecID *codecId, void **payload);
+int ad_read_jpeg(AVFormatContext *s, AVPacket *pkt, NetVuImageData *vid, char **txt);
+int ad_read_jfif(AVFormatContext *s, AVPacket *pkt, int manual_size, int size,
                  NetVuImageData *video_data, char **text_data);
-int ad_read_jfif(AVFormatContext *s, AVIOContext *pb,
-                 AVPacket *pkt, int manual_size, int size,
-                 NetVuImageData *video_data, char **text_data);
-int ad_read_info(AVFormatContext *s, AVIOContext *pb,
-                 AVPacket *pkt, int size);
-int ad_read_layout(AVFormatContext *s, AVIOContext *pb,
-                   AVPacket *pkt, int size);
+int ad_read_info(AVFormatContext *s, AVPacket *pkt, int size);
+int ad_read_layout(AVFormatContext *s, AVPacket *pkt, int size);
 int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int size, char **text_data, int64_t lastVideoPTS);
-int ad_read_packet(AVFormatContext *s, AVIOContext *pb, AVPacket *pkt,
-                   ADFrameType currentFrameType, void *data, char *text_data, 
+int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
+                   enum AVMediaType mediaType, enum CodecID codecId, 
+                   void *data, char *text_data, 
                    int64_t *videoFramePTS);
 AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h,
                          uint8_t cam, int format, const char *title);

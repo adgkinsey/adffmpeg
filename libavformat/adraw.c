@@ -60,15 +60,15 @@ static int adraw_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     uint8_t         *buf = NULL;
     NetVuImageData  *vidDat = NULL;
     char            *txtDat = NULL;
-    int             errorVal = 0;
+    int             errVal = 0;
     int             ii = 0;
 
     vidDat = av_malloc(sizeof(NetVuImageData));
     buf = av_malloc(sizeof(NetVuImageData));
 
     // Scan for 0xDECADE11 marker
-    errorVal = avio_read(pb, buf, sizeof(NetVuImageData));
-    while (errorVal > 0)  {
+    errVal = avio_read(pb, buf, sizeof(NetVuImageData));
+    while (errVal > 0)  {
         ad_network2host(vidDat, buf);
         if (pic_version_valid(vidDat->version))  {
             break;
@@ -76,26 +76,28 @@ static int adraw_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         for(ii = 0; ii < (sizeof(NetVuImageData) - 1); ii++)  {
             buf[ii] = buf[ii+1];
         }
-        errorVal = avio_read(pb, buf + sizeof(NetVuImageData) - 1, 1);
+        errVal = avio_read(pb, buf + sizeof(NetVuImageData) - 1, 1);
     }
     av_free(buf);
 
-    if (errorVal > 0)  {
+    if (errVal > 0)  {
         switch (ad_adFormatToCodecId(s, vidDat->vid_format))  {
             case(CODEC_ID_MJPEG):
-                errorVal = ad_read_jpeg(s, pb, pkt, vidDat, &txtDat);
+                errVal = ad_read_jpeg(s, pkt, vidDat, &txtDat);
                 break;
             case(CODEC_ID_MPEG4):
             case(CODEC_ID_H264):
             default:
-                //errorVal = adbinary_mpeg(s, pb, pkt, vidDat, &txtDat);
+                //errVal = adbinary_mpeg(s, pkt, vidDat, &txtDat);
                 av_log(s, AV_LOG_ERROR, "Unsupported format for adraw demuxer: "
                         "%d\n", vidDat->vid_format);
                 break;
         }
     }
-    if (errorVal >= 0)
-        errorVal = ad_read_packet(s, pb, pkt, NetVuVideo, vidDat, txtDat, NULL);
+    if (errVal >= 0)  {
+        errVal = ad_read_packet(s, pkt, AVMEDIA_TYPE_VIDEO, CODEC_ID_MJPEG, 
+                                vidDat, txtDat, NULL);
+    }
     else  {
         // If there was an error, release any allocated memory
         if( vidDat != NULL )
@@ -105,7 +107,7 @@ static int adraw_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             av_free( txtDat );
     }
 
-    return errorVal;
+    return errVal;
 }
 
 static int adraw_read_close(AVFormatContext *s)

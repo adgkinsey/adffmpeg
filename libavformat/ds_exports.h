@@ -110,8 +110,7 @@ typedef enum _frameType {
     DMNudge,
     NetVuDataInfo,
     NetVuDataLayout,
-    RTPAudio, 
-    NetVuOverlay
+    RTPAudio
 } ADFrameType;
 
 /** This is the data structure that the ffmpeg parser fills in as part of the
