@@ -40,7 +40,8 @@ enum pkt_offsets { DATA_TYPE, DATA_CHANNEL,
                  };
 
 typedef struct {
-    int utc_offset;     ///< Only used in minimal video case
+    int     utc_offset;     ///< Only used in minimal video case
+    int64_t lastVideoFrame;
 } AdbinaryContext;
 
 typedef struct  {    // PRC 002
@@ -364,6 +365,12 @@ static int adbinary_probe(AVProbeData *p)
                     }
                 }
                 break;
+            case DATA_BMP:
+                av_dlog(NULL, "%s: Detected bmp packet\n", __func__);
+                break;
+            case DATA_PBM:
+                av_dlog(NULL, "%s: Detected pbm packet\n", __func__);
+                break;
         }
 
         bufferSize -= dataSize;
@@ -386,12 +393,14 @@ static int adbinary_read_header(AVFormatContext *s, AVFormatParameters *ap)
 
 static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
-    AVIOContext *           pb = s->pb;
-    void *                  payload = NULL;
-    char *                  txtDat = NULL;
-    int                     data_type, data_channel, size;
-    int                     errorVal = 0;
-    ADFrameType             frameType;
+    AdbinaryContext*    adContext = s->priv_data;
+    AVIOContext *       pb        = s->pb;
+    void *              payload   = NULL;
+    char *              txtDat    = NULL;
+    int                 errorVal  = 0;
+    unsigned char *     tempbuf   = NULL;
+    ADFrameType         frameType;
+    int                 data_type, data_channel, size;
 
     // First read the 6 byte separator
     data_type    = avio_r8(pb);
@@ -443,16 +452,32 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             case DATA_LAYOUT:
                 errorVal = ad_read_layout(s, pb, pkt, size);
                 break;
+            case DATA_BMP:
+                av_dlog(s, "Bitmap overlay\n");
+                tempbuf = av_malloc(size);                
+                avio_read(pb, tempbuf, size);
+                av_free(tempbuf);
+                return ADPIC_DEFAULT_ERROR;
+            case DATA_PBM:
+                errorVal = ad_read_overlay(s, pkt, size, &txtDat, adContext->lastVideoFrame);
+                break;
             default:
                 av_log(s, AV_LOG_WARNING, "%s: No handler for data_type = %d\n",
                        __func__, data_type);
-                errorVal = ADPIC_DEFAULT_ERROR;
-                break;
+                       
+                // Would like to use avio_skip, but that needs seek support, 
+                // so just read the data into a buffer then throw it away
+                tempbuf = av_malloc(size);                
+                avio_read(pb, tempbuf, size);
+                av_free(tempbuf);
+                
+                return ADPIC_DEFAULT_ERROR;
         }
     }
 
     if (errorVal >= 0)  {
-        errorVal = ad_read_packet(s, pb, pkt, frameType, payload, txtDat);
+        errorVal = ad_read_packet(s, pb, pkt, frameType, payload, txtDat, 
+                                  &adContext->lastVideoFrame);
     }
     else  {
         // If there was an error, release any allocated memory

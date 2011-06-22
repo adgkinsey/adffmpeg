@@ -57,11 +57,11 @@ int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
             *utcOffset = nv->utc_offset;
 
         for(ii = 0; ii < NETVU_MAX_HEADERS; ii++)  {
-            av_metadata_set2(&s->metadata, nv->hdrNames[ii], nv->hdrs[ii], 0);
+            av_dict_set(&s->metadata, nv->hdrNames[ii], nv->hdrs[ii], 0);
         }
         if ( (nv->utc_offset >= 0) && (nv->utc_offset <= 1440) )  {
             snprintf(temp, sizeof(temp), "%d", nv->utc_offset);
-            av_metadata_set2(&s->metadata, "timezone", temp, 0);
+            av_dict_set(&s->metadata, "timezone", temp, 0);
         }
     }
 
@@ -114,7 +114,7 @@ AVStream * netvu_get_stream(AVFormatContext *s, NetVuImageData *p)
     stream->start_time = p->session_time * 1000LL + p->milliseconds;
     dateSec = p->session_time;
     strftime(dateStr, sizeof(dateStr), "%Y-%m-%d %H:%MZ", gmtime(&dateSec));
-    av_metadata_set2(&stream->metadata, "date", dateStr, 0);
+    av_dict_set(&stream->metadata, "date", dateStr, 0);
     return stream;
 }
 
@@ -201,9 +201,58 @@ AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t cam
             st->codec->time_base = (AVRational) { 1, 1000 };
 
             if (title)
-                av_metadata_set2(&st->metadata, "title", title, 0);
+                av_dict_set(&st->metadata, "title", title, 0);
             snprintf(textbuffer, sizeof(textbuffer), "%u", cam);
-            av_metadata_set2(&st->metadata, "track", textbuffer, 0);
+            av_dict_set(&st->metadata, "track", textbuffer, 0);
+        }
+    }
+    return st;
+}
+
+static unsigned int RSHash(const char* str, unsigned int len)
+{
+    unsigned int b    = 378551;
+    unsigned int a    = 63689;
+    unsigned int hash = 0;
+    unsigned int i    = 0;
+    
+    for(i = 0; i < len; str++, i++)  {
+        hash = hash * a + (*str);
+        a    = a * b;
+    }
+    return hash;
+}
+
+static AVStream * ad_get_overlay_stream(AVFormatContext *s, const char *title)
+{
+    static const int codec_id = CODEC_ID_PBM;
+    unsigned int id;
+    int i, found;
+    AVStream *st;
+
+    id = RSHash(title, strlen(title));
+
+    found = FALSE;
+    for (i = 0; i < s->nb_streams; i++) {
+        st = s->streams[i];
+        if ((st->codec->codec_id == CODEC_ID_PBM) && (st->id == id)) {
+            found = TRUE;
+            break;
+        }
+    }
+    if (!found) {
+        st = av_new_stream(s, id);
+        if (st) {
+            st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
+            st->codec->codec_id = codec_id;
+            st->index = i;
+
+            // Use milliseconds as the time base
+            st->r_frame_rate = (AVRational) { 1, 1000 };
+            av_set_pts_info(st, 32, 1, 1000);
+            st->codec->time_base = (AVRational) { 1, 1000 };
+
+            av_dict_set(&st->metadata, "title", title, 0);
         }
     }
     return st;
@@ -336,25 +385,27 @@ void ad_release_packet( AVPacket *pkt )
 {
     ADFrameData *frameData;
 
-    if ( (pkt == NULL) || (pkt->priv == NULL) )
+    if (pkt == NULL)
         return;
 
-    // Have a look what type of frame we have and then free as appropriate
-    frameData = (ADFrameData *)pkt->priv;
+    if (pkt->priv != NULL)  {
+        // Have a look what type of frame we have and then free as appropriate
+        frameData = (ADFrameData *)pkt->priv;
 
-    if( frameData->frameType == NetVuAudio ) {
-        NetVuAudioData *audioHeader = (NetVuAudioData *)frameData->frameData;
-        if( audioHeader->additionalData )
-            av_free( audioHeader->additionalData );
+        if( frameData->frameType == NetVuAudio ) {
+            NetVuAudioData *audHeader = (NetVuAudioData *)frameData->frameData;
+            if( audHeader->additionalData )
+                av_free( audHeader->additionalData );
+        }
+
+        // Nothing else has nested allocs so just delete the frameData
+        if( frameData->frameData  )
+            av_free( frameData->frameData );
+        if( frameData->additionalData )
+            av_free( frameData->additionalData );
+
+        av_free( pkt->priv );
     }
-
-    // Nothing else has nested allocs so just delete the frameData if it exists
-    if( frameData->frameData  )
-        av_free( frameData->frameData );
-    if( frameData->additionalData )
-        av_free( frameData->additionalData );
-
-    av_free( pkt->priv );
 
     // Now use the default routine to release the rest of the packet's resources
     av_destruct_packet( pkt );
@@ -362,9 +413,9 @@ void ad_release_packet( AVPacket *pkt )
 
 int ad_get_buffer(AVIOContext *s, uint8_t *buf, int size)
 {
-#ifdef FF_API_OLD_AVIO
+/*#ifdef FF_API_OLD_AVIO
     return avio_read(s, buf, size);
-#else
+#else*/
     int TotalDataRead = 0;
     int DataReadThisTime = 0;
     int RetryBoundry = 200;
@@ -372,18 +423,19 @@ int ad_get_buffer(AVIOContext *s, uint8_t *buf, int size)
 
     //get data while ther is no time out and we still need data
     while(TotalDataRead < size && retrys < RetryBoundry) {
-        DataReadThisTime += avio_read(s, buf, (size - TotalDataRead));
+        DataReadThisTime = avio_read(s, buf, (size - TotalDataRead));
 
         // if we retreave some data keep trying until we get the required data
         // or we have much longer time out
-        if(DataReadThisTime > 0 && RetryBoundry < 1000)
-            RetryBoundry += 10;
-
-        TotalDataRead += DataReadThisTime;
+        if(DataReadThisTime > 0)  {
+            if (RetryBoundry < 1000)
+                RetryBoundry += 10;
+            TotalDataRead += DataReadThisTime;
+        }
         retrys++;
     }
     return TotalDataRead;
-#endif
+//#endif
 }
 
 int initADData(int data_type, ADFrameType *frameType, void **payload)
@@ -409,6 +461,8 @@ int initADData(int data_type, ADFrameType *frameType, void **payload)
         *frameType = NetVuDataInfo;
     else if( data_type == DATA_LAYOUT )
         *frameType = NetVuDataLayout;
+    else if (data_type == DATA_PBM)
+        *frameType = NetVuOverlay;
     else
         *frameType = FrameTypeUnknown;
 
@@ -540,7 +594,7 @@ int ad_read_info(AVFormatContext *s, AVIOContext *pb,
     int n, status, errorVal = 0;
 
     // Allocate a new packet
-    if( (status = ad_new_packet( pkt, size )) < 0 )
+    if( (status = av_new_packet( pkt, size )) < 0 )
         return ADPIC_INFO_NEW_PACKET_ERROR;
 
     // Skip first byte
@@ -560,7 +614,7 @@ int ad_read_layout(AVFormatContext *s, AVIOContext *pb,
     int n, status, errorVal = 0;
 
     // Allocate a new packet
-    if( (status = ad_new_packet( pkt, size )) < 0 )
+    if( (status = av_new_packet( pkt, size )) < 0 )
         return ADPIC_LAYOUT_NEW_PACKET_ERROR;
 
     // Get the data
@@ -570,8 +624,118 @@ int ad_read_layout(AVFormatContext *s, AVIOContext *pb,
     return errorVal;
 }
 
+static int pbm_read_mem(char **comment, uint8_t **src, int size, uint8_t **dst)
+{
+    static const uint8_t pbm[3] = { 0x50, 0x34, 0x0A };
+    static const uint8_t rle[4] = { 0x52, 0x4C, 0x45, 0x20 };
+    int isrle                   = 0;
+    const uint8_t *ptr          = *src;
+    const uint8_t *endPtr       = (*src) + size;
+    uint8_t *dPtr               = NULL;
+    int strSize                 = 0;
+    const char *strPtr, *endStrPtr;
+    unsigned int width, height, elementsRead;
+    
+    if ((size >= sizeof(pbm)) && (memcmp(ptr, pbm, sizeof(pbm)) == 0) )
+        ptr += sizeof(pbm);
+    else
+        return -1;
+    
+    while ( (ptr < endPtr) && (*ptr == '#') )  {
+        ++ptr;
+        
+        if ( ((endPtr - ptr) > sizeof(rle)) && (memcmp(ptr, rle, sizeof(rle)) == 0) )  {
+            isrle = 1;
+            ptr += sizeof(rle);
+        }
+        
+        strPtr = ptr;
+        while ( (ptr < endPtr) && (*ptr != 0x0A) )  {
+            ++ptr;
+        }
+        endStrPtr = ptr;
+        strSize = endStrPtr - strPtr;
+        
+        if (*comment)
+            av_free(*comment);
+        *comment = av_malloc(strSize + 1);
+        
+        memcpy(*comment, strPtr, strSize);
+        (*comment)[strSize] = '\0';
+        
+        ++ptr;
+    }
+    
+    elementsRead = sscanf(ptr, "%u", &width);
+    ptr += sizeof(width) * elementsRead;
+    elementsRead = sscanf(ptr, "%u", &height);
+    ptr += sizeof(width) * elementsRead;
+    
+    if (isrle)  {
+        int len;
+        uint8_t val;
+        unsigned int headerSize   = (ptr - *src) - sizeof(rle);
+        unsigned int headerP1Size = sizeof(pbm) + 1;
+        unsigned int headerP2Size = headerSize - headerP1Size;
+        unsigned int dataSize = (width * height) / 8;
+        
+        *dst = av_malloc(headerSize + dataSize);
+        dPtr = *dst;
+        
+        memcpy(dPtr, *src, headerP1Size);
+        dPtr += headerP1Size;
+        memcpy(dPtr, strPtr, headerP2Size);
+        dPtr += headerP2Size;
+        
+        while (ptr < endPtr)  {
+            len = *ptr++;
+            val = *ptr++;
+            do  {
+				len--;
+				*dPtr++ = val;
+			} while(len>0);
+        }
+        return headerSize + dataSize;
+    }
+    else  {
+        *dst = *src;
+        *src = NULL;
+        return size;
+    }
+}
+
+int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int insize, char **text_data, int64_t lastVideoPTS)
+{
+    AVIOContext *pb = s->pb;
+    AVStream *st    = NULL;
+    int n           = 0;
+    uint8_t *inbuf  = NULL;
+    
+    av_dlog(s, "PBM overlay\n");
+    
+    inbuf = av_malloc(insize);
+    n = ad_get_buffer(pb, inbuf, insize);
+    if (n != insize)  {
+        av_log(s, AV_LOG_ERROR, "%s: short of data reading pbm data body, expected %d, read %d\n", __func__, insize, n);
+        return ADPIC_OVERLAY_GET_BUFFER_ERROR;
+    }
+    
+    pkt->size = pbm_read_mem(text_data, &inbuf, insize, &pkt->data);
+    if (pkt->size <= 0) {
+		av_log(s, AV_LOG_ERROR, "ADPIC: pbm_read_mem failed\n");
+		return ADPIC_OVERLAY_PBM_READ_ERROR_ERROR;
+	}
+    
+    st = ad_get_overlay_stream(s, *text_data);
+    
+    pkt->pts = lastVideoPTS;
+    
+    return 0;
+}
+                
 int ad_read_packet(AVFormatContext *s, AVIOContext *pb, AVPacket *pkt,
-                   ADFrameType frameType, void *data, char *text_data)
+                   ADFrameType frameType, void *data, char *text_data, 
+                   int64_t *videoFramePTS)
 {
     AVStream    *st        = NULL;
     ADFrameData *frameData = NULL;
@@ -592,6 +756,8 @@ int ad_read_packet(AVFormatContext *s, AVIOContext *pb, AVPacket *pkt,
             }
             else
                 pkt->pts = AV_NOPTS_VALUE;
+            if (videoFramePTS)
+                *videoFramePTS = pkt->pts;
 
             // Servers occasionally send insane timezone data, which can screw
             // up clients.  Check for this and set to 0
@@ -627,31 +793,38 @@ int ad_read_packet(AVFormatContext *s, AVIOContext *pb, AVPacket *pkt,
             return ADPIC_GET_INFO_LAYOUT_STREAM_ERROR;
         }
     }
-
-    pkt->stream_index = st->index;
-    frameData = av_mallocz(sizeof(*frameData));
-    if( frameData == NULL )
-        return AVERROR(ENOMEM);
-
-    frameData->frameType = frameType;
-
-    if ( (frameType == NetVuVideo) || (frameType == NetVuAudio) )  {
-        frameData->frameData = data;
-        if (text_data != NULL)  {
-            frameData->additionalData = text_data;
-
-            /// Todo: AVOption to allow toggling parsing of text on and off
-            ad_parseText(frameData);
+    else if (frameType == NetVuOverlay)  {
+        // Get or create a data stream
+        if ( (st = ad_get_overlay_stream(s, text_data)) == NULL ) {
+            av_log(s, AV_LOG_ERROR, "%s: ad_get_overlay_stream failed\n", __func__);
+            return ADPIC_GET_OVERLAY_STREAM_ERROR;
         }
     }
-    else if (frameType == NetVuDataInfo || frameType == NetVuDataLayout)
-        frameData->frameData = NULL;
-    else  // Shouldn't really get here...
-        frameData->frameType = FrameTypeUnknown;
-    
-    pkt->priv = frameData;
-    pkt->duration = 0;
-    pkt->pos = -1;
+
+    if (st)  {
+        pkt->stream_index = st->index;
+
+        if ( (frameType == NetVuVideo) || (frameType == NetVuAudio) )  {
+            frameData = av_mallocz(sizeof(*frameData));
+            if( frameData == NULL )
+                return AVERROR(ENOMEM);
+
+            frameData->frameType = frameType;
+            frameData->frameData = data;
+            if (text_data != NULL)  {
+                frameData->additionalData = text_data;
+
+                /// Todo: AVOption to allow toggling parsing of text on and off
+                ad_parseText(frameData);
+            }
+            pkt->priv = frameData;
+        }
+        else
+            pkt->priv = NULL;
+        
+        pkt->duration = 0;
+        pkt->pos = -1;
+    }
 
     return 0;
 }

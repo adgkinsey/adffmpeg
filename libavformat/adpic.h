@@ -46,6 +46,8 @@ enum data_type { DATA_JPEG, DATA_JFIF,
                  DATA_LAYOUT, DATA_INFO,
                  DATA_H264I, DATA_H264P,
                  DATA_XML_INFO,
+                 DATA_BMP, 
+                 DATA_PBM, 
                  MAX_DATA_TYPE
                };
 
@@ -65,8 +67,10 @@ int ad_read_info(AVFormatContext *s, AVIOContext *pb,
                  AVPacket *pkt, int size);
 int ad_read_layout(AVFormatContext *s, AVIOContext *pb,
                    AVPacket *pkt, int size);
+int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int size, char **text_data, int64_t lastVideoPTS);
 int ad_read_packet(AVFormatContext *s, AVIOContext *pb, AVPacket *pkt,
-                   ADFrameType currentFrameType, void *data, char *text_data);
+                   ADFrameType currentFrameType, void *data, char *text_data, 
+                   int64_t *videoFramePTS);
 AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h,
                          uint8_t cam, int format, const char *title);
 AVStream * ad_get_audio_stream(AVFormatContext *s, NetVuAudioData* audioHeader);
@@ -159,5 +163,9 @@ int ad_adFormatToCodecId(AVFormatContext *s, int32_t adFormat);
 
 #define ADPIC_END_OF_STREAM                         ADPIC_ERROR + -48
 #define ADPIC_FAILED_TO_PARSE_INFOLIST              ADPIC_ERROR + -49
+
+#define ADPIC_OVERLAY_GET_BUFFER_ERROR              ADPIC_ERROR + -50
+#define ADPIC_OVERLAY_PBM_READ_ERROR_ERROR          ADPIC_ERROR + -51
+#define ADPIC_GET_OVERLAY_STREAM_ERROR              ADPIC_ERROR + -52
 
 #endif

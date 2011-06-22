@@ -222,6 +222,9 @@ static int process_line(char *line, int *line_count, int *dataType,
                 else
                     *extra = RTP_PAYLOAD_TYPE_8000HZ_ADPCM; // Default
             }
+            else  {
+                *dataType = MAX_DATA_TYPE;
+            }
         }
     }
     return 1;
@@ -666,6 +669,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     int                     imgLoaded = FALSE;
     uint8_t                 buf[TEMP_BUFFER_SIZE];
     int                     bufSize = TEMP_BUFFER_SIZE;
+    unsigned char *         tempbuf = NULL;
 
     errorVal = parse_mime_header(pb, buf, &bufSize, &data_type, &size, &extra);
     if(errorVal != 0 )  {
@@ -710,16 +714,25 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
         case DATA_LAYOUT:
             errorVal = ad_read_layout(s, pb, pkt, size);
             break;
+        case DATA_BMP:
+        case DATA_PBM:
         default: {
             av_log(s, AV_LOG_WARNING, "admime_read_packet: No handler for "
                    "data_type=%d\n", data_type);
-            errorVal = ADPIC_DEFAULT_ERROR;
+            
+            // Would like to use avio_skip, but that needs seek support, 
+            // so just read the data into a buffer then throw it away
+            tempbuf = av_malloc(size);                
+            avio_read(pb, tempbuf, size);
+            av_free(tempbuf);
+                
+            return ADPIC_DEFAULT_ERROR;
         }
         break;
     }
 
     if (errorVal >= 0)  {
-        errorVal = ad_read_packet(s, pb, pkt, frameType, payload, txtDat);
+        errorVal = ad_read_packet(s, pb, pkt, frameType, payload, txtDat, NULL);
     }
     else  {
         // If there was an error, release any memory that has been allocated

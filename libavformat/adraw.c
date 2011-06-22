@@ -95,7 +95,7 @@ static int adraw_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         }
     }
     if (errorVal >= 0)
-        errorVal = ad_read_packet(s, pb, pkt, NetVuVideo, vidDat, txtDat);
+        errorVal = ad_read_packet(s, pb, pkt, NetVuVideo, vidDat, txtDat, NULL);
     else  {
         // If there was an error, release any allocated memory
         if( vidDat != NULL )
