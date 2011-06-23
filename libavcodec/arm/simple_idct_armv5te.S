@@ -333,20 +333,6 @@ function idct_col_armv5te
         ldr    pc, [sp], #4
 endfunc
 
-.macro  clip   dst, src:vararg
-        movs   \dst, \src
-        movmi  \dst, #0
-        cmp    \dst, #255
-        movgt  \dst, #255
-.endm
-
-.macro  aclip  dst, src:vararg
-        adds   \dst, \src
-        movmi  \dst, #0
-        cmp    \dst, #255
-        movgt  \dst, #255
-.endm
-
 function idct_col_put_armv5te
         str    lr, [sp, #-4]!
 
@@ -355,15 +341,27 @@ function idct_col_put_armv5te
         ldmfd  sp!, {a3, a4}
         ldr    lr, [sp, #32]
         add    a2, a3, v1
-        clip   a2, a2, asr #20
+        movs   a2, a2, asr #20
+        movmi  a2, #0
+        cmp    a2, #255
+        movgt  a2, #255
         add    ip, a4, v2
-        clip   ip, ip, asr #20
+        movs   ip, ip, asr #20
+        movmi  ip, #0
+        cmp    ip, #255
+        movgt  ip, #255
         orr    a2, a2, ip, lsl #8
         sub    a3, a3, v1
-        clip   a3, a3, asr #20
+        movs   a3, a3, asr #20
+        movmi  a3, #0
+        cmp    a3, #255
+        movgt  a3, #255
         sub    a4, a4, v2
-        clip   a4, a4, asr #20
+        movs   a4, a4, asr #20
+        movmi  a4, #0
+        cmp    a4, #255
         ldr    v1, [sp, #28]
+        movgt  a4, #255
         strh   a2, [v1]
         add    a2, v1, #2
         str    a2, [sp, #28]
@@ -373,43 +371,79 @@ function idct_col_put_armv5te
         strh   a2, [v2, v1]!
 
         sub    a2, a3, v3
-        clip   a2, a2, asr #20
+        movs   a2, a2, asr #20
+        movmi  a2, #0
+        cmp    a2, #255
+        movgt  a2, #255
         sub    ip, a4, v4
-        clip   ip, ip, asr #20
+        movs   ip, ip, asr #20
+        movmi  ip, #0
+        cmp    ip, #255
+        movgt  ip, #255
         orr    a2, a2, ip, lsl #8
         strh   a2, [v1, lr]!
         add    a3, a3, v3
-        clip   a2, a3, asr #20
+        movs   a2, a3, asr #20
+        movmi  a2, #0
+        cmp    a2, #255
+        movgt  a2, #255
         add    a4, a4, v4
-        clip   a4, a4, asr #20
+        movs   a4, a4, asr #20
+        movmi  a4, #0
+        cmp    a4, #255
+        movgt  a4, #255
         orr    a2, a2, a4, lsl #8
         ldmfd  sp!, {a3, a4}
         strh   a2, [v2, -lr]!
 
         add    a2, a3, v5
-        clip   a2, a2, asr #20
+        movs   a2, a2, asr #20
+        movmi  a2, #0
+        cmp    a2, #255
+        movgt  a2, #255
         add    ip, a4, v6
-        clip   ip, ip, asr #20
+        movs   ip, ip, asr #20
+        movmi  ip, #0
+        cmp    ip, #255
+        movgt  ip, #255
         orr    a2, a2, ip, lsl #8
         strh   a2, [v1, lr]!
         sub    a3, a3, v5
-        clip   a2, a3, asr #20
+        movs   a2, a3, asr #20
+        movmi  a2, #0
+        cmp    a2, #255
+        movgt  a2, #255
         sub    a4, a4, v6
-        clip   a4, a4, asr #20
+        movs   a4, a4, asr #20
+        movmi  a4, #0
+        cmp    a4, #255
+        movgt  a4, #255
         orr    a2, a2, a4, lsl #8
         ldmfd  sp!, {a3, a4}
         strh   a2, [v2, -lr]!
 
         add    a2, a3, v7
-        clip   a2, a2, asr #20
+        movs   a2, a2, asr #20
+        movmi  a2, #0
+        cmp    a2, #255
+        movgt  a2, #255
         add    ip, a4, fp
-        clip   ip, ip, asr #20
+        movs   ip, ip, asr #20
+        movmi  ip, #0
+        cmp    ip, #255
+        movgt  ip, #255
         orr    a2, a2, ip, lsl #8
         strh   a2, [v1, lr]
         sub    a3, a3, v7
-        clip   a2, a3, asr #20
+        movs   a2, a3, asr #20
+        movmi  a2, #0
+        cmp    a2, #255
+        movgt  a2, #255
         sub    a4, a4, fp
-        clip   a4, a4, asr #20
+        movs   a4, a4, asr #20
+        movmi  a4, #0
+        cmp    a4, #255
+        movgt  a4, #255
         orr    a2, a2, a4, lsl #8
         strh   a2, [v2, -lr]
 
@@ -426,22 +460,36 @@ function idct_col_add_armv5te
         ldmfd  sp!, {a3, a4}
         ldrh   ip, [lr]
         add    a2, a3, v1
+        mov    a2, a2, asr #20
         sub    a3, a3, v1
         and    v1, ip, #255
-        aclip  a2, v1, a2, asr #20
+        adds   a2, a2, v1
+        movmi  a2, #0
+        cmp    a2, #255
+        movgt  a2, #255
         add    v1, a4, v2
         mov    v1, v1, asr #20
-        aclip  v1, v1, ip, lsr #8
+        adds   v1, v1, ip, lsr #8
+        movmi  v1, #0
+        cmp    v1, #255
+        movgt  v1, #255
         orr    a2, a2, v1, lsl #8
         ldr    v1, [sp, #32]
         sub    a4, a4, v2
         rsb    v2, v1, v1, lsl #3
         ldrh   ip, [v2, lr]!
         strh   a2, [lr]
+        mov    a3, a3, asr #20
         and    a2, ip, #255
-        aclip  a3, a2, a3, asr #20
+        adds   a3, a3, a2
+        movmi  a3, #0
+        cmp    a3, #255
+        movgt  a3, #255
         mov    a4, a4, asr #20
-        aclip  a4, a4, ip, lsr #8
+        adds   a4, a4, ip, lsr #8
+        movmi  a4, #0
+        cmp    a4, #255
+        movgt  a4, #255
         add    a2, lr, #2
         str    a2, [sp, #28]
         orr    a2, a3, a4, lsl #8
@@ -450,60 +498,102 @@ function idct_col_add_armv5te
         ldmfd  sp!, {a3, a4}
         ldrh   ip, [lr, v1]!
         sub    a2, a3, v3
+        mov    a2, a2, asr #20
         add    a3, a3, v3
         and    v3, ip, #255
-        aclip  a2, v3, a2, asr #20
+        adds   a2, a2, v3
+        movmi  a2, #0
+        cmp    a2, #255
+        movgt  a2, #255
         sub    v3, a4, v4
         mov    v3, v3, asr #20
-        aclip  v3, v3, ip, lsr #8
+        adds   v3, v3, ip, lsr #8
+        movmi  v3, #0
+        cmp    v3, #255
+        movgt  v3, #255
         orr    a2, a2, v3, lsl #8
         add    a4, a4, v4
         ldrh   ip, [v2, -v1]!
         strh   a2, [lr]
+        mov    a3, a3, asr #20
         and    a2, ip, #255
-        aclip  a3, a2, a3, asr #20
+        adds   a3, a3, a2
+        movmi  a3, #0
+        cmp    a3, #255
+        movgt  a3, #255
         mov    a4, a4, asr #20
-        aclip  a4, a4, ip, lsr #8
+        adds   a4, a4, ip, lsr #8
+        movmi  a4, #0
+        cmp    a4, #255
+        movgt  a4, #255
         orr    a2, a3, a4, lsl #8
         strh   a2, [v2]
 
         ldmfd  sp!, {a3, a4}
         ldrh   ip, [lr, v1]!
         add    a2, a3, v5
+        mov    a2, a2, asr #20
         sub    a3, a3, v5
         and    v3, ip, #255
-        aclip  a2, v3, a2, asr #20
+        adds   a2, a2, v3
+        movmi  a2, #0
+        cmp    a2, #255
+        movgt  a2, #255
         add    v3, a4, v6
         mov    v3, v3, asr #20
-        aclip  v3, v3, ip, lsr #8
+        adds   v3, v3, ip, lsr #8
+        movmi  v3, #0
+        cmp    v3, #255
+        movgt  v3, #255
         orr    a2, a2, v3, lsl #8
         sub    a4, a4, v6
         ldrh   ip, [v2, -v1]!
         strh   a2, [lr]
+        mov    a3, a3, asr #20
         and    a2, ip, #255
-        aclip  a3, a2, a3, asr #20
+        adds   a3, a3, a2
+        movmi  a3, #0
+        cmp    a3, #255
+        movgt  a3, #255
         mov    a4, a4, asr #20
-        aclip  a4, a4, ip, lsr #8
+        adds   a4, a4, ip, lsr #8
+        movmi  a4, #0
+        cmp    a4, #255
+        movgt  a4, #255
         orr    a2, a3, a4, lsl #8
         strh   a2, [v2]
 
         ldmfd  sp!, {a3, a4}
         ldrh   ip, [lr, v1]!
         add    a2, a3, v7
+        mov    a2, a2, asr #20
         sub    a3, a3, v7
         and    v3, ip, #255
-        aclip  a2, v3, a2, asr #20
+        adds   a2, a2, v3
+        movmi  a2, #0
+        cmp    a2, #255
+        movgt  a2, #255
         add    v3, a4, fp
         mov    v3, v3, asr #20
-        aclip  v3, v3, ip, lsr #8
+        adds   v3, v3, ip, lsr #8
+        movmi  v3, #0
+        cmp    v3, #255
+        movgt  v3, #255
         orr    a2, a2, v3, lsl #8
         sub    a4, a4, fp
         ldrh   ip, [v2, -v1]!
         strh   a2, [lr]
+        mov    a3, a3, asr #20
         and    a2, ip, #255
-        aclip  a3, a2, a3, asr #20
+        adds   a3, a3, a2
+        movmi  a3, #0
+        cmp    a3, #255
+        movgt  a3, #255
         mov    a4, a4, asr #20
-        aclip  a4, a4, ip, lsr #8
+        adds   a4, a4, ip, lsr #8
+        movmi  a4, #0
+        cmp    a4, #255
+        movgt  a4, #255
         orr    a2, a3, a4, lsl #8
         strh   a2, [v2]
 
