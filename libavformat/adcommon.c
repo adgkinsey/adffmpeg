@@ -41,9 +41,9 @@ static void ad_parseText(struct ADFrameData *frameData);
 
 int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
 {
-    ByteIOContext*	    pb = s->pb;
-    URLContext*		    urlContext = pb->opaque;
-    NetvuContext*	    nv = NULL;
+    AVIOContext*        pb = s->pb;
+    URLContext*            urlContext = pb->opaque;
+    NetvuContext*        nv = NULL;
 
     if (urlContext && urlContext->is_streamed)  {
         if ( av_stristart(urlContext->filename, "netvu://", NULL) == 1)
@@ -57,11 +57,11 @@ int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
             *utcOffset = nv->utc_offset;
 
         for(ii = 0; ii < NETVU_MAX_HEADERS; ii++)  {
-            av_metadata_set2(&s->metadata, nv->hdrNames[ii], nv->hdrs[ii], 0);
+            av_dict_set(&s->metadata, nv->hdrNames[ii], nv->hdrs[ii], 0);
         }
         if ( (nv->utc_offset >= 0) && (nv->utc_offset <= 1440) )  {
             snprintf(temp, sizeof(temp), "%d", nv->utc_offset);
-            av_metadata_set2(&s->metadata, "timezone", temp, 0);
+            av_dict_set(&s->metadata, "timezone", temp, 0);
         }
     }
 
@@ -71,34 +71,34 @@ int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
 
 void ad_network2host(struct NetVuImageData *pic, uint8_t *data)
 {
-    pic->version				= AV_RB32(data + 0);
-    pic->mode					= AV_RB32(data + 4);
-    pic->cam					= AV_RB32(data + 8);
-    pic->vid_format				= AV_RB32(data + 12);
-    pic->start_offset			= AV_RB32(data + 16);
-    pic->size					= AV_RB32(data + 20);
-    pic->max_size				= AV_RB32(data + 24);
-    pic->target_size			= AV_RB32(data + 28);
-    pic->factor					= AV_RB32(data + 32);
-    pic->alm_bitmask_hi			= AV_RB32(data + 36);
-    pic->status					= AV_RB32(data + 40);
-    pic->session_time			= AV_RB32(data + 44);
-    pic->milliseconds			= AV_RB32(data + 48);
+    pic->version                = AV_RB32(data + 0);
+    pic->mode                    = AV_RB32(data + 4);
+    pic->cam                    = AV_RB32(data + 8);
+    pic->vid_format                = AV_RB32(data + 12);
+    pic->start_offset            = AV_RB32(data + 16);
+    pic->size                    = AV_RB32(data + 20);
+    pic->max_size                = AV_RB32(data + 24);
+    pic->target_size            = AV_RB32(data + 28);
+    pic->factor                    = AV_RB32(data + 32);
+    pic->alm_bitmask_hi            = AV_RB32(data + 36);
+    pic->status                    = AV_RB32(data + 40);
+    pic->session_time            = AV_RB32(data + 44);
+    pic->milliseconds            = AV_RB32(data + 48);
     if ((uint8_t *)pic != data)  {
         memcpy(pic->res,    data + 52, 4);
         memcpy(pic->title,  data + 56, 31);
         memcpy(pic->alarm,  data + 87, 31);
     }
-    pic->format.src_pixels		= AV_RB16(data + 118);
-    pic->format.src_lines		= AV_RB16(data + 120);
-    pic->format.target_pixels	= AV_RB16(data + 122);
-    pic->format.target_lines	= AV_RB16(data + 124);
-    pic->format.pixel_offset	= AV_RB16(data + 126);
-    pic->format.line_offset		= AV_RB16(data + 128);
+    pic->format.src_pixels        = AV_RB16(data + 118);
+    pic->format.src_lines        = AV_RB16(data + 120);
+    pic->format.target_pixels    = AV_RB16(data + 122);
+    pic->format.target_lines    = AV_RB16(data + 124);
+    pic->format.pixel_offset    = AV_RB16(data + 126);
+    pic->format.line_offset        = AV_RB16(data + 128);
     if ((uint8_t *)pic != data)
         memcpy(pic->locale, data + 130, 30);
-    pic->utc_offset				= AV_RB32(data + 160);
-    pic->alm_bitmask			= AV_RB32(data + 164);
+    pic->utc_offset                = AV_RB32(data + 160);
+    pic->alm_bitmask            = AV_RB32(data + 164);
 }
 
 AVStream * netvu_get_stream(AVFormatContext *s, struct NetVuImageData *p)
@@ -114,7 +114,7 @@ AVStream * netvu_get_stream(AVFormatContext *s, struct NetVuImageData *p)
     stream->start_time = p->session_time * 1000LL + p->milliseconds;
     dateSec = p->session_time;
     strftime(dateStr, sizeof(dateStr), "%Y-%m-%d %H:%MZ", gmtime(&dateSec));
-    av_metadata_set2(&stream->metadata, "date", dateStr, 0);
+    av_dict_set(&stream->metadata, "date", dateStr, 0);
     return stream;
 }
 
@@ -152,7 +152,7 @@ int ad_adFormatToCodecId(AVFormatContext *s, int32_t adFormat)
 
 AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t cam, int32_t format, const char *title)
 {
-    uint8_t codec_type;
+    uint8_t codec_type = 0;
     int codec_id, id;
     int i, found;
     char textbuffer[4];
@@ -182,7 +182,7 @@ AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t cam
     if (!found) {
         st = av_new_stream( s, id);
         if (st) {
-            st->codec->codec_type = CODEC_TYPE_VIDEO;
+            st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
             st->codec->codec_id = codec_id;
             st->codec->width = w;
             st->codec->height = h;
@@ -201,9 +201,58 @@ AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t cam
             st->codec->time_base = (AVRational) { 1, 1000 };
 
             if (title)
-                av_metadata_set2(&st->metadata, "title", title, 0);
+                av_dict_set(&st->metadata, "title", title, 0);
             snprintf(textbuffer, sizeof(textbuffer), "%u", cam);
-            av_metadata_set2(&st->metadata, "track", textbuffer, 0);
+            av_dict_set(&st->metadata, "track", textbuffer, 0);
+        }
+    }
+    return st;
+}
+
+static unsigned int RSHash(const char* str, unsigned int len)
+{
+    unsigned int b    = 378551;
+    unsigned int a    = 63689;
+    unsigned int hash = 0;
+    unsigned int i    = 0;
+    
+    for(i = 0; i < len; str++, i++)  {
+        hash = hash * a + (*str);
+        a    = a * b;
+    }
+    return hash;
+}
+
+static AVStream * ad_get_overlay_stream(AVFormatContext *s, const char *title)
+{
+    static const int codec_id = CODEC_ID_PBM;
+    unsigned int id;
+    int i, found;
+    AVStream *st;
+
+    id = RSHash(title, strlen(title));
+
+    found = FALSE;
+    for (i = 0; i < s->nb_streams; i++) {
+        st = s->streams[i];
+        if ((st->codec->codec_id == codec_id) && (st->id == id)) {
+            found = TRUE;
+            break;
+        }
+    }
+    if (!found) {
+        st = av_new_stream(s, id);
+        if (st) {
+            st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
+            st->codec->codec_id = codec_id;
+            st->index = i;
+
+            // Use milliseconds as the time base
+            st->r_frame_rate = (AVRational) { 1, 1000 };
+            av_set_pts_info(st, 32, 1, 1000);
+            st->codec->time_base = (AVRational) { 1, 1000 };
+
+            av_dict_set(&st->metadata, "title", title, 0);
         }
     }
     return st;
@@ -231,7 +280,7 @@ AVStream * ad_get_audio_stream(AVFormatContext *s, struct NetVuAudioData* audioH
     if( !found ) {
         st = av_new_stream( s, id );
         if (st) {
-            st->codec->codec_type = CODEC_TYPE_AUDIO;
+            st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
             st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
             st->codec->channels = 1;
             st->codec->block_align = 0;
@@ -306,7 +355,7 @@ AVStream * ad_get_data_stream( AVFormatContext *s )
     if( !found ) {
         st = av_new_stream( s, id );
         if (st) {
-            st->codec->codec_type = CODEC_TYPE_DATA;
+            st->codec->codec_type = AVMEDIA_TYPE_DATA;
             st->codec->codec_id = CODEC_ID_TEXT;
 
             // Use milliseconds as the time base
@@ -336,31 +385,33 @@ void ad_release_packet( AVPacket *pkt )
 {
     struct ADFrameData *frameData;
 
-    if ( (pkt == NULL) || (pkt->priv == NULL) )
+    if (pkt == NULL)
         return;
 
-    // Have a look what type of frame we have and then free as appropriate
-    frameData = (struct ADFrameData *)pkt->priv;
+    if (pkt->priv != NULL)  {
+        // Have a look what type of frame we have and then free as appropriate
+        frameData = (struct ADFrameData *)pkt->priv;
 
-    if( frameData->frameType == NetVuAudio ) {
-        struct NetVuAudioData *audioHeader = (struct NetVuAudioData *)frameData->frameData;
-        if( audioHeader->additionalData )
-            av_free( audioHeader->additionalData );
+        if( frameData->frameType == NetVuAudio ) {
+            struct NetVuAudioData *audHeader = (struct NetVuAudioData *)frameData->frameData;
+            if( audHeader->additionalData )
+                av_free( audHeader->additionalData );
+        }
+
+        // Nothing else has nested allocs so just delete the frameData
+        if( frameData->frameData  )
+            av_free( frameData->frameData );
+        if( frameData->additionalData )
+            av_free( frameData->additionalData );
+
+        av_free( pkt->priv );
     }
-
-    // Nothing else has nested allocs so just delete the frameData if it exists
-    if( frameData->frameData  )
-        av_free( frameData->frameData );
-    if( frameData->additionalData )
-        av_free( frameData->additionalData );
-
-    av_free( pkt->priv );
 
     // Now use the default routine to release the rest of the packet's resources
     av_destruct_packet( pkt );
 }
 
-int ad_get_buffer(ByteIOContext *s, uint8_t *buf, int size)
+int ad_get_buffer(AVIOContext *s, uint8_t *buf, int size)
 {
 #ifdef FF_API_OLD_AVIO
     return avio_read(s, buf, size);
@@ -372,54 +423,85 @@ int ad_get_buffer(ByteIOContext *s, uint8_t *buf, int size)
 
     //get data while ther is no time out and we still need data
     while(TotalDataRead < size && retrys < RetryBoundry) {
-        DataReadThisTime += get_buffer(s, buf, (size - TotalDataRead));
+        DataReadThisTime = avio_read(s, buf, (size - TotalDataRead));
 
         // if we retreave some data keep trying until we get the required data
         // or we have much longer time out
-        if(DataReadThisTime > 0 && RetryBoundry < 1000)
-            RetryBoundry += 10;
-
-        TotalDataRead += DataReadThisTime;
+        if(DataReadThisTime > 0)  {
+            if (RetryBoundry < 1000)
+                RetryBoundry += 10;
+            TotalDataRead += DataReadThisTime;
+        }
         retrys++;
     }
     return TotalDataRead;
 #endif
 }
 
-int initADData(int data_type, enum ADFrameType *frameType, void **payload)
+int initADData(int data_type, enum AVMediaType *mediaType, enum CodecID *codecId, void **payload)
 {
-    if( (data_type == DATA_JPEG)          || (data_type == DATA_JFIF)   ||
-        (data_type == DATA_MPEG4I)        || (data_type == DATA_MPEG4P) ||
-        (data_type == DATA_H264I)         || (data_type == DATA_H264P)  ||
-        (data_type == DATA_MINIMAL_MPEG4)                               )
-    {
-        *frameType = NetVuVideo;
-        *payload = av_malloc( sizeof(struct NetVuImageData) );
-        if( *payload == NULL )
-            return AVERROR(ENOMEM);
+    switch(data_type)  {
+        case(DATA_JPEG):
+        case(DATA_JFIF):
+        case(DATA_MPEG4I):
+        case(DATA_MPEG4P):
+        case(DATA_H264I):
+        case(DATA_H264P):
+        case(DATA_MINIMAL_MPEG4):
+            *payload = av_malloc( sizeof(struct NetVuImageData) );
+            if( *payload == NULL )
+                return AVERROR(ENOMEM);
+            *mediaType = AVMEDIA_TYPE_VIDEO;
+            switch(data_type)  {
+                case(DATA_JPEG):
+                case(DATA_JFIF):
+                    *codecId = CODEC_ID_MJPEG;
+                    break;
+                case(DATA_MPEG4I):
+                case(DATA_MPEG4P):
+                case(DATA_MINIMAL_MPEG4):
+                    *codecId = CODEC_ID_MPEG4;
+                    break;
+                case(DATA_H264I):
+                case(DATA_H264P):
+                    *codecId = CODEC_ID_H264;
+                    break;
+            }
+            break;
+        case(DATA_AUDIO_ADPCM):
+        case(DATA_MINIMAL_AUDIO_ADPCM):
+            *payload = av_malloc( sizeof(struct NetVuAudioData) );
+            if( *payload == NULL )
+                return AVERROR(ENOMEM);
+            *mediaType = AVMEDIA_TYPE_AUDIO;
+            *codecId = CODEC_ID_ADPCM_IMA_WAV;
+            break;
+        case(DATA_INFO):
+        case(DATA_XML_INFO):
+        case(DATA_LAYOUT):
+            *mediaType = AVMEDIA_TYPE_DATA;
+            *codecId = CODEC_ID_FFMETADATA;
+            break;
+        case(DATA_BMP):
+            *mediaType = AVMEDIA_TYPE_VIDEO;
+            *codecId = CODEC_ID_BMP;
+            break;
+        case(DATA_PBM):
+            *mediaType = AVMEDIA_TYPE_VIDEO;
+            *codecId = CODEC_ID_PBM;
+            break;
+        default:
+            *mediaType = AVMEDIA_TYPE_UNKNOWN;
+            *codecId = CODEC_ID_NONE;
     }
-    else if ( (data_type == DATA_AUDIO_ADPCM) ||
-              (data_type == DATA_MINIMAL_AUDIO_ADPCM) ) {
-        *frameType = NetVuAudio;
-        *payload = av_malloc( sizeof(struct NetVuAudioData) );
-        if( *payload == NULL )
-            return AVERROR(ENOMEM);
-    }
-    else if ( (data_type == DATA_INFO) || (data_type == DATA_XML_INFO) )
-        *frameType = NetVuDataInfo;
-    else if( data_type == DATA_LAYOUT )
-        *frameType = NetVuDataLayout;
-    else
-        *frameType = FrameTypeUnknown;
-
     return 0;
 }
 
-int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
-                 AVPacket *pkt,
-                 struct NetVuImageData *video_data, char **text_data)
+int ad_read_jpeg(AVFormatContext *s, AVPacket *pkt, struct NetVuImageData *video_data, 
+                 char **text_data)
 {
     static const int nviSize = NetVuImageDataHeaderSize;
+    AVIOContext *pb = s->pb;
     int hdrSize;
     char jfif[2048], *ptr;
     int n, textSize, errorVal = 0;
@@ -495,11 +577,11 @@ int ad_read_jpeg(AVFormatContext *s, ByteIOContext *pb,
     return errorVal;
 }
 
-int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb,
-                 AVPacket *pkt, int imgLoaded, int size,
+int ad_read_jfif(AVFormatContext *s, AVPacket *pkt, int imgLoaded, int size,
                  struct NetVuImageData *video_data, char **text_data)
 {
     int n, status, errorVal = 0;
+    AVIOContext *pb = s->pb;
 
     if(!imgLoaded) {
         if ((status = ad_new_packet(pkt, size)) < 0) { // PRC 003
@@ -507,7 +589,7 @@ int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb,
             return ADPIC_JFIF_NEW_PACKET_ERROR;
         }
 
-        if ((n = ad_get_buffer(pb, pkt->data, size)) != size) {
+        if ((n = ad_get_buffer(pb, pkt->data, size)) < size) {
             av_log(s, AV_LOG_ERROR, "ad_read_jfif: short of data reading jfif image, expected %d, read %d\n", size, n);
             return ADPIC_JFIF_GET_BUFFER_ERROR;
         }
@@ -534,17 +616,17 @@ int ad_read_jfif(AVFormatContext *s, ByteIOContext *pb,
  * SITE DVIP3S;CAM 3:Development;(JPEG)TARGSIZE 0:(MPEG)BITRATE 262144;IMAGESIZE 0,0:704,256;
  * SITE DVIP3S;CAM 4:Rear road;(JPEG)TARGSIZE 0:(MPEG)BITRATE 262144;IMAGESIZE 0,0:704,256;
  */
-int ad_read_info(AVFormatContext *s, ByteIOContext *pb,
-                 AVPacket *pkt, int size)
+int ad_read_info(AVFormatContext *s, AVPacket *pkt, int size)
 {
     int n, status, errorVal = 0;
+    AVIOContext *pb = s->pb;
 
     // Allocate a new packet
-    if( (status = ad_new_packet( pkt, size )) < 0 )
+    if( (status = av_new_packet( pkt, size )) < 0 )
         return ADPIC_INFO_NEW_PACKET_ERROR;
 
     // Skip first byte
-    get_byte(pb);
+    avio_r8(pb);
     --size;
     
     // Get the data
@@ -554,13 +636,13 @@ int ad_read_info(AVFormatContext *s, ByteIOContext *pb,
     return errorVal;
 }
 
-int ad_read_layout(AVFormatContext *s, ByteIOContext *pb,
-                   AVPacket *pkt, int size)
+int ad_read_layout(AVFormatContext *s, AVPacket *pkt, int size)
 {
     int n, status, errorVal = 0;
+    AVIOContext *pb = s->pb;
 
     // Allocate a new packet
-    if( (status = ad_new_packet( pkt, size )) < 0 )
+    if( (status = av_new_packet( pkt, size )) < 0 )
         return ADPIC_LAYOUT_NEW_PACKET_ERROR;
 
     // Get the data
@@ -570,14 +652,134 @@ int ad_read_layout(AVFormatContext *s, ByteIOContext *pb,
     return errorVal;
 }
 
-int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
-                   enum ADFrameType frameType, void *data, char *text_data)
+static int pbm_read_mem(char **comment, uint8_t **src, int size, uint8_t **dst, int *width, int *height)
+{
+    static const uint8_t pbm[3] = { 0x50, 0x34, 0x0A };
+    static const uint8_t rle[4] = { 0x52, 0x4C, 0x45, 0x20 };
+    int isrle                   = 0;
+    const uint8_t *ptr          = *src;
+    const uint8_t *endPtr       = (*src) + size;
+    uint8_t *dPtr               = NULL;
+    int strSize                 = 0;
+    const char *strPtr, *endStrPtr;
+    unsigned int elementsRead;
+    
+    if ((size >= sizeof(pbm)) && (memcmp(ptr, pbm, sizeof(pbm)) == 0) )
+        ptr += sizeof(pbm);
+    else
+        return -1;
+    
+    while ( (ptr < endPtr) && (*ptr == '#') )  {
+        ++ptr;
+        
+        if ( ((endPtr - ptr) > sizeof(rle)) && (memcmp(ptr, rle, sizeof(rle)) == 0) )  {
+            isrle = 1;
+            ptr += sizeof(rle);
+        }
+        
+        strPtr = ptr;
+        while ( (ptr < endPtr) && (*ptr != 0x0A) )  {
+            ++ptr;
+        }
+        endStrPtr = ptr;
+        strSize = endStrPtr - strPtr;
+        
+        if (*comment)
+            av_free(*comment);
+        *comment = av_malloc(strSize + 1);
+        
+        memcpy(*comment, strPtr, strSize);
+        (*comment)[strSize] = '\0';
+        
+        ++ptr;
+    }
+    
+    elementsRead = sscanf(ptr, "%d", width);
+    ptr += sizeof(*width) * elementsRead;
+    elementsRead = sscanf(ptr, "%d", height);
+    ptr += sizeof(*height) * elementsRead;
+    
+    if (isrle)  {
+        // Data is Runlength Encoded, alloc a new buffer and decode into it
+        int len;
+        uint8_t val;
+        unsigned int headerSize   = (ptr - *src) - sizeof(rle);
+        unsigned int headerP1Size = sizeof(pbm) + 1;
+        unsigned int headerP2Size = headerSize - headerP1Size;
+        unsigned int dataSize = ((*width) * (*height)) / 8;
+        
+        *dst = av_malloc(headerSize + dataSize);
+        dPtr = *dst;
+        
+        memcpy(dPtr, *src, headerP1Size);
+        dPtr += headerP1Size;
+        memcpy(dPtr, strPtr, headerP2Size);
+        dPtr += headerP2Size;
+        
+        while (ptr < endPtr)  {
+            len = *ptr++;
+            val = *ptr++;
+            do  {
+				len--;
+				*dPtr++ = val;
+			} while(len>0);
+        }
+        return headerSize + dataSize;
+    }
+    else  {
+        *dst = *src;
+        *src = NULL;
+        return size;
+    }
+}
+
+int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int insize, char **text_data, int64_t lastVideoPTS)
+{
+    AVIOContext *pb = s->pb;
+    AVStream *st    = NULL;
+    uint8_t *inbuf  = NULL;
+    int n, w, h;
+    
+    av_dlog(s, "PBM overlay\n");
+    
+    inbuf = av_malloc(insize);
+    n = ad_get_buffer(pb, inbuf, insize);
+    if (n != insize)  {
+        av_log(s, AV_LOG_ERROR, "%s: short of data reading pbm data body, expected %d, read %d\n", __func__, insize, n);
+        return ADPIC_OVERLAY_GET_BUFFER_ERROR;
+    }
+    
+    pkt->size = pbm_read_mem(text_data, &inbuf, insize, &pkt->data, &w, &h);
+    if (pkt->size <= 0) {
+		av_log(s, AV_LOG_ERROR, "ADPIC: pbm_read_mem failed\n");
+		return ADPIC_OVERLAY_PBM_READ_ERROR_ERROR;
+	}
+    
+    st = ad_get_overlay_stream(s, *text_data);
+    st->codec->width = w;
+    st->codec->height = h;
+    
+    pkt->pts = lastVideoPTS;
+    
+    return 0;
+}
+                
+int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
+                   enum AVMediaType media, enum CodecID codecId, 
+                   void *data, char *text_data, int64_t *videoFramePTS)
 {
     AVStream    *st        = NULL;
     struct ADFrameData *frameData = NULL;
 
-    if (frameType == NetVuVideo)  {
-        // At this point We have a legal struct NetVuImageData structure which we use
+    if ((media == AVMEDIA_TYPE_VIDEO) && (codecId == CODEC_ID_PBM))  {
+        // Get or create a data stream
+        if ( (st = ad_get_overlay_stream(s, text_data)) == NULL ) {
+            av_log(s, AV_LOG_ERROR, "%s: ad_get_overlay_stream failed\n", __func__);
+            return ADPIC_GET_OVERLAY_STREAM_ERROR;
+        }
+    }
+    else if (media == AVMEDIA_TYPE_VIDEO)  {
+        // At this point We have a legal NetVuImageData structure which we use
         // to determine which codec stream to use
         struct NetVuImageData *video_data = (struct NetVuImageData *)data;
         if ( (st = netvu_get_stream( s, video_data)) == NULL ) {
@@ -592,9 +794,20 @@ int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
             }
             else
                 pkt->pts = AV_NOPTS_VALUE;
+            if (videoFramePTS)
+                *videoFramePTS = pkt->pts;
+
+            // Servers occasionally send insane timezone data, which can screw
+            // up clients.  Check for this and set to 0
+            if (abs(video_data->utc_offset) > 1440)  {
+                av_log(s, AV_LOG_INFO,
+                       "ad_read_packet: Invalid utc_offset of %d, "
+                       "setting to zero\n", video_data->utc_offset);
+                video_data->utc_offset = 0;
+            }
         }
     }
-    else if( frameType == NetVuAudio ) {
+    else if (media == AVMEDIA_TYPE_AUDIO) {
         // Get the audio stream
         struct NetVuAudioData *audio_data = (struct NetVuAudioData *)data;
         if ( (st = ad_get_audio_stream( s, audio_data )) == NULL ) {
@@ -611,38 +824,43 @@ int ad_read_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *pkt,
                 pkt->pts = AV_NOPTS_VALUE;
         }
     }
-    else if( frameType == NetVuDataInfo || frameType == NetVuDataLayout ) {
+    else if (media == AVMEDIA_TYPE_DATA) {
         // Get or create a data stream
         if ( (st = ad_get_data_stream( s )) == NULL ) {
-            av_log(s, AV_LOG_ERROR, "ad_read_packet: ad_get_data_stream failed\n");
+            av_log(s, AV_LOG_ERROR, "%s: ad_get_data_stream failed\n", __func__);
             return ADPIC_GET_INFO_LAYOUT_STREAM_ERROR;
         }
     }
 
-    pkt->stream_index = st->index;
-    frameData = av_mallocz(sizeof(*frameData));
-    if( frameData == NULL )
-        return AVERROR(ENOMEM);
+    if (st)  {
+        pkt->stream_index = st->index;
 
-    frameData->frameType = frameType;
+        if ( (media == AVMEDIA_TYPE_VIDEO) || (media == AVMEDIA_TYPE_AUDIO) )  {
+            frameData = av_mallocz(sizeof(*frameData));
+            if( frameData == NULL )
+                return AVERROR(ENOMEM);
 
-    if ( (frameType == NetVuVideo) || (frameType == NetVuAudio) )  {
-        frameData->frameData = data;
-        if (text_data != NULL)  {
-            frameData->additionalData = text_data;
+            if (media == AVMEDIA_TYPE_VIDEO)
+                frameData->frameType = NetVuVideo;
+            else
+                frameData->frameType = NetVuAudio;
+            
+            frameData->frameData = data;
+            
+            if (text_data != NULL)  {
+                frameData->additionalData = text_data;
 
-            /// Todo: AVOption to allow toggling parsing of text on and off
-            ad_parseText(frameData);
+                /// Todo: AVOption to allow toggling parsing of text on and off
+                ad_parseText(frameData);
+            }
+            pkt->priv = frameData;
         }
+        else
+            pkt->priv = NULL;
+        
+        pkt->duration = 0;
+        pkt->pos = -1;
     }
-    else if (frameType == NetVuDataInfo || frameType == NetVuDataLayout)
-        frameData->frameData = NULL;
-    else  // Shouldn't really get here...
-        frameData->frameType = FrameTypeUnknown;
-    
-    pkt->priv = frameData;
-    pkt->duration = 0;
-    pkt->pos = -1;
 
     return 0;
 }

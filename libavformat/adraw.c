@@ -51,54 +51,53 @@ static int adraw_probe(AVProbeData *p)
 
 static int adraw_read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
-    int utc;
-    s->ctx_flags |= AVFMTCTX_NOHEADER;
-    return ad_read_header(s, ap, &utc);
+    return ad_read_header(s, ap, NULL);
 }
 
 static int adraw_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
-    static const uint32_t nvidSize = sizeof(struct NetVuImageData);
-    ByteIOContext   *pb = s->pb;
+    AVIOContext     *pb = s->pb;
     uint8_t         *buf = NULL;
     struct NetVuImageData  *vidDat = NULL;
     char            *txtDat = NULL;
-    int             errorVal = 0;
+    int             errVal = 0;
     int             ii = 0;
 
-    vidDat = av_malloc(nvidSize);
-    buf = av_malloc(nvidSize);
+    vidDat = av_malloc(sizeof(struct NetVuImageData));
+    buf = av_malloc(sizeof(struct NetVuImageData));
 
     // Scan for 0xDECADE11 marker
-    errorVal = get_buffer(pb, buf, nvidSize);
-    while (errorVal > 0)  {
+    errVal = avio_read(pb, buf, sizeof(struct NetVuImageData));
+    while (errVal > 0)  {
         ad_network2host(vidDat, buf);
         if (pic_version_valid(vidDat->version))  {
             break;
         }
-        for(ii = 0; ii < (nvidSize - 1); ii++)  {
+        for(ii = 0; ii < (sizeof(struct NetVuImageData) - 1); ii++)  {
             buf[ii] = buf[ii+1];
         }
-        errorVal = get_buffer(pb, buf + nvidSize - 1, 1);
+        errVal = avio_read(pb, buf + sizeof(struct NetVuImageData) - 1, 1);
     }
     av_free(buf);
 
-    if (errorVal > 0)  {
+    if (errVal > 0)  {
         switch (ad_adFormatToCodecId(s, vidDat->vid_format))  {
             case(CODEC_ID_MJPEG):
-                errorVal = ad_read_jpeg(s, pb, pkt, vidDat, &txtDat);
+                errVal = ad_read_jpeg(s, pkt, vidDat, &txtDat);
                 break;
             case(CODEC_ID_MPEG4):
             case(CODEC_ID_H264):
             default:
-                //errorVal = adbinary_mpeg(s, pb, pkt, vidDat, &txtDat);
+                //errVal = adbinary_mpeg(s, pkt, vidDat, &txtDat);
                 av_log(s, AV_LOG_ERROR, "Unsupported format for adraw demuxer: "
                         "%d\n", vidDat->vid_format);
                 break;
         }
     }
-    if (errorVal >= 0)
-        errorVal = ad_read_packet(s, pb, pkt, NetVuVideo, vidDat, txtDat);
+    if (errVal >= 0)  {
+        errVal = ad_read_packet(s, pkt, AVMEDIA_TYPE_VIDEO, CODEC_ID_MJPEG, 
+                                vidDat, txtDat, NULL);
+    }
     else  {
         // If there was an error, release any allocated memory
         if( vidDat != NULL )
@@ -108,7 +107,7 @@ static int adraw_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             av_free( txtDat );
     }
 
-    return errorVal;
+    return errVal;
 }
 
 static int adraw_read_close(AVFormatContext *s)
@@ -117,7 +116,7 @@ static int adraw_read_close(AVFormatContext *s)
 }
 
 
-AVInputFormat adraw_demuxer = {
+AVInputFormat ff_adraw_demuxer = {
     .name           = "adraw",
     .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings video format (raw)"),
     .read_probe     = adraw_probe,

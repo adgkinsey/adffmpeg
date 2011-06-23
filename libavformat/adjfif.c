@@ -27,8 +27,10 @@
  * NetVuImageData header and full JFIF image (and vice-versa)
  */
 
+#include <time.h>
 #include "internal.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/avstring.h"
 
 #include "adjfif.h"
 #include "adpic.h"
@@ -337,11 +339,11 @@ static int find_q(unsigned char *qy)
 /**
  * Analyses a JFIF header and fills out a NetVuImageData structure with the info
  *
- * \param data		        Input buffer
- * \param pic				NetVuImageData structure
- * \param imglength			Total length of input buffer
- * \param additionalText    Buffer in which is placed text from the JFIF comment
- *                          that doesn't have a specific field in NetVuImageData
+ * \param data        Input buffer
+ * \param pic         NetVuImageData structure
+ * \param imgSize     Total length of input buffer
+ * \param text        Buffer in which is placed text from the JFIF comment
+ *                    that doesn't have a specific field in NetVuImageData
  * \return Length of JFIF header in bytes
  */
 int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *pic,
@@ -387,18 +389,18 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
         i += 2;
 
         switch (marker) {
-            case 0xffe0 :	// APP0
+            case 0xffe0 :    // APP0
                 if ((data[i]==0x4A)&&(data[i+1]==0x46)&&(data[i+2]==0x49)&&(data[i+3]==0x46)&&(data[i+4]==0x00))  {
                     xdensity = AV_RB16(&data[i+8]);
                     ydensity = AV_RB16(&data[i+10]);
                     densityPtr = &data[i+8];
                 }
                 break;
-            case 0xffdb :	// Q table
+            case 0xffdb :    // Q table
                 if (!data[i])
                     pic->factor =  find_q(&data[i+1]);
                 break;
-            case 0xffc0 :	// SOF
+            case 0xffc0 :    // SOF
                 pic->format.target_lines  = AV_RB16(&data[i+1]);
                 pic->format.target_pixels = AV_RB16(&data[i+3]);
                 if (data[i+7] == 0x22)
@@ -408,10 +410,10 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
                 else
                     av_log(s, AV_LOG_WARNING, "%s: Unknown SOF format byte 0x%02X\n", __func__, data[i+7]);
                 break;
-            case 0xffda :	// SOS
+            case 0xffda :    // SOS
                 sos = TRUE;
                 break;
-            case 0xfffe :	// Comment
+            case 0xfffe :    // Comment
                 parse_comment((char *)&data[i], length - 2, pic, text);
                 break;
             default :
@@ -422,11 +424,11 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
         if ( (pic->format.target_lines > 0) && (xdensity == (ydensity*2)) )  {
             if( (pic->format.target_pixels > 360) && (pic->format.target_lines <= 480) )  {
                 // Server is sending wrong pixel aspect ratio, reverse it
-                av_log(s, AV_LOG_DEBUG, "%s: Server is sending wrong pixel "
-                                        "aspect ratio. Old = %d:%d, New = %d:%d"
-                                        " Res = %dx%d\n",
-                       __func__, xdensity, ydensity, ydensity, xdensity,
-                       pic->format.target_pixels, pic->format.target_lines);
+                //av_log(s, AV_LOG_DEBUG, "%s: Server is sending wrong pixel "
+                //                        "aspect ratio. Old = %d:%d, New = %d:%d"
+                //                        " Res = %dx%d\n",
+                //       __func__, xdensity, ydensity, ydensity, xdensity,
+                //       pic->format.target_pixels, pic->format.target_lines);
                 AV_WB16(densityPtr, ydensity);
                 AV_WB16(densityPtr + 2, xdensity);
             }
@@ -436,7 +438,7 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
             }
         }
     }
-    pic->size = imgSize - i - 2; 	// 2 bytes for FFD9
+    pic->size = imgSize - i - 2;     // 2 bytes for FFD9
     return i;
 }
 
@@ -475,8 +477,7 @@ static void parse_comment( char *text, int text_len, struct NetVuImageData *pic,
         else if ( !memcmp( result, comment_version, strlen(comment_version_0_1) - 2 ) )
             pic->version = 0xdecade10;
         else if( !memcmp( result, camera_title, strlen(camera_title) ) )  {
-            strncpy( pic->title, &result[strlen(camera_title)], sizeof(pic->title) );
-            pic->title[sizeof(pic->title)-1] = 0;
+            av_strlcpy( pic->title, &result[strlen(camera_title)], sizeof(pic->title) );
         }
         else if( !memcmp( result, camera_number, strlen(camera_number) ) )
             sscanf( &result[strlen(camera_number)], "%d", &pic->cam );
@@ -492,7 +493,7 @@ static void parse_comment( char *text, int text_len, struct NetVuImageData *pic,
         else if( !memcmp( result, q_factor, strlen(q_factor) ) )
             sscanf( &result[strlen(q_factor)], "%d", &pic->factor );
         else if( !memcmp( result, alarm_comment, strlen(alarm_comment) ) )
-            strncpy( pic->alarm, &result[strlen(alarm_comment)], sizeof(pic->title) );
+            av_strlcpy( pic->alarm, &result[strlen(alarm_comment)], sizeof(pic->alarm) );
         else if( !memcmp( result, active_alarms, strlen(active_alarms) ) )
             sscanf( &result[strlen(active_alarms)], "%X", &pic->alm_bitmask );
         else if( !memcmp( result, active_detectors, strlen(active_detectors) ) )
@@ -500,7 +501,7 @@ static void parse_comment( char *text, int text_len, struct NetVuImageData *pic,
         else if( !memcmp( result, script_msg, strlen(script_msg) ) ) {
         }
         else if( !memcmp( result, time_zone, strlen(time_zone) ) )
-            strncpy( pic->locale, &result[strlen(time_zone)], sizeof(pic->locale) );
+            av_strlcpy( pic->locale, &result[strlen(time_zone)], sizeof(pic->locale) );
         else if( !memcmp( result, utc_offset, strlen(utc_offset) ) )
             sscanf( &result[strlen(utc_offset)], "%d", &pic->utc_offset );
         else {
@@ -526,5 +527,5 @@ static void parse_comment( char *text, int text_len, struct NetVuImageData *pic,
         }
     }
 
-    pic->session_time = mktimegm(&t);
+    pic->session_time = mktime(&t);
 }

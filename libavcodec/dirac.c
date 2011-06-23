@@ -25,6 +25,7 @@
  * @author Marco Gerards <marco@gnu.org>
  */
 
+#include "libavutil/imgutils.h"
 #include "dirac.h"
 #include "avcodec.h"
 #include "golomb.h"
@@ -244,11 +245,11 @@ static int parse_source_parameters(AVCodecContext *avctx, GetBitContext *gb,
 int ff_dirac_parse_sequence_header(AVCodecContext *avctx, GetBitContext *gb,
                                    dirac_source_params *source)
 {
-    unsigned version_major, version_minor;
+    unsigned version_major;
     unsigned video_format, picture_coding_mode;
 
     version_major  = svq3_get_ue_golomb(gb);
-    version_minor  = svq3_get_ue_golomb(gb);
+    svq3_get_ue_golomb(gb); /* version_minor */
     avctx->profile = svq3_get_ue_golomb(gb);
     avctx->level   = svq3_get_ue_golomb(gb);
     video_format   = svq3_get_ue_golomb(gb);
@@ -268,7 +269,7 @@ int ff_dirac_parse_sequence_header(AVCodecContext *avctx, GetBitContext *gb,
     if (parse_source_parameters(avctx, gb, source))
         return -1;
 
-    if (avcodec_check_dimensions(avctx, source->width, source->height))
+    if (av_image_check_size(source->width, source->height, 0, avctx))
         return -1;
 
     avcodec_set_dimensions(avctx, source->width, source->height);

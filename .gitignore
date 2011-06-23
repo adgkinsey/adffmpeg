@@ -16,6 +16,9 @@ ffmpeg
 ffplay
 ffprobe
 ffserver
+libavcodec/*_tablegen
+libavcodec/*_tables.c
+libavcodec/*_tables.h
 libavcodec/libavcodec*
 libavcore/libavcore*
 libavdevice/libavdevice*
@@ -43,3 +46,4 @@ tools/qt-faststart
 tools/trasher
 tools/trasher*.d
 version.h
+*~

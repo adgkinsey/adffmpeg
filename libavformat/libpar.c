@@ -30,6 +30,8 @@
 #include "avformat.h"
 #include "internal.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/parseutils.h"
+#include "libavutil/avstring.h"
 #include "libpar.h"
 
 
@@ -40,41 +42,36 @@ typedef struct {
     int frameCached;
 } PARDecContext;
 
-typedef struct {
+struct PAREncStreamContext {
+    int index;
     char name[64];
     int camera;
     int64_t startTime;
     int utc_offset;
-} PAREncStreamContext;
+    //struct PAREncStreamContext *next;
+};
 
 typedef struct {
     ParFrameInfo frameInfo;
-    PAREncStreamContext master;
-    PAREncStreamContext stream[MAX_STREAMS];
+    struct PAREncStreamContext master;
+    struct PAREncStreamContext stream[20];
+    //struct PAREncStreamContext *firstStream;
     int picHeaderSize;
 } PAREncContext;
 
 
 void libpar_packet_destroy(struct AVPacket *packet);
-static AVStream* createStream(AVFormatContext * avf, const ParFrameInfo *frameInfo);
-static int createPacket(AVFormatContext * avf, AVPacket *packet, int siz, int fChang);
-static void endianSwapAudioData(uint8_t *data, int size);
-static void importMetadata(const AVMetadataTag *tag, PAREncStreamContext *ps);
-static void parreaderLogger(int level, const char *format, va_list args);
 
 
 const unsigned int MAX_FRAMEBUFFER_SIZE = 256 * 1024;
 
 
-static void importMetadata(const AVMetadataTag *tag, PAREncStreamContext *ps)
+static void importMetadata(const AVMetadataTag *tag, struct PAREncStreamContext *ps)
 {
-    struct tm timeval = {0};
-
     if (strcasecmp(tag->key, "title") == 0)
-        strncpy(ps->name, tag->value, sizeof(ps->name));
+        av_strlcpy(ps->name, tag->value, sizeof(ps->name));
     else if (strcasecmp(tag->key, "date") == 0)  {
-        small_strptime(tag->value, "%Y-%m-%d %H:%M", &timeval);
-        ps->startTime = mktime(&timeval);
+        av_parse_time(&ps->startTime, tag->value, 0);
         ps->startTime *= 1000;
     }
     else if (strcasecmp(tag->key, "track") == 0)
@@ -82,6 +79,30 @@ static void importMetadata(const AVMetadataTag *tag, PAREncStreamContext *ps)
     else if (strcasecmp(tag->key, "timezone") == 0)
         sscanf(tag->value, "%d", &(ps->utc_offset));
 }
+
+static void parreaderLogger(int level, const char *format, va_list args)
+{
+    int av_log_level = -1;
+    switch(level)  {
+        case (PARREADER_LOG_CRITICAL):
+            av_log_level = AV_LOG_FATAL;
+            break;
+        case(PARREADER_LOG_ERROR):
+            av_log_level = AV_LOG_ERROR;
+            break;
+        case(PARREADER_LOG_WARNING):
+            av_log_level = AV_LOG_WARNING;
+            break;
+        case(PARREADER_LOG_INFO):
+            av_log_level = AV_LOG_INFO;
+            break;
+        case(PARREADER_LOG_DEBUG):
+            av_log_level = AV_LOG_DEBUG;
+            break;
+    }
+    av_vlog(NULL, av_log_level, format, args);
+}
+
 
 static int par_write_header(AVFormatContext *avf)
 {
@@ -115,7 +136,8 @@ static int par_write_header(AVFormatContext *avf)
 static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
 {
     PAREncContext *p = avf->priv_data;
-    PAREncStreamContext *ps = &(p->stream[pkt->stream_index]);
+    //struct PAREncStreamContext *ps = p->firstStream;
+    struct PAREncStreamContext *ps = &(p->stream[pkt->stream_index]);
     AVMetadataTag *tag = NULL;
     int64_t parTime;
     AVStream *stream = avf->streams[pkt->stream_index];
@@ -126,6 +148,22 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
     uint32_t pktTypeCheck;
     int written = 0;
 
+    /*if (p->firstStream == NULL)  {
+        p->firstStream = av_mallocz(sizeof(struct PAREncStreamContext));
+        ps->index = pkt->stream_index;
+    }
+    for(ps = p->firstStream; ps != NULL; ps = ps->next)  {
+        if (ps->index == pkt->stream_index)
+            break;
+    }
+    if (ps == NULL)  {
+        for(ps = p->firstStream; ps->next != NULL; ps = ps->next)  {
+        }
+        ps->next = av_mallocz(sizeof(struct PAREncStreamContext));
+        ps = ps->next;
+        ps->index = pkt->stream_index;
+    }*/
+    
     // Metadata
     if (ps->camera < 1)  {
         // Copy over the values from the file data first
@@ -244,6 +282,23 @@ void libpar_packet_destroy(struct AVPacket *packet)
     av_destruct_packet(packet);
 }
 
+
+static void endianSwapAudioData(uint8_t *data, int size)
+{
+    const uint8_t *dataEnd = data + size;
+    uint8_t upper, lower;
+    uint16_t predictor = AV_RB16(data);
+
+    AV_WL16(data, predictor);
+    data += 4;
+
+    for (;data < dataEnd; data++)  {
+        upper = ((*data) & 0xF0) >> 4;
+        lower = ((*data) & 0x0F) << 4;
+        *data = upper | lower;
+    }
+}
+
 static AVStream* createStream(AVFormatContext * avf,
                               const ParFrameInfo *frameInfo)
 {
@@ -260,7 +315,6 @@ static AVStream* createStream(AVFormatContext * avf,
     st = av_new_stream(avf, streamId);
 
     parReader_getIndexData(frameInfo, NULL, &fc, NULL, NULL);
-    st->filename = av_strdup(avf->filename);
     st->nb_frames = fc;
     st->start_time = frameInfo->indexTime * 1000LL + frameInfo->indexMS;
 
@@ -498,22 +552,6 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChan
     return 0;
 }
 
-static void endianSwapAudioData(uint8_t *data, int size)
-{
-    const uint8_t *dataEnd = data + size;
-    uint8_t upper, lower;
-    uint16_t predictor = AV_RB16(data);
-
-    AV_WL16(data, predictor);
-    data += 4;
-
-    for (;data < dataEnd; data++)  {
-        upper = ((*data) & 0xF0) >> 4;
-        lower = ((*data) & 0x0F) << 4;
-        *data = upper | lower;
-    }
-}
-
 static int par_probe(AVProbeData *p)
 {
     unsigned long first4;
@@ -521,7 +559,7 @@ static int par_probe(AVProbeData *p)
         return 0;
 
     first4 = *((unsigned long *)p->buf);
-    first4 = le2me_32(first4);
+    first4 = av_le2ne32(first4);
     if (first4 == 0x00524150)
         return AVPROBE_SCORE_MAX;
     else
@@ -756,31 +794,8 @@ static int par_read_close(AVFormatContext * avf)
     return 0;
 }
 
-static void parreaderLogger(int level, const char *format, va_list args)
-{
-    int av_log_level = -1;
-    switch(level)  {
-        case (PARREADER_LOG_CRITICAL):
-            av_log_level = AV_LOG_FATAL;
-            break;
-        case(PARREADER_LOG_ERROR):
-            av_log_level = AV_LOG_ERROR;
-            break;
-        case(PARREADER_LOG_WARNING):
-            av_log_level = AV_LOG_WARNING;
-            break;
-        case(PARREADER_LOG_INFO):
-            av_log_level = AV_LOG_INFO;
-            break;
-        case(PARREADER_LOG_DEBUG):
-            av_log_level = AV_LOG_DEBUG;
-            break;
-    }
-    av_vlog(NULL, av_log_level, format, args);
-}
 
-
-AVOutputFormat libparreader_muxer = {
+AVOutputFormat ff_libparreader_muxer = {
     .name           = "libpar",
     .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings PAR format"),
     .mime_type      = "video/adhbinary",
@@ -794,7 +809,7 @@ AVOutputFormat libparreader_muxer = {
     .flags          = AVFMT_GLOBALHEADER,
 };
 
-AVInputFormat libparreader_demuxer = {
+AVInputFormat ff_libparreader_demuxer = {
     .name           = "libpar",
     .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings PAR format"),
     .priv_data_size = sizeof(PARDecContext),

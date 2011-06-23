@@ -68,13 +68,13 @@ static int adaudio_read_header(AVFormatContext *s, AVFormatParameters *ap)
 
 static int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
-    ByteIOContext *         ioContext = s->pb;
-    int                     retVal = AVERROR_IO;
+    AVIOContext *         ioContext = s->pb;
+    int                     retVal = AVERROR(EIO);
     int                     packetSize = 0;
     int                     sampleSize = 0;
     AVStream *              st = NULL;
     struct ADFrameData *    frameData = NULL;
-    int					    isPacketAlloced = 0;
+    int                     isPacketAlloced = 0;
 
     /* Get the next packet */
     if( (packetSize = ioContext->read_packet( ioContext->opaque, ioContext->buf_ptr, ioContext->buffer_size )) > 0 ) {
@@ -125,7 +125,7 @@ static int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 }
 
 
-AVInputFormat adaudio_demuxer = {
+AVInputFormat ff_adaudio_demuxer = {
     .name           = "adaudio",
     .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings audio format"),
     .read_probe     = adaudio_probe,

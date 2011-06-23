@@ -29,7 +29,7 @@ static int dspicProbe( AVProbeData *p );
 static int dspicReadHeader( AVFormatContext *s, AVFormatParameters *ap );
 static int dspicReadPacket( AVFormatContext *s, AVPacket *pkt );
 static int dspicReadClose( AVFormatContext *s );
-static int ReadNetworkMessageHeader( ByteIOContext *context, MessageHeader *header );
+static int ReadNetworkMessageHeader( AVIOContext *context, MessageHeader *header );
 static struct DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize );
 static int ExtractDSFrameData( uint8_t * buffer, struct DMImageData *frameData );
 
@@ -52,7 +52,7 @@ static int dspicProbe( AVProbeData *p )
     /* Get what should be the magic number field of the first header */
     memcpy( &magicNumber, p->buf, sizeof(long) );
     /* Adjust the byte ordering */
-    magicNumber = be2me_32(magicNumber);
+    magicNumber = av_be2ne32(magicNumber);
 
     if( magicNumber == DSPacketHeaderMagicNumber )
         return AVPROBE_SCORE_MAX;
@@ -67,7 +67,7 @@ static int dspicReadHeader( AVFormatContext *s, AVFormatParameters *ap )
 
 static int dspicReadPacket( AVFormatContext *s, AVPacket *pkt )
 {
-    ByteIOContext *         ioContext = s->pb;
+    AVIOContext *         ioContext = s->pb;
     int                     retVal = 0;
     MessageHeader           header;
     int                     dataSize = 0;
@@ -91,8 +91,8 @@ static int dspicReadPacket( AVFormatContext *s, AVPacket *pkt )
             if( (retVal = ad_new_packet( pkt, dataSize )) < 0 )
                 return retVal;
 
-            if( get_buffer( ioContext, pkt->data, dataSize ) != dataSize )
-                return AVERROR_IO;
+            if( avio_read( ioContext, pkt->data, dataSize ) != dataSize )
+                return AVERROR(EIO);
         }
         else if( header.messageType == TCP_SRV_IMG_DATA ) {
             frameType = DMVideo;
@@ -105,21 +105,21 @@ static int dspicReadPacket( AVFormatContext *s, AVPacket *pkt )
                 return retVal;
 
             /* Read the jfif data out of the buffer */
-            if( get_buffer( ioContext, pkt->data, dataSize ) != dataSize )
-                return AVERROR_IO;
+            if( avio_read( ioContext, pkt->data, dataSize ) != dataSize )
+                return AVERROR(EIO);
 
             /* Now extract the frame info that's in there */
             if( (videoFrameData = parseDSJFIFHeader( pkt->data, dataSize )) == NULL )
-                return AVERROR_IO;
+                return AVERROR(EIO);
 
             /* if( audioFrameData != NULL ) frameType |= DS1_PACKET_TYPE_AUDIO; */
 
             if ( (stream = ad_get_stream(s, 0, 0, 1, PIC_MODE_JPEG_422, NULL)) == NULL )
-                return AVERROR_IO;
+                return AVERROR(EIO);
         }
     }
     else
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     /* Now create a wrapper to hold this frame's data which we'll store in the packet's private member field */
     if( (frameData = av_malloc( sizeof(*frameData) )) != NULL ) {
@@ -141,7 +141,7 @@ fail_mem:
     /* Make sure everything that might have been allocated is released before we return... */
     av_free( frameData );
     av_free( videoFrameData );
-    return AVERROR_NOMEM;
+    return AVERROR(ENOMEM);
 }
 
 static struct DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize )
@@ -165,11 +165,11 @@ static struct DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize )
         i += 2;
         memcpy(&length, &data[i], 2 );
         i += 2;
-        marker = be2me_16(marker);
-        length = be2me_16(length);
+        marker = av_be2ne16(marker);
+        length = av_be2ne16(length);
 
         switch (marker) {
-            case 0xffe0 : {	// APP0
+            case 0xffe0 : {    // APP0
                 /* Have a little look at the data in this block, see if it's what we're looking for */
                 if( memcmp( &data[i], DSApp0Identifier, strlen(DSApp0Identifier) ) == 0 ) {
                     int         offset = i;
@@ -187,34 +187,34 @@ static struct DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize )
             }
             break;
 
-            case 0xffdb :	// Q table
+            case 0xffdb :    // Q table
                 i += length - 2;
                 break;
 
-            case 0xffc0 :	// SOF
+            case 0xffc0 :    // SOF
                 i += length - 2;
                 break;
 
-            case 0xffc4 :	// Huffman table
+            case 0xffc4 :    // Huffman table
                 i += length - 2;
                 break;
 
-            case 0xffda :	// SOS
+            case 0xffda :    // SOS
                 i += length - 2;
                 sos = TRUE;
                 break;
 
-            case 0xffdd :	// DRI
+            case 0xffdd :    // DRI
                 i += length - 2;
                 break;
 
-            case 0xfffe :	// Comment
+            case 0xfffe :    // Comment
                 i += length - 2;
                 break;
 
             default :
                 /* Unknown marker encountered, better just skip past it */
-                i += length - 2;	// JCB 026 skip past the unknown field
+                i += length - 2;    // JCB 026 skip past the unknown field
                 break;
         }
     }
@@ -224,7 +224,7 @@ static struct DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize )
 
 static int ExtractDSFrameData( uint8_t * buffer, struct DMImageData *frameData )
 {
-    int         retVal = AVERROR_IO;
+    int         retVal = AVERROR(EIO);
     int         bufIdx = 0;
 
     if( buffer != NULL ) {
@@ -233,11 +233,11 @@ static int ExtractDSFrameData( uint8_t * buffer, struct DMImageData *frameData )
 
         memcpy( &frameData->jpegLength, &buffer[bufIdx], sizeof(unsigned long) );
         bufIdx += sizeof(unsigned long);
-        frameData->jpegLength = be2me_32(frameData->jpegLength);
+        frameData->jpegLength = av_be2ne32(frameData->jpegLength);
 
         memcpy( &frameData->imgSeq, &buffer[bufIdx], sizeof(int64_t) );
         bufIdx += sizeof(int64_t);
-        frameData->imgSeq = be2me_64(frameData->imgSeq);
+        frameData->imgSeq = av_be2ne64(frameData->imgSeq);
 
         memcpy( &frameData->imgTime, &buffer[bufIdx], sizeof(int64_t) );
         bufIdx += sizeof(int64_t);
@@ -253,27 +253,27 @@ static int ExtractDSFrameData( uint8_t * buffer, struct DMImageData *frameData )
 
         memcpy( &frameData->QFactor, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->QFactor = be2me_16(frameData->QFactor);
+        frameData->QFactor = av_be2ne16(frameData->QFactor);
 
         memcpy( &frameData->height, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->height = be2me_16(frameData->height);
+        frameData->height = av_be2ne16(frameData->height);
 
         memcpy( &frameData->width, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->width = be2me_16(frameData->width);
+        frameData->width = av_be2ne16(frameData->width);
 
         memcpy( &frameData->resolution, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->resolution = be2me_16(frameData->resolution);
+        frameData->resolution = av_be2ne16(frameData->resolution);
 
         memcpy( &frameData->interlace, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->interlace = be2me_16(frameData->interlace);
+        frameData->interlace = av_be2ne16(frameData->interlace);
 
         memcpy( &frameData->subHeaderMask, &buffer[bufIdx], sizeof(unsigned short) );
         bufIdx += sizeof(unsigned short);
-        frameData->subHeaderMask = be2me_16(frameData->subHeaderMask);
+        frameData->subHeaderMask = av_be2ne16(frameData->subHeaderMask);
 
         memcpy( frameData->camTitle, &buffer[bufIdx], sizeof(char) * CAM_TITLE_LENGTH );
         bufIdx += sizeof(char) * CAM_TITLE_LENGTH;
@@ -287,16 +287,16 @@ static int ExtractDSFrameData( uint8_t * buffer, struct DMImageData *frameData )
     return retVal;
 }
 
-static int ReadNetworkMessageHeader( ByteIOContext *context, MessageHeader *header )
+static int ReadNetworkMessageHeader( AVIOContext *context, MessageHeader *header )
 {
     // Read the header in a piece at a time...
-    header->magicNumber = get_be32(context);
-    header->length = get_be32(context);
-    header->channelID = get_be32(context);
-    header->sequence = get_be32(context);
-    header->messageVersion = get_be32(context);
-    header->checksum = get_be32(context);
-    header->messageType = get_be32(context);
+    header->magicNumber    = avio_rb32(context);
+    header->length         = avio_rb32(context);
+    header->channelID      = avio_rb32(context);
+    header->sequence       = avio_rb32(context);
+    header->messageVersion = avio_rb32(context);
+    header->checksum       = avio_rb32(context);
+    header->messageType    = avio_rb32(context);
     return 0;
 }
 
@@ -306,7 +306,7 @@ static int dspicReadClose( AVFormatContext *s )
 }
 
 
-AVInputFormat dspic_demuxer = {
+AVInputFormat ff_dspic_demuxer = {
     .name           = "dspic",
     .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings Digital-Sprite format"),
     .read_probe     = dspicProbe,

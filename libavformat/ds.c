@@ -91,9 +91,9 @@ typedef enum _netRejectReason {
 } NetRejectReason;
 
 typedef struct _srvConnectRejectMsg {
-    long					reason;				/* enum NET_REJECT_REASON */
-    long					timestamp;
-    char					macAddr[MAC_ADDR_LENGTH];
+    long                    reason;                /* enum NET_REJECT_REASON */
+    long                    timestamp;
+    char                    macAddr[MAC_ADDR_LENGTH];
     unsigned long           appVersion;
     unsigned long           minViewerVersion;
 } SrvConnectRejectMsg;
@@ -116,32 +116,32 @@ typedef enum _realmType {
 } RealmType;
 
 typedef struct _srvConnectReplyMsg {
-    long					numCameras;
-    long					viewableCamMask;
-    long					telemetryCamMask;
-    long					failedCamMask;
-    long					maxMsgInterval;
-    int64_t			        timestamp;                          /* TODO: Verify - this was a 'hyper long' before. Assuming 64 bit value. Is this correct? Is solution portable? */
-    char					cameraTitles[16][28];
+    long                    numCameras;
+    long                    viewableCamMask;
+    long                    telemetryCamMask;
+    long                    failedCamMask;
+    long                    maxMsgInterval;
+    int64_t                    timestamp;                          /* TODO: Verify - this was a 'hyper long' before. Assuming 64 bit value. Is this correct? Is solution portable? */
+    char                    cameraTitles[16][28];
     long                    unitType;
     unsigned long           applicationVersion;
     long                    videoStandard;
     char                    macAddr[MAC_ADDR_LENGTH];
     char                    unitName[UNIT_NAME_LENGTH];
-    long					numFixedRealms;	                    /* Number of FIXED system realms */
-    unsigned long		    realmFlags[NUM_FIXED_REALMS];	    /* Indicates if user is in realm. */
+    long                    numFixedRealms;                        /* Number of FIXED system realms */
+    unsigned long            realmFlags[NUM_FIXED_REALMS];        /* Indicates if user is in realm. */
     unsigned long           minimumViewerVersion;
 } SrvConnectReplyMsg;
 #define VER_TCP_SRV_CONNECT_REPLY           0x00000001
 
 typedef struct _srvFeatureConnectReplyMsg {
-    long					numCameras;
-    long					viewableCamMask;
-    long					telemetryCamMask;
-    long					failedCamMask;
-    long					maxMsgInterval;
-    int64_t			        timestamp;                          /* TODO: Verify - this was a 'hyper long' before. Assuming 64 bit value. Is this correct? Is solution portable? */
-    char					cameraTitles[16][28];
+    long                    numCameras;
+    long                    viewableCamMask;
+    long                    telemetryCamMask;
+    long                    failedCamMask;
+    long                    maxMsgInterval;
+    int64_t                    timestamp;                          /* TODO: Verify - this was a 'hyper long' before. Assuming 64 bit value. Is this correct? Is solution portable? */
+    char                    cameraTitles[16][28];
     long                    unitType;
     unsigned long           applicationVersion;
     long                    videoStandard;
@@ -149,18 +149,18 @@ typedef struct _srvFeatureConnectReplyMsg {
     char                    unitName[UNIT_NAME_LENGTH];
 
     unsigned long           minimumViewerVersion;
-    unsigned long 		    unitFeature01;
-    unsigned long 		    unitFeature02;
-    unsigned long 		    unitFeature03;
-    unsigned long 		    unitFeature04;
-    long					numFixedRealms;	               /* Number of FIXED system realms */
-    unsigned long		    realmFlags[NUM_FIXED_REALMS];	   /* Indicates if user is in realm. */
+    unsigned long             unitFeature01;
+    unsigned long             unitFeature02;
+    unsigned long             unitFeature03;
+    unsigned long             unitFeature04;
+    long                    numFixedRealms;                   /* Number of FIXED system realms */
+    unsigned long            realmFlags[NUM_FIXED_REALMS];       /* Indicates if user is in realm. */
 } SrvFeatureConnectReplyMsg;
 #define VER_TCP_SRV_FEATURE_CONNECT_REPLY   0x00000002
 
 typedef struct _cliImgLiveRequestMsg {
-    long					cameraMask;
-    long					resolution;
+    long                    cameraMask;
+    long                    resolution;
 } CliImgLiveRequestMsg;
 #define VER_TCP_CLI_IMG_LIVE_REQUEST        0x00000001
 #define SIZEOF_TCP_CLI_IMG_LIVE_REQUEST_IO  8            /* Size in bytes of the MessageHeader structure. Can't use sizeof to read/write one of these to network as structure packing may differ based on platform */
@@ -175,11 +175,11 @@ typedef enum _vcrMode {
 } vcrMode;
 
 typedef struct _cliImgPlayRequestMsg {
-    long					cameraMask;
-    long					mode;			    /*	(enum VCR_MODE) */
-    long					pace;
-    int64_t				    fromTime;		    /*		(time_u)	*/
-    int64_t				    toTime;		        /*		(time_u)	*/
+    long                    cameraMask;
+    long                    mode;                /*    (enum VCR_MODE) */
+    long                    pace;
+    int64_t                    fromTime;            /*        (time_u)    */
+    int64_t                    toTime;                /*        (time_u)    */
 } CliImgPlayRequestMsg;
 #define VER_TCP_CLI_IMG_PLAY_REQUEST        0x00000001
 #define SIZEOF_TCP_CLI_IMG_PLAY_REQUEST_IO  28            /* Size in bytes of the MessageHeader structure. Can't use sizeof to read/write one of these to network as structure packing may differ based on platform */
@@ -191,7 +191,7 @@ static void                 FreeNetworkMessage( NetworkMessage **message );
 
 static int DSOpen( URLContext *h, const char *uri, int flags );
 static int DSRead( URLContext *h, uint8_t *buf, int size );
-static int DSWrite( URLContext *h, uint8_t *buf, int size );
+static int DSWrite( URLContext *h, const uint8_t *buf, int size );
 static int DSClose( URLContext *h );
 static int DSConnect( URLContext *h, const char *path, const char *hoststr, const char *auth );
 static inline int MessageSize( const NetworkMessage *message );
@@ -217,8 +217,8 @@ static void NToHMessageHeader( MessageHeader *header );
 #define HTON64(x)
 #define HTON32(x)
 #else
-#define HTON64(x)               (bswap_64(x))
-#define HTON32(x)               (bswap_32(x))
+#define HTON64(x)               (av_bswap64(x))
+#define HTON32(x)               (av_bswap32(x))
 #endif
 
 
@@ -353,7 +353,7 @@ static int DSOpen( URLContext *h, const char *uri, int flags )
     h->priv_data = s;
 
     /* Crack the URL */
-    ff_url_split( NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port, path1, sizeof(path1), uri );
+    av_url_split( NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port, path1, sizeof(path1), uri );
 
     if (port > 0) {
         snprintf( hoststr, sizeof(hoststr), "%s:%d", hostname, port );
@@ -420,7 +420,7 @@ static int DSRead( URLContext *h, uint8_t *buf, int size )
     if( context != NULL )
         return url_read( context->TCPContext, buf, size );
 
-    return AVERROR_IO;
+    return AVERROR(EIO);
 }
 
 /****************************************************************************************************************
@@ -433,7 +433,7 @@ static int DSRead( URLContext *h, uint8_t *buf, int size )
  * Return:
  *   0 on success, non 0 on failure
  ****************************************************************************************************************/
-static int DSWrite( URLContext *h, uint8_t *buf, int size )
+static int DSWrite( URLContext *h, const uint8_t *buf, int size )
 {
     /* All we need to do in here is call the generic write function on our underlying TCP connection */
     DSContext *     context = (DSContext *)h->priv_data;
@@ -441,7 +441,7 @@ static int DSWrite( URLContext *h, uint8_t *buf, int size )
     if( context != NULL )
         return url_write( context->TCPContext, buf, size );
 
-    return AVERROR_IO;
+    return AVERROR(EIO);
 }
 
 /****************************************************************************************************************
@@ -501,7 +501,7 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
     char *              encCredentials = NULL;
     ClientConnectMsg *  connectMsg = NULL;
     int                 channelID = -2;
-    int                 streamType, res, cam;
+    int                 streamType = 0, res = 0, cam = 0;
     time_t              from = 0, to = 0;
     int                 rate = 0;
     vcrMode             playMode = VM_PLAY;
@@ -523,7 +523,7 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
             if( encCredentials != NULL )
                 av_free( encCredentials );
 
-            return AVERROR_NOMEM;
+            return AVERROR(ENOMEM);
         }
 
         /* Set up the connection request */
@@ -558,7 +558,7 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
                             /* Encrypt the username / password */
                             if( strlen( user ) > 0 && strlen( password ) > 0 ) {
                                 if( (encCredentials = EncryptPasswordString( user, password, msg->timestamp, msg->macAddr, msg->appVersion )) == NULL )
-                                    retVal = AVERROR_NOMEM;
+                                    retVal = AVERROR(ENOMEM);
                             }
                             else {
                                 /* If we haven't got a user and password string then we have to notify the client */
@@ -569,7 +569,7 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
                             retVal = ADFFMPEG_ERROR_INVALID_CREDENTIALS;
                         }
                         else { /* Fail */
-                            retVal = AVERROR_IO;
+                            retVal = AVERROR(EIO);
                             isConnecting = 0;
                         }
                     }
@@ -600,7 +600,7 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
                             }
                         }
                         else
-                            retVal = AVERROR_IO;
+                            retVal = AVERROR(EIO);
 
                         if( retVal == 0 ) {
                             /* Fire the request message off */
@@ -613,7 +613,7 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
 
                     /* Anything other than a connect reply is failure */
                     default: {
-                        retVal = AVERROR_UNKNOWN;
+                        retVal = -1;
                         isConnecting = 0;
                     }
                     break;
@@ -687,7 +687,7 @@ static int GetUserAndPassword( const char * auth, char *user, char *password  )
                 authStr = NULL;
             }
             else
-                retVal = AVERROR_NOMEM;
+                retVal = AVERROR(ENOMEM);
         }
     }
 
@@ -777,7 +777,7 @@ static int CrackURI( const char *path, int *streamType, int *res, int *cam, time
             pathStr = NULL;
         }
         else
-            retVal = AVERROR_NOMEM;
+            retVal = AVERROR(ENOMEM);
     }
 
     return retVal;
@@ -801,7 +801,7 @@ static int ReceiveNetworkMessage( URLContext *h, NetworkMessage **message )
     *message = av_mallocz( sizeof(NetworkMessage) );
 
     if( *message == NULL )
-        return AVERROR_NOMEM;
+        return AVERROR(ENOMEM);
 
     if( (retVal = ReadNetworkMessageHeader( h, &(*message)->header )) != 0 ) {
         FreeNetworkMessage( message );
@@ -839,25 +839,25 @@ static int ReadNetworkMessageHeader( URLContext *h, MessageHeader *header )
 {
     /* Read the header in a piece at a time... */
     if( DSReadBuffer( h, (uint8_t *)&header->magicNumber, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&header->length, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&header->channelID, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&header->sequence, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&header->messageVersion, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&header->checksum, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&header->messageType, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     /* Now adjust the endianess */
     NToHMessageHeader( header );
@@ -868,13 +868,13 @@ static int ReadNetworkMessageHeader( URLContext *h, MessageHeader *header )
 static void NToHMessageHeader( MessageHeader *header )
 {
     if( header ) {
-        header->magicNumber = be2me_32(header->magicNumber);
-        header->length = be2me_32(header->length);
-        header->channelID = be2me_32(header->channelID);
-        header->sequence = be2me_32(header->sequence);
-        header->messageVersion = be2me_32(header->messageVersion);
-        header->checksum = be2me_32(header->checksum);
-        header->messageType = be2me_32(header->messageType);
+        header->magicNumber = av_be2ne32(header->magicNumber);
+        header->length = av_be2ne32(header->length);
+        header->channelID = av_be2ne32(header->channelID);
+        header->sequence = av_be2ne32(header->sequence);
+        header->messageVersion = av_be2ne32(header->messageVersion);
+        header->checksum = av_be2ne32(header->checksum);
+        header->messageType = av_be2ne32(header->messageType);
     }
 }
 
@@ -902,7 +902,7 @@ static int ReadNetworkMessageBody( URLContext * h, NetworkMessage *message )
 
             default:
                 /* We shouldn't get into this state so we'd better return an error here... */
-                retVal = AVERROR_IO;
+                retVal = AVERROR(EIO);
                 break;
         }
 
@@ -917,31 +917,31 @@ static int ReadConnectRejectMessage( URLContext * h, NetworkMessage *message )
 
     /* Allocate the message body */
     if( (message->body = av_malloc( sizeof(SrvConnectRejectMsg) )) == NULL )
-        return AVERROR_NOMEM;
+        return AVERROR(ENOMEM);
 
     /* Now read from the stream into the message */
     bodyPtr = (SrvConnectRejectMsg *)message->body;
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->reason, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->timestamp, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->macAddr, MAC_ADDR_LENGTH ) != MAC_ADDR_LENGTH )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->appVersion, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->minViewerVersion, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     /* Correct the byte ordering */
-    bodyPtr->reason = be2me_32(bodyPtr->reason);
-    bodyPtr->timestamp = be2me_32(bodyPtr->timestamp);
-    bodyPtr->appVersion = be2me_32(bodyPtr->appVersion);
-    bodyPtr->minViewerVersion = be2me_32(bodyPtr->minViewerVersion);
+    bodyPtr->reason = av_be2ne32(bodyPtr->reason);
+    bodyPtr->timestamp = av_be2ne32(bodyPtr->timestamp);
+    bodyPtr->appVersion = av_be2ne32(bodyPtr->appVersion);
+    bodyPtr->minViewerVersion = av_be2ne32(bodyPtr->minViewerVersion);
 
     return 0;
 }
@@ -952,69 +952,69 @@ static int ReadConnectReplyMessage( URLContext * h, NetworkMessage *message )
 
     /* Allocate memory in which to store the message body */
     if( (message->body = av_malloc( sizeof(SrvConnectReplyMsg) )) == NULL )
-        return AVERROR_NOMEM;
+        return AVERROR(ENOMEM);
 
     bodyPtr = (SrvConnectReplyMsg *)message->body;
 
     /* Now read the message body, a field at a time */
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->numCameras, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->viewableCamMask, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->telemetryCamMask, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->failedCamMask, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->maxMsgInterval, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->timestamp, sizeof(int64_t) ) != sizeof(int64_t) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->cameraTitles, (16 * 28) ) != (16 * 28) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->unitType, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->applicationVersion, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->videoStandard, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->macAddr, MAC_ADDR_LENGTH ) != MAC_ADDR_LENGTH )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->unitName, UNIT_NAME_LENGTH ) != UNIT_NAME_LENGTH )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->numFixedRealms, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
-    bodyPtr->numFixedRealms = be2me_32(bodyPtr->numFixedRealms);
+    bodyPtr->numFixedRealms = av_be2ne32(bodyPtr->numFixedRealms);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->realmFlags, (sizeof(unsigned long) * bodyPtr->numFixedRealms) ) != (sizeof(unsigned long) * bodyPtr->numFixedRealms) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->minimumViewerVersion, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     /* Correct the byte ordering */
-    bodyPtr->numCameras = be2me_32(bodyPtr->numCameras);
-    bodyPtr->viewableCamMask = be2me_32(bodyPtr->viewableCamMask);
-    bodyPtr->telemetryCamMask = be2me_32(bodyPtr->telemetryCamMask);
-    bodyPtr->failedCamMask = be2me_32(bodyPtr->failedCamMask);
-    bodyPtr->maxMsgInterval = be2me_32(bodyPtr->maxMsgInterval);
-    bodyPtr->unitType = be2me_32(bodyPtr->unitType);
-    bodyPtr->applicationVersion = be2me_32(bodyPtr->applicationVersion);
-    bodyPtr->videoStandard = be2me_32(bodyPtr->videoStandard);
-    bodyPtr->numFixedRealms = be2me_32(bodyPtr->numFixedRealms);
-    bodyPtr->minimumViewerVersion = be2me_32(bodyPtr->minimumViewerVersion);
+    bodyPtr->numCameras = av_be2ne32(bodyPtr->numCameras);
+    bodyPtr->viewableCamMask = av_be2ne32(bodyPtr->viewableCamMask);
+    bodyPtr->telemetryCamMask = av_be2ne32(bodyPtr->telemetryCamMask);
+    bodyPtr->failedCamMask = av_be2ne32(bodyPtr->failedCamMask);
+    bodyPtr->maxMsgInterval = av_be2ne32(bodyPtr->maxMsgInterval);
+    bodyPtr->unitType = av_be2ne32(bodyPtr->unitType);
+    bodyPtr->applicationVersion = av_be2ne32(bodyPtr->applicationVersion);
+    bodyPtr->videoStandard = av_be2ne32(bodyPtr->videoStandard);
+    bodyPtr->numFixedRealms = av_be2ne32(bodyPtr->numFixedRealms);
+    bodyPtr->minimumViewerVersion = av_be2ne32(bodyPtr->minimumViewerVersion);
 
     return 0;
 }
@@ -1024,83 +1024,83 @@ static int ReadFeatureConnectReplyMessage( URLContext * h, NetworkMessage *messa
     SrvFeatureConnectReplyMsg *        bodyPtr = NULL;
 
     if( (message->body = av_malloc( sizeof(SrvFeatureConnectReplyMsg) )) == NULL )
-        return AVERROR_NOMEM;
+        return AVERROR(ENOMEM);
 
     bodyPtr = (SrvFeatureConnectReplyMsg *)message->body;
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->numCameras, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->viewableCamMask, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->telemetryCamMask, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->failedCamMask, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->maxMsgInterval, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->timestamp, sizeof(int64_t) ) != sizeof(int64_t) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->cameraTitles, (16 * 28) ) != (16 * 28) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->unitType, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->applicationVersion, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->videoStandard, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->macAddr, MAC_ADDR_LENGTH ) != MAC_ADDR_LENGTH )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->unitName, UNIT_NAME_LENGTH ) != UNIT_NAME_LENGTH )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->minimumViewerVersion, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->unitFeature01, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->unitFeature02, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->unitFeature03, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->unitFeature04, sizeof(unsigned long) ) != sizeof(unsigned long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     if( DSReadBuffer( h, (uint8_t *)&bodyPtr->numFixedRealms, sizeof(long) ) != sizeof(long) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
-    bodyPtr->numFixedRealms = be2me_32(bodyPtr->numFixedRealms);
+    bodyPtr->numFixedRealms = av_be2ne32(bodyPtr->numFixedRealms);
 
     if( DSReadBuffer( h, (uint8_t *)bodyPtr->realmFlags, (sizeof(unsigned long) * bodyPtr->numFixedRealms) ) != (sizeof(unsigned long) * bodyPtr->numFixedRealms) )
-        return AVERROR_IO;
+        return AVERROR(EIO);
 
     /* Correct the byte ordering */
-    bodyPtr->numCameras = be2me_32(bodyPtr->numCameras);
-    bodyPtr->viewableCamMask = be2me_32(bodyPtr->viewableCamMask);
-    bodyPtr->telemetryCamMask = be2me_32(bodyPtr->telemetryCamMask);
-    bodyPtr->failedCamMask = be2me_32(bodyPtr->failedCamMask);
-    bodyPtr->maxMsgInterval = be2me_32(bodyPtr->maxMsgInterval);
-    bodyPtr->unitType = be2me_32(bodyPtr->unitType);
-    bodyPtr->applicationVersion = be2me_32(bodyPtr->applicationVersion);
-    bodyPtr->videoStandard = be2me_32(bodyPtr->videoStandard);
-    bodyPtr->minimumViewerVersion = be2me_32(bodyPtr->minimumViewerVersion);
-    bodyPtr->unitFeature01 = be2me_32(bodyPtr->unitFeature01);
-    bodyPtr->unitFeature02 = be2me_32(bodyPtr->unitFeature02);
-    bodyPtr->unitFeature03 = be2me_32(bodyPtr->unitFeature03);
-    bodyPtr->unitFeature04 = be2me_32(bodyPtr->unitFeature04);
+    bodyPtr->numCameras = av_be2ne32(bodyPtr->numCameras);
+    bodyPtr->viewableCamMask = av_be2ne32(bodyPtr->viewableCamMask);
+    bodyPtr->telemetryCamMask = av_be2ne32(bodyPtr->telemetryCamMask);
+    bodyPtr->failedCamMask = av_be2ne32(bodyPtr->failedCamMask);
+    bodyPtr->maxMsgInterval = av_be2ne32(bodyPtr->maxMsgInterval);
+    bodyPtr->unitType = av_be2ne32(bodyPtr->unitType);
+    bodyPtr->applicationVersion = av_be2ne32(bodyPtr->applicationVersion);
+    bodyPtr->videoStandard = av_be2ne32(bodyPtr->videoStandard);
+    bodyPtr->minimumViewerVersion = av_be2ne32(bodyPtr->minimumViewerVersion);
+    bodyPtr->unitFeature01 = av_be2ne32(bodyPtr->unitFeature01);
+    bodyPtr->unitFeature02 = av_be2ne32(bodyPtr->unitFeature02);
+    bodyPtr->unitFeature03 = av_be2ne32(bodyPtr->unitFeature03);
+    bodyPtr->unitFeature04 = av_be2ne32(bodyPtr->unitFeature04);
 
     return 0;
 }
@@ -1112,31 +1112,31 @@ static void HToNMessageHeader( MessageHeader *header, unsigned char *buf )
 
     if( header != NULL && buf != NULL ) {
         /* Set whatever header values we can in here */
-        tempHeader.magicNumber = be2me_32(header->magicNumber);
+        tempHeader.magicNumber = av_be2ne32(header->magicNumber);
         memcpy( &buf[bufIdx], &tempHeader.magicNumber, sizeof(unsigned long) );
         bufIdx += sizeof(unsigned long);
 
-        tempHeader.length = be2me_32(header->length);
+        tempHeader.length = av_be2ne32(header->length);
         memcpy( &buf[bufIdx], &tempHeader.length, sizeof(unsigned long) );
         bufIdx += sizeof(unsigned long);
 
-        tempHeader.channelID = be2me_32(header->channelID);
+        tempHeader.channelID = av_be2ne32(header->channelID);
         memcpy( &buf[bufIdx], &tempHeader.channelID, sizeof(long) );
         bufIdx += sizeof(long);
 
-        tempHeader.sequence = be2me_32(header->sequence); /* Currently unsupported at server */
+        tempHeader.sequence = av_be2ne32(header->sequence); /* Currently unsupported at server */
         memcpy( &buf[bufIdx], &tempHeader.sequence, sizeof(long) );
         bufIdx += sizeof(long);
 
-        tempHeader.messageVersion = be2me_32(header->messageVersion);
+        tempHeader.messageVersion = av_be2ne32(header->messageVersion);
         memcpy( &buf[bufIdx], &tempHeader.messageVersion, sizeof(unsigned long) );
         bufIdx += sizeof(unsigned long);
 
-        tempHeader.checksum = be2me_32(header->checksum); /* As suggested in protocol documentation */
+        tempHeader.checksum = av_be2ne32(header->checksum); /* As suggested in protocol documentation */
         memcpy( &buf[bufIdx], &tempHeader.checksum, sizeof(long) );
         bufIdx += sizeof(long);
 
-        tempHeader.messageType = be2me_32(header->messageType);
+        tempHeader.messageType = av_be2ne32(header->messageType);
         memcpy( &buf[bufIdx], &tempHeader.messageType, sizeof(long) );
         bufIdx += sizeof(long);
     }
@@ -1251,11 +1251,10 @@ static int64_t TimeTolong64( time_t time )
 }
 
 
-URLProtocol dm_protocol = {
-    "dm",  /* protocol string (i.e. dm://) */
-    DSOpen,
-    DSRead,
-    DSWrite,
-    NULL, /* seek */
-    DSClose,
+URLProtocol ff_dm_protocol = {
+    .name                = "dm",
+    .url_open            = DSOpen,
+    .url_read            = DSRead,
+    .url_write           = DSWrite,
+    .url_close           = DSClose,
 };
