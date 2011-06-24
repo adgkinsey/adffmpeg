@@ -114,7 +114,7 @@ static int dspicReadPacket( AVFormatContext *s, AVPacket *pkt )
 
             /* if( audioFrameData != NULL ) frameType |= DS1_PACKET_TYPE_AUDIO; */
 
-            if ( (stream = ad_get_stream(s, 0, 0, 1, PIC_MODE_JPEG_422, NULL)) == NULL )
+            if ( (stream = ad_get_vstream(s, 0, 0, 1, PIC_MODE_JPEG_422, NULL)) == NULL )
                 return AVERROR(EIO);
         }
     }

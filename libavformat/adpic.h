@@ -39,17 +39,18 @@
 #endif
 
 /// These are the data types that are supported by the DS2 video servers
-enum data_type { DATA_JPEG, DATA_JFIF,
-                 DATA_MPEG4I, DATA_MPEG4P,
-                 DATA_AUDIO_ADPCM, DATA_AUDIO_RAW,
-                 DATA_MINIMAL_MPEG4, DATA_MINIMAL_AUDIO_ADPCM,
-                 DATA_LAYOUT, DATA_INFO,
-                 DATA_H264I, DATA_H264P,
-                 DATA_XML_INFO,
-                 DATA_BMP, 
-                 DATA_PBM, 
-                 MAX_DATA_TYPE
-               };
+enum ff_ad_data_type {  AD_DATATYPE_JPEG, AD_DATATYPE_JFIF,
+                        AD_DATATYPE_MPEG4I, AD_DATATYPE_MPEG4P,
+                        AD_DATATYPE_AUDIO_ADPCM, AD_DATATYPE_AUDIO_RAW,
+                        AD_DATATYPE_MINIMAL_MPEG4, 
+                        AD_DATATYPE_MINIMAL_AUDIO_ADPCM,
+                        AD_DATATYPE_LAYOUT, AD_DATATYPE_INFO, 
+                        AD_DATATYPE_H264I, AD_DATATYPE_H264P, 
+                        AD_DATATYPE_XML_INFO, 
+                        AD_DATATYPE_BMP, 
+                        AD_DATATYPE_PBM, 
+                        AD_DATATYPE_MAX
+                      };
 
 
 int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset);
@@ -67,8 +68,8 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
                    enum AVMediaType mediaType, enum CodecID codecId, 
                    void *data, char *text_data, 
                    int64_t *videoFramePTS);
-AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h,
-                         uint8_t cam, int format, const char *title);
+AVStream * ad_get_vstream(AVFormatContext *s, uint16_t w, uint16_t h,
+                          uint8_t cam, int format, const char *title);
 AVStream * ad_get_audio_stream(AVFormatContext *s, struct NetVuAudioData* audioHeader);
 void audiodata_network2host(uint8_t *data, int size);
 int ad_adFormatToCodecId(AVFormatContext *s, int32_t adFormat);

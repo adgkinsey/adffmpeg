@@ -113,6 +113,21 @@ enum ADFrameType {
     RTPAudio
 };
 
+#define VSD_M0      0
+#define VSD_M1      1
+#define VSD_M2      2
+#define VSD_M3      3
+#define VSD_M4      4
+#define VSD_M5      5
+#define VSD_M6      6
+#define VSD_FM0     7
+#define VSD_F       8
+#define VSD_EM0     9
+#define VSD_COUNT  10
+
+#define ACTMASKLEN  16
+#define VSDARRAYLEN 16
+
 /** This is the data structure that the ffmpeg parser fills in as part of the
  * parsing routines. It will be shared between adpic and dspic so that our
  * clients can be compatible with either stream more easily
@@ -129,20 +144,10 @@ struct ADFrameData {
     /// Data parsed out of text (if exists)
     uint32_t            frameNum;
     /// Data parsed out of text (if exists)
-    uint16_t            activityMask[16];
+    uint16_t            activityMask[ACTMASKLEN];
     /// Data parsed out of text (if exists)
-    int                 vsd[9][16];
+    int                 vsd[VSD_COUNT][VSDARRAYLEN];
 };
-
-#define VSD_M0  0
-#define VSD_M1  1
-#define VSD_M2  2
-#define VSD_M3  3
-#define VSD_M4  4
-#define VSD_M5  5
-#define VSD_M6  6
-#define VSD_FM0 7
-#define VSD_F   8
 
 #define RTP_PAYLOAD_TYPE_8000HZ_ADPCM                       5
 #define RTP_PAYLOAD_TYPE_11025HZ_ADPCM                      16

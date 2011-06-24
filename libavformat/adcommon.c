@@ -29,21 +29,11 @@
 #include "netvu.h"
 
 
-#define AUDIO_STREAM_ID             1
-#define DATA_STREAM_ID              2
-
-
-AVStream * netvu_get_stream(AVFormatContext *s, struct NetVuImageData *pic);
-AVStream * ad_get_data_stream(AVFormatContext *s);
-void ad_release_packet(AVPacket *pkt);
-static void ad_parseText(struct ADFrameData *frameData);
-
-
 int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
 {
-    AVIOContext*        pb = s->pb;
-    URLContext*            urlContext = pb->opaque;
-    NetvuContext*        nv = NULL;
+    AVIOContext*    pb          = s->pb;
+    URLContext*     urlContext  = pb->opaque;
+    NetvuContext*   nv          = NULL;
 
     if (urlContext && urlContext->is_streamed)  {
         if ( av_stristart(urlContext->filename, "netvu://", NULL) == 1)
@@ -72,45 +62,45 @@ int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
 void ad_network2host(struct NetVuImageData *pic, uint8_t *data)
 {
     pic->version                = AV_RB32(data + 0);
-    pic->mode                    = AV_RB32(data + 4);
+    pic->mode                   = AV_RB32(data + 4);
     pic->cam                    = AV_RB32(data + 8);
-    pic->vid_format                = AV_RB32(data + 12);
-    pic->start_offset            = AV_RB32(data + 16);
-    pic->size                    = AV_RB32(data + 20);
-    pic->max_size                = AV_RB32(data + 24);
+    pic->vid_format             = AV_RB32(data + 12);
+    pic->start_offset           = AV_RB32(data + 16);
+    pic->size                   = AV_RB32(data + 20);
+    pic->max_size               = AV_RB32(data + 24);
     pic->target_size            = AV_RB32(data + 28);
-    pic->factor                    = AV_RB32(data + 32);
-    pic->alm_bitmask_hi            = AV_RB32(data + 36);
-    pic->status                    = AV_RB32(data + 40);
-    pic->session_time            = AV_RB32(data + 44);
-    pic->milliseconds            = AV_RB32(data + 48);
+    pic->factor                 = AV_RB32(data + 32);
+    pic->alm_bitmask_hi         = AV_RB32(data + 36);
+    pic->status                 = AV_RB32(data + 40);
+    pic->session_time           = AV_RB32(data + 44);
+    pic->milliseconds           = AV_RB32(data + 48);
     if ((uint8_t *)pic != data)  {
         memcpy(pic->res,    data + 52, 4);
         memcpy(pic->title,  data + 56, 31);
         memcpy(pic->alarm,  data + 87, 31);
     }
-    pic->format.src_pixels        = AV_RB16(data + 118);
-    pic->format.src_lines        = AV_RB16(data + 120);
-    pic->format.target_pixels    = AV_RB16(data + 122);
+    pic->format.src_pixels      = AV_RB16(data + 118);
+    pic->format.src_lines       = AV_RB16(data + 120);
+    pic->format.target_pixels   = AV_RB16(data + 122);
     pic->format.target_lines    = AV_RB16(data + 124);
     pic->format.pixel_offset    = AV_RB16(data + 126);
-    pic->format.line_offset        = AV_RB16(data + 128);
+    pic->format.line_offset     = AV_RB16(data + 128);
     if ((uint8_t *)pic != data)
         memcpy(pic->locale, data + 130, 30);
-    pic->utc_offset                = AV_RB32(data + 160);
+    pic->utc_offset             = AV_RB32(data + 160);
     pic->alm_bitmask            = AV_RB32(data + 164);
 }
 
-AVStream * netvu_get_stream(AVFormatContext *s, struct NetVuImageData *p)
+static AVStream * netvu_get_stream(AVFormatContext *s, struct NetVuImageData *p)
 {
     time_t dateSec;
     char dateStr[18];
-    AVStream *stream = ad_get_stream(s,
-                                     p->format.target_pixels,
-                                     p->format.target_lines,
-                                     p->cam,
-                                     p->vid_format,
-                                     p->title);
+    AVStream *stream = ad_get_vstream(s,
+                                      p->format.target_pixels,
+                                      p->format.target_lines,
+                                      p->cam,
+                                      p->vid_format,
+                                      p->title);
     stream->start_time = p->session_time * 1000LL + p->milliseconds;
     dateSec = p->session_time;
     strftime(dateStr, sizeof(dateStr), "%Y-%m-%d %H:%MZ", gmtime(&dateSec));
@@ -150,7 +140,7 @@ int ad_adFormatToCodecId(AVFormatContext *s, int32_t adFormat)
     return codec_id;
 }
 
-AVStream * ad_get_stream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t cam, int32_t format, const char *title)
+AVStream * ad_get_vstream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t cam, int32_t format, const char *title)
 {
     uint8_t codec_type = 0;
     int codec_id, id;
@@ -260,17 +250,13 @@ static AVStream * ad_get_overlay_stream(AVFormatContext *s, const char *title)
 
 AVStream * ad_get_audio_stream(AVFormatContext *s, struct NetVuAudioData* audioHeader)
 {
-    int id;
     int i, found;
     AVStream *st;
 
     found = FALSE;
-
-    id = AUDIO_STREAM_ID;
-
     for( i = 0; i < s->nb_streams; i++ ) {
         st = s->streams[i];
-        if( st->id == id ) {
+        if( st->id == audioHeader->channel ) {
             found = TRUE;
             break;
         }
@@ -278,7 +264,7 @@ AVStream * ad_get_audio_stream(AVFormatContext *s, struct NetVuAudioData* audioH
 
     // Did we find our audio stream? If not, create a new one
     if( !found ) {
-        st = av_new_stream( s, id );
+        st = av_new_stream(s, audioHeader->channel);
         if (st) {
             st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
             st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
@@ -339,21 +325,20 @@ AVStream * ad_get_audio_stream(AVFormatContext *s, struct NetVuAudioData* audioH
  * \param s Pointer to AVFormatContext
  * \return Pointer to the data stream on success, NULL on failure
  */
-AVStream * ad_get_data_stream( AVFormatContext *s )
+static AVStream * ad_get_data_stream(AVFormatContext *s, enum CodecID codecId)
 {
-    int id = DATA_STREAM_ID;
     int i, found = FALSE;
     AVStream *st = NULL;
 
-    for( i = 0; i < s->nb_streams && !found; i++ ) {
+    for (i = 0; i < s->nb_streams && !found; i++ ) {
         st = s->streams[i];
-        if( st->id == id )
+        if (st->id == codecId)
             found = TRUE;
     }
 
     // Did we find our data stream? If not, create a new one
     if( !found ) {
-        st = av_new_stream( s, id );
+        st = av_new_stream(s, codecId);
         if (st) {
             st->codec->codec_type = AVMEDIA_TYPE_DATA;
             st->codec->codec_id = CODEC_ID_TEXT;
@@ -369,19 +354,29 @@ AVStream * ad_get_data_stream( AVFormatContext *s )
     return st;
 }
 
-int ad_new_packet(AVPacket *pkt, int size)
-{
-    int retVal = av_new_packet( pkt, size );
+//static AVStream *ad_get_stream(AVFormatContext *s, enum AVMediaType media, 
+//                               enum CodecID codecId, void *data)
+//{
+//    switch (media)  {
+//        case(AVMEDIA_TYPE_VIDEO):
+//            if (codecId == CODEC_ID_PBM)
+//                return ad_get_overlay_stream(s, (const char *)data);
+//            else
+//                return netvu_get_stream(s, (struct NetVuImageData *)data);
+//            break;
+//        case(AVMEDIA_TYPE_AUDIO):
+//            return ad_get_audio_stream(s, (struct NetVuAudioData *)data);
+//            break;
+//        case(AVMEDIA_TYPE_DATA):
+//            return ad_get_data_stream(s);
+//            break;
+//        default:
+//            break;
+//    }
+//    return NULL;
+//}
 
-    if( retVal >= 0 ) {
-        // Give the packet its own destruct function
-        pkt->destruct = ad_release_packet;
-    }
-
-    return retVal;
-}
-
-void ad_release_packet( AVPacket *pkt )
+static void ad_release_packet( AVPacket *pkt )
 {
     struct ADFrameData *frameData;
 
@@ -409,6 +404,155 @@ void ad_release_packet( AVPacket *pkt )
 
     // Now use the default routine to release the rest of the packet's resources
     av_destruct_packet( pkt );
+}
+
+int ad_new_packet(AVPacket *pkt, int size)
+{
+    int retVal = av_new_packet( pkt, size );
+
+    if( retVal >= 0 ) {
+        // Give the packet its own destruct function
+        pkt->destruct = ad_release_packet;
+    }
+
+    return retVal;
+}
+
+
+static void ad_keyvalsplit(const char *line, char *key, char *val)
+{
+    int ii, jj = 0;
+    int len = strlen(line);
+    int inKey, inVal;
+    
+    inKey = 1;
+    inVal = 0;
+    for (ii = 0; ii < len; ii++)  {
+        if (inKey)  {
+            if (line[ii] == ':')  {
+                key[jj++] = '\0';
+                inKey = 0;
+                inVal = 1;
+                jj = 0;
+            }
+            else  {
+                key[jj++] = line[ii];
+            }
+        }
+        else if (inVal)  {
+            val[jj++] = line[ii];
+        }
+    }
+    val[jj++] = '\0';
+}
+
+static int ad_splitcsv(const char *csv, int *results, int maxElements, int base)
+{
+    int ii, jj, ee;
+    char element[8];
+    int len = strlen(csv);
+    
+    for (ii = 0, jj = 0, ee = 0; ii < len; ii++)  {
+        if ((csv[ii] == ',') || (csv[ii] == ';') || (ii == (len -1)))  {
+            element[jj++] = '\0';
+            if (base == 10)
+                sscanf(element, "%d", &results[ee++]);
+            else
+                sscanf(element, "%x", &results[ee++]);
+            if (ee >= maxElements)
+                break;
+            jj = 0;
+        }
+        else
+            element[jj++] = csv[ii];
+    }
+    return ee;
+}
+
+static void ad_parseVSD(const char *vsd, struct ADFrameData *frame)
+{
+    char key[64], val[128];
+    ad_keyvalsplit(vsd, key, val);
+    
+    if ((strlen(key) == 2) && (key[0] == 'M'))  {
+        switch(key[1])  {
+            case('0'):
+                ad_splitcsv(val, frame->vsd[VSD_M0], VSDARRAYLEN, 10);
+                break;
+            case('1'):
+                ad_splitcsv(val, frame->vsd[VSD_M1], VSDARRAYLEN, 10);
+                break;
+            case('2'):
+                ad_splitcsv(val, frame->vsd[VSD_M2], VSDARRAYLEN, 10);
+                break;
+            case('3'):
+                ad_splitcsv(val, frame->vsd[VSD_M3], VSDARRAYLEN, 10);
+                break;
+            case('4'):
+                ad_splitcsv(val, frame->vsd[VSD_M4], VSDARRAYLEN, 10);
+                break;
+            case('5'):
+                ad_splitcsv(val, frame->vsd[VSD_M5], VSDARRAYLEN, 10);
+                break;
+            case('6'):
+                ad_splitcsv(val, frame->vsd[VSD_M6], VSDARRAYLEN, 10);
+                break;
+        }
+    }
+    else if ((strlen(key) == 3) && (strncasecmp(key, "FM0", 3) == 0))  {
+        ad_splitcsv(val, frame->vsd[VSD_FM0], VSDARRAYLEN, 10);
+    }
+    else if ((strlen(key) == 1) && (key[0] == 'F')) {
+        ad_splitcsv(val, frame->vsd[VSD_F], VSDARRAYLEN, 16);
+    }
+    else if ((strlen(key) == 3) && (strncasecmp(key, "EM0", 3) == 0))  {
+        ad_splitcsv(val, frame->vsd[VSD_EM0], VSDARRAYLEN, 10);
+    }
+    else
+        av_log(NULL, AV_LOG_DEBUG, "Unknown VSD key: %s:  Val: %s", key, val);
+}
+
+static void ad_parseLine(AVFormatContext *s, const char *line, struct ADFrameData *frame)
+{
+    char key[32], val[128];
+    ad_keyvalsplit(line, key, val);
+    
+    if (strncasecmp(key, "Active-zones", 12) == 0)  {
+        sscanf(val, "%d", &frame->activeZones);
+    }
+    else if (strncasecmp(key, "FrameNum", 8) == 0)  {
+        sscanf(val, "%u", &frame->frameNum);
+    }
+//    else if (strncasecmp(key, "Site-ID", 7) == 0)  {
+//    }
+    else if (strncasecmp(key, "ActMask", 7) == 0)  {
+        for (int ii = 0, jj = 0; (ii < ACTMASKLEN) && (jj < strlen(val)); ii++)  {
+            sscanf(&val[jj], "0x%04hx", &frame->activityMask[ii]);
+            jj += 7;
+        }
+    }
+    else if (strncasecmp(key, "VSD", 3) == 0)  {
+        ad_parseVSD(val, frame);
+    }
+}
+
+static void ad_parseText(AVFormatContext *s, struct ADFrameData *frameData)
+{
+    const char *src = frameData->additionalData;
+    int len = strlen(src);
+    char line[512];
+    int ii, jj = 0;
+    
+    for (ii = 0; ii < len; ii++)  {
+        if ( (src[ii] == '\r') || (src[ii] == '\n') )  {
+            line[jj++] = '\0';
+            if (strlen(line) > 0)
+                ad_parseLine(s, line, frameData);
+            jj = 0;
+        }
+        else
+            line[jj++] = src[ii];
+    }
 }
 
 int ad_get_buffer(AVIOContext *s, uint8_t *buf, int size)
@@ -441,52 +585,52 @@ int ad_get_buffer(AVIOContext *s, uint8_t *buf, int size)
 int initADData(int data_type, enum AVMediaType *mediaType, enum CodecID *codecId, void **payload)
 {
     switch(data_type)  {
-        case(DATA_JPEG):
-        case(DATA_JFIF):
-        case(DATA_MPEG4I):
-        case(DATA_MPEG4P):
-        case(DATA_H264I):
-        case(DATA_H264P):
-        case(DATA_MINIMAL_MPEG4):
+        case(AD_DATATYPE_JPEG):
+        case(AD_DATATYPE_JFIF):
+        case(AD_DATATYPE_MPEG4I):
+        case(AD_DATATYPE_MPEG4P):
+        case(AD_DATATYPE_H264I):
+        case(AD_DATATYPE_H264P):
+        case(AD_DATATYPE_MINIMAL_MPEG4):
             *payload = av_malloc( sizeof(struct NetVuImageData) );
             if( *payload == NULL )
                 return AVERROR(ENOMEM);
             *mediaType = AVMEDIA_TYPE_VIDEO;
             switch(data_type)  {
-                case(DATA_JPEG):
-                case(DATA_JFIF):
+                case(AD_DATATYPE_JPEG):
+                case(AD_DATATYPE_JFIF):
                     *codecId = CODEC_ID_MJPEG;
                     break;
-                case(DATA_MPEG4I):
-                case(DATA_MPEG4P):
-                case(DATA_MINIMAL_MPEG4):
+                case(AD_DATATYPE_MPEG4I):
+                case(AD_DATATYPE_MPEG4P):
+                case(AD_DATATYPE_MINIMAL_MPEG4):
                     *codecId = CODEC_ID_MPEG4;
                     break;
-                case(DATA_H264I):
-                case(DATA_H264P):
+                case(AD_DATATYPE_H264I):
+                case(AD_DATATYPE_H264P):
                     *codecId = CODEC_ID_H264;
                     break;
             }
             break;
-        case(DATA_AUDIO_ADPCM):
-        case(DATA_MINIMAL_AUDIO_ADPCM):
+        case(AD_DATATYPE_AUDIO_ADPCM):
+        case(AD_DATATYPE_MINIMAL_AUDIO_ADPCM):
             *payload = av_malloc( sizeof(struct NetVuAudioData) );
             if( *payload == NULL )
                 return AVERROR(ENOMEM);
             *mediaType = AVMEDIA_TYPE_AUDIO;
             *codecId = CODEC_ID_ADPCM_IMA_WAV;
             break;
-        case(DATA_INFO):
-        case(DATA_XML_INFO):
-        case(DATA_LAYOUT):
+        case(AD_DATATYPE_INFO):
+        case(AD_DATATYPE_XML_INFO):
+        case(AD_DATATYPE_LAYOUT):
             *mediaType = AVMEDIA_TYPE_DATA;
             *codecId = CODEC_ID_FFMETADATA;
             break;
-        case(DATA_BMP):
+        case(AD_DATATYPE_BMP):
             *mediaType = AVMEDIA_TYPE_VIDEO;
             *codecId = CODEC_ID_BMP;
             break;
-        case(DATA_PBM):
+        case(AD_DATATYPE_PBM):
             *mediaType = AVMEDIA_TYPE_VIDEO;
             *codecId = CODEC_ID_PBM;
             break;
@@ -826,7 +970,7 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
     }
     else if (media == AVMEDIA_TYPE_DATA) {
         // Get or create a data stream
-        if ( (st = ad_get_data_stream( s )) == NULL ) {
+        if ( (st = ad_get_data_stream(s, codecId)) == NULL ) {
             av_log(s, AV_LOG_ERROR, "%s: ad_get_data_stream failed\n", __func__);
             return ADPIC_GET_INFO_LAYOUT_STREAM_ERROR;
         }
@@ -851,7 +995,7 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
                 frameData->additionalData = text_data;
 
                 /// Todo: AVOption to allow toggling parsing of text on and off
-                ad_parseText(frameData);
+                ad_parseText(s, frameData);
             }
             pkt->priv = frameData;
         }
@@ -863,137 +1007,6 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
     }
 
     return 0;
-}
-
-static void ad_keyvalsplit(const char *line, char *key, char *val)
-{
-    int ii, jj = 0;
-    int len = strlen(line);
-    int inKey, inVal;
-    
-    inKey = 1;
-    inVal = 0;
-    for (ii = 0; ii < len; ii++)  {
-        if (inKey)  {
-            if (line[ii] == ':')  {
-                key[jj++] = '\0';
-                inKey = 0;
-                inVal = 1;
-                jj = 0;
-            }
-            else  {
-                key[jj++] = line[ii];
-            }
-        }
-        else if (inVal)  {
-            val[jj++] = line[ii];
-        }
-    }
-    val[jj++] = '\0';
-}
-
-static int ad_splitcsv(const char *csv, int *results, int maxElements, int base)
-{
-    int ii, jj, ee;
-    char element[8];
-    int len = strlen(csv);
-    
-    for (ii = 0, jj = 0, ee = 0; ii < len; ii++)  {
-        if ((csv[ii] == ',') || (csv[ii] == ';') || (ii == (len -1)))  {
-            element[jj++] = '\0';
-            if (base == 10)
-                sscanf(element, "%d", &results[ee++]);
-            else
-                sscanf(element, "%x", &results[ee++]);
-            if (ee >= maxElements)
-                break;
-            jj = 0;
-        }
-        else
-            element[jj++] = csv[ii];
-    }
-    return ee;
-}
-
-static void ad_parseVSD(const char *vsd, struct ADFrameData *frame)
-{
-    char key[64], val[128];
-    ad_keyvalsplit(vsd, key, val);
-    
-    if ((strlen(key) == 2) && (key[0] == 'M'))  {
-        switch(key[1])  {
-            case('0'):
-                ad_splitcsv(val, frame->vsd[VSD_M0], 16, 10);
-                break;
-            case('1'):
-                ad_splitcsv(val, frame->vsd[VSD_M1], 16, 10);
-                break;
-            case('2'):
-                ad_splitcsv(val, frame->vsd[VSD_M2], 16, 10);
-                break;
-            case('3'):
-                ad_splitcsv(val, frame->vsd[VSD_M3], 16, 10);
-                break;
-            case('4'):
-                ad_splitcsv(val, frame->vsd[VSD_M4], 16, 10);
-                break;
-            case('5'):
-                ad_splitcsv(val, frame->vsd[VSD_M5], 16, 10);
-                break;
-            case('6'):
-                ad_splitcsv(val, frame->vsd[VSD_M6], 16, 10);
-                break;
-        }
-    }
-    else if ((strlen(key) == 3) && (strncasecmp(key, "FM0", 3) == 0))  {
-        ad_splitcsv(val, frame->vsd[VSD_FM0], 16, 10);
-    }
-    else if ((strlen(key) == 1) && (key[0] == 'F')) {
-        ad_splitcsv(val, frame->vsd[VSD_F], 16, 16);
-    }
-}
-
-static void ad_parseLine(const char *line, struct ADFrameData *frame)
-{
-    char key[128], val[128];
-    ad_keyvalsplit(line, key, val);
-    
-    if (strncasecmp(key, "Active-zones", 12) == 0)  {
-        sscanf(val, "%d", &frame->activeZones);
-    }
-    else if (strncasecmp(key, "FrameNum", 8) == 0)  {
-        sscanf(val, "%u", &frame->frameNum);
-    }
-//    else if (strncasecmp(key, "Site-ID", 7) == 0)  {
-//    }
-    else if (strncasecmp(key, "ActMask", 7) == 0)  {
-        for (int ii = 0, jj = 0; (ii < 16) && (jj < strlen(val)); ii++)  {
-            sscanf(&val[jj], "0x%04hx", &frame->activityMask[ii]);
-            jj += 7;
-        }
-    }
-    else if (strncasecmp(key, "VSD", 3) == 0)  {
-        ad_parseVSD(val, frame);
-    }
-}
-
-static void ad_parseText(struct ADFrameData *frameData)
-{
-    const char *src = frameData->additionalData;
-    int len = strlen(src);
-    char line[512];
-    int ii, jj = 0;
-    
-    for (ii = 0; ii < len; ii++)  {
-        if ( (src[ii] == '\r') || (src[ii] == '\n') )  {
-            line[jj++] = '\0';
-            if (strlen(line) > 0)
-                ad_parseLine(line, frameData);
-            jj = 0;
-        }
-        else
-            line[jj++] = src[ii];
-    }
 }
 
 void audiodata_network2host(uint8_t *data, int size)
