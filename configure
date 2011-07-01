@@ -3073,7 +3073,6 @@ fi
 
 if enabled small; then
     add_cflags $size_cflags
-    optimizations="small"
 elif enabled optimizations; then
     add_cflags $speed_cflags
 else
@@ -3157,6 +3156,11 @@ check_deps $CONFIG_LIST       \
 
 enabled asm || { arch=c; disable $ARCH_LIST $ARCH_EXT_LIST; }
 
+if test $target_os == "haiku"; then
+    disable memalign
+    disable posix_memalign
+fi
+
 ! enabled_any memalign posix_memalign malloc_aligned &&
     enabled_any $need_memalign && enable memalign_hack
 
@@ -3208,6 +3212,7 @@ if enabled sparc; then
 fi
 echo "debug symbols             ${debug-no}"
 echo "strip symbols             ${stripping-no}"
+echo "optimize for size         ${small-no}"
 echo "optimizations             ${optimizations-no}"
 echo "static                    ${static-no}"
 echo "shared                    ${shared-no}"
