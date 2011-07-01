@@ -33,10 +33,10 @@
 #include "adpic.h"
 
 
-enum pkt_offsets { DATA_TYPE, DATA_CHANNEL,
-                   DATA_SIZE_BYTE_0, DATA_SIZE_BYTE_1,
-                   DATA_SIZE_BYTE_2, DATA_SIZE_BYTE_3,
-                   SEPARATOR_SIZE
+enum pkt_offsets { PKT_DATATYPE, PKT_DATACHANNEL,
+                   PKT_SIZE_BYTE_0, PKT_SIZE_BYTE_1,
+                   PKT_SIZE_BYTE_2, PKT_SIZE_BYTE_3,
+                   PKT_SEPARATOR_SIZE
                  };
 
 typedef struct {
@@ -51,7 +51,7 @@ typedef struct  {    // PRC 002
 } MinimalAudioHeader;
 
 
-static void audioheader_network2host(NetVuAudioData *dst, const uint8_t *src)
+static void audioheader_network2host(struct NetVuAudioData *dst, const uint8_t *src)
 {
     dst->version              = AV_RB32(src);
     dst->mode                 = AV_RB32(src + 4);
@@ -68,7 +68,7 @@ static void audioheader_network2host(NetVuAudioData *dst, const uint8_t *src)
  * MPEG4 or H264 video frame with a Netvu header
  */
 static int adbinary_mpeg(AVFormatContext *s,
-                         AVPacket *pkt, NetVuImageData *vidDat, char **txtDat)
+                         AVPacket *pkt, struct NetVuImageData *vidDat, char **txtDat)
 {
     static const int hdrSize = NetVuImageDataHeaderSize;
     AVIOContext *pb = s->pb;
@@ -130,7 +130,7 @@ static int adbinary_mpeg(AVFormatContext *s,
  */
 static int ad_read_mpeg_minimal(AVFormatContext *s,
                                 AVPacket *pkt, int size, int channel,
-                                NetVuImageData *vidDat, char **text_data)
+                                struct NetVuImageData *vidDat, char **text_data)
 {
     static const int titleLen  = sizeof(vidDat->title) / sizeof(vidDat->title[0]);
     AdbinaryContext* adContext = s->priv_data;
@@ -139,7 +139,7 @@ static int ad_read_mpeg_minimal(AVFormatContext *s,
     int              errorVal  = 0;
 
     // Get the minimal video header and copy into generic video data structure
-    memset(vidDat, 0, sizeof(NetVuImageData));
+    memset(vidDat, 0, sizeof(struct NetVuImageData));
     vidDat->session_time  = avio_rb32(pb);
     vidDat->milliseconds  = avio_rb16(pb);
 
@@ -168,7 +168,7 @@ static int ad_read_mpeg_minimal(AVFormatContext *s,
  * Audio frame with a Netvu header
  */
 static int ad_read_audio(AVFormatContext *s,
-                         AVPacket *pkt, int size, NetVuAudioData *data)
+                         AVPacket *pkt, int size, struct NetVuAudioData *data)
 {
     AVIOContext *pb = s->pb;
     int n, status, errorVal = 0;
@@ -209,14 +209,14 @@ static int ad_read_audio(AVFormatContext *s,
  * Audio frame with a minimal header
  */
 static int ad_read_audio_minimal(AVFormatContext *s,
-                                 AVPacket *pkt, int size, NetVuAudioData *data)
+                                 AVPacket *pkt, int size, struct NetVuAudioData *data)
 {
     AVIOContext *pb = s->pb;
     int dataSize = size - sizeof(MinimalAudioHeader);
     int n, status, errorVal = 0;
 
     // Get the minimal audio header and copy into generic audio data structure
-    memset(data, 0, sizeof(NetVuAudioData));
+    memset(data, 0, sizeof(struct NetVuAudioData));
     data->seconds = avio_rb32(pb);
     data->msecs   = avio_rb16(pb);
     data->mode    = avio_rb16(pb);
@@ -255,30 +255,30 @@ static int adbinary_probe(AVProbeData *p)
     if ( (p->filename) && (av_stristart(p->filename, "netvu://", NULL) == 1))
         score += AVPROBE_SCORE_MAX / 4;
 
-    while ((bufferSize >= SEPARATOR_SIZE) && (score < AVPROBE_SCORE_MAX))  {
-        dataSize =  (bufPtr[DATA_SIZE_BYTE_0] << 24) +
-                    (bufPtr[DATA_SIZE_BYTE_1] << 16) +
-                    (bufPtr[DATA_SIZE_BYTE_2] << 8 ) +
-                    (bufPtr[DATA_SIZE_BYTE_3]);
+    while ((bufferSize >= PKT_SEPARATOR_SIZE) && (score < AVPROBE_SCORE_MAX))  {
+        dataSize =  (bufPtr[PKT_SIZE_BYTE_0] << 24) +
+                    (bufPtr[PKT_SIZE_BYTE_1] << 16) +
+                    (bufPtr[PKT_SIZE_BYTE_2] << 8 ) +
+                    (bufPtr[PKT_SIZE_BYTE_3]);
 
         // Maximum of 32 cameras can be connected to a system
-        if (bufPtr[DATA_CHANNEL] > 32)
+        if (bufPtr[PKT_DATACHANNEL] > 32)
             return 0;
 
-        if (bufPtr[DATA_TYPE] >= MAX_DATA_TYPE)
+        if (bufPtr[PKT_DATATYPE] >= AD_DATATYPE_MAX)
             return 0;
 
-        dataPtr = &bufPtr[SEPARATOR_SIZE];
-        bufferSize -= SEPARATOR_SIZE;
+        dataPtr = &bufPtr[PKT_SEPARATOR_SIZE];
+        bufferSize -= PKT_SEPARATOR_SIZE;
 
-        switch (bufPtr[DATA_TYPE])  {
-            case(DATA_JPEG):
-            case(DATA_MPEG4I):
-            case(DATA_MPEG4P):
-            case(DATA_H264I):
-            case(DATA_H264P):
+        switch (bufPtr[PKT_DATATYPE])  {
+            case(AD_DATATYPE_JPEG):
+            case(AD_DATATYPE_MPEG4I):
+            case(AD_DATATYPE_MPEG4P):
+            case(AD_DATATYPE_H264I):
+            case(AD_DATATYPE_H264P):
                 if (bufferSize >= NetVuImageDataHeaderSize) {
-                    NetVuImageData test;
+                    struct NetVuImageData test;
                     ad_network2host(&test, dataPtr);
                     if (pic_version_valid(test.version))  {
                         av_dlog(NULL, "%s: Detected video packet\n", __func__);
@@ -286,7 +286,7 @@ static int adbinary_probe(AVProbeData *p)
                     }
                 }
                 break;
-            case(DATA_JFIF):
+            case(AD_DATATYPE_JFIF):
                 if (bufferSize >= 2)  {
                     if ( (*dataPtr == 0xFF) && (*(dataPtr + 1) == 0xD8) )  {
                         av_dlog(NULL, "%s: Detected JFIF packet\n", __func__);
@@ -294,9 +294,9 @@ static int adbinary_probe(AVProbeData *p)
                     }
                 }
                 break;
-            case(DATA_AUDIO_ADPCM):
+            case(AD_DATATYPE_AUDIO_ADPCM):
                 if (bufferSize >= NetVuAudioDataHeaderSize)  {
-                    NetVuAudioData test;
+                    struct NetVuAudioData test;
                     audioheader_network2host(&test, dataPtr);
                     if (test.version == AUD_VERSION)  {
                         av_dlog(NULL, "%s: Detected audio packet\n", __func__);
@@ -304,11 +304,11 @@ static int adbinary_probe(AVProbeData *p)
                     }
                 }
                 break;
-            case(DATA_AUDIO_RAW):
+            case(AD_DATATYPE_AUDIO_RAW):
                 // We don't handle this format
                 av_log(NULL, AV_LOG_ERROR, "%s: Detected raw audio packet (unsupported)\n", __func__);
                 break;
-            case(DATA_MINIMAL_MPEG4):
+            case(AD_DATATYPE_MINIMAL_MPEG4):
                 if (bufferSize >= 10)  {
                     uint32_t sec  = AV_RB32(dataPtr);
                     //uint16_t mil  = AV_RB16(dataPtr + 4);
@@ -324,7 +324,7 @@ static int adbinary_probe(AVProbeData *p)
                     }
                 }
                 break;
-            case(DATA_MINIMAL_AUDIO_ADPCM):
+            case(AD_DATATYPE_MINIMAL_AUDIO_ADPCM):
                 if (bufferSize >= 8)  {
                     MinimalAudioHeader test;
                     test.t     = AV_RB32(dataPtr);
@@ -351,13 +351,13 @@ static int adbinary_probe(AVProbeData *p)
                     }
                 }
                 break;
-            case(DATA_LAYOUT):
+            case(AD_DATATYPE_LAYOUT):
                 av_dlog(NULL, "%s: Detected layout packet\n", __func__);
                 break;
-            case(DATA_INFO):
+            case(AD_DATATYPE_INFO):
                 av_dlog(NULL, "%s: Detected info packet\n", __func__);
                 break;
-            case(DATA_XML_INFO):
+            case(AD_DATATYPE_XML_INFO):
                 if (bufferSize >= dataSize)  {
                     const char *infoString = "<infoList>";
                     int infoStringLen = strlen(infoString);
@@ -369,10 +369,10 @@ static int adbinary_probe(AVProbeData *p)
                     }
                 }
                 break;
-            case DATA_BMP:
+            case AD_DATATYPE_BMP:
                 av_dlog(NULL, "%s: Detected bmp packet\n", __func__);
                 break;
-            case DATA_PBM:
+            case AD_DATATYPE_PBM:
                 av_dlog(NULL, "%s: Detected pbm packet\n", __func__);
                 break;
         }
@@ -427,43 +427,43 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     if (errorVal >= 0)  {
         // Proceed based on the type of data in this frame
         switch(data_type) {
-            case DATA_JPEG:
+            case AD_DATATYPE_JPEG:
                 errorVal = ad_read_jpeg(s, pkt, payload, &txtDat);
                 break;
-            case DATA_JFIF:
+            case AD_DATATYPE_JFIF:
                 errorVal = ad_read_jfif(s, pkt, 0, size, payload, &txtDat);
                 break;
-            case DATA_MPEG4I:
-            case DATA_MPEG4P:
-            case DATA_H264I:
-            case DATA_H264P:
+            case AD_DATATYPE_MPEG4I:
+            case AD_DATATYPE_MPEG4P:
+            case AD_DATATYPE_H264I:
+            case AD_DATATYPE_H264P:
                 errorVal = adbinary_mpeg(s, pkt, payload, &txtDat);
                 break;
-            case DATA_MINIMAL_MPEG4:
+            case AD_DATATYPE_MINIMAL_MPEG4:
                 errorVal = ad_read_mpeg_minimal(s, pkt, size, data_channel,
                                                 payload, &txtDat);
                 break;
-            case DATA_MINIMAL_AUDIO_ADPCM:
+            case AD_DATATYPE_MINIMAL_AUDIO_ADPCM:
                 errorVal = ad_read_audio_minimal(s, pkt, size, payload);
                 break;
-            case DATA_AUDIO_ADPCM:
+            case AD_DATATYPE_AUDIO_ADPCM:
                 errorVal = ad_read_audio(s, pkt, size, payload);
                 break;
-            case DATA_INFO:
-            case DATA_XML_INFO:
+            case AD_DATATYPE_INFO:
+            case AD_DATATYPE_XML_INFO:
                 // May want to handle INFO and XML_INFO separately in future
                 errorVal = ad_read_info(s, pkt, size);
                 break;
-            case DATA_LAYOUT:
+            case AD_DATATYPE_LAYOUT:
                 errorVal = ad_read_layout(s, pkt, size);
                 break;
-            case DATA_BMP:
+            case AD_DATATYPE_BMP:
                 av_dlog(s, "Bitmap overlay\n");
                 tempbuf = av_malloc(size);                
                 avio_read(pb, tempbuf, size);
                 av_free(tempbuf);
                 return ADPIC_DEFAULT_ERROR;
-            case DATA_PBM:
+            case AD_DATATYPE_PBM:
                 errorVal = ad_read_overlay(s, pkt, size, &txtDat, adContext->lastVideoPTS);
                 break;
             default:

@@ -393,6 +393,7 @@ int ffurl_get_file_handle(URLContext *h)
 
 static int default_interrupt_cb(void *opaque)
 {
+    (void)opaque;
     return 0;
 }
 

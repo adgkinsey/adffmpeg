@@ -48,3 +48,4 @@ tools/trasher
 tools/trasher*.d
 version.h
 build-*
+*~

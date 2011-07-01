@@ -24,8 +24,6 @@
 
 #include "url.h"
 
-size_t ff_http_get_headers(URLContext *h, char *headers, int bufferSize);
-
 /**
  * Set custom HTTP headers.
  * A trailing CRLF ("\r\n") is required for custom headers.
@@ -62,5 +60,7 @@ void ff_http_set_chunked_transfer_encoding(URLContext *h, int is_chunked);
  * @param src URL context whose authentication state gets copied
  */
 void ff_http_init_auth_state(URLContext *dest, const URLContext *src);
+
+size_t ff_http_get_headers(URLContext *h, char *headers, int bufferSize);
 
 #endif /* AVFORMAT_HTTP_H */

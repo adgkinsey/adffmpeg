@@ -30,8 +30,8 @@ static int dspicReadHeader( AVFormatContext *s, AVFormatParameters *ap );
 static int dspicReadPacket( AVFormatContext *s, AVPacket *pkt );
 static int dspicReadClose( AVFormatContext *s );
 static int ReadNetworkMessageHeader( AVIOContext *context, MessageHeader *header );
-static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize );
-static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData );
+static struct DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize );
+static int ExtractDSFrameData( uint8_t * buffer, struct DMImageData *frameData );
 
 
 static const long       DSPacketHeaderMagicNumber = DS_HEADER_MAGIC_NUMBER;
@@ -71,10 +71,10 @@ static int dspicReadPacket( AVFormatContext *s, AVPacket *pkt )
     int                     retVal = 0;
     MessageHeader           header;
     int                     dataSize = 0;
-    DMImageData *           videoFrameData = NULL;
+    struct DMImageData *           videoFrameData = NULL;
     AVStream *              stream = NULL;
-    ADFrameData *           frameData = NULL;
-    ADFrameType             frameType = FrameTypeUnknown;
+    struct ADFrameData *           frameData = NULL;
+    enum ADFrameType             frameType = FrameTypeUnknown;
 
     /* Attempt to read in a network message header */
     if( (retVal = ReadNetworkMessageHeader( ioContext, &header )) != 0 )
@@ -114,7 +114,7 @@ static int dspicReadPacket( AVFormatContext *s, AVPacket *pkt )
 
             /* if( audioFrameData != NULL ) frameType |= DS1_PACKET_TYPE_AUDIO; */
 
-            if ( (stream = ad_get_stream(s, 0, 0, 1, PIC_MODE_JPEG_422, NULL)) == NULL )
+            if ( (stream = ad_get_vstream(s, 0, 0, 1, PIC_MODE_JPEG_422, NULL)) == NULL )
                 return AVERROR(EIO);
         }
     }
@@ -144,9 +144,9 @@ fail_mem:
     return AVERROR(ENOMEM);
 }
 
-static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize )
+static struct DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize )
 {
-    DMImageData *            frameData = NULL;
+    struct DMImageData *            frameData = NULL;
     int                         i;
     unsigned short              length, marker;
     int                         sos = FALSE;
@@ -174,7 +174,7 @@ static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize )
                 if( memcmp( &data[i], DSApp0Identifier, strlen(DSApp0Identifier) ) == 0 ) {
                     int         offset = i;
 
-                    if( (frameData = av_mallocz( sizeof(DMImageData) )) != NULL ) {
+                    if( (frameData = av_mallocz( sizeof(struct DMImageData) )) != NULL ) {
                         /* Extract the values into a data structure */
                         if( ExtractDSFrameData( &data[offset], frameData ) < 0 ) {
                             av_free( frameData );
@@ -222,7 +222,7 @@ static DMImageData * parseDSJFIFHeader( uint8_t *data, int dataSize )
     return frameData;
 }
 
-static int ExtractDSFrameData( uint8_t * buffer, DMImageData *frameData )
+static int ExtractDSFrameData( uint8_t * buffer, struct DMImageData *frameData )
 {
     int         retVal = AVERROR(EIO);
     int         bufIdx = 0;

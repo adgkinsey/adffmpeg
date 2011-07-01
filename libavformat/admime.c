@@ -34,7 +34,7 @@
 
 // This value is only used internally within the library DATA_PLAINTEXT blocks
 // should not be exposed to the client
-#define DATA_PLAINTEXT          (MAX_DATA_TYPE + 1)
+#define DATA_PLAINTEXT          (AD_DATATYPE_MAX + 1)
 
 
 static const char *     BOUNDARY_PREFIX1 = "--0plm(";
@@ -162,21 +162,21 @@ static int process_line(char *line, int *line_count, int *dataType,
         if (!strcmp(tag, "Content-type")) {
             // Work out what type we actually have
             if (strcasecmp(p, MIME_TYPE_JPEG ) == 0 )
-                *dataType = DATA_JFIF;
+                *dataType = AD_DATATYPE_JFIF;
             // Or if it starts image/mp4 - this covers all the supported mp4
             // variations (i and p frames)
             else if(strncasecmp(p, MIME_TYPE_MP4, strlen(MIME_TYPE_MP4) ) == 0) {
                 // P for now - as they are both processed the same subsequently
-                *dataType = DATA_MPEG4P;
+                *dataType = AD_DATATYPE_MPEG4P;
             }
             else if (strcasecmp(p, MIME_TYPE_TEXT ) == 0 )
                 *dataType = DATA_PLAINTEXT;
             else if (strcasecmp(p, MIME_TYPE_LAYOUT ) == 0 )
-                *dataType = DATA_LAYOUT;
+                *dataType = AD_DATATYPE_LAYOUT;
             else if (strcasecmp(p, MIME_TYPE_XML ) == 0 )
-                *dataType = DATA_XML_INFO;
+                *dataType = AD_DATATYPE_XML_INFO;
             else if(strncasecmp(p, MIME_TYPE_ADPCM, strlen(MIME_TYPE_ADPCM)) == 0) {
-                *dataType = DATA_AUDIO_ADPCM;
+                *dataType = AD_DATATYPE_AUDIO_ADPCM;
 
                 // If we find audio in a mime header, we need to extract the
                 // mode out. The header takes the form,
@@ -229,10 +229,10 @@ static int process_line(char *line, int *line_count, int *dataType,
                     *extra = RTP_PAYLOAD_TYPE_8000HZ_ADPCM; // Default
             }
             else if (strcasecmp(p, MIME_TYPE_PBM ) == 0 )  {
-                *dataType = DATA_PBM;
+                *dataType = AD_DATATYPE_PBM;
             }
             else  {
-                *dataType = MAX_DATA_TYPE;
+                *dataType = AD_DATATYPE_MAX;
             }
         }
     }
@@ -310,7 +310,7 @@ static int parse_mime_header(AVIOContext *pb, uint8_t *buffer, int *bufSize,
  * Parse a line of MIME data for MPEG video frames
  */
 static int process_mp4data_line( char *line, int line_count,
-                                 NetVuImageData *vidDat, struct tm *tim,
+                                 struct NetVuImageData *vidDat, struct tm *tim,
                                  char ** txtDat )
 {
     static const int titleLen = sizeof(vidDat->title) / sizeof(vidDat->title[0]);
@@ -404,7 +404,7 @@ static int process_mp4data_line( char *line, int line_count,
  * Parse MIME data that is sent after each MPEG video frame
  */
 static int parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize,
-                                NetVuImageData *vidDat, char **txtDat )
+                                struct NetVuImageData *vidDat, char **txtDat )
 {
     unsigned char               buffer[TEMP_BUFFER_SIZE];
     int                         ch, err;
@@ -480,7 +480,7 @@ static int parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize,
  */
 static int admime_mpeg(AVFormatContext *s,
                        AVPacket *pkt, int size, long *extra,
-                       NetVuImageData *vidDat, char **txtDat)
+                       struct NetVuImageData *vidDat, char **txtDat)
 {
     AVIOContext *pb = s->pb;
     int errorVal = 0;
@@ -491,7 +491,7 @@ static int admime_mpeg(AVFormatContext *s,
     // Fields are set manually from MIME data with these types so need
     // to set everything to zero initially in case some values aren't
     // available
-    memset(vidDat, 0, sizeof(NetVuImageData));
+    memset(vidDat, 0, sizeof(struct NetVuImageData));
 
     // Allocate a new packet to hold the frame's image data
     if (ad_new_packet(pkt, size) < 0 )
@@ -540,7 +540,7 @@ static int admime_mpeg(AVFormatContext *s,
  */
 static int ad_read_audio(AVFormatContext *s,
                          AVPacket *pkt, int size, long extra,
-                         NetVuAudioData *audDat)
+                         struct NetVuAudioData *audDat)
 {
     AVIOContext *pb = s->pb;
     
@@ -589,7 +589,7 @@ static int handleInvalidMime(AVFormatContext *s,
     }
 
     //Set the data type
-    *data_type = DATA_JFIF;
+    *data_type = AD_DATATYPE_JFIF;
 
     // Read more data till we find end of image marker
     for (; !found && (pb->eof_reached==0) && (pb->error==0); read++) {
@@ -675,7 +675,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     AVIOContext *           pb = s->pb;
     void *                  payload = NULL;
     char *                  txtDat = NULL;
-    int                     data_type = MAX_DATA_TYPE;
+    int                     data_type = AD_DATATYPE_MAX;
     int                     size = -1;
     long                    extra = 0;
     int                     errorVal = ADPIC_UNKNOWN_ERROR;
@@ -707,32 +707,32 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     // Proceed based on the type of data in this frame
     switch(data_type) {
-        case DATA_JPEG:
+        case AD_DATATYPE_JPEG:
             errorVal = ad_read_jpeg(s, pkt, payload, &txtDat);
             break;
-        case DATA_JFIF:
+        case AD_DATATYPE_JFIF:
             errorVal = ad_read_jfif(s, pkt, imgLoaded, size, payload, &txtDat);
             break;
-        case DATA_MPEG4I:
-        case DATA_MPEG4P:
-        case DATA_H264I:
-        case DATA_H264P:
+        case AD_DATATYPE_MPEG4I:
+        case AD_DATATYPE_MPEG4P:
+        case AD_DATATYPE_H264I:
+        case AD_DATATYPE_H264P:
             errorVal = admime_mpeg(s, pkt, size, &extra, payload, &txtDat);
             break;
-        case DATA_AUDIO_ADPCM:
+        case AD_DATATYPE_AUDIO_ADPCM:
             errorVal = ad_read_audio(s, pkt, size, extra, payload);
             break;
-        case DATA_INFO:
-        case DATA_XML_INFO:
+        case AD_DATATYPE_INFO:
+        case AD_DATATYPE_XML_INFO:
             errorVal = ad_read_info(s, pkt, size);
             break;
-        case DATA_LAYOUT:
+        case AD_DATATYPE_LAYOUT:
             errorVal = ad_read_layout(s, pkt, size);
             break;
-        case DATA_PBM:
+        case AD_DATATYPE_PBM:
             errorVal = ad_read_overlay(s, pkt, size, &txtDat, adContext->lastVideoPTS);
             break;
-        case DATA_BMP:
+        case AD_DATATYPE_BMP:
         default: {
             av_log(s, AV_LOG_WARNING, "admime_read_packet: No handler for "
                    "data_type=%d\n", data_type);

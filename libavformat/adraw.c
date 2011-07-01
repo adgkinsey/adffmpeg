@@ -37,7 +37,7 @@ static int adraw_probe(AVProbeData *p)
     uint8_t *bufPtr = p->buf;
 
     while (bufferSize >= NetVuImageDataHeaderSize)  {
-        NetVuImageData test;
+        struct NetVuImageData test;
         ad_network2host(&test, bufPtr);
         if (pic_version_valid(test.version))  {
             if (ad_adFormatToCodecId(NULL, test.vid_format) == CODEC_ID_MJPEG)
@@ -58,25 +58,25 @@ static int adraw_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
     AVIOContext     *pb = s->pb;
     uint8_t         *buf = NULL;
-    NetVuImageData  *vidDat = NULL;
+    struct NetVuImageData  *vidDat = NULL;
     char            *txtDat = NULL;
     int             errVal = 0;
     int             ii = 0;
 
-    vidDat = av_malloc(sizeof(NetVuImageData));
-    buf = av_malloc(sizeof(NetVuImageData));
+    vidDat = av_malloc(sizeof(struct NetVuImageData));
+    buf = av_malloc(sizeof(struct NetVuImageData));
 
     // Scan for 0xDECADE11 marker
-    errVal = avio_read(pb, buf, sizeof(NetVuImageData));
+    errVal = avio_read(pb, buf, sizeof(struct NetVuImageData));
     while (errVal > 0)  {
         ad_network2host(vidDat, buf);
         if (pic_version_valid(vidDat->version))  {
             break;
         }
-        for(ii = 0; ii < (sizeof(NetVuImageData) - 1); ii++)  {
+        for(ii = 0; ii < (sizeof(struct NetVuImageData) - 1); ii++)  {
             buf[ii] = buf[ii+1];
         }
-        errVal = avio_read(pb, buf + sizeof(NetVuImageData) - 1, 1);
+        errVal = avio_read(pb, buf + sizeof(struct NetVuImageData) - 1, 1);
     }
     av_free(buf);
 

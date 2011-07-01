@@ -29,16 +29,16 @@ extern "C" {
 #include <stdint.h>
 
 
-typedef struct {
+struct NetVuPicture {
     uint16_t src_pixels;        ///< Input image size (horizontal)
     uint16_t src_lines;         ///< Input image size (vertical)
     uint16_t target_pixels;     ///< Output image size (horizontal)
     uint16_t target_lines;      ///< Output image size (vertical)
     uint16_t pixel_offset;      ///< Image start offset (horizontal)
     uint16_t line_offset;       ///< Image start offset (vertical)
-} NetVuPicture;
+};
 
-typedef struct {
+struct NetVuImageData {
     uint32_t version;                ///<  structure version number */
 
     /** mode: in PIC_REVISION 0 this was the DFT style FULL_HI etc
@@ -59,14 +59,14 @@ typedef struct {
     char res[4];                ///< picture size
     char title[31];             ///< camera title
     char alarm[31];             ///< alarm text - title, comment etc
-    NetVuPicture format;        ///< NOTE: Do not assign to a pointer due to CW-alignment
+    struct NetVuPicture format; ///< NOTE: Do not assign to a pointer due to CW-alignment
     char locale[30];            ///< Timezone name
     int32_t utc_offset;         ///< Timezone difference in minutes
     uint32_t alm_bitmask;
-} NetVuImageData;
+};
 #define NetVuImageDataHeaderSize 168
 
-typedef struct _audioHeader {
+struct NetVuAudioData {
     uint32_t            version;
     int32_t             mode;
     int32_t             channel;
@@ -75,7 +75,7 @@ typedef struct _audioHeader {
     uint32_t            seconds;
     uint32_t            msecs;
     unsigned char *     additionalData;
-} NetVuAudioData;
+};
 #define NetVuAudioDataHeaderSize (28 + sizeof(unsigned char *))
 
 #define ID_LENGTH                       8
@@ -83,7 +83,7 @@ typedef struct _audioHeader {
 #define CAM_TITLE_LENGTH                24
 #define ALARM_TEXT_LENGTH               24
 
-typedef struct _dmImageData {
+struct DMImageData {
     char            identifier[ID_LENGTH];
     unsigned long   jpegLength;
     int64_t         imgSeq;
@@ -99,10 +99,10 @@ typedef struct _dmImageData {
     unsigned short  subHeaderMask;
     char            camTitle[CAM_TITLE_LENGTH];
     char            alarmText[ALARM_TEXT_LENGTH];
-} DMImageData;
+};
 
 
-typedef enum _frameType {
+enum ADFrameType {
     FrameTypeUnknown = 0,
     NetVuVideo,
     NetVuAudio,
@@ -111,15 +111,30 @@ typedef enum _frameType {
     NetVuDataInfo,
     NetVuDataLayout,
     RTPAudio
-} ADFrameType;
+};
+
+#define VSD_M0      0
+#define VSD_M1      1
+#define VSD_M2      2
+#define VSD_M3      3
+#define VSD_M4      4
+#define VSD_M5      5
+#define VSD_M6      6
+#define VSD_FM0     7
+#define VSD_F       8
+#define VSD_EM0     9
+#define VSD_COUNT  10
+
+#define ACTMASKLEN  16
+#define VSDARRAYLEN 16
 
 /** This is the data structure that the ffmpeg parser fills in as part of the
  * parsing routines. It will be shared between adpic and dspic so that our
  * clients can be compatible with either stream more easily
  */
-typedef struct {
+struct ADFrameData {
     /// Type of frame we have. See ADFrameType enum for supported types
-    ADFrameType         frameType;
+    enum ADFrameType    frameType;
     /// Pointer to structure holding the information for the frame.
     void *              frameData;
     /// Pointer to text block
@@ -129,20 +144,10 @@ typedef struct {
     /// Data parsed out of text (if exists)
     uint32_t            frameNum;
     /// Data parsed out of text (if exists)
-    uint16_t            activityMask[16];
+    uint16_t            activityMask[ACTMASKLEN];
     /// Data parsed out of text (if exists)
-    int                 vsd[9][16];
-} ADFrameData;
-
-#define VSD_M0  0
-#define VSD_M1  1
-#define VSD_M2  2
-#define VSD_M3  3
-#define VSD_M4  4
-#define VSD_M5  5
-#define VSD_M6  6
-#define VSD_FM0 7
-#define VSD_F   8
+    int                 vsd[VSD_COUNT][VSDARRAYLEN];
+};
 
 #define RTP_PAYLOAD_TYPE_8000HZ_ADPCM                       5
 #define RTP_PAYLOAD_TYPE_11025HZ_ADPCM                      16

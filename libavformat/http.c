@@ -48,9 +48,9 @@ typedef struct {
     int64_t off, filesize;
     char location[MAX_URL_SIZE];
     HTTPAuthState auth_state;
+    unsigned char response_headers[BUFFER_SIZE];
     unsigned char headers[BUFFER_SIZE];
     int willclose;          /**< Set if the server correctly handles Connection: close and will close the connection after feeding us the content. */
-    unsigned char response_headers[BUFFER_SIZE];
 } HTTPContext;
 
 #define OFFSET(x) offsetof(HTTPContext, x)
@@ -360,18 +360,17 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
         s->http_code = 200;
         return 0;
     }
-    s->chunksize = -1;
     s->response_headers[0] = '\0';
+    s->chunksize = -1;
 
     /* wait for header */
     for(;;) {
         if (http_get_line(s, line, sizeof(line)) < 0)
             return AVERROR(EIO);
 
-        av_dlog(NULL, "header='%s'\n", line);
-
         av_strlcat(s->response_headers, line, sizeof(s->response_headers));
         av_strlcat(s->response_headers, "\n", sizeof(s->response_headers));
+        av_dlog(NULL, "header='%s'\n", line);
 
         err = process_line(h, line, s->line_count, new_location);
         if (err < 0)

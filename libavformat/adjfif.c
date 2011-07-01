@@ -36,8 +36,8 @@
 #include "adpic.h"
 
 static int find_q(unsigned char *qy);
-static void parse_comment( char *text, int text_len, NetVuImageData *pic,
-                           char **additionalText );
+static void parse_comment(char *text, int text_len, struct NetVuImageData *pic,
+                          char **additionalText );
 static void calcQtabs(void);
 
 
@@ -179,7 +179,7 @@ static int q_init;
  * \param max  Maximum size of header
  * \return Total bytes in the JFIF image
  */
-unsigned int build_jpeg_header(void *jfif, NetVuImageData *pic, unsigned int max)
+unsigned int build_jpeg_header(void *jfif, struct NetVuImageData *pic, unsigned int max)
 {
     volatile unsigned int count;
     unsigned short    us1;
@@ -346,7 +346,7 @@ static int find_q(unsigned char *qy)
  *                    that doesn't have a specific field in NetVuImageData
  * \return Length of JFIF header in bytes
  */
-int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic,
+int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *pic,
                int imgSize, char **text)
 {
     int i, sos = FALSE;
@@ -442,7 +442,7 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, NetVuImageData *pic,
     return i;
 }
 
-static void parse_comment( char *text, int text_len, NetVuImageData *pic, char **additionalText )
+static void parse_comment( char *text, int text_len, struct NetVuImageData *pic, char **additionalText )
 {
     char            result[512];
     int             i = 0;
