@@ -156,10 +156,10 @@ AVStream * ad_get_vstream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t ca
     else if (codec_id)
         codec_type = 2;
 
-    id = (codec_type << 29)     |
-         ((cam - 1) << 24) |
-         ((w >> 4) << 12)    |
-         ((h >> 4) << 0);
+    id = ((codec_type & 0x0003) << 29) |
+         (((cam - 1)  & 0x001F) << 24) |
+         (((w >> 4)   & 0x0FFF) << 12) |
+         (((h >> 4)   & 0x0FFF) << 0);
 
     found = FALSE;
     for (i = 0; i < s->nb_streams; i++) {
