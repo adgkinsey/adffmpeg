@@ -23,11 +23,14 @@
 #define AVFILTER_AVFILTER_H
 
 #include "libavutil/avutil.h"
+#include "libavutil/log.h"
 #include "libavutil/samplefmt.h"
+#include "libavutil/pixfmt.h"
+#include "libavutil/rational.h"
 
 #define LIBAVFILTER_VERSION_MAJOR  2
-#define LIBAVFILTER_VERSION_MINOR 23
-#define LIBAVFILTER_VERSION_MICRO  0
+#define LIBAVFILTER_VERSION_MINOR 24
+#define LIBAVFILTER_VERSION_MICRO  1
 
 #define LIBAVFILTER_VERSION_INT AV_VERSION_INT(LIBAVFILTER_VERSION_MAJOR, \
                                                LIBAVFILTER_VERSION_MINOR, \

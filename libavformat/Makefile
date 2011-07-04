@@ -348,8 +348,10 @@ OBJS-$(CONFIG_TCP_PROTOCOL)              += tcp.o
 OBJS-$(CONFIG_UDP_PROTOCOL)              += udp.o
 
 # libavdevice dependencies
+OBJS-$(CONFIG_ALSA_INDEV)                += timefilter.o
 OBJS-$(CONFIG_JACK_INDEV)                += timefilter.o
 
+EXAMPLES  = metadata
 TESTPROGS = timefilter
 
-include $(SUBDIR)../subdir.mak
+include $(SRC_PATH)/subdir.mak

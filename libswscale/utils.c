@@ -119,6 +119,7 @@ const char *swscale_license(void)
         || (x)==PIX_FMT_YUV420P16LE   \
         || (x)==PIX_FMT_YUV422P16LE   \
         || (x)==PIX_FMT_YUV444P16LE   \
+        || (x)==PIX_FMT_YUV422P10LE   \
         || (x)==PIX_FMT_YUV420P9BE    \
         || (x)==PIX_FMT_YUV444P9BE    \
         || (x)==PIX_FMT_YUV420P10BE   \
@@ -127,7 +128,7 @@ const char *swscale_license(void)
         || (x)==PIX_FMT_YUV420P16BE   \
         || (x)==PIX_FMT_YUV422P16BE   \
         || (x)==PIX_FMT_YUV444P16BE   \
-        || (x)==PIX_FMT_YUV422P10     \
+        || (x)==PIX_FMT_YUV422P10BE   \
     )
 
 int sws_isSupportedInput(enum PixelFormat pix_fmt)
@@ -149,12 +150,18 @@ int sws_isSupportedInput(enum PixelFormat pix_fmt)
         || (x)==PIX_FMT_YUVJ444P    \
         || isRGBinBytes(x)          \
         || isBGRinBytes(x)          \
-        || (x)==PIX_FMT_RGB565      \
-        || (x)==PIX_FMT_RGB555      \
-        || (x)==PIX_FMT_RGB444      \
-        || (x)==PIX_FMT_BGR565      \
-        || (x)==PIX_FMT_BGR555      \
-        || (x)==PIX_FMT_BGR444      \
+        || (x)==PIX_FMT_RGB565LE    \
+        || (x)==PIX_FMT_RGB565BE    \
+        || (x)==PIX_FMT_RGB555LE    \
+        || (x)==PIX_FMT_RGB555BE    \
+        || (x)==PIX_FMT_RGB444LE    \
+        || (x)==PIX_FMT_RGB444BE    \
+        || (x)==PIX_FMT_BGR565LE    \
+        || (x)==PIX_FMT_BGR565BE    \
+        || (x)==PIX_FMT_BGR555LE    \
+        || (x)==PIX_FMT_BGR555BE    \
+        || (x)==PIX_FMT_BGR444LE    \
+        || (x)==PIX_FMT_BGR444BE    \
         || (x)==PIX_FMT_RGB8        \
         || (x)==PIX_FMT_BGR8        \
         || (x)==PIX_FMT_RGB4_BYTE   \
@@ -170,12 +177,13 @@ int sws_isSupportedInput(enum PixelFormat pix_fmt)
         || (x)==PIX_FMT_GRAY8       \
         || (x)==PIX_FMT_YUV410P     \
         || (x)==PIX_FMT_YUV440P     \
-        || (x)==PIX_FMT_YUV422P10   \
+        || (x)==PIX_FMT_YUV422P10LE   \
         || (x)==PIX_FMT_YUV420P9LE    \
         || (x)==PIX_FMT_YUV420P10LE   \
         || (x)==PIX_FMT_YUV420P16LE   \
         || (x)==PIX_FMT_YUV422P16LE   \
         || (x)==PIX_FMT_YUV444P16LE   \
+        || (x)==PIX_FMT_YUV422P10BE   \
         || (x)==PIX_FMT_YUV420P9BE    \
         || (x)==PIX_FMT_YUV420P10BE   \
         || (x)==PIX_FMT_YUV420P16BE   \

@@ -188,6 +188,7 @@ External library support:
   --enable-libxavs         enable AVS encoding via xavs [no]
   --enable-libxvid         enable Xvid encoding via xvidcore,
                            native MPEG-4/Xvid encoder exists [no]
+  --enable-openal          enable OpenAL 1.1 capture support [no]
   --enable-mlib            enable Sun medialib [no]
   --enable-zlib            enable zlib [autodetect]
   --enable-libparreader    enable PAR (de)muxing via libparreader [no]
@@ -239,6 +240,7 @@ Advanced options (experts only):
   --malloc-prefix=PFX      prefix malloc and related names with PFX
   --enable-sram            allow use of on-chip SRAM
   --disable-symver         disable symbol versioning
+  --optflags               override optimization-related compiler flags
 
 Developer options (useful when working on FFmpeg itself):
   --disable-debug          disable debugging symbols
@@ -877,9 +879,9 @@ apply(){
 }
 
 cp_if_changed(){
-    cmp -s "$1" "$2" &&
-        echo "$2 is unchanged" ||
-        cp -f "$1" "$2"
+    cmp -s "$1" "$2" && echo "$2 is unchanged" && return
+    mkdir -p "$(dirname $2)"
+    cp -f "$1" "$2"
 }
 
 # CONFIG_LIST contains configurable options, while HAVE_LIST is for
@@ -960,6 +962,7 @@ CONFIG_LIST="
     mpegaudiodsp
     network
     nonfree
+    openal
     pic
     postproc
     rdft
@@ -972,6 +975,7 @@ CONFIG_LIST="
     static
     swscale
     swscale_alpha
+    thumb
     vaapi
     vdpau
     version3
@@ -1096,7 +1100,6 @@ HAVE_LIST="
     memalign
     mkstemp
     mmap
-    pld
     posix_memalign
     round
     roundf
@@ -1123,7 +1126,6 @@ HAVE_LIST="
     sys_select_h
     sys_soundcard_h
     sys_videoio_h
-    ten_operands
     termios_h
     threads
     trunc
@@ -1189,6 +1191,7 @@ CMDLINE_SET="
     logfile
     malloc_prefix
     nm
+    optflags
     pkg_config
     samples
     strip
@@ -1472,6 +1475,7 @@ dv1394_indev_deps="dv1394 dv_demuxer"
 fbdev_indev_deps="linux_fb_h"
 jack_indev_deps="jack_jack_h sem_timedwait"
 libdc1394_indev_deps="libdc1394"
+openal_indev_deps="openal"
 oss_indev_deps_any="soundcard_h sys_soundcard_h"
 oss_outdev_deps_any="soundcard_h sys_soundcard_h"
 sdl_outdev_deps="sdl"
@@ -1520,9 +1524,9 @@ postproc_deps="gpl"
 
 # programs
 ffmpeg_deps="avcodec avformat swscale"
-ffmpeg_select="buffer_filter"
+ffmpeg_select="buffer_filter buffersink_filter"
 ffplay_deps="avcodec avformat swscale sdl"
-ffplay_select="rdft"
+ffplay_select="buffersink_filter rdft"
 ffprobe_deps="avcodec avformat"
 ffserver_deps="avformat ffm_muxer fork rtp_protocol rtsp_demuxer"
 ffserver_extralibs='$ldl'
@@ -1542,11 +1546,6 @@ test_deps(){
             eval ${name}_test_deps="'${dep}$suf1 ${dep}$suf2'"
         done
     done
-}
-
-set_ne_test_deps(){
-    eval ${1}_be_test_deps="bigendian"
-    eval ${1}_le_test_deps="!bigendian"
 }
 
 test_deps _encoder _decoder                                             \
@@ -1625,15 +1624,6 @@ test_deps _muxer _demuxer                                               \
 ac3_fixed_test_deps="ac3_fixed_encoder ac3_decoder rm_muxer rm_demuxer"
 mpg_test_deps="mpeg1system_muxer mpegps_demuxer"
 
-set_ne_test_deps pixdesc
-set_ne_test_deps pixfmts_copy
-set_ne_test_deps pixfmts_crop
-set_ne_test_deps pixfmts_hflip
-set_ne_test_deps pixfmts_null
-set_ne_test_deps pixfmts_pad
-set_ne_test_deps pixfmts_scale
-set_ne_test_deps pixfmts_vflip
-
 # default parameters
 
 logfile="config.log"
@@ -1709,6 +1699,7 @@ SLIBNAME_WITH_VERSION='$(SLIBNAME).$(LIBVERSION)'
 SLIBNAME_WITH_MAJOR='$(SLIBNAME).$(LIBMAJOR)'
 LIB_INSTALL_EXTRA_CMD='$$(RANLIB) "$(LIBDIR)/$(LIBNAME)"'
 
+AS_O='-o $@'
 CC_O='-o $@'
 
 host_cflags='-D_ISOC99_SOURCE -O3 -g'
@@ -1723,11 +1714,9 @@ DEPFLAGS='$(CPPFLAGS) $(CFLAGS) -MM'
 
 # find source path
 if test -f configure; then
-    source_path="$(pwd)"
-    disable source_path_used
+    source_path=.
 else
     source_path=$(cd $(dirname "$0"); pwd)
-    enable source_path_used
     echo "$source_path" | grep -q '[[:blank:]]' &&
         die "Out of tree builds are impossible with whitespace in source path."
     test -e "$source_path/config.h" &&
@@ -2269,7 +2258,7 @@ elif enabled x86; then
             disable cmov
         ;;
         # targets that do support conditional mov (cmov)
-        i686|pentiumpro|pentium[23]|pentium-m|athlon|athlon-tbird|athlon-4|athlon-[mx]p|athlon64|k8|opteron|athlon-fx|core2|amdfam10|barcelona|atom)
+        i686|pentiumpro|pentium[23]|pentium-m|athlon|athlon-tbird|athlon-4|athlon-[mx]p|athlon64*|k8*|opteron*|athlon-fx|core2|amdfam10|barcelona|atom)
             cpuflags="-march=$cpu"
             enable cmov
             enable fast_cmov
@@ -2306,7 +2295,7 @@ elif enabled arm; then
             case $cpu in
                 cortex-a*)                               subarch=armv7a  ;;
                 cortex-r*)                               subarch=armv7r  ;;
-                cortex-m*)                               subarch=armv7m  ;;
+                cortex-m*)                 enable thumb; subarch=armv7m  ;;
                 arm11*)                                  subarch=armv6   ;;
                 arm[79]*e*|arm9[24]6*|arm96*|arm102[26]) subarch=armv5te ;;
                 armv4*|arm7*|arm9[24]*)                  subarch=armv4   ;;
@@ -2579,8 +2568,6 @@ EOF
     exit 1;
 fi
 
-disabled static && LIBNAME=""
-
 die_license_disabled() {
     enabled $1 || { enabled $2 && die "$2 is $1 and --enable-$1 is not specified."; }
 }
@@ -2646,7 +2633,7 @@ if enabled alpha; then
 
 elif enabled arm; then
 
-    check_cflags -marm
+    enabled thumb && check_cflags -mthumb || check_cflags -marm
     nogas=die
 
     if     check_cpp_condition stddef.h "defined __ARM_PCS_VFP"; then
@@ -2661,9 +2648,6 @@ EOF
         esac
         warn "Compiler does not indicate floating-point ABI, guessing $fpabi."
     fi
-
-    # We have to check if pld is a nop and disable it.
-    check_asm pld '"pld [r0]"'
 
     enabled armv5te && check_asm armv5te '"qadd r0, r0, r0"'
     enabled armv6   && check_asm armv6   '"sadd16 r0, r0, r0"'
@@ -2740,18 +2724,6 @@ EOF
 
     # check whether xmm clobbers are supported
     check_asm xmm_clobbers '"":::"%xmm0"'
-
-    # check whether more than 10 operands are supported
-    check_cc <<EOF && enable ten_operands
-int main(void) {
-    int x=0;
-    __asm__ volatile(
-        ""
-        :"+&rm"(x), "+&rm"(x), "+&rm"(x), "+&rm"(x), "+&rm"(x), "+&rm"(x)
-    );
-    return 0;
-}
-EOF
 
     # check whether binutils is new enough to compile SSSE3/MMX2
     enabled ssse3 && check_asm ssse3 '"pabsw %xmm0, %xmm0"'
@@ -2952,6 +2924,11 @@ enabled libx264    && require  libx264 x264.h x264_encoder_encode -lx264 &&
                         die "ERROR: libx264 version must be >= 0.115."; }
 enabled libxavs    && require  libxavs xavs.h xavs_encoder_encode -lxavs
 enabled libxvid    && require  libxvid xvid.h xvid_global -lxvidcore
+enabled openal     && { { for al_libs in "${OPENAL_LIBS}" "-lopenal" "-lOpenAL32"; do
+                        check_lib 'AL/al.h' alGetError "${al_libs}" && break; done } ||
+                        die "ERROR: openal not found"; } &&
+                      { check_cpp_condition "AL/al.h" "defined(AL_VERSION_1_1)" ||
+                        die "ERROR: openal version must be 1.1 or compatible"; }
 enabled mlib       && require  mediaLib mlib_types.h mlib_VectorSub_S16_U8_Mod -lmlib
 enabled libparreader && require2 libparreader "parreader.h parreader_types.h" parReader_getPicStructSize -lparreader
 
@@ -3041,6 +3018,7 @@ check_cflags -Wdeclaration-after-statement
 check_cflags -Wall
 check_cflags -Wno-parentheses
 check_cflags -Wno-switch
+check_cflags -Wno-format-zero-length
 check_cflags -Wdisabled-optimization
 check_cflags -Wpointer-arith
 check_cflags -Wredundant-decls
@@ -3071,7 +3049,9 @@ void ff_foo(void) {}
 EOF
 fi
 
-if enabled small; then
+if [ -n "$optflags" ]; then
+    add_cflags $optflags
+elif enabled small; then
     add_cflags $size_cflags
 elif enabled optimizations; then
     add_cflags $speed_cflags
@@ -3126,6 +3106,8 @@ elif enabled armcc; then
     add_cflags -W${armcc_opt},--diag_suppress=1207
     add_cflags -W${armcc_opt},--diag_suppress=1293 # assignment in condition
     add_cflags -W${armcc_opt},--diag_suppress=3343 # hardfp compat
+    add_cflags -W${armcc_opt},--diag_suppress=167  # pointer sign
+    add_cflags -W${armcc_opt},--diag_suppress=513  # pointer sign
 elif enabled tms470; then
     add_cflags -pds=824 -pds=837
 elif enabled pathscale; then
@@ -3189,7 +3171,6 @@ if enabled x86; then
     echo "CMOV is fast              ${fast_cmov-no}"
     echo "EBX available             ${ebx_available-no}"
     echo "EBP available             ${ebp_available-no}"
-    echo "10 operands supported     ${ten_operands-no}"
 fi
 if enabled arm; then
     echo "ARMv5TE enabled           ${armv5te-no}"
@@ -3222,6 +3203,9 @@ echo "network support           ${network-no}"
 echo "threading support         ${thread_type-no}"
 echo "SDL support               ${sdl-no}"
 echo "Sun medialib support      ${mlib-no}"
+echo "libdxva2 enabled          ${dxva2-no}"
+echo "libva enabled             ${vaapi-no}"
+echo "libvdpau enabled          ${vdpau-no}"
 echo "AVISynth enabled          ${avisynth-no}"
 echo "libcelt enabled           ${libcelt-no}"
 echo "frei0r enabled            ${frei0r-no}"
@@ -3239,7 +3223,6 @@ echo "librtmp enabled           ${librtmp-no}"
 echo "libschroedinger enabled   ${libschroedinger-no}"
 echo "libspeex enabled          ${libspeex-no}"
 echo "libtheora enabled         ${libtheora-no}"
-echo "libva enabled             ${vaapi-no}"
 echo "libvo-aacenc support      ${libvo_aacenc-no}"
 echo "libvo-amrwbenc support    ${libvo_amrwbenc-no}"
 echo "libvorbis enabled         ${libvorbis-no}"
@@ -3247,6 +3230,7 @@ echo "libvpx enabled            ${libvpx-no}"
 echo "libx264 enabled           ${libx264-no}"
 echo "libxavs enabled           ${libxavs-no}"
 echo "libxvid enabled           ${libxvid-no}"
+echo "openal enabled            ${openal-no}"
 echo "zlib enabled              ${zlib-no}"
 echo "bzlib enabled             ${bzlib-no}"
 echo "libparreader enabled      ${libparreader-no}"
@@ -3274,44 +3258,7 @@ echo "License: $license"
 
 echo "Creating config.mak and config.h..."
 
-# build tree in object directory if source path is different from current one
-if enabled source_path_used; then
-    DIRS="
-        doc
-        libavcodec
-        libavcodec/$arch
-        libavdevice
-        libavfilter
-        libavfilter/$arch
-        libavfilter/libmpcodecs
-        libavfilter/libmpcodecs/libvo
-        libavformat
-        libavutil
-        libavutil/$arch
-        libpostproc
-        libswscale
-        libswscale/$arch
-        tests
-        tools
-    "
-    FILES="
-        Makefile
-        common.mak
-        subdir.mak
-        doc/texi2pod.pl
-        libavcodec/Makefile
-        libavcodec/${arch}/Makefile
-        libavdevice/Makefile
-        libavfilter/Makefile
-        libavfilter/${arch}/Makefile
-        libavformat/Makefile
-        libavutil/Makefile
-        libpostproc/Makefile
-        libswscale/Makefile
-    "
-    map 'mkdir -p $v' $DIRS;
-    map 'test -f "$source_path/$v" && $ln_s "$source_path/$v" $v' $FILES
-fi
+test -e Makefile || $ln_s "$source_path/Makefile" .
 
 enabled stripping || strip="echo skipping strip"
 
@@ -3329,8 +3276,10 @@ INCDIR=\$(DESTDIR)$incdir
 BINDIR=\$(DESTDIR)$bindir
 DATADIR=\$(DESTDIR)$datadir
 MANDIR=\$(DESTDIR)$mandir
-SRC_PATH="$source_path"
-SRC_PATH_BARE=$source_path
+SRC_PATH=$source_path
+ifndef MAIN_MAKEFILE
+SRC_PATH:=\$(SRC_PATH:.%=..%)
+endif
 CC_IDENT=$cc_ident
 ARCH=$arch
 CC=$cc
@@ -3347,6 +3296,7 @@ STRIP=$strip
 CPPFLAGS=$CPPFLAGS
 CFLAGS=$CFLAGS
 ASFLAGS=$ASFLAGS
+AS_O=$CC_O
 CC_O=$CC_O
 LDFLAGS=$LDFLAGS
 FFSERVERLDFLAGS=$FFSERVERLDFLAGS
@@ -3496,6 +3446,7 @@ version=$3
 libs=$4
 requires=$5
 enabled ${name#lib} || return 0
+mkdir -p $name
 cat <<EOF > $name/$name.pc
 prefix=$prefix
 exec_prefix=\${prefix}

@@ -68,6 +68,7 @@ OBJS-$(CONFIG_COLOR_FILTER)                  += vsrc_color.o
 OBJS-$(CONFIG_FREI0R_SRC_FILTER)             += vf_frei0r.o
 OBJS-$(CONFIG_MOVIE_FILTER)                  += vsrc_movie.o
 OBJS-$(CONFIG_NULLSRC_FILTER)                += vsrc_nullsrc.o
+OBJS-$(CONFIG_TESTSRC_FILTER)                += vsrc_testsrc.o
 
 OBJS-$(CONFIG_BUFFERSINK_FILTER)             += vsink_buffer.o
 OBJS-$(CONFIG_NULLSINK_FILTER)               += vsink_nullsink.o
@@ -136,8 +137,8 @@ OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_yvu9.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/pullup.o
 
 
--include $(SUBDIR)$(ARCH)/Makefile
+-include $(SRC_PATH)/$(SUBDIR)$(ARCH)/Makefile
 
 DIRS = x86 libmpcodecs
 
-include $(SUBDIR)../subdir.mak
+include $(SRC_PATH)/subdir.mak

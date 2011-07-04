@@ -40,8 +40,8 @@
 #define AV_VERSION(a, b, c) AV_VERSION_DOT(a, b, c)
 
 #define LIBAVUTIL_VERSION_MAJOR 51
-#define LIBAVUTIL_VERSION_MINOR  9
-#define LIBAVUTIL_VERSION_MICRO  1
+#define LIBAVUTIL_VERSION_MINOR 11
+#define LIBAVUTIL_VERSION_MICRO  0
 
 #define LIBAVUTIL_VERSION_INT   AV_VERSION_INT(LIBAVUTIL_VERSION_MAJOR, \
                                                LIBAVUTIL_VERSION_MINOR, \
@@ -104,7 +104,8 @@ enum AVMediaType {
 #define AV_TIME_BASE_Q          (AVRational){1, AV_TIME_BASE}
 
 enum AVPictureType {
-    AV_PICTURE_TYPE_I = 1, ///< Intra
+    AV_PICTURE_TYPE_NONE = 0, ///< Undefined
+    AV_PICTURE_TYPE_I,     ///< Intra
     AV_PICTURE_TYPE_P,     ///< Predicted
     AV_PICTURE_TYPE_B,     ///< Bi-dir predicted
     AV_PICTURE_TYPE_S,     ///< S(GMC)-VOP MPEG4
@@ -125,9 +126,5 @@ char av_get_picture_type_char(enum AVPictureType pict_type);
 #include "common.h"
 #include "error.h"
 #include "mathematics.h"
-#include "rational.h"
-#include "intfloat_readwrite.h"
-#include "log.h"
-#include "pixfmt.h"
 
 #endif /* AVUTIL_AVUTIL_H */

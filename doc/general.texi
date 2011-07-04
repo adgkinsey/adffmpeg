@@ -819,8 +819,8 @@ the FFmpeg Windows Help Forum at
 
 FFmpeg can be built to run natively on Windows using the MinGW tools. Install
 the latest versions of MSYS and MinGW from @url{http://www.mingw.org/}.
-You can find detailed installation
-instructions in the download section and the FAQ.
+You can find detailed installation instructions in the download
+section and the FAQ.
 
 FFmpeg does not build out-of-the-box with the packages the automated MinGW
 installer provides. It also requires coreutils to be installed and many other
@@ -854,7 +854,8 @@ where SDL was installed. Verify that @file{sdl-config} can be launched from
 the MSYS command line.
 
 @item By using @code{./configure --enable-shared} when configuring FFmpeg,
-you can build libavutil, libavcodec and libavformat as DLLs.
+you can build the FFmpeg libraries (e.g. libavutil, libavcodec,
+libavformat) as DLLs.
 
 @end itemize
 
@@ -961,7 +962,7 @@ MSVC++-compatible import libraries.
 @item Build FFmpeg with
 
 @example
-./configure --enable-shared --enable-memalign-hack
+./configure --enable-shared
 make
 make install
 @end example
@@ -1083,12 +1084,12 @@ and add some special flags to your configure invocation.
 
 For a static build run
 @example
-./configure --target-os=mingw32 --enable-memalign-hack --enable-static --disable-shared --extra-cflags=-mno-cygwin --extra-libs=-mno-cygwin
+./configure --target-os=mingw32 --enable-static --disable-shared --extra-cflags=-mno-cygwin --extra-libs=-mno-cygwin
 @end example
 
 and for a build with shared libraries
 @example
-./configure --target-os=mingw32 --enable-memalign-hack --enable-shared --disable-static --extra-cflags=-mno-cygwin --extra-libs=-mno-cygwin
+./configure --target-os=mingw32 --enable-shared --disable-static --extra-cflags=-mno-cygwin --extra-libs=-mno-cygwin
 @end example
 
 @bye

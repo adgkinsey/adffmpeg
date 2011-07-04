@@ -30,6 +30,7 @@
 #include "opt.h"
 #include "eval.h"
 #include "dict.h"
+#include "log.h"
 
 #if FF_API_FIND_OPT
 //FIXME order them and do a bin search
@@ -195,7 +196,6 @@ int av_set_string3(void *obj, const char *name, const char *val, int alloc, cons
                 return 0;
             notfirst=1;
         }
-        return AVERROR(EINVAL);
     }
 
     if (alloc) {
@@ -603,14 +603,14 @@ typedef struct TestContext
 #define TEST_FLAG_MU   04
 
 static const AVOption test_options[]= {
-{"num",      "set num",        OFFSET(num),      FF_OPT_TYPE_INT,      0,              0,        100                 },
-{"toggle",   "set toggle",     OFFSET(toggle),   FF_OPT_TYPE_INT,      0,              0,        1                   },
-{"rational", "set rational",   OFFSET(rational), FF_OPT_TYPE_RATIONAL, 0,              0,        10                  },
-{"string",   "set string",     OFFSET(string),   FF_OPT_TYPE_STRING,   0,              CHAR_MIN, CHAR_MAX            },
-{"flags",    "set flags",      OFFSET(flags),    FF_OPT_TYPE_FLAGS,    0,              0,        INT_MAX, 0, "flags" },
-{"cool",     "set cool flag ", 0,                FF_OPT_TYPE_CONST,    TEST_FLAG_COOL, INT_MIN,  INT_MAX, 0, "flags" },
-{"lame",     "set lame flag ", 0,                FF_OPT_TYPE_CONST,    TEST_FLAG_LAME, INT_MIN,  INT_MAX, 0, "flags" },
-{"mu",       "set mu flag ",   0,                FF_OPT_TYPE_CONST,    TEST_FLAG_MU,   INT_MIN,  INT_MAX, 0, "flags" },
+{"num",      "set num",        OFFSET(num),      FF_OPT_TYPE_INT,      {0},              0,        100                 },
+{"toggle",   "set toggle",     OFFSET(toggle),   FF_OPT_TYPE_INT,      {0},              0,        1                   },
+{"rational", "set rational",   OFFSET(rational), FF_OPT_TYPE_RATIONAL, {0},              0,        10                  },
+{"string",   "set string",     OFFSET(string),   FF_OPT_TYPE_STRING,   {0},              CHAR_MIN, CHAR_MAX            },
+{"flags",    "set flags",      OFFSET(flags),    FF_OPT_TYPE_FLAGS,    {0},              0,        INT_MAX, 0, "flags" },
+{"cool",     "set cool flag ", 0,                FF_OPT_TYPE_CONST,    {TEST_FLAG_COOL}, INT_MIN,  INT_MAX, 0, "flags" },
+{"lame",     "set lame flag ", 0,                FF_OPT_TYPE_CONST,    {TEST_FLAG_LAME}, INT_MIN,  INT_MAX, 0, "flags" },
+{"mu",       "set mu flag ",   0,                FF_OPT_TYPE_CONST,    {TEST_FLAG_MU},   INT_MIN,  INT_MAX, 0, "flags" },
 {NULL},
 };
 

@@ -1,6 +1,6 @@
-SRC_DIR := $(SRC_PATH_BARE)/lib$(NAME)
+SRC_DIR := $(SRC_PATH)/lib$(NAME)
 
-include $(SUBDIR)../common.mak
+include $(SRC_PATH)/common.mak
 
 LIBVERSION := $(lib$(NAME)_VERSION)
 LIBMAJOR   := $(lib$(NAME)_VERSION_MAJOR)
@@ -11,16 +11,17 @@ all-$(CONFIG_STATIC): $(SUBDIR)$(LIBNAME)
 all-$(CONFIG_SHARED): $(SUBDIR)$(SLIBNAME)
 
 $(SUBDIR)%-test.o: $(SUBDIR)%-test.c
-	$(CC) $(CPPFLAGS) $(CFLAGS) -DTEST -c $(CC_O) $^
+	$(COMPILE_C)
 
 $(SUBDIR)%-test.o: $(SUBDIR)%.c
-	$(CC) $(CPPFLAGS) $(CFLAGS) -DTEST -c $(CC_O) $^
+	$(COMPILE_C)
 
 $(SUBDIR)x86/%.o: $(SUBDIR)x86/%.asm
 	$(YASMDEP) $(YASMFLAGS) -I $(<D)/ -M -o $@ $< > $(@:.o=.d)
 	$(YASM) $(YASMFLAGS) -I $(<D)/ -o $@ $<
 
-$(OBJS) $(SUBDIR)%.ho $(SUBDIR)%-test.o $(TESTOBJS): CPPFLAGS += -DHAVE_AV_CONFIG_H
+$(OBJS) $(SUBDIR)%.ho $(TESTOBJS): CPPFLAGS += -DHAVE_AV_CONFIG_H
+$(TESTOBJS): CPPFLAGS += -DTEST
 
 $(SUBDIR)$(LIBNAME): $(OBJS)
 	$(RM) $@

@@ -40,6 +40,7 @@
 #include "libavutil/fifo.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/dict.h"
+#include "libavutil/mathematics.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/avstring.h"
 #include "libavutil/libm.h"
@@ -1859,7 +1860,7 @@ static int output_packet(AVInputStream *ist, int ist_index,
                             ret = 0;
                             /* encode any samples remaining in fifo */
                             if (fifo_bytes > 0) {
-                                int osize = av_get_bits_per_sample_fmt(enc->sample_fmt) >> 3;
+                                int osize = av_get_bytes_per_sample(enc->sample_fmt);
                                 int fs_tmp = enc->frame_size;
 
                                 av_fifo_generic_read(ost->fifo, audio_buf, fifo_bytes, NULL);
@@ -2282,8 +2283,10 @@ static int transcode(AVFormatContext **output_files,
                 }
                 choose_sample_rate(ost->st, ost->enc);
                 codec->time_base = (AVRational){1, codec->sample_rate};
-                if (!codec->channels)
+                if (!codec->channels) {
                     codec->channels = icodec->channels;
+                    codec->channel_layout = icodec->channel_layout;
+                }
                 if (av_get_channel_layout_nb_channels(codec->channel_layout) != codec->channels)
                     codec->channel_layout = 0;
                 ost->audio_resample = codec->sample_rate != icodec->sample_rate || audio_sync_method > 1;
@@ -2941,7 +2944,7 @@ static int opt_frame_pix_fmt(const char *opt, const char *arg)
             return AVERROR(EINVAL);
         }
     } else {
-        show_pix_fmts();
+        opt_pix_fmts(NULL, NULL);
         ffmpeg_exit(0);
     }
     return 0;
@@ -4071,16 +4074,18 @@ static void parse_matrix_coeffs(uint16_t *dest, const char *str)
     }
 }
 
-static void opt_inter_matrix(const char *arg)
+static int opt_inter_matrix(const char *opt, const char *arg)
 {
     inter_matrix = av_mallocz(sizeof(uint16_t) * 64);
     parse_matrix_coeffs(inter_matrix, arg);
+    return 0;
 }
 
-static void opt_intra_matrix(const char *arg)
+static int opt_intra_matrix(const char *opt, const char *arg)
 {
     intra_matrix = av_mallocz(sizeof(uint16_t) * 64);
     parse_matrix_coeffs(intra_matrix, arg);
+    return 0;
 }
 
 static void show_usage(void)
@@ -4090,7 +4095,7 @@ static void show_usage(void)
     printf("\n");
 }
 
-static void show_help(void)
+static int opt_help(const char *opt, const char *arg)
 {
     AVCodec *c;
     AVOutputFormat *oformat = NULL;
@@ -4145,6 +4150,7 @@ static void show_help(void)
     }
 
     av_opt_show2(sws_opts, NULL, AV_OPT_FLAG_ENCODING_PARAM|AV_OPT_FLAG_DECODING_PARAM, 0);
+    return 0;
 }
 
 static int opt_target(const char *opt, const char *arg)
@@ -4375,10 +4381,11 @@ static void log_callback_null(void* ptr, int level, const char* fmt, va_list vl)
 {
 }
 
-static void opt_passlogfile(const char *arg)
+static int opt_passlogfile(const char *opt, const char *arg)
 {
     pass_logfilename_prefix = arg;
     opt_default("passlogfile", arg);
+    return 0;
 }
 
 static const OptionDef options[] = {
