@@ -67,14 +67,13 @@ static void audioheader_network2host(struct NetVuAudioData *dst, const uint8_t *
 /**
  * MPEG4 or H264 video frame with a Netvu header
  */
-static int adbinary_mpeg(AVFormatContext *s, AVPacket *pkt, int dataSize, 
-                         struct NetVuImageData *vidDat, char **txtDat)
+static int adbinary_mpeg(AVFormatContext *s,
+                         AVPacket *pkt, struct NetVuImageData *vidDat, char **txtDat)
 {
     static const int hdrSize = NetVuImageDataHeaderSize;
     AVIOContext *pb = s->pb;
     int textSize = 0;
     int n, status, errorVal = 0;
-    int readDataSize = 0;
 
     if ((n = ad_get_buffer(pb, (uint8_t *)vidDat, hdrSize)) != hdrSize) {
         av_log(s, AV_LOG_ERROR, "%s: short of data reading header, "
@@ -123,13 +122,6 @@ static int adbinary_mpeg(AVFormatContext *s, AVPacket *pkt, int dataSize,
     if (vidDat->vid_format & (PIC_MODE_MPEG4_411_I | PIC_MODE_MPEG4_411_GOV_I))
         pkt->flags |= AV_PKT_FLAG_KEY;
 
-    readDataSize = hdrSize + textSize + vidDat->size;
-    if (readDataSize < dataSize)  {
-        uint8_t *scratch = av_malloc(dataSize - readDataSize);
-        avio_read(pb, scratch, dataSize - readDataSize);
-        av_free(scratch);
-    }
-    
     return errorVal;
 }
 
@@ -383,9 +375,6 @@ static int adbinary_probe(AVProbeData *p)
             case AD_DATATYPE_PBM:
                 av_dlog(NULL, "%s: Detected pbm packet\n", __func__);
                 break;
-            default:
-                av_dlog(NULL, "%s: Detected unknwon packet type %d\n", __func__, bufPtr[PKT_DATATYPE]);
-                break;
         }
 
         bufferSize -= dataSize;
@@ -448,7 +437,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             case AD_DATATYPE_MPEG4P:
             case AD_DATATYPE_H264I:
             case AD_DATATYPE_H264P:
-                errorVal = adbinary_mpeg(s, pkt, size, payload, &txtDat);
+                errorVal = adbinary_mpeg(s, pkt, payload, &txtDat);
                 break;
             case AD_DATATYPE_MINIMAL_MPEG4:
                 errorVal = ad_read_mpeg_minimal(s, pkt, size, data_channel,
