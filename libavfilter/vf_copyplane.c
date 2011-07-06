@@ -28,14 +28,6 @@
 #include "libavutil/pixdesc.h"
 #include "avfilter.h"
 
-static const char *var_names[] = {
-        "r",
-        "g",
-        "b",
-        "a",
-        NULL
-};
-
 typedef struct {
     const AVClass *class;
     char   *comp_expr_str[4];
@@ -118,7 +110,7 @@ static int config_props(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     CopyPlaneContext *cp = ctx->priv;
-    int comp, ret;
+    int comp;
 
     cp->pix_desc = &av_pix_fmt_descriptors[inlink->format];
 
@@ -216,7 +208,7 @@ static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
         for (i = y1; i < y1 + h1; i++) {
             if (cp->copyplane[c] >= 0)  {
                 av_read_image_line(cp->line, 
-                                   inpic->data,
+                                   (const uint8_t **)inpic->data,
                                    inpic->linesize,
                                    cp->pix_desc,
                                    0, i, cp->copyplane[c], w1, 0);
@@ -228,7 +220,7 @@ static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
             }
             if (!cp->skipplane[c])  {
                 av_read_image_line(cp->line, 
-                                   inpic->data,
+                                   (const uint8_t **)inpic->data,
                                    inpic->linesize,
                                    cp->pix_desc,
                                    0, i, c, w1, 0);
