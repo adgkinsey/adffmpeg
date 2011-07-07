@@ -194,6 +194,8 @@ AVStream * ad_get_vstream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t ca
                 av_dict_set(&st->metadata, "title", title, 0);
             snprintf(textbuffer, sizeof(textbuffer), "%u", cam);
             av_dict_set(&st->metadata, "track", textbuffer, 0);
+            
+            av_dict_set(&st->metadata, "type", "camera", 0);
         }
     }
     return st;
@@ -243,6 +245,7 @@ static AVStream * ad_get_overlay_stream(AVFormatContext *s, const char *title)
             st->codec->time_base = (AVRational) { 1, 1000 };
 
             av_dict_set(&st->metadata, "title", title, 0);
+            av_dict_set(&st->metadata, "type", "mask", 0);
         }
     }
     return st;
@@ -378,28 +381,33 @@ static AVStream * ad_get_data_stream(AVFormatContext *s, enum CodecID codecId)
 
 static void ad_release_packet( AVPacket *pkt )
 {
-    struct ADFrameData *frameData;
-
     if (pkt == NULL)
         return;
 
-    if (pkt->priv != NULL)  {
+    if (pkt->priv)  {
         // Have a look what type of frame we have and then free as appropriate
-        frameData = (struct ADFrameData *)pkt->priv;
+        struct ADFrameData *frameData = (struct ADFrameData *)pkt->priv;
+        struct NetVuAudioData *audHeader;
 
-        if( frameData->frameType == NetVuAudio ) {
-            struct NetVuAudioData *audHeader = (struct NetVuAudioData *)frameData->frameData;
-            if( audHeader->additionalData )
-                av_free( audHeader->additionalData );
+        switch(frameData->frameType)  {
+            case(NetVuAudio):
+                audHeader = (struct NetVuAudioData *)frameData->frameData;
+                if( audHeader->additionalData )
+                    av_free( audHeader->additionalData );
+            case(NetVuVideo):
+            case(DMVideo):
+            case(DMNudge):
+            case(NetVuDataInfo):
+            case(NetVuDataLayout):
+            case(RTPAudio):
+                av_freep(&frameData->frameData);
+                av_freep(&frameData->additionalData);
+                break;
+            default:
+                // Error, unrecognised frameType
+                break;
         }
-
-        // Nothing else has nested allocs so just delete the frameData
-        if( frameData->frameData  )
-            av_free( frameData->frameData );
-        if( frameData->additionalData )
-            av_free( frameData->additionalData );
-
-        av_free( pkt->priv );
+        av_freep(&pkt->priv);
     }
 
     // Now use the default routine to release the rest of the packet's resources
@@ -409,6 +417,7 @@ static void ad_release_packet( AVPacket *pkt )
 int ad_new_packet(AVPacket *pkt, int size)
 {
     int retVal = av_new_packet( pkt, size );
+    pkt->priv = NULL;
 
     if( retVal >= 0 ) {
         // Give the packet its own destruct function
@@ -766,7 +775,7 @@ int ad_read_info(AVFormatContext *s, AVPacket *pkt, int size)
     AVIOContext *pb = s->pb;
 
     // Allocate a new packet
-    if( (status = av_new_packet( pkt, size )) < 0 )
+    if( (status = ad_new_packet( pkt, size )) < 0 )
         return ADPIC_INFO_NEW_PACKET_ERROR;
 
     // Skip first byte
@@ -786,7 +795,7 @@ int ad_read_layout(AVFormatContext *s, AVPacket *pkt, int size)
     AVIOContext *pb = s->pb;
 
     // Allocate a new packet
-    if( (status = av_new_packet( pkt, size )) < 0 )
+    if( (status = ad_new_packet( pkt, size )) < 0 )
         return ADPIC_LAYOUT_NEW_PACKET_ERROR;
 
     // Get the data
@@ -796,7 +805,7 @@ int ad_read_layout(AVFormatContext *s, AVPacket *pkt, int size)
     return errorVal;
 }
 
-static int pbm_read_mem(char **comment, uint8_t **src, int size, uint8_t **dst, int *width, int *height)
+static int pbm_read_mem(char **comment, uint8_t **src, int size, AVPacket *pkt, int *width, int *height)
 {
     static const uint8_t pbm[3] = { 0x50, 0x34, 0x0A };
     static const uint8_t rle[4] = { 0x52, 0x4C, 0x45, 0x20 };
@@ -852,14 +861,15 @@ static int pbm_read_mem(char **comment, uint8_t **src, int size, uint8_t **dst, 
         unsigned int headerP2Size = headerSize - headerP1Size;
         unsigned int dataSize = ((*width) * (*height)) / 8;
         
-        *dst = av_malloc(headerSize + dataSize);
-        dPtr = *dst;
+        ad_new_packet(pkt, headerSize + dataSize);
+        dPtr = pkt->data;
         
         memcpy(dPtr, *src, headerP1Size);
         dPtr += headerP1Size;
         memcpy(dPtr, strPtr, headerP2Size);
         dPtr += headerP2Size;
         
+        // Decompress loop
         while (ptr < endPtr)  {
             len = *ptr++;
             val = *ptr++;
@@ -868,11 +878,16 @@ static int pbm_read_mem(char **comment, uint8_t **src, int size, uint8_t **dst, 
 				*dPtr++ = val;
 			} while(len>0);
         }
+        
+        // Free compressed data
+        av_freep(src);
+        
         return headerSize + dataSize;
     }
     else  {
-        *dst = *src;
-        *src = NULL;
+        ad_new_packet(pkt, size);
+        memcpy(pkt->data, *src, size);
+        av_freep(src);
         return size;
     }
 }
@@ -893,7 +908,7 @@ int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int insize, char **text_d
         return ADPIC_OVERLAY_GET_BUFFER_ERROR;
     }
     
-    pkt->size = pbm_read_mem(text_data, &inbuf, insize, &pkt->data, &w, &h);
+    pkt->size = pbm_read_mem(text_data, &inbuf, insize, pkt, &w, &h);
     if (pkt->size <= 0) {
 		av_log(s, AV_LOG_ERROR, "ADPIC: pbm_read_mem failed\n");
 		return ADPIC_OVERLAY_PBM_READ_ERROR_ERROR;
@@ -903,7 +918,7 @@ int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int insize, char **text_d
     st->codec->width = w;
     st->codec->height = h;
     
-    pkt->pts = lastVideoPTS;
+    pkt->dts = pkt->pts = lastVideoPTS;
     
     return 0;
 }
