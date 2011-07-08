@@ -66,7 +66,7 @@ void libpar_packet_destroy(struct AVPacket *packet);
 const unsigned int MAX_FRAMEBUFFER_SIZE = 256 * 1024;
 
 
-static void importMetadata(const AVMetadataTag *tag, struct PAREncStreamContext *ps)
+static void importMetadata(const AVDictionaryEntry *tag, struct PAREncStreamContext *ps)
 {
     if (strcasecmp(tag->key, "title") == 0)
         av_strlcpy(ps->name, tag->value, sizeof(ps->name));
@@ -107,12 +107,12 @@ static void parreaderLogger(int level, const char *format, va_list args)
 static int par_write_header(AVFormatContext *avf)
 {
     PAREncContext *p = avf->priv_data;
-    AVMetadataTag *tag = NULL;
+    AVDictionaryEntry *tag = NULL;
     int ii;
 
     p->picHeaderSize = parReader_getPicStructSize();
     do  {
-        tag = av_metadata_get(avf->metadata, "", tag, AV_METADATA_IGNORE_SUFFIX);
+        tag = av_dict_get(avf->metadata, "", tag, AV_METADATA_IGNORE_SUFFIX);
         if (tag)
             importMetadata(tag, &(p->master));
     }
@@ -138,7 +138,7 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
     PAREncContext *p = avf->priv_data;
     //struct PAREncStreamContext *ps = p->firstStream;
     struct PAREncStreamContext *ps = &(p->stream[pkt->stream_index]);
-    AVMetadataTag *tag = NULL;
+    AVDictionaryEntry *tag = NULL;
     int64_t parTime;
     AVStream *stream = avf->streams[pkt->stream_index];
     void *hdr;
@@ -171,7 +171,7 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
 
         // Now check if there are stream-specific values
         do  {
-            tag = av_metadata_get(stream->metadata, "", tag, AV_METADATA_IGNORE_SUFFIX);
+            tag = av_dict_get(stream->metadata, "", tag, AV_METADATA_IGNORE_SUFFIX);
             if (tag)
                 importMetadata(tag, ps);
         }
@@ -367,13 +367,15 @@ static AVStream* createStream(AVFormatContext * avf,
                                     frameInfo->frameBufferSize,
                                     textbuffer,
                                     sizeof(textbuffer));
-            av_metadata_set2(&st->metadata, "title", textbuffer, 0);
+            av_dict_set(&st->metadata, "title", textbuffer, 0);
 
             parReader_getStreamDate(frameInfo, textbuffer, sizeof(textbuffer));
-            av_metadata_set2(&st->metadata, "date", textbuffer, 0);
+            av_dict_set(&st->metadata, "date", textbuffer, 0);
 
             snprintf(textbuffer, sizeof(textbuffer), "%d", frameInfo->channel);
-            av_metadata_set2(&st->metadata, "track", textbuffer, 0);
+            av_dict_set(&st->metadata, "track", textbuffer, 0);
+            
+            av_dict_set(&st->metadata, "type", "camera", 0);
         }
     }
     else if (parReader_frameIsAudio(frameInfo))  {
@@ -650,7 +652,7 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
     p->fileChanged = 0;
 
     snprintf(textbuf, sizeof(textbuf), "%d", parReader_getUTCOffset(&p->frameInfo));
-    av_metadata_set2(&avf->metadata, "timezone", textbuf, 0);
+    av_dict_set(&avf->metadata, "timezone", textbuf, 0);
 
     strm = createStream(avf, &p->frameInfo);
     if (strm)  {
