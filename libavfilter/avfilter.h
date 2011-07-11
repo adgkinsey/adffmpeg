@@ -30,7 +30,7 @@
 
 #define LIBAVFILTER_VERSION_MAJOR  2
 #define LIBAVFILTER_VERSION_MINOR 24
-#define LIBAVFILTER_VERSION_MICRO  1
+#define LIBAVFILTER_VERSION_MICRO  4
 
 #define LIBAVFILTER_VERSION_INT AV_VERSION_INT(LIBAVFILTER_VERSION_MAJOR, \
                                                LIBAVFILTER_VERSION_MINOR, \
@@ -162,6 +162,7 @@ static inline void avfilter_copy_buffer_ref_props(AVFilterBufferRef *dst, AVFilt
     switch (src->type) {
     case AVMEDIA_TYPE_VIDEO: *dst->video = *src->video; break;
     case AVMEDIA_TYPE_AUDIO: *dst->audio = *src->audio; break;
+    default: break;
     }
 }
 

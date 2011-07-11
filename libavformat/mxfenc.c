@@ -1539,7 +1539,7 @@ static const uint8_t system_metadata_package_set_key[] = { 0x06,0x0E,0x2B,0x34,0
 static uint32_t ff_framenum_to_12m_time_code(unsigned frame, int drop, int fps)
 {
     return (0                                    << 31) | // color frame flag
-           (0                                    << 30) | // drop  frame flag
+           (drop                                 << 30) | // drop  frame flag
            ( ((frame % fps) / 10)                << 28) | // tens  of frames
            ( ((frame % fps) % 10)                << 24) | // units of frames
            (0                                    << 23) | // field phase (NTSC), b0 (PAL)
@@ -1549,7 +1549,7 @@ static uint32_t ff_framenum_to_12m_time_code(unsigned frame, int drop, int fps)
            ((((frame / (fps * 60)) % 60) / 10)   << 12) | // tens  of minutes
            ((((frame / (fps * 60)) % 60) % 10)   <<  8) | // units of minutes
            (0                                    <<  7) | // b1
-           (0                                    <<  6) | // b2 (NSC), field phase (PAL)
+           (0                                    <<  6) | // b2 (NTSC), field phase (PAL)
            ((((frame / (fps * 3600) % 24)) / 10) <<  4) | // tens  of hours
            (  (frame / (fps * 3600) % 24)) % 10;          // units of hours
 }

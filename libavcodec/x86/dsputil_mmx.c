@@ -42,7 +42,7 @@ DECLARE_ALIGNED(8,  const uint64_t, ff_wtwo) = 0x0002000200020002ULL;
 DECLARE_ALIGNED(16, const uint64_t, ff_pdw_80000000)[2] =
 {0x8000000080000000ULL, 0x8000000080000000ULL};
 
-DECLARE_ALIGNED(8,  const uint64_t, ff_pw_1  ) = 0x0001000100010001ULL;
+DECLARE_ALIGNED(16, const xmm_reg,  ff_pw_1  ) = {0x0001000100010001ULL, 0x0001000100010001ULL};
 DECLARE_ALIGNED(16, const xmm_reg,  ff_pw_2  ) = {0x0002000200020002ULL, 0x0002000200020002ULL};
 DECLARE_ALIGNED(16, const xmm_reg,  ff_pw_3  ) = {0x0003000300030003ULL, 0x0003000300030003ULL};
 DECLARE_ALIGNED(16, const xmm_reg,  ff_pw_4  ) = {0x0004000400040004ULL, 0x0004000400040004ULL};
@@ -1783,7 +1783,7 @@ static void gmc_mmx(uint8_t *dst, uint8_t *src, int stride, int h, int ox, int o
                     int dxx, int dxy, int dyx, int dyy, int shift, int r, int width, int height)
 {
     gmc(dst, src, stride, h, ox, oy, dxx, dxy, dyx, dyy, shift, r,
-        width, height, &ff_emulated_edge_mc);
+        width, height, &ff_emulated_edge_mc_8);
 }
 #endif
 
@@ -2563,8 +2563,8 @@ void dsputil_init_mmx(DSPContext* c, AVCodecContext *avctx)
             SET_QPEL_FUNCS(avg_h264_qpel, 1, 8, mmx2, );
             SET_QPEL_FUNCS(avg_h264_qpel, 2, 4, mmx2, );
             }
-#if HAVE_YASM
             else if (bit_depth == 10) {
+#if HAVE_YASM
 #if !ARCH_X86_64
                 SET_QPEL_FUNCS(avg_h264_qpel, 0, 16, 10_mmxext, ff_);
                 SET_QPEL_FUNCS(put_h264_qpel, 0, 16, 10_mmxext, ff_);
@@ -2573,8 +2573,8 @@ void dsputil_init_mmx(DSPContext* c, AVCodecContext *avctx)
 #endif
                 SET_QPEL_FUNCS(put_h264_qpel, 2, 4,  10_mmxext, ff_);
                 SET_QPEL_FUNCS(avg_h264_qpel, 2, 4,  10_mmxext, ff_);
-            }
 #endif
+            }
 
             SET_QPEL_FUNCS(put_2tap_qpel, 0, 16, mmx2, );
             SET_QPEL_FUNCS(put_2tap_qpel, 1, 8, mmx2, );

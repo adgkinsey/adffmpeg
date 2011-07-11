@@ -2117,7 +2117,7 @@ static void open_parser(AVFormatContext *s, int i)
         codec = avcodec_find_decoder(st->codec->codec_id);
         if (codec && (codec->capabilities & CODEC_CAP_PARSE_ONLY)) {
             st->codec->parse_only = 1;
-            if (avcodec_open(st->codec, codec) < 0)
+            if (avcodec_open2(st->codec, codec, NULL) < 0)
                 st->codec->parse_only = 0;
         }
     }
@@ -2128,13 +2128,12 @@ static int open_input_stream(HTTPContext *c, const char *info)
     char buf[128];
     char input_filename[1024];
     AVFormatContext *s = NULL;
-    int buf_size, i, ret;
+    int i, ret;
     int64_t stream_pos;
 
     /* find file name */
     if (c->stream->feed) {
         strcpy(input_filename, c->stream->feed->feed_filename);
-        buf_size = FFM_PACKET_SIZE;
         /* compute position (absolute time) */
         if (av_find_info_tag(buf, sizeof(buf), "date", info)) {
             if ((ret = av_parse_time(&stream_pos, buf, 0)) < 0)
@@ -2146,7 +2145,6 @@ static int open_input_stream(HTTPContext *c, const char *info)
             stream_pos = av_gettime() - c->stream->prebuffer * (int64_t)1000;
     } else {
         strcpy(input_filename, c->stream->feed_filename);
-        buf_size = 0;
         /* compute position (relative time) */
         if (av_find_info_tag(buf, sizeof(buf), "date", info)) {
             if ((ret = av_parse_time(&stream_pos, buf, 1)) < 0)
@@ -3470,7 +3468,7 @@ static AVStream *add_av_stream1(FFStream *stream, AVCodecContext *codec, int cop
     if (!fst)
         return NULL;
     if (copy) {
-        fst->codec= avcodec_alloc_context();
+        fst->codec = avcodec_alloc_context3(NULL);
         memcpy(fst->codec, codec, sizeof(AVCodecContext));
         if (codec->extradata_size) {
             fst->codec->extradata = av_malloc(codec->extradata_size);
@@ -3887,7 +3885,7 @@ static void add_codec(FFStream *stream, AVCodecContext *av)
     st = av_mallocz(sizeof(AVStream));
     if (!st)
         return;
-    st->codec = avcodec_alloc_context();
+    st->codec = avcodec_alloc_context3(NULL);
     stream->streams[stream->nb_streams++] = st;
     memcpy(st->codec, av, sizeof(AVCodecContext));
 }
