@@ -42,6 +42,7 @@ void avfilter_register_all(void)
 
     REGISTER_FILTER (BLACKFRAME,  blackframe,  vf);
     REGISTER_FILTER (COPY,        copy,        vf);
+    REGISTER_FILTER (COPYPLANE,   copyplane,   vf);
     REGISTER_FILTER (CROP,        crop,        vf);
     REGISTER_FILTER (CROPDETECT,  cropdetect,  vf);
     REGISTER_FILTER (DRAWBOX,     drawbox,     vf);
