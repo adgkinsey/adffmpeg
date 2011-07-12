@@ -149,22 +149,6 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
     uint32_t pktTypeCheck;
     int written = 0;
 
-    /*if (p->firstStream == NULL)  {
-        p->firstStream = av_mallocz(sizeof(struct PAREncStreamContext));
-        ps->index = pkt->stream_index;
-    }
-    for(ps = p->firstStream; ps != NULL; ps = ps->next)  {
-        if (ps->index == pkt->stream_index)
-            break;
-    }
-    if (ps == NULL)  {
-        for(ps = p->firstStream; ps->next != NULL; ps = ps->next)  {
-        }
-        ps->next = av_mallocz(sizeof(struct PAREncStreamContext));
-        ps = ps->next;
-        ps->index = pkt->stream_index;
-    }*/
-    
     // Metadata
     if (ps->camera < 1)  {
         // Copy over the values from the file data first
@@ -720,6 +704,8 @@ static int par_read_seek(AVFormatContext *avf, int stream,
             p->dispSet.frameNumber = 0;
         }
         else  {
+            p->dispSet.fileSeqNo = -1;
+            
             if (flags & AVSEEK_FLAG_FRAME)  {
                 // Don't seek beyond the file
                 p->dispSet.fileLock = 1;
