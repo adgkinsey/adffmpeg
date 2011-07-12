@@ -120,6 +120,7 @@ static int par_write_header(AVFormatContext *avf)
 
     for (ii = 0; ii < avf->nb_streams; ii++)  {
         AVStream *st = avf->streams[ii];
+        
         // Set timebase to 1 millisecond, and min frame rate to 1 / timebase
         av_set_pts_info(st, 32, 1, 1000);
         st->r_frame_rate = (AVRational) { 1, 1 };
@@ -358,7 +359,7 @@ static AVStream* createStream(AVFormatContext * avf,
             // Set pixel aspect ratio, display aspect is (sar * width / height)
             /// \todo Could set better values here by checking resolutions and
             /// assuming PAL/NTSC aspect
-            if( (w > 360) && (h <= 480) )
+            if( (w > 360) && (h < 480) )
                 st->sample_aspect_ratio = (AVRational) { 1, 2 };
             else
                 st->sample_aspect_ratio = (AVRational) { 1, 1 };
@@ -583,8 +584,7 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
     parReader_version(libVer, sizeof(libVer));
     av_log(avf, AV_LOG_INFO, "ParReader library version: %s\n", libVer);
 
-    p->frameInfo.frameBufferSize = MAX_FRAMEBUFFER_SIZE;
-    p->frameInfo.frameBuffer = av_malloc(p->frameInfo.frameBufferSize);
+    parReader_initFrameInfo(&p->frameInfo, MAX_FRAMEBUFFER_SIZE, av_malloc(MAX_FRAMEBUFFER_SIZE));
     if (p->frameInfo.frameBuffer == NULL)
         return AVERROR(ENOMEM);
 
