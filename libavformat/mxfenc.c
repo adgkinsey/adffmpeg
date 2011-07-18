@@ -39,6 +39,7 @@
 #include "libavcodec/bytestream.h"
 #include "audiointerleave.h"
 #include "avformat.h"
+#include "internal.h"
 #include "mxf.h"
 
 static const int NTSC_samples_per_frame[] = { 1602, 1601, 1602, 1601, 1602, 0 };
@@ -1407,6 +1408,8 @@ static int mxf_write_header(AVFormatContext *s)
     int i;
     uint8_t present[FF_ARRAY_ELEMS(mxf_essence_container_uls)] = {0};
     const int *samples_per_frame = NULL;
+    AVDictionaryEntry *t;
+    int64_t timestamp = 0;
 
     if (!s->nb_streams)
         return -1;
@@ -1512,8 +1515,15 @@ static int mxf_write_header(AVFormatContext *s)
         sc->order = AV_RB32(sc->track_essence_element_key+12);
     }
 
+#if FF_API_TIMESTAMP
     if (s->timestamp)
-        mxf->timestamp = mxf_parse_timestamp(s->timestamp);
+        timestamp = s->timestamp;
+    else
+#endif
+    if (t = av_dict_get(s->metadata, "creation_time", NULL, 0))
+        timestamp = ff_iso8601_to_unix_time(t->value);
+    if (timestamp)
+        mxf->timestamp = mxf_parse_timestamp(timestamp);
     mxf->duration = -1;
 
     mxf->timecode_track = av_mallocz(sizeof(*mxf->timecode_track));
@@ -1880,33 +1890,30 @@ static int mxf_interleave(AVFormatContext *s, AVPacket *out, AVPacket *pkt, int 
 }
 
 AVOutputFormat ff_mxf_muxer = {
-    "mxf",
-    NULL_IF_CONFIG_SMALL("Material eXchange Format"),
-    "application/mxf",
-    "mxf",
-    sizeof(MXFContext),
-    CODEC_ID_PCM_S16LE,
-    CODEC_ID_MPEG2VIDEO,
-    mxf_write_header,
-    mxf_write_packet,
-    mxf_write_footer,
-    AVFMT_NOTIMESTAMPS,
-    NULL,
-    mxf_interleave,
+    .name              = "mxf",
+    .long_name         = NULL_IF_CONFIG_SMALL("Material eXchange Format"),
+    .mime_type         = "application/mxf",
+    .extensions        = "mxf",
+    .priv_data_size    = sizeof(MXFContext),
+    .audio_codec       = CODEC_ID_PCM_S16LE,
+    .video_codec       = CODEC_ID_MPEG2VIDEO,
+    .write_header      = mxf_write_header,
+    .write_packet      = mxf_write_packet,
+    .write_trailer     = mxf_write_footer,
+    .flags             = AVFMT_NOTIMESTAMPS,
+    .interleave_packet = mxf_interleave,
 };
 
 AVOutputFormat ff_mxf_d10_muxer = {
-    "mxf_d10",
-    NULL_IF_CONFIG_SMALL("Material eXchange Format, D-10 Mapping"),
-    "application/mxf",
-    NULL,
-    sizeof(MXFContext),
-    CODEC_ID_PCM_S16LE,
-    CODEC_ID_MPEG2VIDEO,
-    mxf_write_header,
-    mxf_write_packet,
-    mxf_write_footer,
-    AVFMT_NOTIMESTAMPS,
-    NULL,
-    mxf_interleave,
+    .name              = "mxf_d10",
+    .long_name         = NULL_IF_CONFIG_SMALL("Material eXchange Format, D-10 Mapping"),
+    .mime_type         = "application/mxf",
+    .priv_data_size    = sizeof(MXFContext),
+    .audio_codec       = CODEC_ID_PCM_S16LE,
+    .video_codec       = CODEC_ID_MPEG2VIDEO,
+    .write_header      = mxf_write_header,
+    .write_packet      = mxf_write_packet,
+    .write_trailer     = mxf_write_footer,
+    .flags             = AVFMT_NOTIMESTAMPS,
+    .interleave_packet = mxf_interleave,
 };

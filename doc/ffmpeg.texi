@@ -159,8 +159,6 @@ Set the ISO 639 language code (3 letters) of the current subtitle stream.
 @section Video Options
 
 @table @option
-@item -b @var{bitrate}
-Set the video bitrate in bit/s (default = 200 kb/s).
 @item -vframes @var{number}
 Set the number of video frames to record.
 @item -r @var{fps}
@@ -560,8 +558,6 @@ Set the audio sampling frequency. For output streams it is set by
 default to the frequency of the corresponding input stream. For input
 streams this option only makes sense for audio grabbing devices and raw
 demuxers and is mapped to the corresponding demuxer options.
-@item -ab @var{bitrate}
-Set the audio bitrate in bit/s (default = 64k).
 @item -aq @var{q}
 Set the audio quality (codec-specific, VBR).
 @item -ac @var{channels}
@@ -888,8 +884,8 @@ ffmpeg -f oss -i /dev/dsp -f video4linux2 -i /dev/video0 /tmp/out.mpg
 @end example
 
 Note that you must activate the right video source and channel before
-launching ffmpeg with any TV viewer such as xawtv
-(@url{http://linux.bytesex.org/xawtv/}) by Gerd Knorr. You also
+launching ffmpeg with any TV viewer such as
+@uref{http://linux.bytesex.org/xawtv/, xawtv} by Gerd Knorr. You also
 have to set the audio recording levels correctly with a
 standard mixer.
 

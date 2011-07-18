@@ -34,6 +34,7 @@ You can use libavcodec or libavformat in your commercial program, but
 @emph{any patch you make must be published}. The best way to proceed is
 to send your patches to the FFmpeg mailing list.
 
+
 @anchor{Coding Rules}
 @section Coding Rules
 
@@ -54,10 +55,8 @@ These features are supported by all compilers we care about, so we will not
 accept patches to remove their use unless they absolutely do not impair
 clarity and performance.
 
-All code must compile with GCC 3.3. Currently, FFmpeg also
-compiles with several other compilers, such as the Compaq ccc compiler
-or Sun Studio 9, and we would like to keep it that way unless it would
-be exceedingly involved. To ensure compatibility, please do not use any
+All code must compile with recent versions of GCC and a number of other
+currently supported compilers. To ensure compatibility, please do not use
 additional C99 features or GCC extensions. Especially watch out for:
 @itemize @bullet
 @item
@@ -86,7 +85,7 @@ above them explaining what the function does, even if it is just one sentence.
 All structures and their member variables should be documented, too.
 @example
 /**
- * @@file mpeg.c
+ * @@file
  * MPEG codec.
  * @@author ...
  */
