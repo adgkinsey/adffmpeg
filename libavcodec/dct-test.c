@@ -88,7 +88,7 @@ static const struct algo fdct_tab[] = {
     { "REF-DBL",        ff_ref_fdct,           NO_PERM    },
     { "FAAN",           ff_faandct,            FAAN_SCALE },
     { "IJG-AAN-INT",    fdct_ifast,            SCALE_PERM },
-    { "IJG-LLM-INT",    ff_jpeg_fdct_islow,    NO_PERM    },
+    { "IJG-LLM-INT",    ff_jpeg_fdct_islow_8,  NO_PERM    },
 
 #if HAVE_MMX
     { "MMX",            ff_fdct_mmx,           NO_PERM,   AV_CPU_FLAG_MMX     },
@@ -111,7 +111,7 @@ static const struct algo idct_tab[] = {
     { "FAANI",          ff_faanidct,           NO_PERM  },
     { "REF-DBL",        ff_ref_idct,           NO_PERM  },
     { "INT",            j_rev_dct,             MMX_PERM },
-    { "SIMPLE-C",       ff_simple_idct,        NO_PERM  },
+    { "SIMPLE-C",       ff_simple_idct_8,      NO_PERM  },
 
 #if HAVE_MMX
 #if CONFIG_GPL

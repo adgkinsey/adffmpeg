@@ -184,7 +184,7 @@ static int pix_norm1_c(uint8_t * pix, int line_size)
             s += sq[pix[6]];
             s += sq[pix[7]];
 #else
-#if LONG_MAX > 2147483647
+#if HAVE_FAST_64BIT
             register uint64_t x=*(uint64_t*)pix;
             s += sq[x&0xff];
             s += sq[(x>>8)&0xff];
@@ -304,25 +304,6 @@ static int sse16_c(void *v, uint8_t *pix1, uint8_t *pix2, int line_size, int h)
         pix2 += line_size;
     }
     return s;
-}
-
-static void get_pixels_c(DCTELEM *restrict block, const uint8_t *pixels, int line_size)
-{
-    int i;
-
-    /* read the pixels */
-    for(i=0;i<8;i++) {
-        block[0] = pixels[0];
-        block[1] = pixels[1];
-        block[2] = pixels[2];
-        block[3] = pixels[3];
-        block[4] = pixels[4];
-        block[5] = pixels[5];
-        block[6] = pixels[6];
-        block[7] = pixels[7];
-        pixels += line_size;
-        block += 8;
-    }
 }
 
 static void diff_pixels_c(DCTELEM *restrict block, const uint8_t *s1,
@@ -818,27 +799,6 @@ static inline void avg_tpel_pixels_mc22_c(uint8_t *dst, const uint8_t *src, int 
       dst += stride;
     }
 }
-#if 0
-#define TPEL_WIDTH(width)\
-static void put_tpel_pixels ## width ## _mc00_c(uint8_t *dst, const uint8_t *src, int stride, int height){\
-    void put_tpel_pixels_mc00_c(dst, src, stride, width, height);}\
-static void put_tpel_pixels ## width ## _mc10_c(uint8_t *dst, const uint8_t *src, int stride, int height){\
-    void put_tpel_pixels_mc10_c(dst, src, stride, width, height);}\
-static void put_tpel_pixels ## width ## _mc20_c(uint8_t *dst, const uint8_t *src, int stride, int height){\
-    void put_tpel_pixels_mc20_c(dst, src, stride, width, height);}\
-static void put_tpel_pixels ## width ## _mc01_c(uint8_t *dst, const uint8_t *src, int stride, int height){\
-    void put_tpel_pixels_mc01_c(dst, src, stride, width, height);}\
-static void put_tpel_pixels ## width ## _mc11_c(uint8_t *dst, const uint8_t *src, int stride, int height){\
-    void put_tpel_pixels_mc11_c(dst, src, stride, width, height);}\
-static void put_tpel_pixels ## width ## _mc21_c(uint8_t *dst, const uint8_t *src, int stride, int height){\
-    void put_tpel_pixels_mc21_c(dst, src, stride, width, height);}\
-static void put_tpel_pixels ## width ## _mc02_c(uint8_t *dst, const uint8_t *src, int stride, int height){\
-    void put_tpel_pixels_mc02_c(dst, src, stride, width, height);}\
-static void put_tpel_pixels ## width ## _mc12_c(uint8_t *dst, const uint8_t *src, int stride, int height){\
-    void put_tpel_pixels_mc12_c(dst, src, stride, width, height);}\
-static void put_tpel_pixels ## width ## _mc22_c(uint8_t *dst, const uint8_t *src, int stride, int height){\
-    void put_tpel_pixels_mc22_c(dst, src, stride, width, height);}
-#endif
 
 #define QPEL_MC(r, OPNAME, RND, OP) \
 static void OPNAME ## mpeg4_qpel8_h_lowpass(uint8_t *dst, uint8_t *src, int dstStride, int srcStride, int h){\
@@ -2246,7 +2206,7 @@ static int quant_psnr8x8_c(/*MpegEncContext*/ void *c, uint8_t *src1, uint8_t *s
 
     s->block_last_index[0/*FIXME*/]= s->fast_dct_quantize(s, temp, 0/*FIXME*/, s->qscale, &i);
     s->dct_unquantize_inter(s, temp, 0, s->qscale);
-    ff_simple_idct(temp); //FIXME
+    ff_simple_idct_8(temp); //FIXME
 
     for(i=0; i<64; i++)
         sum+= (temp[i]-bak[i])*(temp[i]-bak[i]);
@@ -2832,9 +2792,9 @@ av_cold void dsputil_static_init(void)
 
 int ff_check_alignment(void){
     static int did_fail=0;
-    LOCAL_ALIGNED_16(int, aligned);
+    LOCAL_ALIGNED_16(int, aligned, [4]);
 
-    if((intptr_t)&aligned & 15){
+    if((intptr_t)aligned & 15){
         if(!did_fail){
 #if HAVE_MMX || HAVE_ALTIVEC
             av_log(NULL, AV_LOG_ERROR,
@@ -2857,44 +2817,28 @@ av_cold void dsputil_init(DSPContext* c, AVCodecContext *avctx)
     ff_check_alignment();
 
 #if CONFIG_ENCODERS
-    if(avctx->dct_algo==FF_DCT_FASTINT) {
-        c->fdct = fdct_ifast;
-        c->fdct248 = fdct_ifast248;
-    }
-    else if(avctx->dct_algo==FF_DCT_FAAN) {
-        c->fdct = ff_faandct;
-        c->fdct248 = ff_faandct248;
-    }
-    else {
-        c->fdct = ff_jpeg_fdct_islow; //slow/accurate/default
-        c->fdct248 = ff_fdct248_islow;
+    if (avctx->bits_per_raw_sample == 10) {
+        c->fdct    = ff_jpeg_fdct_islow_10;
+        c->fdct248 = ff_fdct248_islow_10;
+    } else {
+        if(avctx->dct_algo==FF_DCT_FASTINT) {
+            c->fdct    = fdct_ifast;
+            c->fdct248 = fdct_ifast248;
+        }
+        else if(avctx->dct_algo==FF_DCT_FAAN) {
+            c->fdct    = ff_faandct;
+            c->fdct248 = ff_faandct248;
+        }
+        else {
+            c->fdct    = ff_jpeg_fdct_islow_8; //slow/accurate/default
+            c->fdct248 = ff_fdct248_islow_8;
+        }
     }
 #endif //CONFIG_ENCODERS
 
     if(avctx->lowres==1){
-        if(avctx->idct_algo==FF_IDCT_INT || avctx->idct_algo==FF_IDCT_AUTO || !CONFIG_H264_DECODER){
-            c->idct_put= ff_jref_idct4_put;
-            c->idct_add= ff_jref_idct4_add;
-        }else{
-            if (avctx->codec_id != CODEC_ID_H264) {
-                c->idct_put= ff_h264_lowres_idct_put_8_c;
-                c->idct_add= ff_h264_lowres_idct_add_8_c;
-            } else {
-                switch (avctx->bits_per_raw_sample) {
-                    case 9:
-                        c->idct_put= ff_h264_lowres_idct_put_9_c;
-                        c->idct_add= ff_h264_lowres_idct_add_9_c;
-                        break;
-                    case 10:
-                        c->idct_put= ff_h264_lowres_idct_put_10_c;
-                        c->idct_add= ff_h264_lowres_idct_add_10_c;
-                        break;
-                    default:
-                        c->idct_put= ff_h264_lowres_idct_put_8_c;
-                        c->idct_add= ff_h264_lowres_idct_add_8_c;
-                }
-            }
-        }
+        c->idct_put= ff_jref_idct4_put;
+        c->idct_add= ff_jref_idct4_add;
         c->idct    = j_rev_dct4;
         c->idct_permutation_type= FF_NO_IDCT_PERM;
     }else if(avctx->lowres==2){
@@ -2908,6 +2852,12 @@ av_cold void dsputil_init(DSPContext* c, AVCodecContext *avctx)
         c->idct    = j_rev_dct1;
         c->idct_permutation_type= FF_NO_IDCT_PERM;
     }else{
+        if (avctx->bits_per_raw_sample == 10) {
+            c->idct_put              = ff_simple_idct_put_10;
+            c->idct_add              = ff_simple_idct_add_10;
+            c->idct                  = ff_simple_idct_10;
+            c->idct_permutation_type = FF_NO_IDCT_PERM;
+        } else {
         if(avctx->idct_algo==FF_IDCT_INT){
             c->idct_put= ff_jref_idct_put;
             c->idct_add= ff_jref_idct_add;
@@ -2938,14 +2888,14 @@ av_cold void dsputil_init(DSPContext* c, AVCodecContext *avctx)
             c->idct_put = ff_bink_idct_put_c;
             c->idct_permutation_type = FF_NO_IDCT_PERM;
         }else{ //accurate/default
-            c->idct_put= ff_simple_idct_put;
-            c->idct_add= ff_simple_idct_add;
-            c->idct    = ff_simple_idct;
+            c->idct_put = ff_simple_idct_put_8;
+            c->idct_add = ff_simple_idct_add_8;
+            c->idct     = ff_simple_idct_8;
             c->idct_permutation_type= FF_NO_IDCT_PERM;
+        }
         }
     }
 
-    c->get_pixels = get_pixels_c;
     c->diff_pixels = diff_pixels_c;
     c->put_pixels_clamped = ff_put_pixels_clamped_c;
     c->put_signed_pixels_clamped = ff_put_signed_pixels_clamped_c;
@@ -3173,13 +3123,14 @@ av_cold void dsputil_init(DSPContext* c, AVCodecContext *avctx)
     c->PFX ## _pixels_tab[IDX][15] = FUNCC(PFX ## NUM ## _mc33, depth)
 
 
-#define BIT_DEPTH_FUNCS(depth)\
+#define BIT_DEPTH_FUNCS(depth, dct)\
+    c->get_pixels                    = FUNCC(get_pixels   ## dct   , depth);\
     c->draw_edges                    = FUNCC(draw_edges            , depth);\
     c->emulated_edge_mc              = FUNC (ff_emulated_edge_mc   , depth);\
-    c->clear_block                   = FUNCC(clear_block           , depth);\
-    c->clear_blocks                  = FUNCC(clear_blocks          , depth);\
-    c->add_pixels8                   = FUNCC(add_pixels8           , depth);\
-    c->add_pixels4                   = FUNCC(add_pixels4           , depth);\
+    c->clear_block                   = FUNCC(clear_block  ## dct   , depth);\
+    c->clear_blocks                  = FUNCC(clear_blocks ## dct   , depth);\
+    c->add_pixels8                   = FUNCC(add_pixels8  ## dct   , depth);\
+    c->add_pixels4                   = FUNCC(add_pixels4  ## dct   , depth);\
     c->put_no_rnd_pixels_l2[0]       = FUNCC(put_no_rnd_pixels16_l2, depth);\
     c->put_no_rnd_pixels_l2[1]       = FUNCC(put_no_rnd_pixels8_l2 , depth);\
 \
@@ -3211,21 +3162,26 @@ av_cold void dsputil_init(DSPContext* c, AVCodecContext *avctx)
     dspfunc2(avg_h264_qpel, 1,  8, depth);\
     dspfunc2(avg_h264_qpel, 2,  4, depth);
 
-    if (avctx->codec_id != CODEC_ID_H264 || avctx->bits_per_raw_sample == 8) {
-        BIT_DEPTH_FUNCS(8)
-    } else {
-        switch (avctx->bits_per_raw_sample) {
-            case 9:
-                BIT_DEPTH_FUNCS(9)
-                break;
-            case 10:
-                BIT_DEPTH_FUNCS(10)
-                break;
-            default:
-                av_log(avctx, AV_LOG_DEBUG, "Unsupported bit depth: %d\n", avctx->bits_per_raw_sample);
-                BIT_DEPTH_FUNCS(8)
-                break;
+    switch (avctx->bits_per_raw_sample) {
+    case 9:
+        if (c->dct_bits == 32) {
+            BIT_DEPTH_FUNCS(9, _32);
+        } else {
+            BIT_DEPTH_FUNCS(9, _16);
         }
+        break;
+    case 10:
+        if (c->dct_bits == 32) {
+            BIT_DEPTH_FUNCS(10, _32);
+        } else {
+            BIT_DEPTH_FUNCS(10, _16);
+        }
+        break;
+    default:
+        av_log(avctx, AV_LOG_DEBUG, "Unsupported bit depth: %d\n", avctx->bits_per_raw_sample);
+    case 8:
+        BIT_DEPTH_FUNCS(8, _16);
+        break;
     }
 
 
@@ -3285,4 +3241,3 @@ av_cold void dsputil_init(DSPContext* c, AVCodecContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "Internal error, IDCT permutation not set\n");
     }
 }
-

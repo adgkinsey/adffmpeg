@@ -152,6 +152,8 @@ typedef struct AC3EncodeContext {
     int bit_rate;                           ///< target bit rate, in bits-per-second
     int sample_rate;                        ///< sampling frequency, in Hz
 
+    int num_blks_code;                      ///< number of blocks code                  (numblkscod)
+    int num_blocks;                         ///< number of blocks per frame
     int frame_size_min;                     ///< minimum frame size in case rounding is necessary
     int frame_size;                         ///< current frame size in bytes
     int frame_size_code;                    ///< frame size code                        (frmsizecod)
@@ -218,6 +220,8 @@ typedef struct AC3EncodeContext {
     uint8_t *cpl_coord_mant_buffer;
 
     uint8_t exp_strategy[AC3_MAX_CHANNELS][AC3_MAX_BLOCKS]; ///< exponent strategies
+    uint8_t frame_exp_strategy[AC3_MAX_CHANNELS];           ///< frame exp strategy index
+    int use_frame_exp_strategy;                             ///< indicates use of frame exp strategy
     uint8_t exp_ref_block[AC3_MAX_CHANNELS][AC3_MAX_BLOCKS]; ///< reference blocks for EXP_REUSE
     uint8_t *ref_bap     [AC3_MAX_CHANNELS][AC3_MAX_BLOCKS]; ///< bit allocation pointers (bap)
     int ref_bap_set;                                         ///< indicates if ref_bap pointers have been set

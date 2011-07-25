@@ -40,8 +40,10 @@ typedef short DCTELEM;
 
 void fdct_ifast (DCTELEM *data);
 void fdct_ifast248 (DCTELEM *data);
-void ff_jpeg_fdct_islow (DCTELEM *data);
-void ff_fdct248_islow (DCTELEM *data);
+void ff_jpeg_fdct_islow_8(DCTELEM *data);
+void ff_jpeg_fdct_islow_10(DCTELEM *data);
+void ff_fdct248_islow_8(DCTELEM *data);
+void ff_fdct248_islow_10(DCTELEM *data);
 
 void j_rev_dct (DCTELEM *data);
 void j_rev_dct4 (DCTELEM *data);
@@ -58,8 +60,6 @@ void ff_h264_idct8_add_ ## depth ## _c(uint8_t *dst, DCTELEM *block, int stride)
 void ff_h264_idct_add_ ## depth ## _c(uint8_t *dst, DCTELEM *block, int stride);\
 void ff_h264_idct8_dc_add_ ## depth ## _c(uint8_t *dst, DCTELEM *block, int stride);\
 void ff_h264_idct_dc_add_ ## depth ## _c(uint8_t *dst, DCTELEM *block, int stride);\
-void ff_h264_lowres_idct_add_ ## depth ## _c(uint8_t *dst, int stride, DCTELEM *block);\
-void ff_h264_lowres_idct_put_ ## depth ## _c(uint8_t *dst, int stride, DCTELEM *block);\
 void ff_h264_idct_add16_ ## depth ## _c(uint8_t *dst, const int *blockoffset, DCTELEM *block, int stride, const uint8_t nnzc[6*8]);\
 void ff_h264_idct_add16intra_ ## depth ## _c(uint8_t *dst, const int *blockoffset, DCTELEM *block, int stride, const uint8_t nnzc[6*8]);\
 void ff_h264_idct8_add4_ ## depth ## _c(uint8_t *dst, const int *blockoffset, DCTELEM *block, int stride, const uint8_t nnzc[6*8]);\
@@ -219,6 +219,11 @@ void ff_put_signed_pixels_clamped_c(const DCTELEM *block, uint8_t *dest, int lin
  * DSPContext.
  */
 typedef struct DSPContext {
+    /**
+     * Size of DCT coefficients.
+     */
+    int dct_bits;
+
     /* pixel ops : interface with DCT */
     void (*get_pixels)(DCTELEM *block/*align 16*/, const uint8_t *pixels/*align 8*/, int line_size);
     void (*diff_pixels)(DCTELEM *block/*align 16*/, const uint8_t *s1/*align 8*/, const uint8_t *s2/*align 8*/, int stride);
