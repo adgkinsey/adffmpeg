@@ -892,11 +892,12 @@ static int pbm_read_mem(char **comment, uint8_t **src, int size, AVPacket *pkt, 
     }
 }
 
-int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int insize, char **text_data, int64_t lastVideoPTS)
+int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int insize, char **text_data)
 {
-    AVIOContext *pb = s->pb;
-    AVStream *st    = NULL;
-    uint8_t *inbuf  = NULL;
+    AdContext* adContext = s->priv_data;
+    AVIOContext *pb      = s->pb;
+    AVStream *st         = NULL;
+    uint8_t *inbuf       = NULL;
     int n, w, h;
     
     av_dlog(s, "PBM overlay\n");
@@ -918,15 +919,17 @@ int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int insize, char **text_d
     st->codec->width = w;
     st->codec->height = h;
     
-    pkt->dts = pkt->pts = lastVideoPTS;
+    if (adContext)
+        pkt->dts = pkt->pts = adContext->lastVideoPTS;
     
     return 0;
 }
                 
 int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
                    enum AVMediaType media, enum CodecID codecId, 
-                   void *data, char *text_data, int64_t *videoFramePTS)
+                   void *data, char *text_data)
 {
+    AdContext *adContext          = s->priv_data;
     AVStream *st                  = NULL;
     struct ADFrameData *frameData = NULL;
     uint8_t *sideData             = NULL;
@@ -954,8 +957,8 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
             }
             else
                 pkt->pts = AV_NOPTS_VALUE;
-            if (videoFramePTS)
-                *videoFramePTS = pkt->pts;
+            if (adContext)
+                adContext->lastVideoPTS = pkt->pts;
 
             // Servers occasionally send insane timezone data, which can screw
             // up clients.  Check for this and set to 0
@@ -964,6 +967,14 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
                        "ad_read_packet: Invalid utc_offset of %d, "
                        "setting to zero\n", video_data->utc_offset);
                 video_data->utc_offset = 0;
+            }
+            
+            if (adContext && (!adContext->metadataSet))  {
+                char utcOffsetStr[12];
+                snprintf(utcOffsetStr, sizeof(utcOffsetStr), "%d", video_data->utc_offset);
+                av_dict_set(&s->metadata, "locale", video_data->locale, 0);
+                av_dict_set(&s->metadata, "timezone", utcOffsetStr, 0);
+                adContext->metadataSet = 1;
             }
             
             sideData = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_FRAME, sizeof(struct NetVuImageData));
