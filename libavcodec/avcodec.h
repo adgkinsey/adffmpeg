@@ -1072,6 +1072,7 @@ typedef struct AVPanScan{
 
 enum AVPacketSideDataType {
     AV_PKT_DATA_PALETTE,
+    AV_PKT_DATA_AD_FRAME,
 };
 
 typedef struct AVPacket {

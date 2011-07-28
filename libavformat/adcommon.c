@@ -927,8 +927,9 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
                    enum AVMediaType media, enum CodecID codecId, 
                    void *data, char *text_data, int64_t *videoFramePTS)
 {
-    AVStream    *st        = NULL;
+    AVStream *st                  = NULL;
     struct ADFrameData *frameData = NULL;
+    uint8_t *sideData             = NULL;
 
     if ((media == AVMEDIA_TYPE_VIDEO) && (codecId == CODEC_ID_PBM))  {
         // Get or create a data stream
@@ -964,6 +965,10 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
                        "setting to zero\n", video_data->utc_offset);
                 video_data->utc_offset = 0;
             }
+            
+            sideData = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_FRAME, sizeof(struct NetVuImageData));
+            if (sideData)
+                memcpy(sideData, data, sizeof(struct NetVuImageData));
         }
     }
     else if (media == AVMEDIA_TYPE_AUDIO) {

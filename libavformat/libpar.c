@@ -563,6 +563,7 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
     AVStream *strm = NULL;
     AVRational secondsTB = {1, 1};
     char libVer[128], textbuf[5];
+    char version[64];
 
 
     parReader_version(libVer, sizeof(libVer));
@@ -637,6 +638,9 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
 
     snprintf(textbuf, sizeof(textbuf), "%d", parReader_getUTCOffset(&p->frameInfo));
     av_dict_set(&avf->metadata, "timezone", textbuf, 0);
+    
+    if (parReader_version(version, sizeof(version)) > 0)
+        av_dict_set(&avf->metadata, "ParReader", version, 0);
 
     strm = createStream(avf, &p->frameInfo);
     if (strm)  {
