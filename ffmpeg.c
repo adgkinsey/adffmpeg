@@ -1859,7 +1859,7 @@ static int output_packet(AVInputStream *ist, int ist_index,
                             ret = 0;
                             /* encode any samples remaining in fifo */
                             if (fifo_bytes > 0) {
-                                int osize = av_get_bits_per_sample_fmt(enc->sample_fmt) >> 3;
+                                int osize = av_get_bytes_per_sample(enc->sample_fmt);
                                 int fs_tmp = enc->frame_size;
 
                                 av_fifo_generic_read(ost->fifo, audio_buf, fifo_bytes, NULL);
@@ -2303,16 +2303,19 @@ static int transcode(AVFormatContext **output_files,
                     fprintf(stderr, "Video pixel format is unknown, stream cannot be encoded\n");
                     ffmpeg_exit(1);
                 }
+
+                if (!codec->width || !codec->height) {
+                    codec->width  = icodec->width;
+                    codec->height = icodec->height;
+                }
+
                 ost->video_resample = codec->width   != icodec->width  ||
                                       codec->height  != icodec->height ||
                                       codec->pix_fmt != icodec->pix_fmt;
                 if (ost->video_resample) {
                     codec->bits_per_raw_sample= frame_bits_per_raw_sample;
                 }
-                if (!codec->width || !codec->height) {
-                    codec->width  = icodec->width;
-                    codec->height = icodec->height;
-                }
+
                 ost->resample_height = icodec->height;
                 ost->resample_width  = icodec->width;
                 ost->resample_pix_fmt= icodec->pix_fmt;
@@ -4071,13 +4074,13 @@ static void parse_matrix_coeffs(uint16_t *dest, const char *str)
     }
 }
 
-static void opt_inter_matrix(const char *arg)
+static void opt_inter_matrix(const char *opt, const char *arg)
 {
     inter_matrix = av_mallocz(sizeof(uint16_t) * 64);
     parse_matrix_coeffs(inter_matrix, arg);
 }
 
-static void opt_intra_matrix(const char *arg)
+static void opt_intra_matrix(const char *opt, const char *arg)
 {
     intra_matrix = av_mallocz(sizeof(uint16_t) * 64);
     parse_matrix_coeffs(intra_matrix, arg);
@@ -4375,10 +4378,12 @@ static void log_callback_null(void* ptr, int level, const char* fmt, va_list vl)
 {
 }
 
-static void opt_passlogfile(const char *arg)
+static void opt_passlogfile(const char *opt, const char *arg)
 {
     pass_logfilename_prefix = arg;
+#if CONFIG_LIBX264_ENCODER
     opt_default("passlogfile", arg);
+#endif
 }
 
 static const OptionDef options[] = {
