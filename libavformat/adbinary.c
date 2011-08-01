@@ -39,11 +39,6 @@ enum pkt_offsets { PKT_DATATYPE, PKT_DATACHANNEL,
                    PKT_SEPARATOR_SIZE
                  };
 
-typedef struct {
-    int     utc_offset;     ///< Only used in minimal video case
-    int64_t lastVideoPTS;
-} AdbinaryContext;
-
 typedef struct  {    // PRC 002
     uint32_t t;
     uint16_t ms;
@@ -133,7 +128,7 @@ static int ad_read_mpeg_minimal(AVFormatContext *s,
                                 struct NetVuImageData *vidDat, char **text_data)
 {
     static const int titleLen  = sizeof(vidDat->title) / sizeof(vidDat->title[0]);
-    AdbinaryContext* adContext = s->priv_data;
+    AdContext* adContext       = s->priv_data;
     AVIOContext *    pb        = s->pb;
     int              dataSize  = size - 6;
     int              errorVal  = 0;
@@ -391,13 +386,12 @@ static int adbinary_probe(AVProbeData *p)
 
 static int adbinary_read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
-    AdbinaryContext *adContext = s->priv_data;
+    AdContext *adContext = s->priv_data;
     return ad_read_header(s, ap, &adContext->utc_offset);
 }
 
 static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
-    AdbinaryContext*    adContext = s->priv_data;
     AVIOContext *       pb        = s->pb;
     void *              payload   = NULL;
     char *              txtDat    = NULL;
@@ -464,7 +458,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 av_free(tempbuf);
                 return ADPIC_DEFAULT_ERROR;
             case AD_DATATYPE_PBM:
-                errorVal = ad_read_overlay(s, pkt, size, &txtDat, adContext->lastVideoPTS);
+                errorVal = ad_read_overlay(s, pkt, size, &txtDat);
                 break;
             default:
                 av_log(s, AV_LOG_WARNING, "%s: No handler for data_type = %d\n",
@@ -481,8 +475,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     }
 
     if (errorVal >= 0)  {
-        errorVal = ad_read_packet(s, pkt, mediaType, codecId, payload, txtDat, 
-                                  &adContext->lastVideoPTS);
+        errorVal = ad_read_packet(s, pkt, mediaType, codecId, payload, txtDat);
     }
     else  {
         // If there was an error, release any allocated memory
@@ -505,7 +498,7 @@ static int adbinary_read_close(AVFormatContext *s)
 AVInputFormat ff_adbinary_demuxer = {
     .name           = "adbinary",
     .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings video format (binary)"),
-    .priv_data_size = sizeof(AdbinaryContext),
+    .priv_data_size = sizeof(AdContext),
     .read_probe     = adbinary_probe,
     .read_header    = adbinary_read_header,
     .read_packet    = adbinary_read_packet,

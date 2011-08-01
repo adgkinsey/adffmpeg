@@ -59,10 +59,6 @@ static const uint8_t rawJfifHeader[] = { 0xff, 0xd8, 0xff, 0xe0,
                                          0x49, 0x46, 0x00, 0x01 };
 
 
-typedef struct {
-    int64_t lastVideoPTS;
-} AdmimeContext;
-
 
 /**
  * Validates a multipart MIME boundary separator against the convention used by
@@ -671,7 +667,7 @@ static int admime_read_header(AVFormatContext *s, AVFormatParameters *ap)
 
 static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    AdmimeContext*          adContext = s->priv_data;
+    AdContext*              adContext = s->priv_data;
     AVIOContext *           pb = s->pb;
     void *                  payload = NULL;
     char *                  txtDat = NULL;
@@ -730,7 +726,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
             errorVal = ad_read_layout(s, pkt, size);
             break;
         case AD_DATATYPE_PBM:
-            errorVal = ad_read_overlay(s, pkt, size, &txtDat, adContext->lastVideoPTS);
+            errorVal = ad_read_overlay(s, pkt, size, &txtDat);
             break;
         case AD_DATATYPE_BMP:
         default: {
@@ -749,8 +745,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     if (errorVal >= 0)  {
-        errorVal = ad_read_packet(s, pkt, mediaType, codecId, payload, txtDat, 
-                                  &adContext->lastVideoPTS);
+        errorVal = ad_read_packet(s, pkt, mediaType, codecId, payload, txtDat);
     }
     else  {
         // If there was an error, release any memory that has been allocated
@@ -774,7 +769,7 @@ static int admime_read_close(AVFormatContext *s)
 AVInputFormat ff_admime_demuxer = {
     .name           = "admime",
     .long_name      = NULL_IF_CONFIG_SMALL("AD-Holdings video format (MIME)"),
-    .priv_data_size = sizeof(AdmimeContext),
+    .priv_data_size = sizeof(AdContext),
     .read_probe     = admime_probe,
     .read_header    = admime_read_header,
     .read_packet    = admime_read_packet,

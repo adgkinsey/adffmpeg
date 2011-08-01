@@ -52,6 +52,12 @@ enum ff_ad_data_type {  AD_DATATYPE_JPEG, AD_DATATYPE_JFIF,
                         AD_DATATYPE_MAX
                       };
 
+typedef struct {
+    int64_t lastVideoPTS;
+    int     utc_offset;     ///< Only used in minimal video case
+    int     metadataSet;
+} AdContext;
+
 
 int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset);
 void ad_network2host(struct NetVuImageData *pic, uint8_t *data);
@@ -63,11 +69,10 @@ int ad_read_jfif(AVFormatContext *s, AVPacket *pkt, int manual_size, int size,
                  struct NetVuImageData *video_data, char **text_data);
 int ad_read_info(AVFormatContext *s, AVPacket *pkt, int size);
 int ad_read_layout(AVFormatContext *s, AVPacket *pkt, int size);
-int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int size, char **text_data, int64_t lastVideoPTS);
+int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int size, char **text_data);
 int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
                    enum AVMediaType mediaType, enum CodecID codecId, 
-                   void *data, char *text_data, 
-                   int64_t *videoFramePTS);
+                   void *data, char *text_data);
 AVStream * ad_get_vstream(AVFormatContext *s, uint16_t w, uint16_t h,
                           uint8_t cam, int format, const char *title);
 AVStream * ad_get_audio_stream(AVFormatContext *s, struct NetVuAudioData* audioHeader);
