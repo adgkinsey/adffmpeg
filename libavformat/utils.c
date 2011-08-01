@@ -522,9 +522,9 @@ int av_probe_input_buffer(AVIOContext *pb, AVInputFormat **fmt,
         return AVERROR(EINVAL);
     }
 
-    for(probe_size= PROBE_BUF_MIN; probe_size<=max_probe_size && !*fmt && ret >= 0;
+    for(probe_size= PROBE_BUF_MIN; probe_size<=max_probe_size && !*fmt;
         probe_size = FFMIN(probe_size<<1, FFMAX(max_probe_size, probe_size+1))) {
-        int ret, score = probe_size < max_probe_size ? AVPROBE_SCORE_MAX/4 : 0;
+        int score = probe_size < max_probe_size ? AVPROBE_SCORE_MAX/4 : 0;
         int buf_offset = (probe_size == PROBE_BUF_MIN) ? 0 : probe_size>>1;
 
         if (probe_size < offset) {
@@ -2927,6 +2927,9 @@ int avformat_write_header(AVFormatContext *s, AVDictionary **options)
         av_dict_copy(&tmp, *options, 0);
     if ((ret = av_opt_set_dict(s, &tmp)) < 0)
         goto fail;
+    if (s->priv_data && s->oformat->priv_class && *(const AVClass**)s->priv_data==s->oformat->priv_class &&
+        (ret = av_opt_set_dict(s->priv_data, &tmp)) < 0)
+        goto fail;
 
     // some sanity checks
     if (s->nb_streams == 0 && !(s->oformat->flags & AVFMT_NOSTREAMS)) {
@@ -3397,7 +3400,7 @@ static void dump_stream_format(AVFormatContext *ic, int i, int index, int is_out
                   st->codec->width*st->sample_aspect_ratio.num,
                   st->codec->height*st->sample_aspect_ratio.den,
                   1024*1024);
-        av_log(NULL, AV_LOG_INFO, ", PAR %d:%d DAR %d:%d",
+        av_log(NULL, AV_LOG_INFO, ", SAR %d:%d DAR %d:%d",
                  st->sample_aspect_ratio.num, st->sample_aspect_ratio.den,
                  display_aspect_ratio.num, display_aspect_ratio.den);
     }

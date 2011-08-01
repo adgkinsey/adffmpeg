@@ -2237,13 +2237,23 @@ static int transcode(AVFormatContext **output_files,
                 goto fail;
             memcpy(codec->extradata, icodec->extradata, icodec->extradata_size);
             codec->extradata_size= icodec->extradata_size;
-            if(!copy_tb && av_q2d(icodec->time_base)*icodec->ticks_per_frame > av_q2d(ist->st->time_base) && av_q2d(ist->st->time_base) < 1.0/500){
-                codec->time_base = icodec->time_base;
-                codec->time_base.num *= icodec->ticks_per_frame;
-                av_reduce(&codec->time_base.num, &codec->time_base.den,
-                          codec->time_base.num, codec->time_base.den, INT_MAX);
-            }else
-                codec->time_base = ist->st->time_base;
+
+            codec->time_base = ist->st->time_base;
+            if(!strcmp(os->oformat->name, "avi")) {
+                if(!copy_tb && av_q2d(icodec->time_base)*icodec->ticks_per_frame > 2*av_q2d(ist->st->time_base) && av_q2d(ist->st->time_base) < 1.0/500){
+                    codec->time_base = icodec->time_base;
+                    codec->time_base.num *= icodec->ticks_per_frame;
+                    codec->time_base.den *= 2;
+                }
+            } else if(!(os->oformat->flags & AVFMT_VARIABLE_FPS)) {
+                if(!copy_tb && av_q2d(icodec->time_base)*icodec->ticks_per_frame > av_q2d(ist->st->time_base) && av_q2d(ist->st->time_base) < 1.0/500){
+                    codec->time_base = icodec->time_base;
+                    codec->time_base.num *= icodec->ticks_per_frame;
+                }
+            }
+            av_reduce(&codec->time_base.num, &codec->time_base.den,
+                        codec->time_base.num, codec->time_base.den, INT_MAX);
+
             switch(codec->codec_type) {
             case AVMEDIA_TYPE_AUDIO:
                 if(audio_volume != 256) {
@@ -3020,8 +3030,7 @@ static int opt_qscale(const char *opt, const char *arg)
 static int opt_top_field_first(const char *opt, const char *arg)
 {
     top_field_first = parse_number_or_die(opt, arg, OPT_INT, 0, 1);
-    opt_default(opt, arg);
-    return 0;
+    return opt_default(opt, arg);
 }
 
 static int opt_thread_count(const char *opt, const char *arg)
@@ -3067,15 +3076,13 @@ static int opt_audio_channels(const char *opt, const char *arg)
 static int opt_video_channel(const char *opt, const char *arg)
 {
     av_log(NULL, AV_LOG_WARNING, "This option is deprecated, use -channel.\n");
-    opt_default("channel", arg);
-    return 0;
+    return opt_default("channel", arg);
 }
 
 static int opt_video_standard(const char *opt, const char *arg)
 {
     av_log(NULL, AV_LOG_WARNING, "This option is deprecated, use -standard.\n");
-    opt_default("standard", arg);
-    return 0;
+    return opt_default("standard", arg);
 }
 
 static int opt_codec(const char *opt, const char *arg)
@@ -3378,7 +3385,7 @@ static int opt_input_file(const char *opt, const char *filename)
     }
 
     /* Set AVCodecContext options for avformat_find_stream_info */
-    opts = setup_find_stream_info_opts(ic);
+    opts = setup_find_stream_info_opts(ic, codec_opts);
     orig_nb_streams = ic->nb_streams;
 
     /* If not enough info to get the stream parameters, we decode the
@@ -4369,8 +4376,7 @@ static void log_callback_null(void* ptr, int level, const char* fmt, va_list vl)
 static int opt_passlogfile(const char *opt, const char *arg)
 {
     pass_logfilename_prefix = arg;
-    opt_default("passlogfile", arg);
-    return 0;
+    return opt_default("passlogfile", arg);
 }
 
 static const OptionDef options[] = {
