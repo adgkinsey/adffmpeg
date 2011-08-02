@@ -933,6 +933,7 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
     AVStream *st                  = NULL;
     struct ADFrameData *frameData = NULL;
     uint8_t *sideData             = NULL;
+    int textBufSize               = 0;
 
     if ((media == AVMEDIA_TYPE_VIDEO) && (codecId == CODEC_ID_PBM))  {
         // Get or create a data stream
@@ -980,6 +981,13 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
             sideData = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_FRAME, sizeof(struct NetVuImageData));
             if (sideData)
                 memcpy(sideData, data, sizeof(struct NetVuImageData));
+            
+            if (text_data)  {
+                textBufSize = strlen(text_data) + 1;
+                sideData = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_TEXT, textBufSize);
+                if (sideData)
+                    memcpy(sideData, text_data, textBufSize);
+            }
         }
     }
     else if (media == AVMEDIA_TYPE_AUDIO) {
