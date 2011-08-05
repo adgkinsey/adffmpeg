@@ -1034,7 +1034,7 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
                 frameData->additionalData = text_data;
 
                 /// Todo: AVOption to allow toggling parsing of text on and off
-                ad_parseText(s, frameData);
+                //ad_parseText(s, frameData);
             }
             pkt->priv = frameData;
         }
