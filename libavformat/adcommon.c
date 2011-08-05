@@ -29,6 +29,9 @@
 #include "netvu.h"
 
 
+static const AVRational MilliTB = {1, 1000};
+
+
 int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
 {
     AVIOContext*    pb          = s->pb;
@@ -186,9 +189,9 @@ AVStream * ad_get_vstream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t ca
                 st->sample_aspect_ratio = (AVRational) { 1, 1 };
 
             // Use milliseconds as the time base
-            st->r_frame_rate = (AVRational) { 1, 1000 };
-            av_set_pts_info(st, 32, 1, 1000);
-            st->codec->time_base = (AVRational) { 1, 1000 };
+            st->r_frame_rate = MilliTB;
+            av_set_pts_info(st, 32, MilliTB.num, MilliTB.den);
+            st->codec->time_base = MilliTB;
 
             if (title)
                 av_dict_set(&st->metadata, "title", title, 0);
@@ -240,9 +243,9 @@ static AVStream * ad_get_overlay_stream(AVFormatContext *s, const char *title)
             st->index = i;
 
             // Use milliseconds as the time base
-            st->r_frame_rate = (AVRational) { 1, 1000 };
-            av_set_pts_info(st, 32, 1, 1000);
-            st->codec->time_base = (AVRational) { 1, 1000 };
+            st->r_frame_rate = MilliTB;
+            av_set_pts_info(st, 32, MilliTB.num, MilliTB.den);
+            st->codec->time_base = MilliTB;
 
             av_dict_set(&st->metadata, "title", title, 0);
             av_dict_set(&st->metadata, "type", "mask", 0);
@@ -347,9 +350,9 @@ static AVStream * ad_get_data_stream(AVFormatContext *s, enum CodecID codecId)
             st->codec->codec_id = CODEC_ID_TEXT;
 
             // Use milliseconds as the time base
-            //st->r_frame_rate = (AVRational) { 1, 1000 };
-            av_set_pts_info(st, 32, 1, 1000);
-            //st->codec->time_base = (AVRational) { 1, 1000 };
+            //st->r_frame_rate = MilliTB;
+            av_set_pts_info(st, 32, MilliTB.num, MilliTB.den);
+            //st->codec->time_base = MilliTB;
 
             st->index = i;
         }
@@ -999,9 +1002,8 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
         }
         else  {
             if (audio_data->seconds > 0)  {
-                pkt->pts = audio_data->seconds;
-                pkt->pts *= 1000ULL;
-                pkt->pts += audio_data->msecs % 1000;
+                int64_t milliseconds = audio_data->seconds * 1000ULL + (audio_data->msecs % 1000);
+                pkt->pts = av_rescale_q(milliseconds, MilliTB, st->time_base);
             }
             else
                 pkt->pts = AV_NOPTS_VALUE;
