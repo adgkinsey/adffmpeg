@@ -22,6 +22,7 @@ OBJS-$(CONFIG_ANULL_FILTER)                  += af_anull.o
 
 OBJS-$(CONFIG_ANULLSRC_FILTER)               += asrc_anullsrc.o
 
+OBJS-$(CONFIG_ABUFFERSINK_FILTER)            += asink_abuffer.o
 OBJS-$(CONFIG_ANULLSINK_FILTER)              += asink_anullsink.o
 
 OBJS-$(CONFIG_BLACKFRAME_FILTER)             += vf_blackframe.o
@@ -97,7 +98,6 @@ OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_fixpts.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_framestep.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_fspp.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_geq.o
-OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_gradfun.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_harddup.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_hqdn3d.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_hue.o

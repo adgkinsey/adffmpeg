@@ -802,6 +802,9 @@ typedef struct AVPacket {
     uint8_t *data;
     int   size;
     int   stream_index;
+    /**
+     * A combination of AV_PKT_FLAG values
+     */
     int   flags;
     /**
      * Additional packet data that can be provided by the container.
@@ -842,7 +845,8 @@ typedef struct AVPacket {
      */
     int64_t convergence_duration;
 } AVPacket;
-#define AV_PKT_FLAG_KEY   0x0001
+#define AV_PKT_FLAG_KEY     0x0001 ///< The packet contains a keyframe
+#define AV_PKT_FLAG_CORRUPT 0x0002 ///< The packet content is corrupted
 
 /**
  * Audio Video Frame.
@@ -1485,7 +1489,7 @@ typedef struct AVCodecContext {
     float b_quant_offset;
 
     /**
-     * Error recognization; higher values will detect more errors but may
+     * Error recognition; higher values will detect more errors but may
      * misdetect some more or less valid parts as errors.
      * - encoding: unused
      * - decoding: Set by user.

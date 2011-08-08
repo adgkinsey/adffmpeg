@@ -1,7 +1,4 @@
 /*
- * Multiple format streaming server
- * copyright (c) 2002 Fabrice Bellard
- *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -18,11 +15,33 @@
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#ifndef FFMPEG_FFSERVER_H
-#define FFMPEG_FFSERVER_H
 
-/* interface between ffserver and modules */
+#ifndef AVFILTER_ASINK_ABUFFER_H
+#define AVFILTER_ASINK_ABUFFER_H
 
-void ffserver_module_init(void);
+/**
+ * @file
+ * audio buffer sink API
+ */
 
-#endif /* FFMPEG_FFSERVER_H */
+#include "avfilter.h"
+
+typedef struct {
+    enum AVSampleFormat sample_fmt;
+    int64_t channel_layout;
+    int planar;
+} ABufferSinkContext;
+
+
+/**
+ * Get an audio buffer from abuffersink and put it in samplesref.
+ *
+ * @param abuffersink pointer to an abuffersink context
+ * @param flags unused
+ * @return >= 0 in case of success, a negative AVERROR code in case of failure
+ */
+int av_asink_abuffer_get_audio_buffer_ref(AVFilterContext *abuffersink,
+                                          AVFilterBufferRef **samplesref,
+                                          int av_unused flags);
+
+#endif /* AVFILTER_ASINK_ABUFFER_H */
