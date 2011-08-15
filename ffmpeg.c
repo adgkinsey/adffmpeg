@@ -639,6 +639,7 @@ static void choose_sample_fmt(AVStream *st, AVCodec *codec)
         if (*p == -1) {
             if((codec->capabilities & CODEC_CAP_LOSSLESS) && av_get_sample_fmt_name(st->codec->sample_fmt) > av_get_sample_fmt_name(codec->sample_fmts[0]))
                 av_log(NULL, AV_LOG_ERROR, "Convertion will not be lossless'\n");
+            if(av_get_sample_fmt_name(st->codec->sample_fmt))
             av_log(NULL, AV_LOG_WARNING,
                    "Incompatible sample format '%s' for codec '%s', auto-selecting format '%s'\n",
                    av_get_sample_fmt_name(st->codec->sample_fmt),
@@ -723,7 +724,7 @@ static OutputStream *new_output_stream(AVFormatContext *oc, int file_idx, AVCode
     ost->st    = st;
     ost->enc   = codec;
     if (codec)
-        ost->opts  = filter_codec_opts(codec_opts, codec->id, 1);
+        ost->opts  = filter_codec_opts(codec_opts, codec->id, oc, st);
 
     avcodec_get_context_defaults3(st->codec, codec);
 
@@ -3427,7 +3428,7 @@ static int opt_input_file(const char *opt, const char *filename)
         ist->st = st;
         ist->file_index = nb_input_files;
         ist->discard = 1;
-        ist->opts = filter_codec_opts(codec_opts, ist->st->codec->codec_id, 0);
+        ist->opts = filter_codec_opts(codec_opts, ist->st->codec->codec_id, ic, st);
 
         if (i < nb_ts_scale)
             ist->ts_scale = ts_scale[i];
@@ -4378,7 +4379,11 @@ static void log_callback_null(void* ptr, int level, const char* fmt, va_list vl)
 static int opt_passlogfile(const char *opt, const char *arg)
 {
     pass_logfilename_prefix = arg;
+#if CONFIG_LIBX264_ENCODER
     return opt_default("passlogfile", arg);
+#else
+    return 0;
+#endif
 }
 
 static const OptionDef options[] = {

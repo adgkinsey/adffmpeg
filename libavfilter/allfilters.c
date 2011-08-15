@@ -34,6 +34,7 @@ void avfilter_register_all(void)
         return;
     initialized = 1;
 
+    REGISTER_FILTER (AFORMAT,     aformat,     af);
     REGISTER_FILTER (ANULL,       anull,       af);
 
     REGISTER_FILTER (ANULLSRC,    anullsrc,    asrc);
@@ -47,6 +48,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER (COPYPLANE,   copyplane,   vf);
     REGISTER_FILTER (CROP,        crop,        vf);
     REGISTER_FILTER (CROPDETECT,  cropdetect,  vf);
+    REGISTER_FILTER (DELOGO,      delogo,      vf);
     REGISTER_FILTER (DRAWBOX,     drawbox,     vf);
     REGISTER_FILTER (DRAWTEXT,    drawtext,    vf);
     REGISTER_FILTER (FADE,        fade,        vf);
@@ -86,6 +88,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER (COLOR,       color,       vsrc);
     REGISTER_FILTER (FREI0R,      frei0r_src,  vsrc);
     REGISTER_FILTER (MOVIE,       movie,       vsrc);
+    REGISTER_FILTER (MPTESTSRC,   mptestsrc,   vsrc);
     REGISTER_FILTER (NULLSRC,     nullsrc,     vsrc);
     REGISTER_FILTER (RGBTESTSRC,  rgbtestsrc,  vsrc);
     REGISTER_FILTER (TESTSRC,     testsrc,     vsrc);

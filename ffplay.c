@@ -98,6 +98,7 @@ typedef struct PacketQueue {
 typedef struct VideoPicture {
     double pts;                                  ///<presentation time stamp for this picture
     double target_clock;                         ///<av_gettime() time at which this should be displayed ideally
+    double duration;                             ///<expected duration of the frame
     int64_t pos;                                 ///<byte position in file
     SDL_Overlay *bmp;
     int width, height; /* source height & width */
@@ -157,10 +158,13 @@ typedef struct VideoState {
     uint8_t *audio_buf;
     unsigned int audio_buf_size; /* in bytes */
     int audio_buf_index; /* in bytes */
+    int audio_write_buf_size;
     AVPacket audio_pkt_temp;
     AVPacket audio_pkt;
     enum AVSampleFormat audio_src_fmt;
     AVAudioConvert *reformat_ctx;
+    double audio_current_pts;
+    double audio_current_pts_drift;
 
     enum ShowMode {
         SHOW_MODE_NONE = -1, SHOW_MODE_VIDEO = 0, SHOW_MODE_WAVES, SHOW_MODE_RDFT, SHOW_MODE_NB
@@ -705,13 +709,6 @@ static void video_image_display(VideoState *is)
     }
 }
 
-/* get the current audio output buffer size, in samples. With SDL, we
-   cannot have a precise information */
-static int audio_write_get_buf_size(VideoState *is)
-{
-    return is->audio_buf_size - is->audio_buf_index;
-}
-
 static inline int compute_mod(int a, int b)
 {
     return a < 0 ? a%b + b : a%b;
@@ -734,7 +731,7 @@ static void video_audio_display(VideoState *s)
     if (!s->paused) {
         int data_used= s->show_mode == SHOW_MODE_WAVES ? s->width : (2*nb_freq);
         n = 2 * channels;
-        delay = audio_write_get_buf_size(s);
+        delay = s->audio_write_buf_size;
         delay /= n;
 
         /* to be more precise, we take into account the time spent since
@@ -988,18 +985,11 @@ static int refresh_thread(void *opaque)
 /* get the current audio clock value */
 static double get_audio_clock(VideoState *is)
 {
-    double pts;
-    int hw_buf_size, bytes_per_sec;
-    pts = is->audio_clock;
-    hw_buf_size = audio_write_get_buf_size(is);
-    bytes_per_sec = 0;
-    if (is->audio_st) {
-        bytes_per_sec = is->audio_st->codec->sample_rate *
-            2 * is->audio_st->codec->channels;
+    if (is->paused) {
+        return is->audio_current_pts;
+    } else {
+        return is->audio_current_pts_drift + av_gettime() / 1000000.0;
     }
-    if (bytes_per_sec)
-        pts -= (double)hw_buf_size / bytes_per_sec;
-    return pts;
 }
 
 /* get the current video clock value */
@@ -1136,7 +1126,7 @@ retry:
                 assert(nextvp->target_clock >= vp->target_clock);
                 next_target= nextvp->target_clock;
             }else{
-                next_target= vp->target_clock + is->video_clock - vp->pts; //FIXME pass durations cleanly
+                next_target= vp->target_clock + vp->duration;
             }
             if((framedrop>0 || (framedrop && is->audio_st)) && time > next_target){
                 is->skip_frames *= 1.0 + FRAME_SKIP_FACTOR;
@@ -1340,6 +1330,8 @@ static int queue_picture(VideoState *is, AVFrame *src_frame, double pts1, int64_
         return -1;
 
     vp = &is->pictq[is->pictq_windex];
+
+    vp->duration = frame_delay;
 
     /* alloc or resize hardware picture buffer */
     if (!vp->bmp ||
@@ -2071,6 +2063,7 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len)
 {
     VideoState *is = opaque;
     int audio_size, len1;
+    int bytes_per_sec;
     double pts;
 
     audio_callback_time = av_gettime();
@@ -2100,6 +2093,12 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len)
         stream += len1;
         is->audio_buf_index += len1;
     }
+    bytes_per_sec = is->audio_st->codec->sample_rate *
+            2 * is->audio_st->codec->channels;
+    is->audio_write_buf_size = is->audio_buf_size - is->audio_buf_index;
+    /* Let's assume the audio driver that is used by SDL has two periods. */
+    is->audio_current_pts = is->audio_clock - (double)(2 * is->audio_hw_buf_size + is->audio_write_buf_size) / bytes_per_sec;
+    is->audio_current_pts_drift = is->audio_current_pts - audio_callback_time / 1000000.0;
 }
 
 /* open a given stream. Return 0 if OK */
@@ -2116,7 +2115,7 @@ static int stream_component_open(VideoState *is, int stream_index)
         return -1;
     avctx = ic->streams[stream_index]->codec;
 
-    opts = filter_codec_opts(codec_opts, avctx->codec_id, 0);
+    opts = filter_codec_opts(codec_opts, avctx->codec_id, ic, ic->streams[stream_index]);
 
     /* prepare audio output */
     if (avctx->codec_type == AVMEDIA_TYPE_AUDIO) {
@@ -2951,7 +2950,7 @@ static const OptionDef options[] = {
 static void show_usage(void)
 {
     printf("Simple media player\n");
-    printf("usage: ffplay [options] input_file\n");
+    printf("usage: %s [options] input_file\n", program_name);
     printf("\n");
 }
 
@@ -3016,7 +3015,7 @@ int main(int argc, char **argv)
     if (!input_filename) {
         show_usage();
         fprintf(stderr, "An input file must be specified\n");
-        fprintf(stderr, "Use -h to get full help or, even better, run 'man ffplay'\n");
+        fprintf(stderr, "Use -h to get full help or, even better, run 'man %s'\n", program_name);
         exit(1);
     }
 
