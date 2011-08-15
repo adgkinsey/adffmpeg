@@ -664,7 +664,7 @@ int ad_read_jpeg(AVFormatContext *s, AVPacket *pkt, struct NetVuImageData *video
     int status;
 
     // Check if we've already read a pic header
-    if (!pic_version_valid(video_data->version))  {
+    if (video_data && (!pic_version_valid(video_data->version)))  {
         // Read the pic structure
         if ((n = ad_get_buffer(pb, (uint8_t*)video_data, nviSize)) != nviSize)  {
             av_log(s, AV_LOG_ERROR, "ad_read_jpeg: Short of data reading "
@@ -677,7 +677,7 @@ int ad_read_jpeg(AVFormatContext *s, AVPacket *pkt, struct NetVuImageData *video
         ad_network2host(video_data, (uint8_t *)video_data);
     }
 
-    if (!pic_version_valid(video_data->version))  {
+    if ((video_data==NULL) || !pic_version_valid(video_data->version))  {
         av_log(s, AV_LOG_ERROR, "%s: invalid struct NetVuImageData version "
                                 "0x%08X\n", __func__, video_data->version);
         return ADPIC_JPEG_PIC_VERSION_ERROR;
