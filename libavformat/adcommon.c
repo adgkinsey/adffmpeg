@@ -382,6 +382,7 @@ static AVStream * ad_get_data_stream(AVFormatContext *s, enum CodecID codecId)
 //    return NULL;
 //}
 
+#ifndef AD_USE_SIDEDATA
 static void ad_release_packet( AVPacket *pkt )
 {
     if (pkt == NULL)
@@ -416,12 +417,13 @@ static void ad_release_packet( AVPacket *pkt )
     // Now use the default routine to release the rest of the packet's resources
     av_destruct_packet( pkt );
 }
+#endif
 
+#ifndef AD_USE_SIDEDATA
 int ad_new_packet(AVPacket *pkt, int size)
 {
     int retVal = av_new_packet( pkt, size );
     pkt->priv = NULL;
-
     if( retVal >= 0 ) {
         // Give the packet its own destruct function
         pkt->destruct = ad_release_packet;
@@ -429,7 +431,6 @@ int ad_new_packet(AVPacket *pkt, int size)
 
     return retVal;
 }
-
 
 static void ad_keyvalsplit(const char *line, char *key, char *val)
 {
@@ -566,6 +567,7 @@ static void ad_parseText(AVFormatContext *s, struct ADFrameData *frameData)
             line[jj++] = src[ii];
     }
 }
+#endif
 
 int ad_get_buffer(AVIOContext *s, uint8_t *buf, int size)
 {
@@ -934,9 +936,12 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
 {
     AdContext *adContext          = s->priv_data;
     AVStream *st                  = NULL;
-    struct ADFrameData *frameData = NULL;
+#ifdef AD_USE_SIDEDATA
     uint8_t *sideData             = NULL;
     int textBufSize               = 0;
+#else
+    struct ADFrameData *frameData = NULL;
+#endif
 
     if ((media == AVMEDIA_TYPE_VIDEO) && (codecId == CODEC_ID_PBM))  {
         // Get or create a data stream
@@ -980,7 +985,8 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
                 av_dict_set(&s->metadata, "timezone", utcOffsetStr, 0);
                 adContext->metadataSet = 1;
             }
-            
+
+#ifdef AD_USE_SIDEDATA
             sideData = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_FRAME, sizeof(struct NetVuImageData));
             if (sideData)
                 memcpy(sideData, data, sizeof(struct NetVuImageData));
@@ -991,6 +997,7 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
                 if (sideData)
                     memcpy(sideData, text_data, textBufSize);
             }
+#endif
         }
     }
     else if (media == AVMEDIA_TYPE_AUDIO) {
@@ -1020,6 +1027,7 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
     if (st)  {
         pkt->stream_index = st->index;
 
+#ifndef AD_USE_SIDEDATA
         if ( (media == AVMEDIA_TYPE_VIDEO) || (media == AVMEDIA_TYPE_AUDIO) )  {
             frameData = av_mallocz(sizeof(*frameData));
             if( frameData == NULL )
@@ -1042,6 +1050,7 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
         }
         else
             pkt->priv = NULL;
+#endif
         
         pkt->duration = 0;
         pkt->pos = -1;
