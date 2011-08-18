@@ -21,6 +21,12 @@
 #ifndef AVFORMAT_LIBPAR_H
 #define AVFORMAT_LIBPAR_H
 
+#include "avformat.h"
+
+#if (LIBAVFORMAT_VERSION_MAJOR >= 53)
+#define AD_USE_SIDEDATA 1
+#else
+
 #include <parreader_types.h>
 
 
@@ -30,5 +36,6 @@ typedef struct {
     ParKeyValuePair *indexInfo;
     int fileChanged;
 } LibparFrameExtra;
+#endif // AD_USE_SIDEDATA
 
 #endif /* AVFORMAT_LIBPAR_H */
