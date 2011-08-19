@@ -25,8 +25,9 @@
 
 #if (LIBAVFORMAT_VERSION_MAJOR >= 53)
 #define AD_USE_SIDEDATA 1
-#else
+#endif
 
+#ifndef AD_USE_SIDEDATA    
 #include <parreader_types.h>
 
 

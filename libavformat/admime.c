@@ -667,7 +667,7 @@ static int admime_read_header(AVFormatContext *s, AVFormatParameters *ap)
 
 static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    AdContext*              adContext = s->priv_data;
+    //AdContext*              adContext = s->priv_data;
     AVIOContext *           pb = s->pb;
     void *                  payload = NULL;
     char *                  txtDat = NULL;

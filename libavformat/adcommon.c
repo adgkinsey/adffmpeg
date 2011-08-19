@@ -929,23 +929,52 @@ int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int insize, char **text_d
     
     return 0;
 }
-                
+            
+static int addSideData(AVFormatContext *s, AVPacket *pkt, 
+                       enum AVMediaType media, unsigned int size, 
+                       void *data, const char *text)
+{
+#ifdef AD_USE_SIDEDATA
+    uint8_t *side = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_FRAME, size);
+    if (side)
+        memcpy(side, data, size);
+    
+    if (text)  {
+        size = strlen(text) + 1;
+        side = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_TEXT, size);
+        if (side)
+            memcpy(side, text, size);
+    }
+#else
+    struct ADFrameData *frameData = av_mallocz(sizeof(*frameData));
+    if( frameData == NULL )
+        return AVERROR(ENOMEM);
+
+    if (media == AVMEDIA_TYPE_VIDEO)
+        frameData->frameType = NetVuVideo;
+    else
+        frameData->frameType = NetVuAudio;
+    
+    frameData->frameData = data;
+    frameData->additionalData = (unsigned char *)text;
+    
+    if (text != NULL)
+        ad_parseText(s, frameData);
+    pkt->priv = frameData;
+#endif
+    return 0;
+}
+    
 int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
                    enum AVMediaType media, enum CodecID codecId, 
-                   void *data, char *text_data)
+                   void *data, char *text)
 {
     AdContext *adContext          = s->priv_data;
     AVStream *st                  = NULL;
-#ifdef AD_USE_SIDEDATA
-    uint8_t *sideData             = NULL;
-    int textBufSize               = 0;
-#else
-    struct ADFrameData *frameData = NULL;
-#endif
 
     if ((media == AVMEDIA_TYPE_VIDEO) && (codecId == CODEC_ID_PBM))  {
         // Get or create a data stream
-        if ( (st = ad_get_overlay_stream(s, text_data)) == NULL ) {
+        if ( (st = ad_get_overlay_stream(s, text)) == NULL ) {
             av_log(s, AV_LOG_ERROR, "%s: ad_get_overlay_stream failed\n", __func__);
             return ADPIC_GET_OVERLAY_STREAM_ERROR;
         }
@@ -986,34 +1015,25 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
                 adContext->metadataSet = 1;
             }
 
-#ifdef AD_USE_SIDEDATA
-            sideData = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_FRAME, sizeof(struct NetVuImageData));
-            if (sideData)
-                memcpy(sideData, data, sizeof(struct NetVuImageData));
-            
-            if (text_data)  {
-                textBufSize = strlen(text_data) + 1;
-                sideData = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_TEXT, textBufSize);
-                if (sideData)
-                    memcpy(sideData, text_data, textBufSize);
-            }
-#endif
+            addSideData(s, pkt, media, sizeof(struct NetVuImageData), data, text);
         }
     }
     else if (media == AVMEDIA_TYPE_AUDIO) {
         // Get the audio stream
-        struct NetVuAudioData *audio_data = (struct NetVuAudioData *)data;
-        if ( (st = ad_get_audio_stream( s, audio_data )) == NULL ) {
+        struct NetVuAudioData *data = (struct NetVuAudioData *)data;
+        if ( (st = ad_get_audio_stream( s, data )) == NULL ) {
             av_log(s, AV_LOG_ERROR, "ad_read_packet: ad_get_audio_stream failed\n");
             return ADPIC_GET_AUDIO_STREAM_ERROR;
         }
         else  {
-            if (audio_data->seconds > 0)  {
-                int64_t milliseconds = audio_data->seconds * 1000ULL + (audio_data->msecs % 1000);
+            if (data->seconds > 0)  {
+                int64_t milliseconds = data->seconds * 1000ULL + (data->msecs % 1000);
                 pkt->pts = av_rescale_q(milliseconds, MilliTB, st->time_base);
             }
             else
                 pkt->pts = AV_NOPTS_VALUE;
+            
+            addSideData(s, pkt, media, sizeof(struct NetVuAudioData), data, text);
         }
     }
     else if (media == AVMEDIA_TYPE_DATA) {
@@ -1026,31 +1046,6 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
 
     if (st)  {
         pkt->stream_index = st->index;
-
-#ifndef AD_USE_SIDEDATA
-        if ( (media == AVMEDIA_TYPE_VIDEO) || (media == AVMEDIA_TYPE_AUDIO) )  {
-            frameData = av_mallocz(sizeof(*frameData));
-            if( frameData == NULL )
-                return AVERROR(ENOMEM);
-
-            if (media == AVMEDIA_TYPE_VIDEO)
-                frameData->frameType = NetVuVideo;
-            else
-                frameData->frameType = NetVuAudio;
-            
-            frameData->frameData = data;
-            
-            if (text_data != NULL)  {
-                frameData->additionalData = text_data;
-
-                /// Todo: AVOption to allow toggling parsing of text on and off
-                ad_parseText(s, frameData);
-            }
-            pkt->priv = frameData;
-        }
-        else
-            pkt->priv = NULL;
-#endif
         
         pkt->duration = 0;
         pkt->pos = -1;
