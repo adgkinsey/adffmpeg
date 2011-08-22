@@ -720,7 +720,7 @@ static int mov_get_codec_tag(AVFormatContext *s, MOVTrack *track)
             if (!tag) { // if no mac fcc found, try with Microsoft tags
                 tag = ff_codec_get_tag(ff_codec_bmp_tags, track->enc->codec_id);
                 if (tag)
-                    av_log(s, AV_LOG_INFO, "Warning, using MS style video codec tag, "
+                    av_log(s, AV_LOG_WARNING, "Using MS style video codec tag, "
                            "the file may be unplayable!\n");
             }
         } else if (track->enc->codec_type == AVMEDIA_TYPE_AUDIO) {
@@ -729,7 +729,7 @@ static int mov_get_codec_tag(AVFormatContext *s, MOVTrack *track)
                 int ms_tag = ff_codec_get_tag(ff_codec_wav_tags, track->enc->codec_id);
                 if (ms_tag) {
                     tag = MKTAG('m', 's', ((ms_tag >> 8) & 0xff), (ms_tag & 0xff));
-                    av_log(s, AV_LOG_INFO, "Warning, using MS style audio codec tag, "
+                    av_log(s, AV_LOG_WARNING, "Using MS style audio codec tag, "
                            "the file may be unplayable!\n");
                 }
             }
@@ -2356,7 +2356,11 @@ AVOutputFormat ff_mov_muxer = {
     .extensions        = "mov",
     .priv_data_size    = sizeof(MOVMuxContext),
     .audio_codec       = CODEC_ID_AAC,
+#if CONFIG_LIBX264_ENCODER
+    .video_codec       = CODEC_ID_H264,
+#else
     .video_codec       = CODEC_ID_MPEG4,
+#endif
     .write_header      = mov_write_header,
     .write_packet      = ff_mov_write_packet,
     .write_trailer     = mov_write_trailer,
@@ -2389,7 +2393,11 @@ AVOutputFormat ff_mp4_muxer = {
     .extensions        = "mp4",
     .priv_data_size    = sizeof(MOVMuxContext),
     .audio_codec       = CODEC_ID_AAC,
+#if CONFIG_LIBX264_ENCODER
+    .video_codec       = CODEC_ID_H264,
+#else
     .video_codec       = CODEC_ID_MPEG4,
+#endif
     .write_header      = mov_write_header,
     .write_packet      = ff_mov_write_packet,
     .write_trailer     = mov_write_trailer,
@@ -2405,7 +2413,11 @@ AVOutputFormat ff_psp_muxer = {
     .extensions        = "mp4,psp",
     .priv_data_size    = sizeof(MOVMuxContext),
     .audio_codec       = CODEC_ID_AAC,
+#if CONFIG_LIBX264_ENCODER
+    .video_codec       = CODEC_ID_H264,
+#else
     .video_codec       = CODEC_ID_MPEG4,
+#endif
     .write_header      = mov_write_header,
     .write_packet      = ff_mov_write_packet,
     .write_trailer     = mov_write_trailer,

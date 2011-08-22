@@ -212,6 +212,7 @@ enum CodecID {
     CODEC_ID_G2M,
 
     /* various PCM "codecs" */
+    CODEC_ID_FIRST_AUDIO = 0x10000,     ///< A dummy id pointing at the start of audio codecs
     CODEC_ID_PCM_S16LE= 0x10000,
     CODEC_ID_PCM_S16BE,
     CODEC_ID_PCM_U16LE,
@@ -343,6 +344,7 @@ enum CodecID {
     CODEC_ID_CELT,
 
     /* subtitle codecs */
+    CODEC_ID_FIRST_SUBTITLE = 0x17000,          ///< A dummy ID pointing at the start of subtitle codecs.
     CODEC_ID_DVD_SUBTITLE= 0x17000,
     CODEC_ID_DVB_SUBTITLE,
     CODEC_ID_TEXT,  ///< raw UTF-8 text
@@ -355,6 +357,7 @@ enum CodecID {
     CODEC_ID_MICRODVD,
 
     /* other specific kind of codecs (generally used for attachments) */
+    CODEC_ID_FIRST_UNKNOWN = 0x18000,           ///< A dummy ID pointing at the start of various fake codecs.
     CODEC_ID_TTF= 0x18000,
 
     CODEC_ID_PROBE= 0x19000, ///< codec_id is not known (like CODEC_ID_NONE) but lavf should attempt to identify it
@@ -3432,6 +3435,12 @@ int avpicture_layout(const AVPicture* src, enum PixelFormat pix_fmt, int width, 
 int avpicture_get_size(enum PixelFormat pix_fmt, int width, int height);
 void avcodec_get_chroma_sub_sample(enum PixelFormat pix_fmt, int *h_shift, int *v_shift);
 
+/**
+ * Get the name of a codec.
+ * @return  a static string identifying the codec; never NULL
+ */
+const char *avcodec_get_name(enum CodecID id);
+
 #if FF_API_GET_PIX_FMT_NAME
 /**
  * Return the short name for a pixel format.
@@ -3483,7 +3492,8 @@ size_t av_get_codec_tag_string(char *buf, size_t buf_size, unsigned int codec_ta
  * @param[in] dst_pix_fmt destination pixel format
  * @param[in] src_pix_fmt source pixel format
  * @param[in] has_alpha Whether the source pixel format alpha channel is used.
- * @return Combination of flags informing you what kind of losses will occur.
+ * @return Combination of flags informing you what kind of losses will occur
+ * (maximum loss for an invalid dst_pix_fmt).
  */
 int avcodec_get_pix_fmt_loss(enum PixelFormat dst_pix_fmt, enum PixelFormat src_pix_fmt,
                              int has_alpha);
@@ -3498,9 +3508,11 @@ int avcodec_get_pix_fmt_loss(enum PixelFormat dst_pix_fmt, enum PixelFormat src_
  * The pixel formats from which it chooses one, are determined by the
  * pix_fmt_mask parameter.
  *
+ * Note, only the first 64 pixel formats will fit in pix_fmt_mask.
+ *
  * @code
  * src_pix_fmt = PIX_FMT_YUV420P;
- * pix_fmt_mask = (1 << PIX_FMT_YUV422P) || (1 << PIX_FMT_RGB24);
+ * pix_fmt_mask = (1 << PIX_FMT_YUV422P) | (1 << PIX_FMT_RGB24);
  * dst_pix_fmt = avcodec_find_best_pix_fmt(pix_fmt_mask, src_pix_fmt, alpha, &loss);
  * @endcode
  *
@@ -4343,5 +4355,10 @@ enum AVLockOp {
  *           lockmgr callback may also be invoked.
  */
 int av_lockmgr_register(int (*cb)(void **mutex, enum AVLockOp op));
+
+/**
+ * Get the type of the given codec.
+ */
+enum AVMediaType avcodec_get_type(enum CodecID codec_id);
 
 #endif /* AVCODEC_AVCODEC_H */

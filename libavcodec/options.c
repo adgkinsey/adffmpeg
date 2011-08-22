@@ -70,7 +70,7 @@ static const AVOption *opt_find(void *obj, const char *name, const char *unit, i
 #define AV_CODEC_DEFAULT_BITRATE 200*1000
 
 static const AVOption options[]={
-{"b", "set bitrate (in bits/s)", OFFSET(bit_rate), FF_OPT_TYPE_INT, {.dbl = AV_CODEC_DEFAULT_BITRATE }, INT_MIN, INT_MAX, V|E},
+{"b", "set bitrate (in bits/s)", OFFSET(bit_rate), FF_OPT_TYPE_INT, {.dbl = AV_CODEC_DEFAULT_BITRATE }, INT_MIN, INT_MAX, A|V|E},
 {"ab", "set bitrate (in bits/s)", OFFSET(bit_rate), FF_OPT_TYPE_INT, {.dbl = 64*1000 }, INT_MIN, INT_MAX, A|E},
 {"bt", "set video bitrate tolerance (in bits/s)", OFFSET(bit_rate_tolerance), FF_OPT_TYPE_INT, {.dbl = AV_CODEC_DEFAULT_BITRATE*20 }, 1, INT_MAX, V|E},
 {"flags", NULL, OFFSET(flags), FF_OPT_TYPE_FLAGS, {.dbl = DEFAULT }, 0, UINT_MAX, V|A|E|D, "flags"},
@@ -126,8 +126,8 @@ static const AVOption options[]={
 {"extradata_size", NULL, OFFSET(extradata_size), FF_OPT_TYPE_INT, {.dbl = DEFAULT }, INT_MIN, INT_MAX},
 {"time_base", NULL, OFFSET(time_base), FF_OPT_TYPE_RATIONAL, {.dbl = 0}, INT_MIN, INT_MAX},
 {"g", "set the group of picture size", OFFSET(gop_size), FF_OPT_TYPE_INT, {.dbl = 12 }, INT_MIN, INT_MAX, V|E},
-{"ar", "set audio sampling rate (in Hz)", OFFSET(sample_rate), FF_OPT_TYPE_INT, {.dbl = DEFAULT }, INT_MIN, INT_MAX},
-{"ac", "set number of audio channels", OFFSET(channels), FF_OPT_TYPE_INT, {.dbl = DEFAULT }, INT_MIN, INT_MAX},
+{"ar", "set audio sampling rate (in Hz)", OFFSET(sample_rate), FF_OPT_TYPE_INT, {.dbl = DEFAULT }, INT_MIN, INT_MAX, A|D|E},
+{"ac", "set number of audio channels", OFFSET(channels), FF_OPT_TYPE_INT, {.dbl = DEFAULT }, INT_MIN, INT_MAX, A|D|E},
 {"cutoff", "set cutoff bandwidth", OFFSET(cutoff), FF_OPT_TYPE_INT, {.dbl = DEFAULT }, INT_MIN, INT_MAX, A|E},
 {"frame_size", NULL, OFFSET(frame_size), FF_OPT_TYPE_INT, {.dbl = DEFAULT }, INT_MIN, INT_MAX, A|E},
 {"frame_number", NULL, OFFSET(frame_number), FF_OPT_TYPE_INT, {.dbl = DEFAULT }, INT_MIN, INT_MAX},

@@ -736,7 +736,6 @@ static int read_ffserver_streams(AVFormatContext *s, const char *filename)
 {
     int i, err;
     AVFormatContext *ic = NULL;
-    int nopts = 0;
 
     err = avformat_open_input(&ic, filename, NULL, NULL);
     if (err < 0)
@@ -768,9 +767,6 @@ static int read_ffserver_streams(AVFormatContext *s, const char *filename)
             } else
                 choose_pixel_fmt(st, codec);
         }
-
-        if(st->codec->flags & CODEC_FLAG_BITEXACT)
-            nopts = 1;
     }
 
     av_close_input_file(ic);
@@ -1725,6 +1721,14 @@ static int output_packet(InputStream *ist, int ist_index,
                 int frame_size;
 
                 ost = ost_table[i];
+
+                /* finish if recording time exhausted */
+                if (recording_time != INT64_MAX &&
+                        av_compare_ts(ist->pts, AV_TIME_BASE_Q, recording_time + start_time, (AVRational){1, 1000000})
+                    >= 0) {
+                    ist->is_past_recording_time = 1;
+                    continue;
+                }
                 if (ost->source_index == ist_index) {
 #if CONFIG_AVFILTER
                 frame_available = ist->st->codec->codec_type != AVMEDIA_TYPE_VIDEO ||
@@ -2432,8 +2436,8 @@ static int transcode(AVFormatContext **output_files,
             AVCodec *codec = ost->enc;
             AVCodecContext *dec = input_streams[ost->source_index].st->codec;
             if (!codec) {
-                snprintf(error, sizeof(error), "Encoder (codec id %d) not found for output stream #%d.%d",
-                         ost->st->codec->codec_id, ost->file_index, ost->index);
+                snprintf(error, sizeof(error), "Encoder (codec %s) not found for output stream #%d.%d",
+                         avcodec_get_name(ost->st->codec->codec_id), ost->file_index, ost->index);
                 ret = AVERROR(EINVAL);
                 goto dump_format;
             }
@@ -2469,8 +2473,8 @@ static int transcode(AVFormatContext **output_files,
             if (!codec)
                 codec = avcodec_find_decoder(ist->st->codec->codec_id);
             if (!codec) {
-                snprintf(error, sizeof(error), "Decoder (codec id %d) not found for input stream #%d.%d",
-                        ist->st->codec->codec_id, ist->file_index, ist->st->index);
+                snprintf(error, sizeof(error), "Decoder (codec %s) not found for input stream #%d.%d",
+                        avcodec_get_name(ist->st->codec->codec_id), ist->file_index, ist->st->index);
                 ret = AVERROR(EINVAL);
                 goto dump_format;
             }
@@ -2482,8 +2486,6 @@ static int transcode(AVFormatContext **output_files,
             }
             assert_codec_experimental(ist->st->codec, 0);
             assert_avoptions(ost->opts);
-            //if (ist->st->codec->codec_type == AVMEDIA_TYPE_VIDEO)
-            //    ist->st->codec->flags |= CODEC_FLAG_REPEAT_FIELD;
         }
     }
 
@@ -2621,6 +2623,13 @@ static int transcode(AVFormatContext **output_files,
                 fprintf(stderr, " [sync #%d.%d]",
                         ost->sync_ist->file_index,
                         ost->sync_ist->st->index);
+            if(ost->encoding_needed)
+                fprintf(stderr, ": %s -> %s",
+                    input_streams[ost->source_index].dec ?
+                        input_streams[ost->source_index].dec->name : "?",
+                    ost->enc ? ost->enc->name : "?");
+            else
+                fprintf(stderr, ": copy");
             fprintf(stderr, "\n");
         }
     }
@@ -2795,7 +2804,10 @@ static int transcode(AVFormatContext **output_files,
             && (is->iformat->flags & AVFMT_TS_DISCONT)) {
             int64_t pkt_dts= av_rescale_q(pkt.dts, ist->st->time_base, AV_TIME_BASE_Q);
             int64_t delta= pkt_dts - ist->next_pts;
-            if((FFABS(delta) > 1LL*dts_delta_threshold*AV_TIME_BASE || pkt_dts+1<ist->pts)&& !copy_ts){
+            if((delta < -1LL*dts_delta_threshold*AV_TIME_BASE ||
+                (delta > 1LL*dts_delta_threshold*AV_TIME_BASE &&
+                 ist->st->codec->codec_type != AVMEDIA_TYPE_SUBTITLE) ||
+                pkt_dts+1<ist->pts)&& !copy_ts){
                 input_files[ist->file_index].ts_offset -= delta;
                 if (verbose > 2)
                     fprintf(stderr, "timestamp discontinuity %"PRId64", new offset= %"PRId64"\n",
@@ -2804,17 +2816,6 @@ static int transcode(AVFormatContext **output_files,
                 if(pkt.pts != AV_NOPTS_VALUE)
                     pkt.pts-= av_rescale_q(delta, AV_TIME_BASE_Q, ist->st->time_base);
             }
-        }
-
-        /* finish if recording time exhausted */
-        if (recording_time != INT64_MAX &&
-            (pkt.pts != AV_NOPTS_VALUE ?
-                av_compare_ts(pkt.pts, ist->st->time_base, recording_time + start_time, (AVRational){1, 1000000})
-                    :
-                av_compare_ts(ist->pts, AV_TIME_BASE_Q, recording_time + start_time, (AVRational){1, 1000000})
-            )>= 0) {
-            ist->is_past_recording_time = 1;
-            goto discard_packet;
         }
 
         //fprintf(stderr,"read #%d.%d size=%d\n", ist->file_index, ist->st->index, pkt.size);
@@ -4453,8 +4454,8 @@ static const OptionDef options[] = {
     { "rc_override", HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_video_rc_override_string}, "rate control override for specific intervals", "override" },
     { "vcodec", HAS_ARG | OPT_VIDEO, {(void*)opt_codec}, "force video codec ('copy' to copy stream)", "codec" },
     { "me_threshold", HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_me_threshold}, "motion estimaton threshold",  "threshold" },
-    { "sameq", OPT_BOOL | OPT_VIDEO, {(void*)&same_quality},
-      "use same quantizer as source (implies VBR)" },
+    { "sameq", OPT_BOOL | OPT_VIDEO, {(void*)&same_quality}, "use same quantizer as source (implies VBR)" },
+    { "same_quant", OPT_BOOL | OPT_VIDEO, {(void*)&same_quality}, "use same quantizer as source (implies VBR)" },
     { "pass", HAS_ARG | OPT_VIDEO, {(void*)opt_pass}, "select the pass number (1 or 2)", "n" },
     { "passlogfile", HAS_ARG | OPT_VIDEO, {(void*)&opt_passlogfile}, "select two pass log file name prefix", "prefix" },
     { "deinterlace", OPT_BOOL | OPT_EXPERT | OPT_VIDEO, {(void*)&do_deinterlace},

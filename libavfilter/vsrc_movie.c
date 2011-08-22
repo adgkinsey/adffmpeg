@@ -39,6 +39,7 @@
 #include "avfilter.h"
 
 typedef struct {
+    /* common A/V fields */
     const AVClass *class;
     int64_t seek_point;   ///< seekpoint in microseconds
     double seek_point_d;
@@ -51,6 +52,7 @@ typedef struct {
     int is_done;
     AVFrame *frame;   ///< video frame to store the decoded images in
 
+    /* video-only fields */
     int w, h;
     AVFilterBufferRef *picref;
 } MovieContext;
@@ -78,13 +80,31 @@ static const AVClass movie_class = {
     movie_options
 };
 
-static int movie_init(AVFilterContext *ctx)
+static av_cold int movie_common_init(AVFilterContext *ctx, const char *args, void *opaque,
+                                     enum AVMediaType type)
 {
     MovieContext *movie = ctx->priv;
     AVInputFormat *iformat = NULL;
     AVCodec *codec;
-    int ret;
     int64_t timestamp;
+    int ret;
+
+    movie->class = &movie_class;
+    av_opt_set_defaults2(movie, 0, 0);
+
+    if (args)
+        movie->file_name = av_get_token(&args, ":");
+    if (!movie->file_name || !*movie->file_name) {
+        av_log(ctx, AV_LOG_ERROR, "No filename provided!\n");
+        return AVERROR(EINVAL);
+    }
+
+    if (*args++ == ':' && (ret = av_set_options_string(movie, args, "=", ":")) < 0) {
+        av_log(ctx, AV_LOG_ERROR, "Error parsing options string: '%s'\n", args);
+        return ret;
+    }
+
+    movie->seek_point = movie->seek_point_d * 1000000 + 0.5;
 
     av_register_all();
 
@@ -120,11 +140,11 @@ static int movie_init(AVFilterContext *ctx)
         }
     }
 
-    /* select the video stream */
-    if ((ret = av_find_best_stream(movie->format_ctx, AVMEDIA_TYPE_VIDEO,
+    /* select the media stream */
+    if ((ret = av_find_best_stream(movie->format_ctx, type,
                                    movie->stream_index, -1, NULL, 0)) < 0) {
-        av_log(ctx, AV_LOG_ERROR, "No video stream with index '%d' found\n",
-               movie->stream_index);
+        av_log(ctx, AV_LOG_ERROR, "No %s stream with index '%d' found\n",
+               av_get_media_type_string(type), movie->stream_index);
         return ret;
     }
     movie->stream_index = ret;
@@ -145,14 +165,6 @@ static int movie_init(AVFilterContext *ctx)
         return ret;
     }
 
-    if (!(movie->frame = avcodec_alloc_frame()) ) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to alloc frame\n");
-        return AVERROR(ENOMEM);
-    }
-
-    movie->w = movie->codec_ctx->width;
-    movie->h = movie->codec_ctx->height;
-
     av_log(ctx, AV_LOG_INFO, "seek_point:%"PRIi64" format_name:%s file_name:%s stream_index:%d\n",
            movie->seek_point, movie->format_name, movie->file_name,
            movie->stream_index);
@@ -160,31 +172,7 @@ static int movie_init(AVFilterContext *ctx)
     return 0;
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
-{
-    MovieContext *movie = ctx->priv;
-    int ret;
-    movie->class = &movie_class;
-    av_opt_set_defaults2(movie, 0, 0);
-
-    if (args)
-        movie->file_name = av_get_token(&args, ":");
-    if (!movie->file_name || !*movie->file_name) {
-        av_log(ctx, AV_LOG_ERROR, "No filename provided!\n");
-        return AVERROR(EINVAL);
-    }
-
-    if (*args++ == ':' && (ret = av_set_options_string(movie, args, "=", ":")) < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Error parsing options string: '%s'\n", args);
-        return ret;
-    }
-
-    movie->seek_point = movie->seek_point_d * 1000000 + 0.5;
-
-    return movie_init(ctx);
-}
-
-static av_cold void uninit(AVFilterContext *ctx)
+static av_cold void movie_common_uninit(AVFilterContext *ctx)
 {
     MovieContext *movie = ctx->priv;
 
@@ -194,11 +182,31 @@ static av_cold void uninit(AVFilterContext *ctx)
         avcodec_close(movie->codec_ctx);
     if (movie->format_ctx)
         av_close_input_file(movie->format_ctx);
+
     avfilter_unref_buffer(movie->picref);
     av_freep(&movie->frame);
 }
 
-static int query_formats(AVFilterContext *ctx)
+static av_cold int movie_init(AVFilterContext *ctx, const char *args, void *opaque)
+{
+    MovieContext *movie = ctx->priv;
+    int ret;
+
+    if ((ret = movie_common_init(ctx, args, opaque, AVMEDIA_TYPE_VIDEO)) < 0)
+        return ret;
+
+    if (!(movie->frame = avcodec_alloc_frame()) ) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to alloc frame\n");
+        return AVERROR(ENOMEM);
+    }
+
+    movie->w = movie->codec_ctx->width;
+    movie->h = movie->codec_ctx->height;
+
+    return 0;
+}
+
+static int movie_query_formats(AVFilterContext *ctx)
 {
     MovieContext *movie = ctx->priv;
     enum PixelFormat pix_fmts[] = { movie->codec_ctx->pix_fmt, PIX_FMT_NONE };
@@ -207,7 +215,7 @@ static int query_formats(AVFilterContext *ctx)
     return 0;
 }
 
-static int config_output_props(AVFilterLink *outlink)
+static int movie_config_output_props(AVFilterLink *outlink)
 {
     MovieContext *movie = outlink->src->priv;
 
@@ -273,7 +281,7 @@ static int movie_get_frame(AVFilterLink *outlink)
     return ret;
 }
 
-static int request_frame(AVFilterLink *outlink)
+static int movie_request_frame(AVFilterLink *outlink)
 {
     AVFilterBufferRef *outpicref;
     MovieContext *movie = outlink->src->priv;
@@ -298,14 +306,14 @@ AVFilter avfilter_vsrc_movie = {
     .name          = "movie",
     .description   = NULL_IF_CONFIG_SMALL("Read from a movie source."),
     .priv_size     = sizeof(MovieContext),
-    .init          = init,
-    .uninit        = uninit,
-    .query_formats = query_formats,
+    .init          = movie_init,
+    .uninit        = movie_common_uninit,
+    .query_formats = movie_query_formats,
 
     .inputs    = (AVFilterPad[]) {{ .name = NULL }},
     .outputs   = (AVFilterPad[]) {{ .name            = "default",
                                     .type            = AVMEDIA_TYPE_VIDEO,
-                                    .request_frame   = request_frame,
-                                    .config_props    = config_output_props, },
+                                    .request_frame   = movie_request_frame,
+                                    .config_props    = movie_config_output_props, },
                                   { .name = NULL}},
 };

@@ -984,6 +984,25 @@ static int get_bit_rate(AVCodecContext *ctx)
     return bit_rate;
 }
 
+const char *avcodec_get_name(enum CodecID id)
+{
+    AVCodec *codec;
+
+#if !CONFIG_SMALL
+    switch (id) {
+#include "libavcodec/codec_names.h"
+    }
+    av_log(NULL, AV_LOG_WARNING, "Codec 0x%x is not in the full list.\n", id);
+#endif
+    codec = avcodec_find_decoder(id);
+    if (codec)
+        return codec->name;
+    codec = avcodec_find_encoder(id);
+    if (codec)
+        return codec->name;
+    return "unknown_codec";
+}
+
 size_t av_get_codec_tag_string(char *buf, size_t buf_size, unsigned int codec_tag)
 {
     int i, len, ret = 0;
@@ -1001,43 +1020,37 @@ size_t av_get_codec_tag_string(char *buf, size_t buf_size, unsigned int codec_ta
 
 void avcodec_string(char *buf, int buf_size, AVCodecContext *enc, int encode)
 {
+    const char *codec_type;
     const char *codec_name;
     const char *profile = NULL;
     AVCodec *p;
-    char buf1[32];
     int bitrate;
     AVRational display_aspect_ratio;
 
-    if (encode)
-        p = avcodec_find_encoder(enc->codec_id);
-    else
-        p = avcodec_find_decoder(enc->codec_id);
-
-    if (p) {
-        codec_name = p->name;
-        profile = av_get_profile_name(p, enc->profile);
-    } else if (enc->codec_id == CODEC_ID_MPEG2TS) {
-        /* fake mpeg2 transport stream codec (currently not
-           registered) */
-        codec_name = "mpeg2ts";
-    } else if (enc->codec_name[0] != '\0') {
-        codec_name = enc->codec_name;
-    } else {
-        /* output avi tags */
-        char tag_buf[32];
-        av_get_codec_tag_string(tag_buf, sizeof(tag_buf), enc->codec_tag);
-        snprintf(buf1, sizeof(buf1), "%s / 0x%04X", tag_buf, enc->codec_tag);
-        codec_name = buf1;
+    if (!buf || buf_size <= 0)
+        return;
+    codec_type = av_get_media_type_string(enc->codec_type);
+    codec_name = avcodec_get_name(enc->codec_id);
+    if (enc->profile != FF_PROFILE_UNKNOWN) {
+        p = encode ? avcodec_find_encoder(enc->codec_id) :
+                     avcodec_find_decoder(enc->codec_id);
+        if (p)
+            profile = av_get_profile_name(p, enc->profile);
     }
 
+    snprintf(buf, buf_size, "%s: %s%s", codec_type ? codec_type : "unknown",
+             codec_name, enc->mb_decision ? " (hq)" : "");
+    buf[0] ^= 'a' ^ 'A'; /* first letter in uppercase */
+    if (profile)
+        snprintf(buf + strlen(buf), buf_size - strlen(buf), " (%s)", profile);
+    if (enc->codec_tag) {
+        char tag_buf[32];
+        av_get_codec_tag_string(tag_buf, sizeof(tag_buf), enc->codec_tag);
+        snprintf(buf + strlen(buf), buf_size - strlen(buf),
+                 " (%s / 0x%04X)", tag_buf, enc->codec_tag);
+    }
     switch(enc->codec_type) {
     case AVMEDIA_TYPE_VIDEO:
-        snprintf(buf, buf_size,
-                 "Video: %s%s",
-                 codec_name, enc->mb_decision ? " (hq)" : "");
-        if (profile)
-            snprintf(buf + strlen(buf), buf_size - strlen(buf),
-                     " (%s)", profile);
         if (enc->pix_fmt != PIX_FMT_NONE) {
             snprintf(buf + strlen(buf), buf_size - strlen(buf),
                      ", %s",
@@ -1070,12 +1083,6 @@ void avcodec_string(char *buf, int buf_size, AVCodecContext *enc, int encode)
         }
         break;
     case AVMEDIA_TYPE_AUDIO:
-        snprintf(buf, buf_size,
-                 "Audio: %s",
-                 codec_name);
-        if (profile)
-            snprintf(buf + strlen(buf), buf_size - strlen(buf),
-                     " (%s)", profile);
         if (enc->sample_rate) {
             snprintf(buf + strlen(buf), buf_size - strlen(buf),
                      ", %d Hz", enc->sample_rate);
@@ -1087,17 +1094,7 @@ void avcodec_string(char *buf, int buf_size, AVCodecContext *enc, int encode)
                      ", %s", av_get_sample_fmt_name(enc->sample_fmt));
         }
         break;
-    case AVMEDIA_TYPE_DATA:
-        snprintf(buf, buf_size, "Data: %s", codec_name);
-        break;
-    case AVMEDIA_TYPE_SUBTITLE:
-        snprintf(buf, buf_size, "Subtitle: %s", codec_name);
-        break;
-    case AVMEDIA_TYPE_ATTACHMENT:
-        snprintf(buf, buf_size, "Attachment: %s", codec_name);
-        break;
     default:
-        snprintf(buf, buf_size, "Invalid Codec type %d", enc->codec_type);
         return;
     }
     if (encode) {
@@ -1380,3 +1377,17 @@ int avcodec_thread_init(AVCodecContext *s, int thread_count)
     return ff_thread_init(s);
 }
 #endif
+
+enum AVMediaType avcodec_get_type(enum CodecID codec_id)
+{
+    if (codec_id <= CODEC_ID_NONE)
+        return AVMEDIA_TYPE_UNKNOWN;
+    else if (codec_id < CODEC_ID_FIRST_AUDIO)
+        return AVMEDIA_TYPE_VIDEO;
+    else if (codec_id < CODEC_ID_FIRST_SUBTITLE)
+        return AVMEDIA_TYPE_AUDIO;
+    else if (codec_id < CODEC_ID_FIRST_UNKNOWN)
+        return AVMEDIA_TYPE_SUBTITLE;
+
+    return AVMEDIA_TYPE_UNKNOWN;
+}

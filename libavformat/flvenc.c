@@ -180,7 +180,7 @@ static int flv_write_header(AVFormatContext *s)
     AVCodecContext *audio_enc = NULL, *video_enc = NULL;
     int i;
     double framerate = 0.0;
-    int metadata_size_pos, data_size;
+    int64_t metadata_size_pos, data_size;
     AVDictionaryEntry *tag = NULL;
 
     for(i=0; i<s->nb_streams; i++){
@@ -384,7 +384,7 @@ static int flv_write_packet(AVFormatContext *s, AVPacket *pkt)
 
         flags = enc->codec_tag;
         if(flags == 0) {
-            av_log(enc, AV_LOG_ERROR, "video codec %X not compatible with flv\n",enc->codec_id);
+            av_log(enc, AV_LOG_ERROR, "video codec %s not compatible with flv\n", avcodec_get_name(enc->codec_id));
             return -1;
         }
 

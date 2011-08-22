@@ -369,6 +369,7 @@ static int set_codec_from_probe_data(AVFormatContext *s, AVStream *st, AVProbeDa
         { "dts"      , CODEC_ID_DTS       , AVMEDIA_TYPE_AUDIO },
         { "eac3"     , CODEC_ID_EAC3      , AVMEDIA_TYPE_AUDIO },
         { "h264"     , CODEC_ID_H264      , AVMEDIA_TYPE_VIDEO },
+        { "loas"     , CODEC_ID_AAC_LATM  , AVMEDIA_TYPE_AUDIO },
         { "m4v"      , CODEC_ID_MPEG4     , AVMEDIA_TYPE_VIDEO },
         { "mp3"      , CODEC_ID_MP3       , AVMEDIA_TYPE_AUDIO },
         { "mpegvideo", CODEC_ID_MPEG2VIDEO, AVMEDIA_TYPE_VIDEO },
@@ -1245,6 +1246,9 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
             if (st->need_parsing && !st->parser && !(s->flags & AVFMT_FLAG_NOPARSE)) {
                 st->parser = av_parser_init(st->codec->codec_id);
                 if (!st->parser) {
+                    av_log(s, AV_LOG_WARNING, "parser not found for codec "
+                           "%s, packets or times may be invalid.\n",
+                           avcodec_get_name(st->codec->codec_id));
                     /* no parser available: just output the raw packets */
                     st->need_parsing = AVSTREAM_PARSE_NONE;
                 }else if(st->need_parsing == AVSTREAM_PARSE_HEADERS){
@@ -4032,4 +4036,18 @@ int64_t ff_iso8601_to_unix_time(const char *datestr)
                                  "the date string.\n");
     return 0;
 #endif
+}
+
+int avformat_query_codec(AVOutputFormat *ofmt, enum CodecID codec_id, int std_compliance)
+{
+    if (ofmt) {
+        if (ofmt->query_codec)
+            return ofmt->query_codec(codec_id, std_compliance);
+        else if (ofmt->codec_tag)
+            return !!av_codec_get_tag(ofmt->codec_tag, codec_id);
+        else if (codec_id == ofmt->video_codec || codec_id == ofmt->audio_codec ||
+                 codec_id == ofmt->subtitle_codec)
+                return 1;
+    }
+    return AVERROR_PATCHWELCOME;
 }

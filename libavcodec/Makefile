@@ -635,6 +635,8 @@ OBJS-$(CONFIG_MPEGVIDEO_PARSER)        += mpegvideo_parser.o    \
                                           mpeg12.o mpeg12data.o \
                                           mpegvideo.o error_resilience.o
 OBJS-$(CONFIG_PNM_PARSER)              += pnm_parser.o pnm.o
+OBJS-$(CONFIG_RV30_PARSER)             += rv34_parser.o
+OBJS-$(CONFIG_RV40_PARSER)             += rv34_parser.o
 OBJS-$(CONFIG_VC1_PARSER)              += vc1_parser.o vc1.o vc1data.o \
                                           msmpeg4.o msmpeg4data.o mpeg4video.o \
                                           h263.o mpegvideo.o error_resilience.o
@@ -733,3 +735,9 @@ $(SUBDIR)motionpixels.o: $(SUBDIR)motionpixels_tables.h
 $(SUBDIR)pcm.o: $(SUBDIR)pcm_tables.h
 $(SUBDIR)qdm2.o: $(SUBDIR)qdm2_tables.h
 endif
+
+CODEC_NAMES_SH := $(SRC_PATH)/$(SUBDIR)codec_names.sh
+AVCODEC_H      := $(SRC_PATH)/$(SUBDIR)avcodec.h
+$(SUBDIR)codec_names.h: $(CODEC_NAMES_SH) config.h $(AVCODEC_H)
+	$(M)$(CODEC_NAMES_SH) config.h $(AVCODEC_H) $@
+$(SUBDIR)utils.o: $(SUBDIR)codec_names.h

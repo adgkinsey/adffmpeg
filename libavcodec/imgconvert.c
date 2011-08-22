@@ -359,6 +359,9 @@ static int get_pix_fmt_depth(int *min, int *max, enum PixelFormat pix_fmt)
 int avcodec_get_pix_fmt_loss(enum PixelFormat dst_pix_fmt, enum PixelFormat src_pix_fmt,
                              int has_alpha)
 {
+    if (dst_pix_fmt>=PIX_FMT_NB || dst_pix_fmt<=PIX_FMT_NONE)
+        return ~0;
+
     const PixFmtInfo *pf, *ps;
     const AVPixFmtDescriptor *src_desc = &av_pix_fmt_descriptors[src_pix_fmt];
     const AVPixFmtDescriptor *dst_desc = &av_pix_fmt_descriptors[dst_pix_fmt];
@@ -439,7 +442,7 @@ static enum PixelFormat avcodec_find_best_pix_fmt1(int64_t pix_fmt_mask,
     /* find exact color match with smallest size */
     dst_pix_fmt = PIX_FMT_NONE;
     min_dist = 0x7fffffff;
-    for(i = 0;i < PIX_FMT_NB; i++) {
+    for (i = 0; i < FFMIN(PIX_FMT_NB, 64); i++) {
         if (pix_fmt_mask & (1ULL << i)) {
             loss = avcodec_get_pix_fmt_loss(i, src_pix_fmt, has_alpha) & loss_mask;
             if (loss == 0) {

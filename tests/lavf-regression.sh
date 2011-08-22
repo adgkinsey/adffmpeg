@@ -14,7 +14,7 @@ eval do_$test=y
 do_lavf()
 {
     file=${outfile}lavf.$1
-    do_avconv $file $DEC_OPTS -f image2 -vcodec pgmyuv -i $raw_src $DEC_OPTS -ar 44100 -f s16le -i $pcm_src $ENC_OPTS -ab 64k -t 1 -qscale 10 $2
+    do_avconv $file $DEC_OPTS -f image2 -vcodec pgmyuv -i $raw_src $DEC_OPTS -ar 44100 -f s16le -i $pcm_src $ENC_OPTS -b:a 64k -t 1 -qscale 10 $2
     do_avconv_crc $file $DEC_OPTS -i $target_path/$file $3
 }
 
@@ -44,22 +44,22 @@ do_audio_only()
 }
 
 if [ -n "$do_avi" ] ; then
-do_lavf avi
+do_lavf avi "-acodec mp2 -ab 64k"
 fi
 
 if [ -n "$do_asf" ] ; then
-do_lavf asf "-acodec mp2" "-r 25"
+do_lavf asf "-acodec mp2 -ab 64k" "-r 25"
 fi
 
 if [ -n "$do_rm" ] ; then
 file=${outfile}lavf.rm
-do_avconv $file $DEC_OPTS -f image2 -vcodec pgmyuv -i $raw_src $DEC_OPTS -ar 44100 -f s16le -i $pcm_src $ENC_OPTS -t 1 -qscale 10 -acodec ac3_fixed -ab 64k
+do_avconv $file $DEC_OPTS -f image2 -vcodec pgmyuv -i $raw_src $DEC_OPTS -ar 44100 -f s16le -i $pcm_src $ENC_OPTS -t 1 -qscale 10 -acodec ac3_fixed -b:a 64k
 # broken
 #do_avconv_crc $file -i $target_path/$file
 fi
 
 if [ -n "$do_mpg" ] ; then
-do_lavf mpg
+do_lavf mpg "-ab 64k"
 fi
 
 if [ -n "$do_mxf" ] ; then
@@ -67,11 +67,11 @@ do_lavf mxf "-ar 48000 -bf 2 -timecode 02:56:14:13"
 fi
 
 if [ -n "$do_mxf_d10" ]; then
-do_lavf mxf_d10 "-ar 48000 -ac 2 -r 25 -s 720x576 -vf pad=720:608:0:32 -vcodec mpeg2video -intra -flags +ildct+low_delay -dc 10 -flags2 +ivlc+non_linear_q -qscale 1 -ps 1 -qmin 1 -rc_max_vbv_use 1 -rc_min_vbv_use 1 -pix_fmt yuv422p -minrate 30000k -maxrate 30000k -b 30000k -bufsize 1200000 -top 1 -rc_init_occupancy 1200000 -qmax 12 -f mxf_d10"
+do_lavf mxf_d10 "-ar 48000 -ac 2 -r 25 -s 720x576 -vf pad=720:608:0:32 -vcodec mpeg2video -g 0 -flags +ildct+low_delay -dc 10 -flags2 +ivlc+non_linear_q -qscale 1 -ps 1 -qmin 1 -rc_max_vbv_use 1 -rc_min_vbv_use 1 -pix_fmt yuv422p -minrate 30000k -maxrate 30000k -b 30000k -bufsize 1200000 -top 1 -rc_init_occupancy 1200000 -qmax 12 -f mxf_d10"
 fi
 
 if [ -n "$do_ts" ] ; then
-do_lavf ts
+do_lavf ts "-ab 64k"
 fi
 
 if [ -n "$do_swf" ] ; then
@@ -79,7 +79,7 @@ do_lavf swf -an
 fi
 
 if [ -n "$do_ffm" ] ; then
-do_lavf ffm
+do_lavf ffm "-ab 64k"
 fi
 
 if [ -n "$do_flv_fmt" ] ; then
@@ -87,7 +87,7 @@ do_lavf flv -an
 fi
 
 if [ -n "$do_mov" ] ; then
-do_lavf mov "-acodec pcm_alaw"
+do_lavf mov "-acodec pcm_alaw -vcodec mpeg4"
 fi
 
 if [ -n "$do_dv_fmt" ] ; then
@@ -99,11 +99,11 @@ do_lavf gxf "-ar 48000 -r 25 -s pal -ac 1"
 fi
 
 if [ -n "$do_nut" ] ; then
-do_lavf nut "-acodec mp2"
+do_lavf nut "-acodec mp2 -ab 64k"
 fi
 
 if [ -n "$do_mkv" ] ; then
-do_lavf mkv
+do_lavf mkv "-acodec mp2 -ab 64k -vcodec mpeg4"
 fi
 
 

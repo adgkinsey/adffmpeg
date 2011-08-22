@@ -2,6 +2,7 @@ include $(SUBDIR)../config.mak
 
 NAME = avfilter
 FFLIBS = avutil
+FFLIBS-$(CONFIG_ARESAMPLE_FILTER) += avcodec
 FFLIBS-$(CONFIG_MOVIE_FILTER) += avformat avcodec
 FFLIBS-$(CONFIG_SCALE_FILTER) += swscale
 FFLIBS-$(CONFIG_MP_FILTER) += avcodec
@@ -20,7 +21,10 @@ OBJS-$(CONFIG_AVCODEC)                       += avcodec.o
 
 OBJS-$(CONFIG_AFORMAT_FILTER)                += af_aformat.o
 OBJS-$(CONFIG_ANULL_FILTER)                  += af_anull.o
+OBJS-$(CONFIG_ARESAMPLE_FILTER)              += af_aresample.o
+OBJS-$(CONFIG_ASHOWINFO_FILTER)              += af_ashowinfo.o
 
+OBJS-$(CONFIG_ABUFFER_FILTER)                += asrc_abuffer.o
 OBJS-$(CONFIG_ANULLSRC_FILTER)               += asrc_anullsrc.o
 
 OBJS-$(CONFIG_ABUFFERSINK_FILTER)            += asink_abuffer.o

@@ -83,9 +83,11 @@ static char *value_string(char *buf, int buf_size, double val, const char *unit)
             prefix_string = decimal_unit_prefixes[index];
         }
 
-        snprintf(buf, buf_size, "%.3f %s%s", val, prefix_string, show_value_unit ? unit : "");
+        snprintf(buf, buf_size, "%.3f%s%s%s", val, prefix_string || show_value_unit ? " " : "",
+                 prefix_string, show_value_unit ? unit : "");
     } else {
-        snprintf(buf, buf_size, "%f %s", val, show_value_unit ? unit : "");
+        snprintf(buf, buf_size, "%f%s%s", val, show_value_unit ? " " : "",
+                 show_value_unit ? unit : "");
     }
 
     return buf;
@@ -115,14 +117,8 @@ static char *ts_value_string (char *buf, int buf_size, int64_t ts)
 
 static const char *media_type_string(enum AVMediaType media_type)
 {
-    switch (media_type) {
-    case AVMEDIA_TYPE_VIDEO:      return "video";
-    case AVMEDIA_TYPE_AUDIO:      return "audio";
-    case AVMEDIA_TYPE_DATA:       return "data";
-    case AVMEDIA_TYPE_SUBTITLE:   return "subtitle";
-    case AVMEDIA_TYPE_ATTACHMENT: return "attachment";
-    default:                      return "unknown";
-    }
+    const char *s = av_get_media_type_string(media_type);
+    return s ? s : "unknown";
 }
 
 static void show_packet(AVFormatContext *fmt_ctx, AVPacket *pkt)
