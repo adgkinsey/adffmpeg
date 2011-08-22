@@ -59,8 +59,9 @@ typedef struct {
     int picHeaderSize;
 } PAREncContext;
 
-
+#ifndef AD_USE_SIDEDATA
 void libpar_packet_destroy(struct AVPacket *packet);
+#endif
 
 
 const unsigned int MAX_FRAMEBUFFER_SIZE = 256 * 1024;
@@ -244,6 +245,7 @@ static int par_write_trailer(AVFormatContext *avf)
     return 0;
 }
 
+#ifndef AD_USE_SIDEDATA
 void libpar_packet_destroy(struct AVPacket *packet)
 {
     LibparFrameExtra *fed = (LibparFrameExtra*)packet->priv;
@@ -266,7 +268,7 @@ void libpar_packet_destroy(struct AVPacket *packet)
 
     av_destruct_packet(packet);
 }
-
+#endif
 
 static void endianSwapAudioData(uint8_t *data, int size)
 {
@@ -439,11 +441,17 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChan
 {
     PARDecContext *ctxt = avf->priv_data;
     ParFrameInfo *fi = &ctxt->frameInfo;
-    LibparFrameExtra *pktExt = NULL;
-    ParFrameInfo *pktFI = NULL;
     int streamIndex = -1;
     int id = fi->channel;
     int ii;
+#ifdef AD_USE_SIDEDATA
+    int adDataSize = 0;
+    uint8_t *sideData = NULL;
+    int textBufSize = 0;
+#else
+    LibparFrameExtra *pktExt = NULL;
+    ParFrameInfo *pktFI = NULL;
+#endif
 
     for(ii = 0; ii < avf->nb_streams; ii++)  {
         if ( (NULL != avf->streams[ii]) && (avf->streams[ii]->id == id) )  {
@@ -465,43 +473,43 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChan
         return AVERROR(ENOMEM);
     }
 
-    pkt->destruct = libpar_packet_destroy;
-
     pkt->stream_index = streamIndex;
-
+    
+#ifdef AD_USE_SIDEDATA
+    if (parReader_frameIsVideo(fi))
+        adDataSize = parReader_getPicStructSize();
+    else if (parReader_frameIsAudio(fi))
+        adDataSize = parReader_getAudStructSize();
+    sideData = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_FRAME, adDataSize);
+    if (sideData)
+        memcpy(sideData, fi->frameBuffer, adDataSize);
+            
+    if (fi->frameText)  {
+        textBufSize = strlen(fi->frameText) + 1;
+        sideData = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_TEXT, textBufSize);
+        if (sideData)
+            memcpy(sideData, fi->frameText, textBufSize);
+    }
+#else
+    pkt->destruct = libpar_packet_destroy;
     pktExt = av_malloc(sizeof(LibparFrameExtra));
     if (NULL == pktExt)  {
         pkt->size = 0;
         return AVERROR(ENOMEM);
     }
-    pkt->priv = pktExt;
-
     pktExt->fileChanged = fChang;
-
     pktExt->indexInfoCount = parReader_getIndexInfo(fi, &pktExt->indexInfo);
-
-    memcpy(pkt->data, fi->frameData, siz);
-
+    
     pktExt->frameInfo = av_mallocz(sizeof(ParFrameInfo));
     if (NULL == pktExt->frameInfo)  {
         pkt->size = 0;
         return AVERROR(ENOMEM);
     }
     pktFI = pktExt->frameInfo;
-
-    if (parReader_frameIsVideo(fi))  {
+    if (parReader_frameIsVideo(fi))
         pktFI->frameBufferSize = parReader_getPicStructSize();
-        if (parReader_isIFrame(fi))
-            pkt->flags |= AV_PKT_FLAG_KEY;
-    }
-    else if (parReader_frameIsAudio(fi))  {
+    else if (parReader_frameIsAudio(fi))
         pktFI->frameBufferSize = parReader_getAudStructSize();
-
-        endianSwapAudioData(pkt->data, siz);
-    }
-    else  {
-        /// \todo Do something with data frames
-    }
 
     if (pktFI->frameBufferSize > 0)  {
         // Make a copy of the ParFrameInfo struct and the frame header
@@ -518,6 +526,22 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChan
         }
         memcpy(pktFI->frameBuffer, fi->frameBuffer, fbs);
         pktFI->frameData = NULL;
+    }
+    
+    pkt->priv = pktExt;
+#endif
+
+    memcpy(pkt->data, fi->frameData, siz);
+
+    if (parReader_frameIsVideo(fi))  {
+        if (parReader_isIFrame(fi))
+            pkt->flags |= AV_PKT_FLAG_KEY;
+    }
+    else if (parReader_frameIsAudio(fi))  {
+        endianSwapAudioData(pkt->data, siz);
+    }
+    else  {
+        /// \todo Do something with data frames
     }
 
     if (fi->imageTime > 0)  {

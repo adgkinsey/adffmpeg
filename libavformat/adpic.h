@@ -31,6 +31,18 @@
 #include "ds_exports.h"
 
 
+
+#if (LIBAVFORMAT_VERSION_MAJOR >= 53)
+#define AD_USE_SIDEDATA 1
+#endif
+
+#ifdef AD_USE_SIDEDATA    
+#define ad_new_packet av_new_packet
+#else
+int ad_new_packet(AVPacket *pkt, int size);
+#endif
+
+
 #ifndef FALSE
 #define FALSE 0
 #endif
@@ -61,7 +73,6 @@ typedef struct {
 
 int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset);
 void ad_network2host(struct NetVuImageData *pic, uint8_t *data);
-int ad_new_packet(AVPacket *pkt, int size);
 int ad_get_buffer(AVIOContext *s, uint8_t *buf, int size);
 int initADData(int data_type, enum AVMediaType *media, enum CodecID *codecId, void **payload);
 int ad_read_jpeg(AVFormatContext *s, AVPacket *pkt, struct NetVuImageData *vid, char **txt);
