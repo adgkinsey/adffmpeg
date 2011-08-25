@@ -31,7 +31,6 @@
 typedef struct {
     const AVClass *class;
     char   *comp_expr_str[4];
-    AVExpr *comp_expr[4];
     int rgba_map[4];
     int copyplane[4];
     int skipplane[4];
@@ -87,8 +86,6 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&copyplane->line);
     
     for (i = 0; i < 4; i++) {
-        av_expr_free(copyplane->comp_expr[i]);
-        copyplane->comp_expr[i] = NULL;
         av_freep(&copyplane->comp_expr_str[i]);
     }
 }
