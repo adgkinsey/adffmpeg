@@ -778,14 +778,14 @@ int ad_read_info(AVFormatContext *s, AVPacket *pkt, int size)
 {
     int n, status, errorVal = 0;
     AVIOContext *pb = s->pb;
+    //uint8_t dataDatatype;
 
     // Allocate a new packet
     if( (status = ad_new_packet( pkt, size )) < 0 )
         return ADPIC_INFO_NEW_PACKET_ERROR;
 
-    // Skip first byte
-    avio_r8(pb);
-    --size;
+    //dataDatatype = avio_r8(pb);
+    //--size;
     
     // Get the data
     if( (n = ad_get_buffer( pb, pkt->data, size)) != size )
