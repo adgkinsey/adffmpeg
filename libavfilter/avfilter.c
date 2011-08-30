@@ -26,6 +26,7 @@
 #include "libavutil/audioconvert.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/avassert.h"
+#include "libavutil/avstring.h"
 #include "avfilter.h"
 #include "internal.h"
 
@@ -42,6 +43,15 @@ const char *avfilter_license(void)
 {
 #define LICENSE_PREFIX "libavfilter license: "
     return LICENSE_PREFIX FFMPEG_LICENSE + sizeof(LICENSE_PREFIX) - 1;
+}
+
+static void command_queue_pop(AVFilterContext *filter)
+{
+    AVFilterCommand *c= filter->command_queue;
+    av_freep(&c->arg);
+    av_freep(&c->command);
+    filter->command_queue= c->next;
+    av_free(c);
 }
 
 AVFilterBufferRef *avfilter_ref_buffer(AVFilterBufferRef *ref, int pmask)
@@ -533,6 +543,7 @@ void avfilter_start_frame(AVFilterLink *link, AVFilterBufferRef *picref)
     void (*start_frame)(AVFilterLink *, AVFilterBufferRef *);
     AVFilterPad *dst = link->dstpad;
     int perms = picref->perms;
+    AVFilterCommand *cmd= link->dst->command_queue;
 
     FF_DPRINTF_START(NULL, start_frame); ff_dlog_link(NULL, link, 0); av_dlog(NULL, " "); ff_dlog_ref(NULL, picref, 1);
 
@@ -554,6 +565,12 @@ void avfilter_start_frame(AVFilterLink *link, AVFilterBufferRef *picref)
     }
     else
         link->cur_buf = picref;
+
+    while(cmd && cmd->time <= picref->pts * av_q2d(link->time_base)){
+        avfilter_process_command(link->dst, cmd->command, cmd->arg, 0, 0, cmd->flags);
+        command_queue_pop(link->dst);
+        cmd= link->dst->command_queue;
+    }
 
     start_frame(link, link->cur_buf);
 }
@@ -614,6 +631,17 @@ void avfilter_draw_slice(AVFilterLink *link, int y, int h, int slice_dir)
     if (!(draw_slice = link->dstpad->draw_slice))
         draw_slice = avfilter_default_draw_slice;
     draw_slice(link, y, h, slice_dir);
+}
+
+int avfilter_process_command(AVFilterContext *filter, const char *cmd, const char *arg, char *res, int res_len, int flags)
+{
+    if(!strcmp(cmd, "ping")){
+        av_strlcatf(res, res_len, "pong from:%s %s\n", filter->filter->name, filter->name);
+        return 0;
+    }else if(filter->filter->process_command) {
+        return filter->filter->process_command(filter, cmd, arg, res, res_len, flags);
+    }
+    return AVERROR(ENOSYS);
 }
 
 void avfilter_filter_samples(AVFilterLink *link, AVFilterBufferRef *samplesref)
@@ -803,6 +831,9 @@ void avfilter_free(AVFilterContext *filter)
     av_freep(&filter->inputs);
     av_freep(&filter->outputs);
     av_freep(&filter->priv);
+    while(filter->command_queue){
+        command_queue_pop(filter);
+    }
     av_free(filter);
 }
 

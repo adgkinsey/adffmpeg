@@ -2,6 +2,7 @@ include $(SUBDIR)../config.mak
 
 NAME = avfilter
 FFLIBS = avutil
+FFLIBS-$(CONFIG_AMOVIE_FILTER) += avformat avcodec
 FFLIBS-$(CONFIG_ARESAMPLE_FILTER) += avcodec
 FFLIBS-$(CONFIG_MOVIE_FILTER) += avformat avcodec
 FFLIBS-$(CONFIG_SCALE_FILTER) += swscale
@@ -25,6 +26,7 @@ OBJS-$(CONFIG_ARESAMPLE_FILTER)              += af_aresample.o
 OBJS-$(CONFIG_ASHOWINFO_FILTER)              += af_ashowinfo.o
 
 OBJS-$(CONFIG_ABUFFER_FILTER)                += asrc_abuffer.o
+OBJS-$(CONFIG_AMOVIE_FILTER)                 += src_movie.o
 OBJS-$(CONFIG_ANULLSRC_FILTER)               += asrc_anullsrc.o
 
 OBJS-$(CONFIG_ABUFFERSINK_FILTER)            += asink_abuffer.o
@@ -75,7 +77,7 @@ OBJS-$(CONFIG_YADIF_FILTER)                  += vf_yadif.o
 OBJS-$(CONFIG_BUFFER_FILTER)                 += vsrc_buffer.o
 OBJS-$(CONFIG_COLOR_FILTER)                  += vsrc_color.o
 OBJS-$(CONFIG_FREI0R_SRC_FILTER)             += vf_frei0r.o
-OBJS-$(CONFIG_MOVIE_FILTER)                  += vsrc_movie.o
+OBJS-$(CONFIG_MOVIE_FILTER)                  += src_movie.o
 OBJS-$(CONFIG_MPTESTSRC_FILTER)              += vsrc_mptestsrc.o
 OBJS-$(CONFIG_NULLSRC_FILTER)                += vsrc_nullsrc.o
 OBJS-$(CONFIG_RGBTESTSRC_FILTER)             += vsrc_testsrc.o

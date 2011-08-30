@@ -314,9 +314,6 @@ int vc1_decode_sequence_header(AVCodecContext *avctx, VC1Context *v, GetBitConte
                    "Old interlaced mode is not supported\n");
             return -1;
         }
-        if (v->res_sprite) {
-            av_log(avctx, AV_LOG_ERROR, "WMVP is not fully supported\n");
-        }
     }
 
     // (fps-2)/4 (->30)
@@ -505,6 +502,10 @@ static int decode_sequence_header_adv(VC1Context *v, GetBitContext *gb)
                     v->s.avctx->time_base.num = ff_vc1_fps_dr[dr - 1];
                     v->s.avctx->time_base.den = ff_vc1_fps_nr[nr - 1] * 1000;
                 }
+            }
+            if(v->broadcast) { // Pulldown may be present
+                v->s.avctx->time_base.den *= 2;
+                v->s.avctx->ticks_per_frame = 2;
             }
         }
 
@@ -824,7 +825,7 @@ int vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
     case 4:
         v->s.pict_type = AV_PICTURE_TYPE_P; // skipped pic
         v->p_frame_skipped = 1;
-        return 0;
+        break;
     }
     if(v->tfcntrflag)
         skip_bits(gb, 8);
@@ -839,6 +840,9 @@ int vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
     if(v->panscanflag) {
         av_log_missing_feature(v->s.avctx, "Pan-scan", 0);
         //...
+    }
+    if(v->p_frame_skipped) {
+        return 0;
     }
     v->rnd = get_bits1(gb);
     if(v->interlace)

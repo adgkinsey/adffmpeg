@@ -891,6 +891,7 @@ static void do_exit(VideoState *is)
     if (is) {
         stream_close(is);
     }
+    av_lockmgr_register(NULL);
     uninit_opts();
 #if CONFIG_AVFILTER
     avfilter_uninit();
@@ -1354,6 +1355,12 @@ static int queue_picture(VideoState *is, AVFrame *src_frame, double pts1, int64_
         SDL_LockMutex(is->pictq_mutex);
         while (!vp->allocated && !is->videoq.abort_request) {
             SDL_CondWait(is->pictq_cond, is->pictq_mutex);
+        }
+        /* if the queue is aborted, we have to pop the pending ALLOC event or wait for the allocation to complete */
+        if (is->videoq.abort_request && SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_EVENTMASK(FF_ALLOC_EVENT)) != 1) {
+            while (!vp->allocated) {
+                SDL_CondWait(is->pictq_cond, is->pictq_mutex);
+            }
         }
         SDL_UnlockMutex(is->pictq_mutex);
 
@@ -2988,6 +2995,25 @@ static int opt_help(const char *opt, const char *arg)
     return 0;
 }
 
+static int lockmgr(void **mtx, enum AVLockOp op)
+{
+   switch(op) {
+      case AV_LOCK_CREATE:
+          *mtx = SDL_CreateMutex();
+          if(!*mtx)
+              return 1;
+          return 0;
+      case AV_LOCK_OBTAIN:
+          return !!SDL_LockMutex(*mtx);
+      case AV_LOCK_RELEASE:
+          return !!SDL_UnlockMutex(*mtx);
+      case AV_LOCK_DESTROY:
+          SDL_DestroyMutex(*mtx);
+          return 0;
+   }
+   return 1;
+}
+
 /* Called from the main */
 int main(int argc, char **argv)
 {
@@ -3045,6 +3071,11 @@ int main(int argc, char **argv)
     SDL_EventState(SDL_ACTIVEEVENT, SDL_IGNORE);
     SDL_EventState(SDL_SYSWMEVENT, SDL_IGNORE);
     SDL_EventState(SDL_USEREVENT, SDL_IGNORE);
+
+    if (av_lockmgr_register(lockmgr)) {
+        fprintf(stderr, "Could not initialize lock manager!\n");
+        do_exit(NULL);
+    }
 
     av_init_packet(&flush_pkt);
     flush_pkt.data= "FLUSH";
