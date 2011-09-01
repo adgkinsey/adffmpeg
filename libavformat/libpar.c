@@ -59,7 +59,7 @@ typedef struct {
     int picHeaderSize;
 } PAREncContext;
 
-#ifndef AD_USE_SIDEDATA
+#ifdef AD_NO_SIDEDATA
 void libpar_packet_destroy(struct AVPacket *packet);
 #endif
 
@@ -245,7 +245,7 @@ static int par_write_trailer(AVFormatContext *avf)
     return 0;
 }
 
-#ifndef AD_USE_SIDEDATA
+#ifdef AD_NO_SIDEDATA
 void libpar_packet_destroy(struct AVPacket *packet)
 {
     LibparFrameExtra *fed = (LibparFrameExtra*)packet->priv;
@@ -444,13 +444,13 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChan
     int streamIndex = -1;
     int id = fi->channel;
     int ii;
-#ifdef AD_USE_SIDEDATA
+#ifdef AD_NO_SIDEDATA
+    LibparFrameExtra *pktExt = NULL;
+    ParFrameInfo *pktFI = NULL;
+#else
     int adDataSize = 0;
     uint8_t *sideData = NULL;
     int textBufSize = 0;
-#else
-    LibparFrameExtra *pktExt = NULL;
-    ParFrameInfo *pktFI = NULL;
 #endif
 
     for(ii = 0; ii < avf->nb_streams; ii++)  {
@@ -475,22 +475,7 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChan
 
     pkt->stream_index = streamIndex;
     
-#ifdef AD_USE_SIDEDATA
-    if (parReader_frameIsVideo(fi))
-        adDataSize = parReader_getPicStructSize();
-    else if (parReader_frameIsAudio(fi))
-        adDataSize = parReader_getAudStructSize();
-    sideData = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_FRAME, adDataSize);
-    if (sideData)
-        memcpy(sideData, fi->frameBuffer, adDataSize);
-            
-    if (fi->frameText)  {
-        textBufSize = strlen(fi->frameText) + 1;
-        sideData = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_TEXT, textBufSize);
-        if (sideData)
-            memcpy(sideData, fi->frameText, textBufSize);
-    }
-#else
+#ifdef AD_NO_SIDEDATA
     pkt->destruct = libpar_packet_destroy;
     pktExt = av_malloc(sizeof(LibparFrameExtra));
     if (NULL == pktExt)  {
@@ -529,6 +514,21 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChan
     }
     
     pkt->priv = pktExt;
+#else
+    if (parReader_frameIsVideo(fi))
+        adDataSize = parReader_getPicStructSize();
+    else if (parReader_frameIsAudio(fi))
+        adDataSize = parReader_getAudStructSize();
+    sideData = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_FRAME, adDataSize);
+    if (sideData)
+        memcpy(sideData, fi->frameBuffer, adDataSize);
+            
+    if (fi->frameText)  {
+        textBufSize = strlen(fi->frameText) + 1;
+        sideData = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_TEXT, textBufSize);
+        if (sideData)
+            memcpy(sideData, fi->frameText, textBufSize);
+    }
 #endif
 
     memcpy(pkt->data, fi->frameData, siz);

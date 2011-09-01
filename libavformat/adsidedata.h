@@ -1,0 +1,9 @@
+
+#ifndef AVFORMAT_ADSIDEDATA_H
+#define AVFORMAT_ADSIDEDATA_H
+
+#if (LIBAVFORMAT_VERSION_MAJOR < 53)
+#define AD_NO_SIDEDATA 1
+#endif
+
+#endif
