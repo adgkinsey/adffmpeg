@@ -382,7 +382,7 @@ static AVStream * ad_get_data_stream(AVFormatContext *s, enum CodecID codecId)
 //    return NULL;
 //}
 
-#ifndef AD_USE_SIDEDATA
+#ifdef AD_NO_SIDEDATA
 static void ad_release_packet( AVPacket *pkt )
 {
     if (pkt == NULL)
@@ -419,7 +419,7 @@ static void ad_release_packet( AVPacket *pkt )
 }
 #endif
 
-#ifndef AD_USE_SIDEDATA
+#ifdef AD_NO_SIDEDATA
 int ad_new_packet(AVPacket *pkt, int size)
 {
     int retVal = av_new_packet( pkt, size );
@@ -778,14 +778,14 @@ int ad_read_info(AVFormatContext *s, AVPacket *pkt, int size)
 {
     int n, status, errorVal = 0;
     AVIOContext *pb = s->pb;
+    //uint8_t dataDatatype;
 
     // Allocate a new packet
     if( (status = ad_new_packet( pkt, size )) < 0 )
         return ADPIC_INFO_NEW_PACKET_ERROR;
 
-    // Skip first byte
-    avio_r8(pb);
-    --size;
+    //dataDatatype = avio_r8(pb);
+    //--size;
     
     // Get the data
     if( (n = ad_get_buffer( pb, pkt->data, size)) != size )
@@ -934,18 +934,7 @@ static int addSideData(AVFormatContext *s, AVPacket *pkt,
                        enum AVMediaType media, unsigned int size, 
                        void *data, const char *text)
 {
-#ifdef AD_USE_SIDEDATA
-    uint8_t *side = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_FRAME, size);
-    if (side)
-        memcpy(side, data, size);
-    
-    if (text)  {
-        size = strlen(text) + 1;
-        side = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_TEXT, size);
-        if (side)
-            memcpy(side, text, size);
-    }
-#else
+#ifdef AD_NO_SIDEDATA
     struct ADFrameData *frameData = av_mallocz(sizeof(*frameData));
     if( frameData == NULL )
         return AVERROR(ENOMEM);
@@ -961,6 +950,17 @@ static int addSideData(AVFormatContext *s, AVPacket *pkt,
     if (text != NULL)
         ad_parseText(s, frameData);
     pkt->priv = frameData;
+#else
+    uint8_t *side = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_FRAME, size);
+    if (side)
+        memcpy(side, data, size);
+    
+    if (text)  {
+        size = strlen(text) + 1;
+        side = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_TEXT, size);
+        if (side)
+            memcpy(side, text, size);
+    }
 #endif
     return 0;
 }

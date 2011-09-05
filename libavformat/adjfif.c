@@ -199,7 +199,7 @@ unsigned int build_jpeg_header(void *jfif, struct NetVuImageData *pic, unsigned 
 
     memcpy(bufptr, jfif_header, sizeof(jfif_header));
 
-    if( (pic->format.target_pixels > 360) && (pic->format.target_lines <= 480) )
+    if( (pic->format.target_pixels > 360) && (pic->format.target_lines < 480) )
         bufptr[17] = 0x32;
 
     bufptr += sizeof(jfif_header);
@@ -422,7 +422,7 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
         i += length;
 
         if ( (pic->format.target_lines > 0) && (xdensity == (ydensity*2)) )  {
-            if( (pic->format.target_pixels > 360) && (pic->format.target_lines <= 480) )  {
+            if( (pic->format.target_pixels > 360) && (pic->format.target_lines < 480) )  {
                 // Server is sending wrong pixel aspect ratio, reverse it
                 //av_log(s, AV_LOG_DEBUG, "%s: Server is sending wrong pixel "
                 //                        "aspect ratio. Old = %d:%d, New = %d:%d"

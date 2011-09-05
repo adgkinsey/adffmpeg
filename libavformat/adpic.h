@@ -29,17 +29,13 @@
 
 #include "avformat.h"
 #include "ds_exports.h"
+#include "adsidedata.h"
 
 
-
-#if (LIBAVFORMAT_VERSION_MAJOR >= 53)
-#define AD_USE_SIDEDATA 1
-#endif
-
-#ifdef AD_USE_SIDEDATA    
-#define ad_new_packet av_new_packet
-#else
+#ifdef AD_NO_SIDEDATA
 int ad_new_packet(AVPacket *pkt, int size);
+#else
+#define ad_new_packet av_new_packet
 #endif
 
 
