@@ -30,6 +30,7 @@
 #ifndef AVFORMAT_ADJFIF_H
 #define AVFORMAT_ADJFIF_H
 
+#include "avformat.h"
 #include "ds_exports.h"
 
 extern unsigned int build_jpeg_header(void *jfif, struct NetVuImageData *pic,
