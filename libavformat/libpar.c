@@ -286,29 +286,54 @@ static void endianSwapAudioData(uint8_t *data, int size)
     }
 }
 
-static AVStream* createStream(AVFormatContext * avf,
-                              const ParFrameInfo *frameInfo)
+static AVStream* createStream(AVFormatContext * avf)
 {
+    PARDecContext *p = avf->priv_data;
+    ParFrameInfo *fi = (ParFrameInfo *)&p->frameInfo;
     char textbuffer[128];
     int w, h;
     int streamId = -1;
-    int fc = 0;
+    int ii, fc = 0;
+    unsigned long startT = 0, endT = 0;
+    long startFrame;
     AVStream * st = NULL;
 
-    if ((NULL==avf) || (NULL==frameInfo) || (NULL==frameInfo->frameBuffer))
+    if ((NULL==avf) || (NULL==fi) || (NULL==fi->frameBuffer))
         return NULL;
 
-    streamId = frameInfo->channel;
+    streamId = fi->channel;
     st = av_new_stream(avf, streamId);
 
-    parReader_getIndexData(frameInfo, NULL, &fc, NULL, NULL);
-    st->nb_frames = fc;
-    st->start_time = frameInfo->indexTime * 1000LL + frameInfo->indexMS;
+    parReader_getIndexData(fi, NULL, &fc, &startT, &endT);
+    st->nb_frames  = fc;
+    
+    
+    startFrame = fi->frameNumber;
+    p->dispSet.cameraNum = fi->channel;
+    p->dispSet.fileSeqNo = -1;
+    p->dispSet.fileLock = 1;    // Don't seek beyond the file
+    ii = 1;
+    do  {
+        p->dispSet.frameNumber = fc - ii++;
+        if (p->dispSet.frameNumber <= startFrame)
+            break;
+        parReader_loadFrame(fi, &p->dispSet, &p->fileChanged);
+    } while (streamId != p->frameInfo.channel);
+    
+    endT = fi->imageTime * 1000LL + fi->imageMS;
 
-    if (parReader_frameIsVideo(frameInfo))  {
+    p->dispSet.playMode = RWND;
+    p->dispSet.frameNumber = startFrame;
+    parReader_loadFrame(fi, &p->dispSet, &p->fileChanged);
+    p->dispSet.playMode = PLAY;
+    
+    st->start_time = startT = fi->imageTime * 1000LL + fi->imageMS;
+    st->duration   = endT - startT;
+    
+    if (parReader_frameIsVideo(fi))  {
         st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
 
-        switch(getVideoFrameSubType(frameInfo))  {
+        switch(getVideoFrameSubType(fi))  {
             case(FRAME_FORMAT_JPEG_422):
             case(FRAME_FORMAT_JPEG_411):
                 st->codec->codec_id = CODEC_ID_MJPEG;
@@ -333,10 +358,10 @@ static AVStream* createStream(AVFormatContext * avf,
         }
 
         if (AVMEDIA_TYPE_VIDEO == st->codec->codec_type)  {
-            parReader_getFrameSize(frameInfo, &w, &h);
+            parReader_getFrameSize(fi, &w, &h);
             st->codec->width = w;
             st->codec->height = h;
-            st->start_time = frameInfo->imageTime * 1000LL + frameInfo->imageMS;
+            st->start_time = fi->imageTime * 1000LL + fi->imageMS;
 
             // Set timebase to 1 millisecond, and min frame rate to 1 / timebase
             av_set_pts_info(st, 32, 1, 1000);
@@ -350,30 +375,30 @@ static AVStream* createStream(AVFormatContext * avf,
             else
                 st->sample_aspect_ratio = (AVRational) { 1, 1 };
 
-            parReader_getStreamName(frameInfo->frameBuffer,
-                                    frameInfo->frameBufferSize,
+            parReader_getStreamName(fi->frameBuffer,
+                                    fi->frameBufferSize,
                                     textbuffer,
                                     sizeof(textbuffer));
             av_dict_set(&st->metadata, "title", textbuffer, 0);
 
-            parReader_getStreamDate(frameInfo, textbuffer, sizeof(textbuffer));
+            parReader_getStreamDate(fi, textbuffer, sizeof(textbuffer));
             av_dict_set(&st->metadata, "date", textbuffer, 0);
 
-            snprintf(textbuffer, sizeof(textbuffer), "%d", frameInfo->channel);
+            snprintf(textbuffer, sizeof(textbuffer), "%d", fi->channel);
             av_dict_set(&st->metadata, "track", textbuffer, 0);
             
             av_dict_set(&st->metadata, "type", "camera", 0);
         }
     }
-    else if (parReader_frameIsAudio(frameInfo))  {
+    else if (parReader_frameIsAudio(fi))  {
         st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
         st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
         st->codec->channels = 1;
         st->codec->block_align = 0;
         st->codec->bits_per_coded_sample = 4;
-        st->start_time = frameInfo->imageTime * 1000LL + frameInfo->imageMS;
+        st->start_time = fi->imageTime * 1000LL + fi->imageMS;
 
-        switch(getAudioFrameSubType(frameInfo))  {
+        switch(getAudioFrameSubType(fi))  {
             case(FRAME_FORMAT_AUD_ADPCM_8000):
                 st->codec->sample_rate = 8000;
                 break;
@@ -460,7 +485,7 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChan
         }
     }
     if (-1 == streamIndex)  {
-        AVStream *str = createStream(avf, fi);
+        AVStream *str = createStream(avf);
         if (str)
             streamIndex = str->index;
         else
@@ -666,7 +691,7 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
     if (parReader_version(version, sizeof(version)) > 0)
         av_dict_set(&avf->metadata, "ParReader", version, 0);
 
-    strm = createStream(avf, &p->frameInfo);
+    strm = createStream(avf);
     if (strm)  {
         // Note: Do not set avf->start_time, ffmpeg computes it from AVStream values
         avf->duration = av_rescale_q(seconds, secondsTB, strm->time_base);
