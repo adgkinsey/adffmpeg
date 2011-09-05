@@ -453,9 +453,13 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 break;
             case AD_DATATYPE_BMP:
                 av_dlog(s, "Bitmap overlay\n");
-                tempbuf = av_malloc(size);                
-                avio_read(pb, tempbuf, size);
-                av_free(tempbuf);
+                tempbuf = av_malloc(size);  
+                if (tempbuf)  {
+                    avio_read(pb, tempbuf, size);
+                    av_free(tempbuf);
+                }
+                else
+                    return AVERROR(ENOMEM);
                 return ADPIC_DEFAULT_ERROR;
             case AD_DATATYPE_PBM:
                 errorVal = ad_read_overlay(s, pkt, size, &txtDat);

@@ -735,9 +735,13 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
             
             // Would like to use avio_skip, but that needs seek support, 
             // so just read the data into a buffer then throw it away
-            tempbuf = av_malloc(size);                
-            avio_read(pb, tempbuf, size);
-            av_free(tempbuf);
+            tempbuf = av_malloc(size); 
+            if (tempbuf)  {
+                avio_read(pb, tempbuf, size);
+                av_free(tempbuf);
+            }
+            else
+                return AVERROR(ENOMEM);
                 
             return ADPIC_DEFAULT_ERROR;
         }

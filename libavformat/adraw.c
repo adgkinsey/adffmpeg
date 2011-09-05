@@ -65,6 +65,9 @@ static int adraw_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 
     vidDat = av_malloc(sizeof(struct NetVuImageData));
     buf = av_malloc(sizeof(struct NetVuImageData));
+    
+    if (!vidDat || !buf)
+        return AVERROR(ENOMEM);
 
     // Scan for 0xDECADE11 marker
     errVal = avio_read(pb, buf, sizeof(struct NetVuImageData));
