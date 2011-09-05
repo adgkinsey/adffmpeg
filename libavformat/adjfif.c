@@ -28,8 +28,9 @@
  */
 
 #include <time.h>
-#include "internal.h"
-#include "libavutil/intreadwrite.h"
+
+#include "libavcodec/mjpeg.h"
+#include "libavcodec/put_bits.h"
 #include "libavutil/avstring.h"
 
 #include "adjfif.h"
@@ -57,8 +58,8 @@ static const char time_zone[] = "Locale: ";
 static const char utc_offset[] = "UTCoffset: ";
 
 static const uint8_t jfif_header[] = {
-    0xFF, 0xD8,                     // SOI
-    0xFF, 0xE0,                     // APP0
+    0xFF, SOI,
+    0xFF, APP0,
     0x00, 0x10,                     // APP0 header size (including
                                     // this field, but excluding preceding)
     0x4A, 0x46, 0x49, 0x46, 0x00,   // ID string 'JFIF\0'
@@ -71,18 +72,18 @@ static const uint8_t jfif_header[] = {
 };
 
 static const unsigned char sof_422_header[] = {
-    0xFF, 0xC0, 0x00, 0x11, 0x08, 0x01, 0x00, 0x01,
+    0xFF, SOF0, 0x00, 0x11, 0x08, 0x01, 0x00, 0x01,
     0x60, 0x03, 0x01, 0x21, 0x00, 0x02, 0x11, 0x01,
     0x03, 0x11, 0x01
 };
 static const unsigned char sof_411_header[] = {
-    0xFF, 0xC0, 0x00, 0x11, 0x08, 0x01, 0x00, 0x01,
+    0xFF, SOF0, 0x00, 0x11, 0x08, 0x01, 0x00, 0x01,
     0x60, 0x03, 0x01, 0x22, 0x00, 0x02, 0x11, 0x01,
     0x03, 0x11, 0x01
 };
 
 static const unsigned char huf_header[] = {
-    0xFF, 0xC4, 0x00, 0x1F, 0x00, 0x00, 0x01, 0x05,
+    0xFF, DHT,  0x00, 0x1F, 0x00, 0x00, 0x01, 0x05,
     0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02,
     0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A,
@@ -139,7 +140,7 @@ static const unsigned char huf_header[] = {
 };
 
 static const unsigned char sos_header[] = {
-    0xFF, 0xDA, 0x00, 0x0c, 0x03, 0x01, 0x00, 0x02,
+    0xFF, SOS,  0x00, 0x0c, 0x03, 0x01, 0x00, 0x02,
     0x11, 0x03, 0x11, 0x00, 0x3F, 0x00
 };
 
@@ -181,9 +182,8 @@ static int q_init;
  */
 unsigned int build_jpeg_header(void *jfif, struct NetVuImageData *pic, unsigned int max)
 {
-    volatile unsigned int count;
-    unsigned short    us1;
-    char  *bufptr = jfif;
+    PutBitContext  pb;
+    int            us1;
     char sof_copy[sizeof(sof_422_header)];
 
 
@@ -192,66 +192,36 @@ unsigned int build_jpeg_header(void *jfif, struct NetVuImageData *pic, unsigned 
         q_init = 1;
     }
 
-    // Add all the fixed length headers prior to building comment field
-    count = sizeof(jfif_header);
-    if (count > max)
-        return 0;
+    init_put_bits(&pb, jfif, max);
 
-    memcpy(bufptr, jfif_header, sizeof(jfif_header));
-
+    ff_copy_bits(&pb, jfif_header, 16*8);
     if( (pic->format.target_pixels > 360) && (pic->format.target_lines < 480) )
-        bufptr[17] = 0x32;
-
-    bufptr += sizeof(jfif_header);
+        put_bits(&pb, 8, 0x32);
+    else
+        put_bits(&pb, 8, 0x19);
+    ff_copy_bits(&pb, jfif_header, (sizeof(jfif_header) - 16)*8);
 
     // Q tables and markers
-    count += 138;
-    if (count > max)
-        return 0;
-    *bufptr++ = 0xff;
-    *bufptr++ = 0xdb;
-    *bufptr++ = 0x00;
-    *bufptr++ = 0x43;
-    *bufptr++ = 0x00;
+    put_marker(&pb, DQT);
+    put_bits(&pb, 16, 0x0043);
+    put_bits(&pb, 8, 0x00);
     for (us1 = 0; us1 < 64; us1++)
-        *bufptr++ = YQuantizationFactors[pic->factor][us1];
-    *bufptr++ = 0xff;
-    *bufptr++ = 0xdb;
-    *bufptr++ = 0x00;
-    *bufptr++ = 0x43;
-    *bufptr++ = 0x01;
+        put_bits(&pb, 8, YQuantizationFactors[pic->factor][us1]);
+    put_marker(&pb, DQT);
+    put_bits(&pb, 16, 0x0043);
+    put_bits(&pb, 8, 0x01);
     for (us1 = 0; us1 < 64; us1++)
-        *bufptr++ = UVQuantizationFactors[pic->factor][us1];
-    count += (sizeof(sof_copy) + sizeof(huf_header) + sizeof(sos_header));
-    if (count > max)
-        return 0;
-    else {
-        unsigned short targ;
-        char *ptr1, *ptr2;
-        memcpy(sof_copy, (pic->vid_format == PIC_MODE_JPEG_411) ? sof_411_header : sof_422_header, sizeof( sof_copy ) );
-        targ = AV_RB16(&pic->format.target_pixels); // Byte swap from native to big-endian
-        ptr1 = (char *)&targ;
-        ptr2 = &sof_copy[7];
-        *ptr2++ = *ptr1++;
-        *ptr2 = *ptr1;
+        put_bits(&pb, 8, UVQuantizationFactors[pic->factor][us1]);
+    
+    memcpy(sof_copy, (pic->vid_format == PIC_MODE_JPEG_411) ? sof_411_header : sof_422_header, sizeof(sof_copy) );
+    AV_WB16(sof_copy+5, pic->format.target_lines);
+    AV_WB16(sof_copy+7, pic->format.target_pixels);
 
-        targ = AV_RB16(&pic->format.target_lines); // Byte swap from native to big-endian
-        ptr1 = (char *)&targ;
-        ptr2 = &sof_copy[5];
-        *ptr2++ = *ptr1++;
-        *ptr2 = *ptr1;
+    ff_copy_bits(&pb, sof_copy, sizeof(sof_copy)*8);
+    ff_copy_bits(&pb, huf_header, sizeof(huf_header)*8);
+    ff_copy_bits(&pb, sos_header, sizeof(sos_header)*8);
 
-        memcpy(bufptr, sof_copy, sizeof(sof_copy));
-        bufptr += sizeof(sof_copy);
-
-        memcpy(bufptr, huf_header, sizeof(huf_header));
-        bufptr += sizeof(huf_header);
-
-        memcpy(bufptr, sos_header, sizeof(sos_header));
-        bufptr += sizeof(sos_header);
-    }
-
-    return bufptr - (char*)jfif;
+    return (put_bits_count(&pb) / 8);
 }
 
 /**
@@ -283,8 +253,8 @@ static void calcQtabs(void)
             if ( uvval > 255)  //
                 uvval = 255;   // be more than 255
 
-            YQuantizationFactors[factor][i]  = (unsigned char)yval;
-            UVQuantizationFactors[factor][i] = (unsigned char)uvval;
+            YQuantizationFactors[factor][i]  = (uint8_t)yval;
+            UVQuantizationFactors[factor][i] = (uint8_t)uvval;
         }
     }
 }
@@ -350,10 +320,12 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
                int imgSize, char **text)
 {
     int i, sos = FALSE;
-    unsigned short length, marker;
+    uint16_t length;
+    uint8_t marker;
     uint16_t xdensity = 0;
     uint16_t ydensity = 0;
     uint8_t *densityPtr = NULL;
+    unsigned int jfifMarker;
 
     //av_log(s, AV_LOG_DEBUG, "parse_jfif: leading bytes 0x%02X, 0x%02X, "
     //       "length=%d\n", data[0], data[1], imgSize);
@@ -383,24 +355,26 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
     }
 
     while ( !sos && (i < imgSize) ) {
-        marker = AV_RB16(&data[i]);
-        i += 2;
+        if (data[i++] != 0xff)
+            continue;
+        marker = data[i++];
         length = AV_RB16(&data[i]) - 2;
         i += 2;
 
         switch (marker) {
-            case 0xffe0 :    // APP0
-                if ((data[i]==0x4A)&&(data[i+1]==0x46)&&(data[i+2]==0x49)&&(data[i+3]==0x46)&&(data[i+4]==0x00))  {
+            case APP0:
+                jfifMarker = AV_RB32(&data[i]);
+                if ( (jfifMarker==0x4A464946) && (data[i+4]==0x00) )  {
                     xdensity = AV_RB16(&data[i+8]);
                     ydensity = AV_RB16(&data[i+10]);
                     densityPtr = &data[i+8];
                 }
                 break;
-            case 0xffdb :    // Q table
+            case DQT:
                 if (!data[i])
                     pic->factor =  find_q(&data[i+1]);
                 break;
-            case 0xffc0 :    // SOF
+            case SOF0:
                 pic->format.target_lines  = AV_RB16(&data[i+1]);
                 pic->format.target_pixels = AV_RB16(&data[i+3]);
                 if (data[i+7] == 0x22)
@@ -410,10 +384,10 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
                 else
                     av_log(s, AV_LOG_WARNING, "%s: Unknown SOF format byte 0x%02X\n", __func__, data[i+7]);
                 break;
-            case 0xffda :    // SOS
+            case SOS:
                 sos = TRUE;
                 break;
-            case 0xfffe :    // Comment
+            case COM:
                 parse_comment((char *)&data[i], length - 2, pic, text);
                 break;
             default :
@@ -421,7 +395,7 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
         }
         i += length;
 
-        if ( (pic->format.target_lines > 0) && (xdensity == (ydensity*2)) )  {
+        if ( densityPtr && (pic->format.target_lines > 0) && (xdensity == (ydensity*2)) )  {
             if( (pic->format.target_pixels > 360) && (pic->format.target_lines < 480) )  {
                 // Server is sending wrong pixel aspect ratio, reverse it
                 //av_log(s, AV_LOG_DEBUG, "%s: Server is sending wrong pixel "
@@ -436,6 +410,8 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
                 // Server is sending wrong pixel aspect ratio, set it to 1:1
                 AV_WB16(densityPtr, ydensity);
             }
+            xdensity = AV_RB16(densityPtr);
+            ydensity = AV_RB16(densityPtr+2);
         }
     }
     pic->size = imgSize - i - 2;     // 2 bytes for FFD9

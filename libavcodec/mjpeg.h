@@ -33,7 +33,6 @@
 #ifndef AVCODEC_MJPEG_H
 #define AVCODEC_MJPEG_H
 
-#include "avcodec.h"
 #include "put_bits.h"
 
 
