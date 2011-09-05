@@ -20,6 +20,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/log.h"
+#include "libavutil/opt.h"
 #include "mpegvideo.h"
 #include "h263.h"
 #include "mpeg4video.h"
@@ -834,8 +836,8 @@ static void mpeg4_encode_gop_header(MpegEncContext * s){
     s->last_time_base= FFUDIV(time, s->avctx->time_base.den);
 
     seconds= FFUDIV(time, s->avctx->time_base.den);
-    minutes= FFUDIV(seconds, 60); FFUMOD(seconds, 60);
-    hours  = FFUDIV(minutes, 60); FFUMOD(minutes, 60);
+    minutes= FFUDIV(seconds, 60); seconds = FFUMOD(seconds, 60);
+    hours  = FFUDIV(minutes, 60); minutes = FFUMOD(minutes, 60);
     hours  = FFUMOD(hours  , 24);
 
     put_bits(&s->pb, 5, hours);
@@ -1284,6 +1286,21 @@ void ff_mpeg4_encode_video_packet_header(MpegEncContext *s)
     put_bits(&s->pb, 1, 0); /* no HEC */
 }
 
+#define OFFSET(x) offsetof(MpegEncContext, x)
+#define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
+static const AVOption options[] = {
+    { "data_partitioning",       "Use data partitioning.",      OFFSET(data_partitioning), FF_OPT_TYPE_INT, { 0 }, 0, 1, VE },
+    { "alternate_scan",          "Enable alternate scantable.", OFFSET(alternate_scan),    FF_OPT_TYPE_INT, { 0 }, 0, 1, VE },
+    { NULL },
+};
+
+static const AVClass mpeg4enc_class = {
+    .class_name = "MPEG4 encoder",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
 AVCodec ff_mpeg4_encoder = {
     .name           = "mpeg4",
     .type           = AVMEDIA_TYPE_VIDEO,
@@ -1295,4 +1312,5 @@ AVCodec ff_mpeg4_encoder = {
     .pix_fmts= (const enum PixelFormat[]){PIX_FMT_YUV420P, PIX_FMT_NONE},
     .capabilities= CODEC_CAP_DELAY | CODEC_CAP_SLICE_THREADS,
     .long_name= NULL_IF_CONFIG_SMALL("MPEG-4 part 2"),
+    .priv_class     = &mpeg4enc_class,
 };

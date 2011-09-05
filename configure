@@ -216,6 +216,7 @@ Advanced options (experts only):
   --extra-libs=ELIBS       add ELIBS [$ELIBS]
   --extra-version=STRING   version string suffix []
   --build-suffix=SUFFIX    library name suffix []
+  --progs-suffix=SUFFIX    program name suffix []
   --arch=ARCH              select architecture [$arch]
   --cpu=CPU                select the minimum required CPU (affects
                            instruction selection, may crash on older CPUs)
@@ -1102,6 +1103,7 @@ HAVE_LIST="
     memalign
     mkstemp
     mmap
+    PeekNamedPipe
     posix_memalign
     round
     roundf
@@ -1179,6 +1181,7 @@ CMDLINE_SET="
     arch
     as
     build_suffix
+    progs_suffix
     cc
     cpu
     cross_prefix
@@ -2194,12 +2197,8 @@ case "$arch" in
         arch="parisc"
         subarch="parisc64"
     ;;
-    "Power Macintosh"|ppc|powerpc)
+    "Power Macintosh"|ppc|powerpc|ppc64|powerpc64)
         arch="ppc"
-    ;;
-    ppc64|powerpc64)
-        arch="ppc"
-        subarch="ppc64"
     ;;
     s390|s390x)
         arch="s390"
@@ -2397,6 +2396,11 @@ EOF
         if test "$subarch" = "x86_64"; then
             spic=$shared
         fi
+    ;;
+    ppc)
+        check_cc <<EOF && subarch="ppc64"
+        int test[(int)sizeof(char*) - 7];
+EOF
     ;;
 esac
 
@@ -2847,6 +2851,7 @@ check_func  strerror_r
 check_func  strptime
 check_func  strtok_r
 check_func_headers conio.h kbhit
+check_func_headers windows.h PeekNamedPipe
 check_func_headers io.h setmode
 check_func_headers lzo/lzo1x.h lzo1x_999_compress
 check_lib2 "windows.h psapi.h" GetProcessMemoryInfo -lpsapi
@@ -3179,6 +3184,9 @@ echo "ARCH                      $arch ($cpu)"
 if test "$build_suffix" != ""; then
     echo "build suffix              $build_suffix"
 fi
+if test "$progs_suffix" != ""; then
+    echo "progs suffix              $progs_suffix"
+fi
 if test "$extra_version" != ""; then
     echo "version string suffix     $extra_version"
 fi
@@ -3329,6 +3337,7 @@ FFSERVERLDFLAGS=$FFSERVERLDFLAGS
 SHFLAGS=$SHFLAGS
 YASMFLAGS=$YASMFLAGS
 BUILDSUF=$build_suffix
+PROGSSUF=$progs_suffix
 FULLNAME=$FULLNAME
 LIBPREF=$LIBPREF
 LIBSUF=$LIBSUF

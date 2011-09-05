@@ -5,18 +5,26 @@ NOTE: This is a draft.
 
 Overview:
 ---------
+
 FFmpeg uses Trac for tracking issues, new issues and changes to
 existing issues can be done through a web interface.
+
+Issues can be different kinds of things we want to keep track of
+but that do not belong into the source tree itself. This includes
+bug reports, patches, feature requests and license violations. We
+might add more items to this list in the future, so feel free to
+propose a new `type of issue' on the ffmpeg-devel mailing list if
+you feel it is worth tracking.
+
 It is possible to subscribe to individual issues by adding yourself to the
 Cc list or to subscribe to the ffmpeg-trac mailing list which receives
 a mail for every change to every issue.
 (the above does all work already after light testing)
+
 The subscription URL for the ffmpeg-trac list is:
 http(s)://ffmpeg.org/mailman/listinfo/ffmpeg-trac
 The URL of the webinterface of the tracker is:
 http(s)://ffmpeg.org/trac/ffmpeg
-
-NOTE: issue = (bug report || patch || feature request || license violation)
 
 Type:
 -----
@@ -54,7 +62,7 @@ important
     For feature requests this priority would be used for things many people
     want.
     Regressions also should be marked as important, regressions are bugs that
-    dont exist in a past revission or another branch.
+    don't exist in a past revision or another branch.
 
 normal
 
@@ -166,7 +174,7 @@ Note, please do not use type-status-substatus combinations other than the
 above without asking on ffmpeg-dev first!
 
 Note2, if you provide the requested info do not forget to remove the
-needs_more_info substate.
+needs_more_info substatus.
 
 Component:
 ----------
@@ -199,7 +207,7 @@ build system
     issues in or related to configure/Makefile
 
 regression
-    bugs which were working in a past revision
+    bugs which were not present in a past revision
 
 trac
     issues related to our issue tracker

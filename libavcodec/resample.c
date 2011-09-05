@@ -121,11 +121,11 @@ static void surround_to_stereo(short **output, short *input, int channels, int s
     short l, r;
 
     for (i = 0; i < samples; i++) {
-        int fl,fr,c,rl,rr,lfe;
+        int fl,fr,c,rl,rr;
         fl = input[0];
         fr = input[1];
         c = input[2];
-        lfe = input[3];
+        // lfe = input[3];
         rl = input[4];
         rr = input[5];
 
@@ -184,7 +184,7 @@ static void ac3_5p1_mux(short *output, short *input1, short *input2, int n)
     ch8<<7 | ch7<<6 | ch6<<5 | ch5<<4 | ch4<<3 | ch3<<2 | ch2<<1 | ch1<<0
 
 static const uint8_t supported_resampling[MAX_CHANNELS] = {
-    //ouput channels:1  2  3  4  5  6  7  8
+    // output ch:    1  2  3  4  5  6  7  8
     SUPPORT_RESAMPLE(1, 1, 0, 0, 0, 0, 0, 0), // 1 input channel
     SUPPORT_RESAMPLE(1, 1, 0, 0, 0, 1, 0, 0), // 2 input channels
     SUPPORT_RESAMPLE(0, 0, 1, 0, 0, 0, 0, 0), // 3 input channels

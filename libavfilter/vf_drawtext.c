@@ -81,6 +81,7 @@ typedef struct {
     int pixel_step[4];              ///< distance in bytes between the component of each pixel
     uint8_t rgba_map[4];            ///< map RGBA offsets to the positions in the packed RGBA format
     uint8_t *box_line[4];           ///< line used for filling the box background
+    int64_t basetime;               ///< base pts time in the real world for display
 } DrawTextContext;
 
 #define OFFSET(x) offsetof(DrawTextContext, x)
@@ -99,6 +100,8 @@ static const AVOption drawtext_options[]= {
 {"shadowx",  "set x",                OFFSET(shadowx),            FF_OPT_TYPE_INT,    {.dbl=0},     INT_MIN,  INT_MAX  },
 {"shadowy",  "set y",                OFFSET(shadowy),            FF_OPT_TYPE_INT,    {.dbl=0},     INT_MIN,  INT_MAX  },
 {"tabsize",  "set tab size",         OFFSET(tabsize),            FF_OPT_TYPE_INT,    {.dbl=4},     0,        INT_MAX  },
+{"basetime", "set base time",        OFFSET(basetime),           FF_OPT_TYPE_INT64,  {.dbl=AV_NOPTS_VALUE},     INT64_MIN,        INT64_MAX  },
+
 
 /* FT_LOAD_* flags */
 {"ft_load_flags", "set font loading flags for libfreetype",   OFFSET(ft_load_flags),  FF_OPT_TYPE_FLAGS,  {.dbl=FT_LOAD_DEFAULT|FT_LOAD_RENDER}, 0, INT_MAX, 0, "ft_load_flags" },
@@ -355,6 +358,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&dtext->fontcolor_string);
     av_freep(&dtext->boxcolor_string);
     av_freep(&dtext->positions);
+    dtext->nb_positions = 0;
     av_freep(&dtext->shadowcolor_string);
     av_tree_enumerate(dtext->glyphs, NULL, NULL, glyph_enu_free);
     av_tree_destroy(dtext->glyphs);
@@ -404,8 +408,11 @@ static int config_input(AVFilterLink *inlink)
 static int command(AVFilterContext *ctx, const char *cmd, const char *arg, char *res, int res_len, int flags)
 {
     if(!strcmp(cmd, "reinit")){
+        int ret;
         uninit(ctx);
-        return init(ctx, arg, NULL);
+        if((ret=init(ctx, arg, NULL)) < 0)
+            return ret;
+        return config_input(ctx->inputs[0]);
     }
 
     return AVERROR(ENOSYS);
@@ -572,6 +579,9 @@ static int draw_text(AVFilterContext *ctx, AVFilterBufferRef *picref,
     struct tm ltime;
     uint8_t *buf = dtext->expanded_text;
     int buf_size = dtext->expanded_text_size;
+
+    if(dtext->basetime != AV_NOPTS_VALUE)
+        now= picref->pts*av_q2d(ctx->inputs[0]->time_base) + dtext->basetime/1000000;
 
     if (!buf) {
         buf_size = 2*strlen(dtext->text)+1;

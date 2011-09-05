@@ -1379,7 +1379,7 @@ static void decode_postinit(H264Context *h, int setup_finished){
     pics = 0;
     while(h->delayed_pic[pics]) pics++;
 
-    assert(pics <= MAX_DELAYED_PIC_COUNT);
+    av_assert0(pics <= MAX_DELAYED_PIC_COUNT);
 
     h->delayed_pic[pics++] = cur;
     if (cur->f.reference == 0)
@@ -2241,7 +2241,7 @@ static void idr(H264Context *h){
 static void flush_dpb(AVCodecContext *avctx){
     H264Context *h= avctx->priv_data;
     int i;
-    for(i=0; i<MAX_DELAYED_PIC_COUNT; i++) {
+    for(i=0; i<=MAX_DELAYED_PIC_COUNT; i++) {
         if(h->delayed_pic[i])
             h->delayed_pic[i]->f.reference = 0;
         h->delayed_pic[i]= NULL;
