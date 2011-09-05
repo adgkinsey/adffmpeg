@@ -199,7 +199,7 @@ unsigned int build_jpeg_header(void *jfif, struct NetVuImageData *pic, unsigned 
         put_bits(&pb, 8, 0x32);
     else
         put_bits(&pb, 8, 0x19);
-    ff_copy_bits(&pb, jfif_header, (sizeof(jfif_header) - 16)*8);
+    ff_copy_bits(&pb, jfif_header, (sizeof(jfif_header) - 17)*8);
 
     // Q tables and markers
     put_marker(&pb, DQT);
@@ -409,6 +409,7 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
             else  {
                 // Server is sending wrong pixel aspect ratio, set it to 1:1
                 AV_WB16(densityPtr, ydensity);
+                AV_WB16(densityPtr + 2, ydensity);
             }
             xdensity = AV_RB16(densityPtr);
             ydensity = AV_RB16(densityPtr+2);
