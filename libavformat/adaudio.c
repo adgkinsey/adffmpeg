@@ -111,9 +111,11 @@ static int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                         frameData->additionalData = NULL;
 
                         pkt->priv = (void*)frameData;
+                        retVal = 0;
                     }
+                    else
+                        retVal = AVERROR(ENOMEM);
 #endif
-                    retVal = 0;
                 }
             }
         }
