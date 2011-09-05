@@ -196,10 +196,10 @@ unsigned int build_jpeg_header(void *jfif, struct NetVuImageData *pic, unsigned 
 
     ff_copy_bits(&pb, jfif_header, 16*8);
     if( (pic->format.target_pixels > 360) && (pic->format.target_lines < 480) )
-        put_bits(&pb, 8, 0x32);
+        put_bits(&pb, 16, 0x0032);
     else
-        put_bits(&pb, 8, 0x19);
-    ff_copy_bits(&pb, jfif_header, (sizeof(jfif_header) - 17)*8);
+        put_bits(&pb, 16, 0x0019);
+    ff_copy_bits(&pb, jfif_header+18, (sizeof(jfif_header) - 18)*8);
 
     // Q tables and markers
     put_marker(&pb, DQT);
