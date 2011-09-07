@@ -1074,6 +1074,7 @@ enum AVPacketSideDataType {
     AV_PKT_DATA_PALETTE,
     AV_PKT_DATA_AD_FRAME, 
     AV_PKT_DATA_AD_TEXT,
+    AV_PKT_DATA_AD_PARINF,
 };
 
 typedef struct AVPacket {
