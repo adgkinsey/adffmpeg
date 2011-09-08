@@ -323,10 +323,12 @@ static AVStream* createStream(AVFormatContext * avf)
         
         endT = fi->imageTime * 1000LL + fi->imageMS;
 
+        // Now go back to where we were and reset the state
         p->dispSet.playMode = RWND;
         p->dispSet.frameNumber = startFrame;
         parReader_loadFrame(fi, &p->dispSet, &p->fileChanged);
         p->dispSet.playMode = PLAY;
+        p->dispSet.fileLock = 0;
         
         st->start_time = fi->imageTime * 1000LL + fi->imageMS;
         st->duration   = endT - st->start_time;
@@ -465,7 +467,7 @@ static AVStream* createStream(AVFormatContext * avf)
     return st;
 }
 
-static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChang)
+static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
 {
     PARDecContext *ctxt = avf->priv_data;
     ParFrameInfo *fi = &ctxt->frameInfo;
@@ -503,6 +505,31 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChan
 
     pkt->stream_index = streamIndex;
     
+
+    memcpy(pkt->data, fi->frameData, siz);
+
+    if (parReader_frameIsVideo(fi))  {
+        if (parReader_isIFrame(fi))
+            pkt->flags |= AV_PKT_FLAG_KEY;
+    }
+    else if (parReader_frameIsAudio(fi))  {
+        endianSwapAudioData(pkt->data, siz);
+    }
+
+    if (fi->imageTime > 0)  {
+        pkt->pts = fi->imageTime;
+        pkt->pts *= 1000ULL;
+        pkt->pts += fi->imageMS;
+    }
+    else if (fi->indexTime > 0)  {
+        pkt->pts = fi->indexTime;
+        pkt->pts *= 1000ULL;
+        pkt->pts += fi->indexMS;
+    }
+    else  {
+        pkt->pts = AV_NOPTS_VALUE;
+    }
+    
 #ifdef AD_NO_SIDEDATA
     pkt->destruct = libpar_packet_destroy;
     pktExt = av_malloc(sizeof(LibparFrameExtra));
@@ -510,7 +537,7 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChan
         pkt->size = 0;
         return AVERROR(ENOMEM);
     }
-    pktExt->fileChanged = fChang;
+    pktExt->fileChanged = ctxt->fileChanged;
     pktExt->indexInfoCount = parReader_getIndexInfo(fi, &pktExt->indexInfo);
     
     pktExt->frameInfo = av_mallocz(sizeof(ParFrameInfo));
@@ -567,36 +594,6 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChan
         ctxt->fileChanged = 0;
     }
 #endif
-
-    memcpy(pkt->data, fi->frameData, siz);
-
-    if (parReader_frameIsVideo(fi))  {
-        if (parReader_isIFrame(fi))
-            pkt->flags |= AV_PKT_FLAG_KEY;
-    }
-    else if (parReader_frameIsAudio(fi))  {
-        endianSwapAudioData(pkt->data, siz);
-    }
-    else  {
-        /// \todo Do something with data frames
-        pkt->pts = fi->imageTime;
-        pkt->pts *= 1000ULL;
-        pkt->pts += fi->imageMS;
-    }
-
-    if (fi->imageTime > 0)  {
-        pkt->pts = fi->imageTime;
-        pkt->pts *= 1000ULL;
-        pkt->pts += fi->imageMS;
-    }
-    else if (fi->indexTime > 0)  {
-        pkt->pts = fi->indexTime;
-        pkt->pts *= 1000ULL;
-        pkt->pts += fi->indexMS;
-    }
-    else  {
-        pkt->pts = AV_NOPTS_VALUE;
-    }
 
     ctxt->frameCached = 0;
 
@@ -738,7 +735,7 @@ static int par_read_packet(AVFormatContext * avf, AVPacket * pkt)
         return AVERROR(EAGAIN);
     }
 
-    createPacket(avf, pkt, siz, p->fileChanged);
+    createPacket(avf, pkt, siz);
 
     return 0;
 }
