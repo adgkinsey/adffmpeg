@@ -560,7 +560,7 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz, int fChan
             memcpy(sideData, fi->frameText, textBufSize);
     }
     
-    if (ctxt->fileChanged && parReader_frameIsVideo(fi) && parReader_isIFrame(fi))  {
+    if (ctxt->fileChanged)  {
         sideData = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_PARINF, sizeof(ctxt->frameInfo));
         if (sideData)
             memcpy(sideData, &(ctxt->frameInfo), sizeof(ctxt->frameInfo));
