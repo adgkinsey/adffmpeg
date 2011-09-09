@@ -1020,20 +1020,20 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
     }
     else if (media == AVMEDIA_TYPE_AUDIO) {
         // Get the audio stream
-        struct NetVuAudioData *data = (struct NetVuAudioData *)data;
-        if ( (st = ad_get_audio_stream( s, data )) == NULL ) {
+        struct NetVuAudioData *audHdr = (struct NetVuAudioData *)data;
+        if ( (st = ad_get_audio_stream( s, audHdr )) == NULL ) {
             av_log(s, AV_LOG_ERROR, "ad_read_packet: ad_get_audio_stream failed\n");
             return ADPIC_GET_AUDIO_STREAM_ERROR;
         }
         else  {
-            if (data->seconds > 0)  {
-                int64_t milliseconds = data->seconds * 1000ULL + (data->msecs % 1000);
+            if (audHdr->seconds > 0)  {
+                int64_t milliseconds = audHdr->seconds * 1000ULL + (audHdr->msecs % 1000);
                 pkt->pts = av_rescale_q(milliseconds, MilliTB, st->time_base);
             }
             else
                 pkt->pts = AV_NOPTS_VALUE;
             
-            addSideData(s, pkt, media, sizeof(struct NetVuAudioData), data, text);
+            addSideData(s, pkt, media, sizeof(struct NetVuAudioData), audHdr, text);
         }
     }
     else if (media == AVMEDIA_TYPE_DATA) {
