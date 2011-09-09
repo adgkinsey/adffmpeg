@@ -91,6 +91,9 @@ typedef struct AVPixFmtDescriptor{
 /**
  * The array of all the pixel format descriptors.
  */
+#if defined(_WIN32) && defined(_MSC_VER)
+__declspec(dllimport)
+#endif
 extern const AVPixFmtDescriptor av_pix_fmt_descriptors[];
 
 /**
