@@ -286,6 +286,36 @@ static void endianSwapAudioData(uint8_t *data, int size)
     }
 }
 
+static int64_t getLastFrameTime(int fc, ParFrameInfo *fi, ParDisplaySettings *disp)
+{
+    long startFrame;
+    int ii, streamId = fi->channel;
+    int64_t lastFrame = 0;
+    
+    startFrame = fi->frameNumber;
+    disp->cameraNum = fi->channel;
+    disp->fileSeqNo = -1;
+    disp->fileLock = 1;    // Don't seek beyond the file
+    ii = 1;
+    do  {
+        disp->frameNumber = fc - ii++;
+        if (disp->frameNumber <= startFrame)
+            break;
+        parReader_loadFrame(fi, disp, NULL);
+    } while (streamId != fi->channel);
+    
+    lastFrame = fi->imageTime * 1000LL + fi->imageMS;
+    
+    // Now go back to where we were and reset the state
+    disp->playMode = RWND;
+    disp->frameNumber = startFrame;
+    parReader_loadFrame(fi, disp, NULL);
+    disp->playMode = PLAY;
+    disp->fileLock = 0;
+        
+    return lastFrame;
+}
+
 static AVStream* createStream(AVFormatContext * avf)
 {
     PARDecContext *p = avf->priv_data;
@@ -293,8 +323,8 @@ static AVStream* createStream(AVFormatContext * avf)
     char textbuf[128];
     int w, h;
     int streamId = -1;
-    int ii, fc = 0;
-    long startFrame;
+    int fc = 0;
+    
     unsigned long startT, endT;
     AVStream * st = NULL;
 
@@ -309,30 +339,6 @@ static AVStream* createStream(AVFormatContext * avf)
     if (parReader_frameIsVideo(fi))  {
         st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
         
-        startFrame = fi->frameNumber;
-        p->dispSet.cameraNum = fi->channel;
-        p->dispSet.fileSeqNo = -1;
-        p->dispSet.fileLock = 1;    // Don't seek beyond the file
-        ii = 1;
-        do  {
-            p->dispSet.frameNumber = fc - ii++;
-            if (p->dispSet.frameNumber <= startFrame)
-                break;
-            parReader_loadFrame(fi, &p->dispSet, &p->fileChanged);
-        } while (streamId != p->frameInfo.channel);
-        
-        endT = fi->imageTime * 1000LL + fi->imageMS;
-
-        // Now go back to where we were and reset the state
-        p->dispSet.playMode = RWND;
-        p->dispSet.frameNumber = startFrame;
-        parReader_loadFrame(fi, &p->dispSet, &p->fileChanged);
-        p->dispSet.playMode = PLAY;
-        p->dispSet.fileLock = 0;
-        
-        st->start_time = fi->imageTime * 1000LL + fi->imageMS;
-        st->duration   = endT - st->start_time;
-
         switch(getVideoFrameSubType(fi))  {
             case(FRAME_FORMAT_JPEG_422):
             case(FRAME_FORMAT_JPEG_411):
@@ -360,8 +366,9 @@ static AVStream* createStream(AVFormatContext * avf)
         // Set timebase to 1 millisecond, and min frame rate to 1 / timebase
         av_set_pts_info(st, 32, 1, 1000);
         st->r_frame_rate = (AVRational) { 1, 1 };
-        st->start_time = fi->imageTime * 1000LL + fi->imageMS;
-
+        st->start_time   = fi->imageTime * 1000LL + fi->imageMS;
+        st->duration     = getLastFrameTime(fc, fi, &p->dispSet) - st->start_time;
+        
         if (AVMEDIA_TYPE_VIDEO == st->codec->codec_type)  {
             parReader_getFrameSize(fi, &w, &h);
             st->codec->width = w;
@@ -496,6 +503,18 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
         else
             return -1;
     }
+    
+    if (avf->streams[streamIndex]->start_time == 0)  {
+        AVStream *st = avf->streams[streamIndex];
+        int fc = 0;
+        unsigned long startT, endT;
+        
+        parReader_getIndexData(fi, NULL, &fc, &startT, &endT);
+        
+        st->start_time = fi->imageTime * 1000LL + fi->imageMS;
+        st->duration = getLastFrameTime(fc, fi, &ctxt->dispSet) - st->start_time;
+    }
+        
     av_new_packet(pkt, siz);
 
     if (NULL == pkt->data)  {
@@ -588,6 +607,11 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
     }
     
     if (ctxt->fileChanged)  {
+        for (ii = 0; ii < avf->nb_streams; ii++)  {
+            avf->streams[ii]->start_time = 0;
+            avf->streams[ii]->duration = 0;
+        }
+        
         sideData = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_PARINF, sizeof(ctxt->frameInfo));
         if (sideData)
             memcpy(sideData, &(ctxt->frameInfo), sizeof(ctxt->frameInfo));
