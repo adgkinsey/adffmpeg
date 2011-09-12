@@ -259,6 +259,8 @@ unknown_opt:
         *(int64_t*)dst = parse_time_or_die(opt, arg, 1);
     } else if (po->flags & OPT_FLOAT) {
         *(float*)dst = parse_number_or_die(opt, arg, OPT_FLOAT, -INFINITY, INFINITY);
+    } else if (po->flags & OPT_DOUBLE) {
+        *(double*)dst = parse_number_or_die(opt, arg, OPT_DOUBLE, -INFINITY, INFINITY);
     } else if (po->u.func_arg) {
         int ret = po->flags & OPT_FUNC2 ? po->u.func2_arg(optctx, opt, arg) :
                                           po->u.func_arg(opt, arg);
@@ -728,6 +730,15 @@ int opt_pix_fmts(const char *opt, const char *arg)
     return 0;
 }
 
+int show_sample_fmts(const char *opt, const char *arg)
+{
+    int i;
+    char fmt_str[128];
+    for (i = -1; i < AV_SAMPLE_FMT_NB; i++)
+        printf("%s\n", av_get_sample_fmt_string(fmt_str, sizeof(fmt_str), i));
+    return 0;
+}
+
 int read_yesno(void)
 {
     int c = getchar();
@@ -834,6 +845,26 @@ int check_stream_specifier(AVFormatContext *s, AVStream *st, const char *spec)
             return 0;
         }
         return 1;
+    } else if (*spec == 'p' && *(spec + 1) == ':') {
+        int prog_id, i, j;
+        char *endptr;
+        spec += 2;
+        prog_id = strtol(spec, &endptr, 0);
+        for (i = 0; i < s->nb_programs; i++) {
+            if (s->programs[i]->id != prog_id)
+                continue;
+
+            if (*endptr++ == ':') {
+                int stream_idx = strtol(endptr, NULL, 0);
+                return (stream_idx >= 0 && stream_idx < s->programs[i]->nb_stream_indexes &&
+                        st->index == s->programs[i]->stream_index[stream_idx]);
+            }
+
+            for (j = 0; j < s->programs[i]->nb_stream_indexes; j++)
+                if (st->index == s->programs[i]->stream_index[j])
+                    return 1;
+        }
+        return 0;
     } else if (!*spec) /* empty specifier, matches everything */
         return 1;
 

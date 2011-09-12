@@ -226,7 +226,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
     Glyph *glyph;
 
     dtext->class = &drawtext_class;
-    av_opt_set_defaults2(dtext, 0, 0);
+    av_opt_set_defaults(dtext);
     dtext->fontcolor_string = av_strdup("black");
     dtext->boxcolor_string = av_strdup("white");
     dtext->shadowcolor_string = av_strdup("black");
@@ -317,10 +317,6 @@ static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
         return err;
     }
     dtext->tabsize *= glyph->advance;
-
-#if !HAVE_LOCALTIME_R
-    av_log(ctx, AV_LOG_WARNING, "strftime() expansion unavailable!\n");
-#endif
 
     return 0;
 }
@@ -524,7 +520,7 @@ static inline int is_newline(uint32_t c)
 static int draw_glyphs(DrawTextContext *dtext, AVFilterBufferRef *picref,
                        int width, int height, const uint8_t rgbcolor[4], const uint8_t yuvcolor[4], int x, int y)
 {
-    char *text = HAVE_LOCALTIME_R ? dtext->expanded_text : dtext->text;
+    char *text = dtext->expanded_text;
     uint32_t code = 0;
     int i;
     uint8_t *p;
@@ -574,7 +570,6 @@ static int draw_text(AVFilterContext *ctx, AVFilterBufferRef *picref,
     Glyph *glyph = NULL, *prev_glyph = NULL;
     Glyph dummy = { 0 };
 
-#if HAVE_LOCALTIME_R
     time_t now = time(0);
     struct tm ltime;
     uint8_t *buf = dtext->expanded_text;
@@ -588,7 +583,12 @@ static int draw_text(AVFilterContext *ctx, AVFilterBufferRef *picref,
         buf = av_malloc(buf_size);
     }
 
+#if HAVE_LOCALTIME_R
     localtime_r(&now, &ltime);
+#else
+    if(strchr(dtext->text, '%'))
+        ltime= *localtime(&now);
+#endif
 
     do {
         *buf = 1;
@@ -601,7 +601,6 @@ static int draw_text(AVFilterContext *ctx, AVFilterBufferRef *picref,
         return AVERROR(ENOMEM);
     text = dtext->expanded_text = buf;
     dtext->expanded_text_size = buf_size;
-#endif
     if ((len = strlen(text)) > dtext->nb_positions) {
         if (!(dtext->positions =
               av_realloc(dtext->positions, len*sizeof(*dtext->positions))))

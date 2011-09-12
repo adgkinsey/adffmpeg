@@ -19,8 +19,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavformat/timefilter.h"
-
 #include "avdevice.h"
 #include "dshow.h"
 
@@ -42,8 +40,6 @@ struct dshow_ctx {
     unsigned int video_frame_num;
 
     IMediaControl *control;
-
-    TimeFilter *timefilter;
 };
 
 static enum PixelFormat dshow_pixfmt(DWORD biCompression, WORD biBitCount)
@@ -96,11 +92,7 @@ dshow_read_close(AVFormatContext *s)
         IMediaControl_Stop(ctx->control);
         IMediaControl_Release(ctx->control);
     }
-    if (ctx->graph)
-        IGraphBuilder_Release(ctx->graph);
 
-    /* FIXME remove filters from graph */
-    /* FIXME disconnect pins */
     if (ctx->capture_pin[VideoDevice])
         libAVPin_Release(ctx->capture_pin[VideoDevice]);
     if (ctx->capture_pin[AudioDevice])
@@ -118,6 +110,20 @@ dshow_read_close(AVFormatContext *s)
         IBaseFilter_Release(ctx->device_filter[VideoDevice]);
     if (ctx->device_filter[AudioDevice])
         IBaseFilter_Release(ctx->device_filter[AudioDevice]);
+
+    if (ctx->graph) {
+        IEnumFilters *fenum;
+        int r;
+        r = IGraphBuilder_EnumFilters(ctx->graph, &fenum);
+        if (r == S_OK) {
+            IBaseFilter *f;
+            IEnumFilters_Reset(fenum);
+            while (IEnumFilters_Next(fenum, 1, &f, NULL) == S_OK)
+                IGraphBuilder_RemoveFilter(ctx->graph, f);
+            IEnumFilters_Release(fenum);
+        }
+        IGraphBuilder_Release(ctx->graph);
+    }
 
     if (ctx->device_name[0])
         av_free(ctx->device_name[0]);
@@ -223,7 +229,7 @@ dshow_open_device(AVFormatContext *avctx, ICreateDevEnum *devenum,
     const char *device_name = ctx->device_name[devtype];
     int ret = AVERROR(EIO);
     IPin *pin;
-    int r, i;
+    int r;
 
     const GUID *device_guid[2] = { &CLSID_VideoInputDeviceCategory,
                                    &CLSID_AudioInputDeviceCategory };
@@ -287,7 +293,6 @@ fail1:
         goto error;
     }
 
-    i = 0;
     while (IEnumPins_Next(pins, 1, &pin, NULL) == S_OK && !device_pin) {
         IKsPropertySet *p = NULL;
         IEnumMediaTypes *types;
