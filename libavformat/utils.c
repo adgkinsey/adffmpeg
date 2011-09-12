@@ -1146,7 +1146,10 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
             if (!st->need_parsing || !st->parser) {
                 /* no parsing needed: we just output the packet as is */
                 /* raw data support */
-                *pkt = st->cur_pkt; st->cur_pkt.data= NULL;
+                *pkt = st->cur_pkt;
+                st->cur_pkt.data= NULL;
+                st->cur_pkt.side_data_elems = 0;
+                st->cur_pkt.side_data = NULL;
                 compute_pkt_fields(s, st, NULL, pkt);
                 s->cur_st = NULL;
                 if ((s->iformat->flags & AVFMT_GENERIC_INDEX) &&
@@ -2119,6 +2122,8 @@ static int has_codec_parameters(AVCodecContext *avctx)
     case AVMEDIA_TYPE_VIDEO:
         val = avctx->width && avctx->pix_fmt != PIX_FMT_NONE;
         break;
+    case AVMEDIA_TYPE_DATA:
+        if(avctx->codec_id == CODEC_ID_NONE) return 1;
     default:
         val = 1;
         break;
@@ -2315,8 +2320,15 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
 
         //try to just open decoders, in case this is enough to get parameters
         if(!has_codec_parameters(st->codec)){
-            if (codec && !st->codec->codec)
-                avcodec_open2(st->codec, codec, options ? &options[i] : NULL);
+            if (codec && !st->codec->codec){
+                AVDictionary *tmp = NULL;
+                if (options){
+                    av_dict_copy(&tmp, options[i], 0);
+                    av_dict_set(&tmp, "threads", 0, 0);
+                }
+                avcodec_open2(st->codec, codec, options ? &tmp : NULL);
+                av_dict_free(&tmp);
+            }
         }
     }
 
@@ -2354,7 +2366,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
                 break;
             if(st->parser && st->parser->parser->split && !st->codec->extradata)
                 break;
-            if(st->first_dts == AV_NOPTS_VALUE)
+            if(st->first_dts == AV_NOPTS_VALUE && (st->codec->codec_type == AVMEDIA_TYPE_VIDEO || st->codec->codec_type == AVMEDIA_TYPE_AUDIO))
                 break;
         }
         if (i == ic->nb_streams) {
@@ -2567,6 +2579,8 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
 #endif
 
  find_stream_info_err:
+    for (i=0; i < ic->nb_streams; i++)
+        av_freep(&ic->streams[i]->info);
     return ret;
 }
 
@@ -3218,17 +3232,44 @@ static int ff_interleave_compare_dts(AVFormatContext *s, AVPacket *next, AVPacke
 
 int av_interleave_packet_per_dts(AVFormatContext *s, AVPacket *out, AVPacket *pkt, int flush){
     AVPacketList *pktl;
-    int stream_count=0;
+    int stream_count=0, noninterleaved_count=0;
+    int64_t delta_dts_max = 0;
     int i;
 
     if(pkt){
         ff_interleave_add_packet(s, pkt, ff_interleave_compare_dts);
     }
 
-    for(i=0; i < s->nb_streams; i++)
-        stream_count+= !!s->streams[i]->last_in_packet_buffer;
+    for(i=0; i < s->nb_streams; i++) {
+        if (s->streams[i]->last_in_packet_buffer) {
+            ++stream_count;
+        } else if(s->streams[i]->codec->codec_type == AVMEDIA_TYPE_SUBTITLE) {
+            ++noninterleaved_count;
+        }
+    }
 
-    if(stream_count && (s->nb_streams == stream_count || flush)){
+    if (s->nb_streams == stream_count) {
+        flush = 1;
+    } else if (!flush){
+        for(i=0; i < s->nb_streams; i++) {
+            if (s->streams[i]->last_in_packet_buffer) {
+                int64_t delta_dts =
+                    av_rescale_q(s->streams[i]->last_in_packet_buffer->pkt.dts,
+                                s->streams[i]->time_base,
+                                AV_TIME_BASE_Q) -
+                    av_rescale_q(s->packet_buffer->pkt.dts,
+                                s->streams[s->packet_buffer->pkt.stream_index]->time_base,
+                                AV_TIME_BASE_Q);
+                delta_dts_max= FFMAX(delta_dts_max, delta_dts);
+            }
+        }
+        if(s->nb_streams == stream_count+noninterleaved_count &&
+           delta_dts_max > 20*AV_TIME_BASE) {
+            av_log(s, AV_LOG_DEBUG, "flushing with %d noninterleaved\n", noninterleaved_count);
+            flush = 1;
+        }
+    }
+    if(stream_count && flush){
         pktl= s->packet_buffer;
         *out= pktl->pkt;
 

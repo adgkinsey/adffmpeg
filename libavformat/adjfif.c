@@ -57,20 +57,6 @@ static const char script_msg[] = "Comments: ";
 static const char time_zone[] = "Locale: ";
 static const char utc_offset[] = "UTCoffset: ";
 
-static const uint8_t jfif_header[] = {
-    0xFF, SOI,
-    0xFF, APP0,
-    0x00, 0x10,                     // APP0 header size (including
-                                    // this field, but excluding preceding)
-    0x4A, 0x46, 0x49, 0x46, 0x00,   // ID string 'JFIF\0'
-    0x01, 0x02,                     // version
-    0x02,                           // density units (0 - none, 1 - PPI, 2 - PPCM)
-    0x00, 0x19,                     // X density
-    0x00, 0x19,                     // Y density
-    0x00,                           // X thumbnail size
-    0x00,                           // Y thumbnail size
-};
-
 static const unsigned char sof_422_header[] = {
     0xFF, SOF0, 0x00, 0x11, 0x08, 0x01, 0x00, 0x01,
     0x60, 0x03, 0x01, 0x21, 0x00, 0x02, 0x11, 0x01,
@@ -194,12 +180,21 @@ unsigned int build_jpeg_header(void *jfif, struct NetVuImageData *pic, unsigned 
 
     init_put_bits(&pb, jfif, max);
 
-    ff_copy_bits(&pb, jfif_header, 16*8);
-    if( (pic->format.target_pixels > 360) && (pic->format.target_lines < 480) )
-        put_bits(&pb, 8, 0x32);
-    else
-        put_bits(&pb, 8, 0x19);
-    ff_copy_bits(&pb, jfif_header, (sizeof(jfif_header) - 16)*8);
+    put_marker(&pb, SOI);
+    put_marker(&pb, APP0);
+    put_bits(&pb, 16, 16);          // APP0 header size
+    ff_put_string(&pb, "JFIF", 1);  // this puts the trailing zero-byte too
+    put_bits(&pb, 16, 0x0102);      // v 1.02 */
+    put_bits(&pb, 8, 2);            // density units (0 - none, 1 - PPI, 2 - PPCM)
+    if ((pic->format.target_pixels > 360) && (pic->format.target_lines < 480)) {
+        put_bits(&pb, 16, 0x19);    // X density
+        put_bits(&pb, 16, 0x32);    // Y density
+    }
+    else {
+        put_bits(&pb, 16, 0x19);    // X density
+        put_bits(&pb, 16, 0x19);    // Y density
+    }
+    put_bits(&pb, 16, 0); // Thumbnail dimensions WxH
 
     // Q tables and markers
     put_marker(&pb, DQT);
@@ -325,7 +320,6 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
     uint16_t xdensity = 0;
     uint16_t ydensity = 0;
     uint8_t *densityPtr = NULL;
-    unsigned int jfifMarker;
 
     //av_log(s, AV_LOG_DEBUG, "parse_jfif: leading bytes 0x%02X, 0x%02X, "
     //       "length=%d\n", data[0], data[1], imgSize);
@@ -335,16 +329,16 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
     pic->start_offset = 0;
     i = 0;
 
-    if(data[i] != 0xff && data[i+1] != 0xd8) {
+    if(data[i] != 0xff && data[i+1] != SOI) {
         //there is a header so skip it
-        while( ((unsigned char)data[i] != 0xff) && (i < imgSize) )
+        while( (data[i] != 0xff) && (i < imgSize) )
             i++;
         //if ( i > 0 )
         //    av_log(s, AV_LOG_DEBUG, "parse_jfif: %d leading bytes\n", i);
 
         i++;
-        if ( (unsigned char) data[i] != 0xd8) {
-            //av_log(s, AV_LOG_ERROR, "parse_jfif: incorrect SOI 0xff%02x\n", data[i]);
+        if (data[i] != 0xd8) {
+            av_log(s, AV_LOG_ERROR, "parse_jfif: incorrect SOI 0xff%02x\n", data[i]);
             return -1;
         }
         i++;
@@ -363,8 +357,7 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
 
         switch (marker) {
             case APP0:
-                jfifMarker = AV_RB32(&data[i]);
-                if ( (jfifMarker==0x4A464946) && (data[i+4]==0x00) )  {
+                if (strncmp(&data[i], "JFIF", 4) == 0)  {
                     xdensity = AV_RB16(&data[i+8]);
                     ydensity = AV_RB16(&data[i+10]);
                     densityPtr = &data[i+8];
@@ -409,6 +402,7 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
             else  {
                 // Server is sending wrong pixel aspect ratio, set it to 1:1
                 AV_WB16(densityPtr, ydensity);
+                AV_WB16(densityPtr + 2, ydensity);
             }
             xdensity = AV_RB16(densityPtr);
             ydensity = AV_RB16(densityPtr+2);
@@ -450,7 +444,7 @@ static void parse_comment( char *text, int text_len, struct NetVuImageData *pic,
         // Changed this line so it doesn't include the \r\n from the end of comment_version
         if( !memcmp( result, comment_version, strlen(comment_version) - 2 ) )
             pic->version = 0xdecade11;
-        else if ( !memcmp( result, comment_version, strlen(comment_version_0_1) - 2 ) )
+        else if ( !memcmp( result, comment_version_0_1, strlen(comment_version_0_1) - 2 ) )
             pic->version = 0xdecade10;
         else if( !memcmp( result, camera_title, strlen(camera_title) ) )  {
             av_strlcpy( pic->title, &result[strlen(camera_title)], sizeof(pic->title) );
