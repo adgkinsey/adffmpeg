@@ -769,12 +769,17 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 {
     PARDecContext *p = avf->priv_data;
     int siz = 0;
-    AVStream *st = avf->streams[stream];
-    int streamId = st->id;
+    int streamId = 0;
     int isKeyFrame = 0;
     int step;
+    int anyStreamWillDo = 0;
 
     av_log(avf, AV_LOG_DEBUG, "par_read_seek target    = %"PRId64"\n", target);
+    
+    if (stream >= avf->nb_streams)
+        anyStreamWillDo = 1;
+    else
+        streamId = avf->streams[stream]->id;
 
     p->dispSet.cameraNum = streamId;
     if (flags & AVSEEK_FLAG_BACKWARD)
@@ -821,6 +826,10 @@ static int par_read_seek(AVFormatContext *avf, int stream,
                 // Always seek to a video frame
                 isKeyFrame = 0;
             }
+            
+            // If we don't care which stream then force the streamId to match
+            if (anyStreamWillDo)
+                streamId = p->frameInfo.channel;
         }
         while ( (streamId != p->frameInfo.channel) || (0 == isKeyFrame) );
 
@@ -844,7 +853,12 @@ static int par_read_seek(AVFormatContext *avf, int stream,
         }
         else  {
             p->frameCached = siz;
-            st->codec->frame_number = p->frameInfo.frameNumber;
+            for(step = 0; step < avf->nb_streams; step++)  {
+                if ( (NULL != avf->streams[step]) && (avf->streams[step]->id == streamId) )  {
+                    avf->streams[step]->codec->frame_number = p->frameInfo.frameNumber;
+                    break;
+                }
+            }
         }
     }
     while (siz <= 0);
