@@ -31,6 +31,7 @@
 #include "libavutil/intreadwrite.h"
 
 #include "adpic.h"
+#include "adffmpeg_errors.h"
 
 
 enum pkt_offsets { PKT_DATATYPE, PKT_DATACHANNEL,
@@ -74,13 +75,13 @@ static int adbinary_mpeg(AVFormatContext *s,
         av_log(s, AV_LOG_ERROR, "%s: short of data reading header, "
                                 "expected %d, read %d\n",
                __func__, hdrSize, n);
-        return ADPIC_MPEG4_GET_BUFFER_ERROR;
+        return ADFFMPEG_AD_ERROR_MPEG4_GET_BUFFER;
     }
     ad_network2host(vidDat, (uint8_t *)vidDat);
     if (!pic_version_valid(vidDat->version)) {
         av_log(s, AV_LOG_ERROR, "%s: invalid pic version 0x%08X\n", __func__,
                vidDat->version);
-        return ADPIC_MPEG4_PIC_VERSION_VALID_ERROR;
+        return ADFFMPEG_AD_ERROR_MPEG4_PIC_VERSION_VALID;
     }
 
     // Get the additional text block
@@ -95,7 +96,7 @@ static int adbinary_mpeg(AVFormatContext *s,
         av_log(s, AV_LOG_ERROR, "%s: short of data reading text, "
                                 "expected %d, read %d\n", __func__,
                textSize, n);
-        return ADPIC_MPEG4_GET_TEXT_BUFFER_ERROR;
+        return ADFFMPEG_AD_ERROR_MPEG4_GET_TEXT_BUFFER;
     }
 
     // Somtimes the buffer seems to end with a NULL terminator,
@@ -105,13 +106,13 @@ static int adbinary_mpeg(AVFormatContext *s,
     if ((status = ad_new_packet(pkt, vidDat->size)) < 0) {
         av_log(s, AV_LOG_ERROR, "%s: ad_new_packet (size %d) failed, status %d\n",
                __func__, vidDat->size, status);
-        return ADPIC_MPEG4_NEW_PACKET_ERROR;
+        return ADFFMPEG_AD_ERROR_MPEG4_NEW_PACKET;
     }
     if ((n = ad_get_buffer(pb, pkt->data, vidDat->size)) != vidDat->size) {
         av_log(s, AV_LOG_ERROR, "%s: short of data reading mpeg, "
                                 "expected %d, read %d\n",
                __func__, vidDat->size, n);
-        return ADPIC_MPEG4_PIC_BODY_ERROR;
+        return ADFFMPEG_AD_ERROR_MPEG4_PIC_BODY;
     }
 
     if (vidDat->vid_format & (PIC_MODE_MPEG4_411_I | PIC_MODE_MPEG4_411_GOV_I))
@@ -141,7 +142,7 @@ static int ad_read_mpeg_minimal(AVFormatContext *s,
     if ( pb->error || (vidDat->session_time == 0) )  {
         av_log(s, AV_LOG_ERROR, "%s: Reading header, errorcode %d\n",
                __func__, pb->error);
-        return ADPIC_MPEG4_MINIMAL_GET_BUFFER_ERROR;
+        return ADFFMPEG_AD_ERROR_MPEG4_MINIMAL_GET_BUFFER;
     }
     vidDat->version = PIC_VERSION;
     vidDat->cam = channel + 1;
@@ -151,10 +152,10 @@ static int ad_read_mpeg_minimal(AVFormatContext *s,
 
     // Now get the main frame data into a new packet
     if( ad_new_packet(pkt, dataSize) < 0 )
-        return ADPIC_MPEG4_MINIMAL_NEW_PACKET_ERROR;
+        return ADFFMPEG_AD_ERROR_MPEG4_MINIMAL_NEW_PACKET;
 
     if( ad_get_buffer(pb, pkt->data, dataSize) != dataSize )
-        return ADPIC_MPEG4_MINIMAL_NEW_PACKET_ERROR2;
+        return ADFFMPEG_AD_ERROR_MPEG4_MINIMAL_NEW_PACKET2;
 
     return errorVal;
 }
@@ -171,7 +172,7 @@ static int ad_read_audio(AVFormatContext *s,
     // Get the fixed size portion of the audio header
     size = NetVuAudioDataHeaderSize - sizeof(unsigned char *);
     if( (n = ad_get_buffer( pb, (uint8_t*)data, size)) != size)
-        return ADPIC_AUDIO_ADPCM_GET_BUFFER_ERROR;
+        return ADFFMPEG_AD_ERROR_AUDIO_ADPCM_GET_BUFFER;
 
     // endian fix it...
     audioheader_network2host(data, (uint8_t*)data);
@@ -183,17 +184,17 @@ static int ad_read_audio(AVFormatContext *s,
             return AVERROR(ENOMEM);
 
         if( (n = ad_get_buffer( pb, data->additionalData, data->sizeOfAdditionalData )) != data->sizeOfAdditionalData )
-            return ADPIC_AUDIO_ADPCM_GET_BUFFER_ERROR2;
+            return ADFFMPEG_AD_ERROR_AUDIO_ADPCM_GET_BUFFER2;
     }
     else
         data->additionalData = NULL;
 
     if( (status = ad_new_packet( pkt, data->sizeOfAudioData )) < 0 )
-        return ADPIC_AUDIO_ADPCM_MIME_NEW_PACKET_ERROR;
+        return ADFFMPEG_AD_ERROR_AUDIO_ADPCM_MIME_NEW_PACKET;
 
     // Now get the actual audio data
     if( (n = ad_get_buffer( pb, pkt->data, data->sizeOfAudioData)) != data->sizeOfAudioData )
-        return ADPIC_AUDIO_ADPCM_MIME_GET_BUFFER_ERROR;
+        return ADFFMPEG_AD_ERROR_AUDIO_ADPCM_MIME_GET_BUFFER;
 
     audiodata_network2host(pkt->data, data->sizeOfAudioData);
 
@@ -218,15 +219,15 @@ static int ad_read_audio_minimal(AVFormatContext *s,
     if ( pb->error || (data->seconds == 0) )  {
         av_log(s, AV_LOG_ERROR, "%s: Reading header, errorcode %d\n",
                __func__, pb->error);
-        return ADPIC_MINIMAL_AUDIO_ADPCM_GET_BUFFER_ERROR;
+        return ADFFMPEG_AD_ERROR_MINIMAL_AUDIO_ADPCM_GET_BUFFER;
     }
 
     // Now get the main frame data into a new packet
     if( (status = ad_new_packet( pkt, dataSize )) < 0 )
-        return ADPIC_MINIMAL_AUDIO_ADPCM_NEW_PACKET_ERROR;
+        return ADFFMPEG_AD_ERROR_MINIMAL_AUDIO_ADPCM_NEW_PACKET;
 
     if( (n = ad_get_buffer( pb, pkt->data, dataSize )) != dataSize )
-        return ADPIC_MINIMAL_AUDIO_ADPCM_GET_BUFFER_ERROR2;
+        return ADFFMPEG_AD_ERROR_MINIMAL_AUDIO_ADPCM_GET_BUFFER2;
 
     audiodata_network2host(pkt->data, dataSize);
 
@@ -411,7 +412,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         else {
             av_log(s, AV_LOG_ERROR, "%s: Reading separator, errorcode %d\n",
                    __func__, pb->error);
-            errorVal = ADPIC_READ_6_BYTE_SEPARATOR_ERROR;
+            errorVal = ADFFMPEG_AD_ERROR_READ_6_BYTE_SEPARATOR;
         }
         return errorVal;
     }
@@ -460,7 +461,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 }
                 else
                     return AVERROR(ENOMEM);
-                return ADPIC_DEFAULT_ERROR;
+                return ADFFMPEG_AD_ERROR_DEFAULT;
             case AD_DATATYPE_PBM:
                 errorVal = ad_read_overlay(s, pkt, size, &txtDat);
                 break;
@@ -474,7 +475,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 avio_read(pb, tempbuf, size);
                 av_free(tempbuf);
                 
-                return ADPIC_DEFAULT_ERROR;
+                return ADFFMPEG_AD_ERROR_DEFAULT;
         }
     }
 

@@ -26,6 +26,7 @@
 #include <strings.h>
 
 #include "avformat.h"
+#include "adffmpeg_errors.h"
 #include "adpic.h"
 
 
@@ -267,7 +268,7 @@ static int parse_mime_header(AVIOContext *pb, uint8_t *buffer, int *bufSize,
     // Try and parse the header
     for(;;) {
         if (ch < 0)
-            return ADPIC_PARSE_MIME_HEADER_ERROR;
+            return ADFFMPEG_AD_ERROR_PARSE_MIME_HEADER;
 
         if (ch == '\n') {
             // process line
@@ -292,13 +293,13 @@ static int parse_mime_header(AVIOContext *pb, uint8_t *buffer, int *bufSize,
             if ((q - buffer) < (maxBufSize - 1))
                 *q++ = ch;
             else
-                return ADPIC_PARSE_MIME_HEADER_ERROR;
+                return ADFFMPEG_AD_ERROR_PARSE_MIME_HEADER;
         }
 
         ch = avio_r8(pb);
     }
 
-    return ADPIC_PARSE_MIME_HEADER_ERROR;
+    return ADFFMPEG_AD_ERROR_PARSE_MIME_HEADER;
 }
 
 
@@ -491,16 +492,16 @@ static int admime_mpeg(AVFormatContext *s,
 
     // Allocate a new packet to hold the frame's image data
     if (ad_new_packet(pkt, size) < 0 )
-        return ADPIC_MPEG4_MIME_NEW_PACKET_ERROR;
+        return ADFFMPEG_AD_ERROR_MPEG4_MIME_NEW_PACKET;
 
     // Now read the frame data into the packet
     if (ad_get_buffer( pb, pkt->data, size ) != size )
-        return ADPIC_MPEG4_MIME_GET_BUFFER_ERROR;
+        return ADFFMPEG_AD_ERROR_MPEG4_MIME_GET_BUFFER;
 
     // Now we should have a text block following this which contains the
     // frame data that we can place in a _image_data struct
     if (parse_mime_header(pb, buf, &bufSize, &mimeBlockType, &size, extra ) != 0)
-        return ADPIC_MPEG4_MIME_PARSE_HEADER_ERROR;
+        return ADFFMPEG_AD_ERROR_MPEG4_MIME_PARSE_HEADER;
 
     // Validate the data type and then extract the text buffer
     if (mimeBlockType == DATA_PLAINTEXT ) {
@@ -512,13 +513,13 @@ static int admime_mpeg(AVFormatContext *s,
                 // _image_data struct
                 if (parse_mp4_text_data(textBuffer, size, vidDat, txtDat ) != 0) {
                     av_free( textBuffer );
-                    return ADPIC_MPEG4_MIME_PARSE_TEXT_DATA_ERROR;
+                    return ADFFMPEG_AD_ERROR_MPEG4_MIME_PARSE_TEXT_DATA;
                 }
                 vidDat->vid_format = PIC_MODE_MPEG4_411;
             }
             else {
                 av_free( textBuffer );
-                return ADPIC_MPEG4_MIME_GET_TEXT_BUFFER_ERROR;
+                return ADFFMPEG_AD_ERROR_MPEG4_MIME_GET_TEXT_BUFFER;
             }
 
             av_free( textBuffer );
@@ -552,11 +553,11 @@ static int ad_read_audio(AVFormatContext *s,
     audDat->additionalData = NULL;
 
     if (ad_new_packet(pkt, size) < 0)
-        return(ADPIC_AUDIO_ADPCM_MIME_NEW_PACKET_ERROR);
+        return ADFFMPEG_AD_ERROR_AUDIO_ADPCM_MIME_NEW_PACKET;
 
     // Now get the actual audio data
     if (ad_get_buffer( pb, pkt->data, size) != size)
-        return(ADPIC_AUDIO_ADPCM_MIME_GET_BUFFER_ERROR);
+        return ADFFMPEG_AD_ERROR_AUDIO_ADPCM_MIME_GET_BUFFER;
 
     audiodata_network2host(pkt->data, size);
 
@@ -590,7 +591,7 @@ static int handleInvalidMime(AVFormatContext *s,
     // Read more data till we find end of image marker
     for (; !found && (pb->eof_reached==0) && (pb->error==0); read++) {
         if (read >= MAX_IMAGE_SIZE)
-            return ADPIC_PARSE_MIME_HEADER_ERROR;
+            return ADFFMPEG_AD_ERROR_PARSE_MIME_HEADER;
 
         chkByte = avio_r8(pb);
         if (chkByte < 0)
@@ -604,7 +605,7 @@ static int handleInvalidMime(AVFormatContext *s,
     if ((status = ad_new_packet(pkt, *size)) < 0) {
         av_log(s, AV_LOG_ERROR, "handleInvalidMime: ad_new_packet (size %d)"
                                 " failed, status %d\n", *size, status);
-        return ADPIC_NEW_PACKET_ERROR;
+        return ADFFMPEG_AD_ERROR_NEW_PACKET;
     }
 
     memcpy(pkt->data, imageData, *size);
@@ -674,7 +675,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     int                     data_type = AD_DATATYPE_MAX;
     int                     size = -1;
     long                    extra = 0;
-    int                     errorVal = ADPIC_UNKNOWN_ERROR;
+    int                     errorVal = ADFFMPEG_AD_ERROR_UNKNOWN;
     enum AVMediaType        mediaType = AVMEDIA_TYPE_UNKNOWN;
     enum CodecID            codecId   = CODEC_ID_NONE;
     int                     imgLoaded = FALSE;
@@ -743,7 +744,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
             else
                 return AVERROR(ENOMEM);
                 
-            return ADPIC_DEFAULT_ERROR;
+            return ADFFMPEG_AD_ERROR_DEFAULT;
         }
         break;
     }
