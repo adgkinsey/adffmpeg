@@ -149,7 +149,7 @@ void avcodec_align_dimensions2(AVCodecContext *s, int *width, int *height, int l
     case PIX_FMT_YUV444P10BE:
         w_align= 16; //FIXME check for non mpeg style codecs and use less alignment
         h_align= 16;
-        if(s->codec_id == CODEC_ID_MPEG2VIDEO || s->codec_id == CODEC_ID_MJPEG || s->codec_id == CODEC_ID_AMV || s->codec_id == CODEC_ID_THP || s->codec_id == CODEC_ID_H264)
+        if(s->codec_id == CODEC_ID_MPEG2VIDEO || s->codec_id == CODEC_ID_MJPEG || s->codec_id == CODEC_ID_AMV || s->codec_id == CODEC_ID_THP || s->codec_id == CODEC_ID_H264 || s->codec_id == CODEC_ID_PRORES)
             h_align= 32; // interlaced is rounded up to 2 MBs
         break;
     case PIX_FMT_YUV411P:
@@ -575,6 +575,9 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, AVCodec *codec, AVD
         goto free_and_end;
     }
     avctx->frame_number = 0;
+
+    if (!HAVE_THREADS)
+        av_log(avctx, AV_LOG_WARNING, "Warning: not compiled with thread support, using thread emulation\n");
 
     if (HAVE_THREADS && !avctx->thread_opaque) {
         ret = ff_thread_init(avctx);

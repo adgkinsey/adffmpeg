@@ -896,6 +896,7 @@ static int is_intra_only(AVCodecContext *enc){
         case CODEC_ID_VCR1:
         case CODEC_ID_DNXHD:
         case CODEC_ID_JPEG2000:
+        case CODEC_ID_PRORES:
             return 1;
         default: break;
         }
@@ -1008,7 +1009,7 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
     // we take the conservative approach and discard both
     // Note, if this is misbehaving for a H.264 file then possibly presentation_delayed is not set correctly.
     if(delay==1 && pkt->dts == pkt->pts && pkt->dts != AV_NOPTS_VALUE && presentation_delayed){
-        av_log(s, AV_LOG_DEBUG, "invalid dts/pts combination\n");
+        av_log(s, AV_LOG_DEBUG, "invalid dts/pts combination %Ld\n", pkt->dts);
         pkt->dts= pkt->pts= AV_NOPTS_VALUE;
     }
 
@@ -1742,7 +1743,6 @@ static int seek_frame_generic(AVFormatContext *s,
         return -1;
 
     if(index < 0 || index==st->nb_index_entries-1){
-        int i;
         AVPacket pkt;
 
         if(st->nb_index_entries){
@@ -1755,12 +1755,12 @@ static int seek_frame_generic(AVFormatContext *s,
             if ((ret = avio_seek(s->pb, s->data_offset, SEEK_SET)) < 0)
                 return ret;
         }
-        for(i=0;; i++) {
-            int ret;
+        for (;;) {
+            int read_status;
             do{
-                ret = av_read_frame(s, &pkt);
-            }while(ret == AVERROR(EAGAIN));
-            if(ret<0)
+                read_status = av_read_frame(s, &pkt);
+            } while (read_status == AVERROR(EAGAIN));
+            if (read_status < 0)
                 break;
             av_free_packet(&pkt);
             if(stream_index == pkt.stream_index){
@@ -1856,6 +1856,8 @@ static int has_duration(AVFormatContext *ic)
 {
     int i;
     AVStream *st;
+    if(ic->duration != AV_NOPTS_VALUE)
+        return 1;
 
     for(i = 0;i < ic->nb_streams; i++) {
         st = ic->streams[i];
@@ -1913,14 +1915,14 @@ static void update_stream_timings(AVFormatContext *ic)
                 duration = end_time - start_time;
         }
     }
-    if (duration != INT64_MIN) {
+    if (duration != INT64_MIN && ic->duration == AV_NOPTS_VALUE) {
         ic->duration = duration;
-        if (ic->file_size > 0) {
+    }
+        if (ic->file_size > 0 && ic->duration != AV_NOPTS_VALUE) {
             /* compute the bitrate */
             ic->bit_rate = (double)ic->file_size * 8.0 * AV_TIME_BASE /
                 (double)ic->duration;
         }
-    }
 }
 
 static void fill_all_stream_timings(AVFormatContext *ic)
@@ -2429,17 +2431,19 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
             int64_t duration= pkt->dts - last;
 
             if(pkt->dts != AV_NOPTS_VALUE && last != AV_NOPTS_VALUE && duration>0){
-                double dur= duration * av_q2d(st->time_base);
+                double dts= pkt->dts * av_q2d(st->time_base);
 
 //                if(st->codec->codec_type == AVMEDIA_TYPE_VIDEO)
 //                    av_log(NULL, AV_LOG_ERROR, "%f\n", dur);
-                if (st->info->duration_count < 2)
-                    memset(st->info->duration_error, 0, sizeof(st->info->duration_error));
-                for (i=1; i<FF_ARRAY_ELEMS(st->info->duration_error); i++) {
+                for (i=1; i<FF_ARRAY_ELEMS(st->info->duration_error[0][0]); i++) {
                     int framerate= get_std_framerate(i);
-                    int ticks= lrintf(dur*framerate/(1001*12));
-                    double error= dur - ticks*1001*12/(double)framerate;
-                    st->info->duration_error[i] += error*error;
+                    double sdts= dts*framerate/(1001*12);
+                    for(j=0; j<2; j++){
+                        int ticks= lrintf(sdts+j*0.5);
+                        double error= sdts - ticks + j*0.5;
+                        st->info->duration_error[j][0][i] += error;
+                        st->info->duration_error[j][1][i] += error*error;
+                    }
                 }
                 st->info->duration_count++;
                 // ignore the first 4 values, they might have some random jitter
@@ -2503,16 +2507,24 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
                //FIXME we should not special-case MPEG-2, but this needs testing with non-MPEG-2 ...
                st->time_base.num*duration_sum[i]/st->info->duration_count*101LL > st->time_base.den*/){
                 int num = 0;
-                double best_error= 2*av_q2d(st->time_base);
-                best_error = best_error*best_error*st->info->duration_count*1000*12*30;
+                double best_error= 0.01;
 
-                for (j=1; j<FF_ARRAY_ELEMS(st->info->duration_error); j++) {
-                    double error = st->info->duration_error[j] * get_std_framerate(j);
-//                    if(st->codec->codec_type == AVMEDIA_TYPE_VIDEO)
-//                        av_log(NULL, AV_LOG_ERROR, "%f %f\n", get_std_framerate(j) / 12.0/1001, error);
-                    if(error < best_error){
-                        best_error= error;
-                        num = get_std_framerate(j);
+                for (j=1; j<FF_ARRAY_ELEMS(st->info->duration_error[0][0]); j++) {
+                    int k;
+
+                    if(st->info->codec_info_duration && st->info->codec_info_duration*av_q2d(st->time_base) < (1001*12.0)/get_std_framerate(j))
+                        continue;
+                    for(k=0; k<2; k++){
+                        int n= st->info->duration_count;
+                        double a= st->info->duration_error[k][0][j] / n;
+                        double error= st->info->duration_error[k][1][j]/n - a*a;
+
+                        if(error < best_error && best_error> 0.000000001){
+                            best_error= error;
+                            num = get_std_framerate(j);
+                        }
+                        if(error < 0.02)
+                            av_log(NULL, AV_LOG_DEBUG, "rfps: %f %f\n", get_std_framerate(j) / 12.0/1001, error);
                     }
                 }
                 // do not increase frame rate by more than 1 % in order to match a standard rate.

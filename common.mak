@@ -10,7 +10,7 @@ ifndef SUBDIR
 ifndef V
 Q      = @
 ECHO   = printf "$(1)\t%s\n" $(2)
-BRIEF  = CC AS YASM AR LD HOSTCC STRIP CP
+BRIEF  = CC CXX AS YASM AR LD HOSTCC STRIP CP
 SILENT = DEPCC YASMDEP RM RANLIB
 MSG    = $@
 M      = @$(call ECHO,$(TAG),$@);
@@ -20,13 +20,14 @@ $(foreach VAR,$(SILENT),$(eval override $(VAR) = @$($(VAR))))
 $(eval INSTALL = @$(call ECHO,INSTALL,$$(^:$(SRC_DIR)/%=%)); $(INSTALL))
 endif
 
-ALLFFLIBS = avcodec avdevice avfilter avformat avutil postproc swscale
+ALLFFLIBS = avcodec avdevice avfilter avformat avutil postproc swscale swresample
 
 # NASM requires -I path terminated with /
 IFLAGS     := -I. -I$(SRC_PATH)/
 CPPFLAGS   := $(IFLAGS) $(CPPFLAGS)
 CFLAGS     += $(ECFLAGS)
 CCFLAGS     = $(CFLAGS)
+CXXFLAGS   := $(CFLAGS) $(CXXFLAGS)
 YASMFLAGS  += $(IFLAGS) -I$(SRC_PATH)/libavutil/x86/ -Pconfig.asm
 HOSTCFLAGS += $(IFLAGS)
 LDFLAGS    := $(ALLFFLIBS:%=-Llib%) $(LDFLAGS)
@@ -37,10 +38,14 @@ define COMPILE
 endef
 
 COMPILE_C = $(call COMPILE,CC)
+COMPILE_CXX = $(call COMPILE,CXX)
 COMPILE_S = $(call COMPILE,AS)
 
 %.o: %.c
 	$(COMPILE_C)
+
+%.o: %.cpp
+	$(COMPILE_CXX)
 
 %.o: %.S
 	$(COMPILE_S)

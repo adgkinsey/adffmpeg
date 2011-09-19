@@ -49,6 +49,15 @@ easier to use. The changes are:
 - amovie source added
 - LATM muxer
 - Speex encoder via libspeex
+- JSON output in ffprobe
+- WTV muxer
+- Optional C++ Support (needed for libstagefright)
+- H.264 Decoding on Android via Stagefright
+- Prores decoder
+- BIN/XBIN/ADF/IDF text file decoder
+- aconvert audio filter added
+- audio support to lavfi input device added
+- libcdio-paranoia input device for audio CD grabbing
 
 
 version 0.8:

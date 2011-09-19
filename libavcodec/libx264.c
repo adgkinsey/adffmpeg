@@ -68,6 +68,7 @@ typedef struct X264Context {
     float cplxblur;
     char *partitions;
     int direct_pred;
+    int slice_max_size;
 } X264Context;
 
 static void X264_log(void *p, int level, const char *fmt, va_list args)
@@ -358,16 +359,18 @@ static av_cold int X264_init(AVCodecContext *avctx)
         if (avctx->partitions & X264_PART_B8X8)
             x4->params.analyse.inter |= X264_ANALYSE_BSUB16x16;
     }
-    x4->params.analyse.b_ssim = avctx->flags2 & CODEC_FLAG2_SSIM;
-    x4->params.b_intra_refresh = avctx->flags2 & CODEC_FLAG2_INTRA_REFRESH;
-    x4->params.i_bframe_pyramid = avctx->flags2 & CODEC_FLAG2_BPYRAMID ? X264_B_PYRAMID_NORMAL : X264_B_PYRAMID_NONE;
-    x4->params.analyse.b_weighted_bipred = avctx->flags2 & CODEC_FLAG2_WPRED;
-    x4->params.analyse.b_mixed_references = avctx->flags2 & CODEC_FLAG2_MIXED_REFS;
-    x4->params.analyse.b_transform_8x8    = avctx->flags2 & CODEC_FLAG2_8X8DCT;
-    x4->params.analyse.b_fast_pskip       = avctx->flags2 & CODEC_FLAG2_FASTPSKIP;
-    x4->params.b_aud                      = avctx->flags2 & CODEC_FLAG2_AUD;
-    x4->params.analyse.b_psy              = avctx->flags2 & CODEC_FLAG2_PSY;
-    x4->params.rc.b_mb_tree               = !!(avctx->flags2 & CODEC_FLAG2_MBTREE);
+    if (avctx->flags2) {
+        x4->params.analyse.b_ssim = avctx->flags2 & CODEC_FLAG2_SSIM;
+        x4->params.b_intra_refresh = avctx->flags2 & CODEC_FLAG2_INTRA_REFRESH;
+        x4->params.i_bframe_pyramid = avctx->flags2 & CODEC_FLAG2_BPYRAMID ? X264_B_PYRAMID_NORMAL : X264_B_PYRAMID_NONE;
+        x4->params.analyse.b_weighted_bipred  = avctx->flags2 & CODEC_FLAG2_WPRED;
+        x4->params.analyse.b_mixed_references = avctx->flags2 & CODEC_FLAG2_MIXED_REFS;
+        x4->params.analyse.b_transform_8x8    = avctx->flags2 & CODEC_FLAG2_8X8DCT;
+        x4->params.analyse.b_fast_pskip       = avctx->flags2 & CODEC_FLAG2_FASTPSKIP;
+        x4->params.b_aud                      = avctx->flags2 & CODEC_FLAG2_AUD;
+        x4->params.analyse.b_psy              = avctx->flags2 & CODEC_FLAG2_PSY;
+        x4->params.rc.b_mb_tree               = !!(avctx->flags2 & CODEC_FLAG2_MBTREE);
+    }
 #endif
 
     if (avctx->me_method == ME_EPZS)
@@ -454,6 +457,9 @@ static av_cold int X264_init(AVCodecContext *avctx)
         x4->params.rc.b_mb_tree               = x4->mbtree;
     if (x4->direct_pred >= 0)
         x4->params.analyse.i_direct_mv_pred   = x4->direct_pred;
+
+    if (x4->slice_max_size >= 0)
+        x4->params.i_slice_max_size =  x4->slice_max_size;
 
     if (x4->fastfirstpass)
         x264_param_apply_fastfirstpass(&x4->params);
@@ -565,6 +571,7 @@ static const AVOption options[] = {
     { "spatial",       NULL,      0,    FF_OPT_TYPE_CONST, { X264_DIRECT_PRED_SPATIAL },  0, 0, VE, "direct-pred" },
     { "temporal",      NULL,      0,    FF_OPT_TYPE_CONST, { X264_DIRECT_PRED_TEMPORAL }, 0, 0, VE, "direct-pred" },
     { "auto",          NULL,      0,    FF_OPT_TYPE_CONST, { X264_DIRECT_PRED_AUTO },     0, 0, VE, "direct-pred" },
+    { "slice-max-size","Constant quantization parameter rate control method",OFFSET(slice_max_size),        FF_OPT_TYPE_INT,    {-1 }, -1, INT_MAX, VE },
     { NULL },
 };
 
@@ -578,12 +585,14 @@ static const AVClass class = {
 static const AVCodecDefault x264_defaults[] = {
     { "b",                "0" },
     { "bf",               "-1" },
+    { "flags2",           "0" },
     { "g",                "-1" },
     { "qmin",             "-1" },
     { "qmax",             "-1" },
     { "qdiff",            "-1" },
     { "qblur",            "-1" },
     { "qcomp",            "-1" },
+    { "rc_lookahead",     "-1" },
     { "refs",             "-1" },
     { "sc_threshold",     "-1" },
     { "trellis",          "-1" },

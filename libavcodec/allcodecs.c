@@ -172,6 +172,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (PICTOR, pictor);
     REGISTER_ENCDEC  (PNG, png);
     REGISTER_ENCDEC  (PPM, ppm);
+    REGISTER_DECODER (PRORES, prores);
     REGISTER_DECODER (PTX, ptx);
     REGISTER_DECODER (QDRAW, qdraw);
     REGISTER_DECODER (QPEG, qpeg);
@@ -382,6 +383,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (LIBOPENJPEG, libopenjpeg);
     REGISTER_ENCDEC  (LIBSCHROEDINGER, libschroedinger);
     REGISTER_ENCDEC  (LIBSPEEX, libspeex);
+    REGISTER_DECODER (LIBSTAGEFRIGHT_H264, libstagefright_h264);
     REGISTER_ENCODER (LIBTHEORA, libtheora);
     REGISTER_ENCODER (LIBVO_AACENC, libvo_aacenc);
     REGISTER_ENCODER (LIBVO_AMRWBENC, libvo_amrwbenc);
@@ -390,6 +392,11 @@ void avcodec_register_all(void)
     REGISTER_ENCODER (LIBX264, libx264);
     REGISTER_ENCODER (LIBXAVS, libxavs);
     REGISTER_ENCODER (LIBXVID, libxvid);
+
+    /* text */
+    REGISTER_DECODER (BINTEXT, bintext);
+    REGISTER_DECODER  (XBIN, xbin);
+    REGISTER_DECODER  (IDF, idf);
 
     /* parsers */
     REGISTER_PARSER  (AAC, aac);

@@ -1039,8 +1039,11 @@ static int mxf_read_header(AVFormatContext *s, AVFormatParameters *ap)
                 int res;
                 if (klv.key[5] == 0x53) {
                     res = mxf_read_local_tags(mxf, &klv, metadata->read, metadata->ctx_size, metadata->type);
-                } else
+                } else {
+                    uint64_t next = avio_tell(s->pb) + klv.length;
                     res = metadata->read(mxf, s->pb, 0, 0, klv.key);
+                    avio_seek(s->pb, next, SEEK_SET);
+                }
                 if (res < 0) {
                     av_log(s, AV_LOG_ERROR, "error reading header metadata\n");
                     return -1;
@@ -1116,7 +1119,8 @@ static int mxf_read_seek(AVFormatContext *s, int stream_index, int64_t sample_ti
     if (sample_time < 0)
         sample_time = 0;
     seconds = av_rescale(sample_time, st->time_base.num, st->time_base.den);
-    avio_seek(s->pb, (s->bit_rate * seconds) >> 3, SEEK_SET);
+    if (avio_seek(s->pb, (s->bit_rate * seconds) >> 3, SEEK_SET) < 0)
+        return -1;
     av_update_cur_dts(s, st, sample_time);
     return 0;
 }
