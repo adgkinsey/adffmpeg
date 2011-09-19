@@ -214,8 +214,8 @@ static int64_t TimeTolong64( time_t time );
 static void NToHMessageHeader( MessageHeader *header );
 
 #if HAVE_BIGENDIAN
-#define HTON64(x)
-#define HTON32(x)
+#define HTON64(x)               x
+#define HTON32(x)               x
 #else
 #define HTON64(x)               (av_bswap64(x))
 #define HTON32(x)               (av_bswap32(x))
