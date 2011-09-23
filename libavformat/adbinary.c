@@ -64,18 +64,21 @@ static void audioheader_network2host(struct NetVuAudioData *dst, const uint8_t *
  * MPEG4 or H264 video frame with a Netvu header
  */
 static int adbinary_mpeg(AVFormatContext *s,
-                         AVPacket *pkt, struct NetVuImageData *vidDat, char **txtDat)
+                         AVPacket *pkt,
+                         struct NetVuImageData *vidDat,
+                         char **txtDat)
 {
     static const int hdrSize = NetVuImageDataHeaderSize;
     AVIOContext *pb = s->pb;
     int textSize = 0;
     int n, status, errorVal = 0;
 
-    if ((n = ad_get_buffer(pb, (uint8_t *)vidDat, hdrSize)) != hdrSize) {
+    n = ad_get_buffer(pb, (uint8_t *)vidDat, hdrSize);
+    if (n < hdrSize) {
         av_log(s, AV_LOG_ERROR, "%s: short of data reading header, "
                                 "expected %d, read %d\n",
                __func__, hdrSize, n);
-        return ADFFMPEG_AD_ERROR_MPEG4_GET_BUFFER;
+        return ADFFMPEG_AD_ERROR_MPEG4_PIC_BODY;
     }
     ad_network2host(vidDat, (uint8_t *)vidDat);
     if (!pic_version_valid(vidDat->version)) {
@@ -86,29 +89,27 @@ static int adbinary_mpeg(AVFormatContext *s,
 
     // Get the additional text block
     textSize = vidDat->start_offset;
-    *txtDat = av_malloc( textSize + 1 );
+    *txtDat = av_malloc(textSize + 1);
 
-    if( *txtDat == NULL )
+    if (*txtDat == NULL)  {
+        av_log(s, AV_LOG_ERROR, "%s: Failed to allocate memory for text\n", __func__);
         return AVERROR(ENOMEM);
-
-    // Copy the additional text block
-    if( (n = ad_get_buffer( pb, *txtDat, textSize)) != textSize) {
-        av_log(s, AV_LOG_ERROR, "%s: short of data reading text, "
-                                "expected %d, read %d\n", __func__,
-               textSize, n);
-        return ADFFMPEG_AD_ERROR_MPEG4_GET_TEXT_BUFFER;
     }
 
-    // Somtimes the buffer seems to end with a NULL terminator,
-    // other times it doesn't.  Adding a terminator here regardless
-    (*txtDat)[textSize] = '\0';
+    // Copy the additional text block
+    n = avio_get_str(pb, textSize, *txtDat, textSize+1);
+    if (n < textSize)
+        avio_skip(pb, textSize - n);
 
-    if ((status = ad_new_packet(pkt, vidDat->size)) < 0) {
+    status = ad_new_packet(pkt, vidDat->size);
+    if (status < 0)  {
         av_log(s, AV_LOG_ERROR, "%s: ad_new_packet (size %d) failed, status %d\n",
                __func__, vidDat->size, status);
         return ADFFMPEG_AD_ERROR_MPEG4_NEW_PACKET;
     }
-    if ((n = ad_get_buffer(pb, pkt->data, vidDat->size)) != vidDat->size) {
+
+    n = ad_get_buffer(pb, pkt->data, vidDat->size);
+    if (n != vidDat->size) {
         av_log(s, AV_LOG_ERROR, "%s: short of data reading mpeg, "
                                 "expected %d, read %d\n",
                __func__, vidDat->size, n);
@@ -400,17 +401,31 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     unsigned char *     tempbuf   = NULL;
     enum AVMediaType    mediaType = AVMEDIA_TYPE_UNKNOWN;
     enum CodecID        codecId   = CODEC_ID_NONE;
-    int                 data_type, data_channel, size;
+    int                 data_type, data_channel;
+    unsigned int        size;
 
     // First read the 6 byte separator
     data_type    = avio_r8(pb);
+    if (data_type >= AD_DATATYPE_MAX)  {
+        av_log(s, AV_LOG_WARNING, "%s: No handler for data_type = %d", __func__, data_type);
+        return ADFFMPEG_AD_ERROR_DEFAULT;
+    }
     data_channel = avio_r8(pb);
+    if (data_channel >= 32)  {
+        av_log(s, AV_LOG_WARNING, "%s: Channel number %d too high", __func__, data_channel);
+        return ADFFMPEG_AD_ERROR_DEFAULT;
+    }
     size         = avio_rb32(pb);
+    if (size >= 0x1000000)  {
+        av_log(s, AV_LOG_WARNING, "%s: Packet too large, %d bytes", __func__, size);
+        return ADFFMPEG_AD_ERROR_DEFAULT;
+    }
+
     if (size == 0)  {
         if(url_feof(pb))
             errorVal = AVERROR_EOF;
         else {
-            av_log(s, AV_LOG_ERROR, "%s: Reading separator, errorcode %d\n",
+            av_log(s, AV_LOG_ERROR, "%s: Reading separator, error code %d\n",
                    __func__, pb->error);
             errorVal = ADFFMPEG_AD_ERROR_READ_6_BYTE_SEPARATOR;
         }
@@ -466,8 +481,9 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 errorVal = ad_read_overlay(s, pkt, size, &txtDat);
                 break;
             default:
-                av_log(s, AV_LOG_WARNING, "%s: No handler for data_type = %d\n",
-                       __func__, data_type);
+                av_log(s, AV_LOG_WARNING, "%s: No handler for data_type = %d  "
+                       "Surrounding bytes = %02x%02x%08x\n",
+                       __func__, data_type, data_type, data_channel, size);
                        
                 // Would like to use avio_skip, but that needs seek support, 
                 // so just read the data into a buffer then throw it away
@@ -483,6 +499,8 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         errorVal = ad_read_packet(s, pkt, mediaType, codecId, payload, txtDat);
     }
     else  {
+        av_log(s, AV_LOG_ERROR, "%s: Error %d creating packet\n", __func__, errorVal);
+
         // If there was an error, release any allocated memory
         if (payload != NULL)
             av_free(payload);
