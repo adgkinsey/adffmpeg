@@ -572,7 +572,7 @@ static void ad_parseText(AVFormatContext *s, struct ADFrameData *frameData)
 
 int ad_get_buffer(AVIOContext *s, uint8_t *buf, int size)
 {
-#ifdef FF_API_OLD_AVIO
+#if !defined(FF_API_OLD_AVIO) || !FF_API_OLD_AVIO
     return avio_read(s, buf, size);
 #else
     int TotalDataRead = 0;
@@ -581,10 +581,10 @@ int ad_get_buffer(AVIOContext *s, uint8_t *buf, int size)
     int retrys = 0;
 
     //get data while ther is no time out and we still need data
-    while(TotalDataRead < size && retrys < RetryBoundry) {
+    while ( (TotalDataRead < size) && (retrys < RetryBoundry) )  {
         DataReadThisTime = avio_read(s, buf, (size - TotalDataRead));
 
-        // if we retreave some data keep trying until we get the required data
+        // if we retrieved some data keep trying until we get the required data
         // or we have much longer time out
         if(DataReadThisTime > 0)  {
             if (RetryBoundry < 1000)
@@ -607,7 +607,7 @@ int initADData(int data_type, enum AVMediaType *mediaType, enum CodecID *codecId
         case(AD_DATATYPE_H264I):
         case(AD_DATATYPE_H264P):
         case(AD_DATATYPE_MINIMAL_MPEG4):
-            *payload = av_malloc( sizeof(struct NetVuImageData) );
+            *payload = av_mallocz( sizeof(struct NetVuImageData) );
             if( *payload == NULL )
                 return AVERROR(ENOMEM);
             *mediaType = AVMEDIA_TYPE_VIDEO;
