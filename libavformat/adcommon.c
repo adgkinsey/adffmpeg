@@ -666,13 +666,14 @@ int ad_read_jpeg(AVFormatContext *s, AVPacket *pkt, struct NetVuImageData *video
     int n, textSize, errorVal = 0;
     int status;
 
-    // Check if we've already read a pic header
+    // Check if we've already read a NetVuImageData header
+    // (possible if this is called by adraw demuxer)
     if (video_data && (!pic_version_valid(video_data->version)))  {
         // Read the pic structure
         if ((n = ad_get_buffer(pb, (uint8_t*)video_data, nviSize)) != nviSize)  {
-            av_log(s, AV_LOG_ERROR, "ad_read_jpeg: Short of data reading "
+            av_log(s, AV_LOG_ERROR, "%s: Short of data reading "
                                     "struct NetVuImageData, expected %d, read %d\n",
-                                    nviSize, n);
+                                    __func__, nviSize, n);
             return ADFFMPEG_AD_ERROR_JPEG_IMAGE_DATA_READ;
         }
 
@@ -690,15 +691,16 @@ int ad_read_jpeg(AVFormatContext *s, AVPacket *pkt, struct NetVuImageData *video
     textSize = video_data->start_offset;
     *text_data = av_malloc(textSize + 1);
     if( *text_data == NULL )  {
-        av_log(s, AV_LOG_ERROR, "ad_read_jpeg: text_data allocation failed "
-                                "(%d bytes)", textSize + 1);
+        av_log(s, AV_LOG_ERROR, "%s: text_data allocation failed "
+                                "(%d bytes)", __func__, textSize + 1);
         return AVERROR(ENOMEM);
     }
 
     // Copy the additional text block
     if( (n = ad_get_buffer( pb, *text_data, textSize )) != textSize )  {
-        av_log(s, AV_LOG_ERROR, "ad_read_jpeg: short of data reading text block"
-                                " data, expected %d, read %d\n", textSize, n);
+        av_log(s, AV_LOG_ERROR, "%s: short of data reading text block"
+                                " data, expected %d, read %d\n",
+                                __func__, textSize, n);
         return ADFFMPEG_AD_ERROR_JPEG_READ_TEXT_BLOCK;
     }
 
@@ -708,14 +710,14 @@ int ad_read_jpeg(AVFormatContext *s, AVPacket *pkt, struct NetVuImageData *video
 
     // Use the struct NetVuImageData struct to build a JFIF header
     if ((hdrSize = build_jpeg_header( jfif, video_data, 2048)) <= 0)  {
-        av_log(s, AV_LOG_ERROR, "ad_read_jpeg: build_jpeg_header failed\n");
+        av_log(s, AV_LOG_ERROR, "%s: build_jpeg_header failed\n", __func__);
         return ADFFMPEG_AD_ERROR_JPEG_HEADER;
     }
     // We now know the packet size required for the image, allocate it.
     if ((status = ad_new_packet(pkt, hdrSize + video_data->size + 2)) < 0)  {
-        av_log(s, AV_LOG_ERROR, "ad_read_jpeg: ad_new_packet %d failed, "
-                                "status %d\n", hdrSize + video_data->size + 2,
-                                status);
+        av_log(s, AV_LOG_ERROR, "%s: ad_new_packet %d failed, "
+                                "status %d\n", __func__,
+                                hdrSize + video_data->size + 2, status);
         return ADFFMPEG_AD_ERROR_JPEG_NEW_PACKET;
     }
     ptr = pkt->data;
@@ -724,8 +726,9 @@ int ad_read_jpeg(AVFormatContext *s, AVPacket *pkt, struct NetVuImageData *video
     ptr += hdrSize;
     // Now get the compressed JPEG data into the packet
     if ((n = ad_get_buffer(pb, ptr, video_data->size)) != video_data->size) {
-        av_log(s, AV_LOG_ERROR, "ad_read_jpeg: short of data reading pic body, "
-                                "expected %d, read %d\n", video_data->size, n);
+        av_log(s, AV_LOG_ERROR, "%s: short of data reading pic body, "
+                                "expected %d, read %d\n", __func__,
+                                video_data->size, n);
         return ADFFMPEG_AD_ERROR_JPEG_READ_BODY;
     }
     ptr += video_data->size;
