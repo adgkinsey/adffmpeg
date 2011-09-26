@@ -405,6 +405,7 @@ static AVDictionary *convert_format_parameters(AVFormatParameters *ap)
     if (!ap)
         return NULL;
 
+    AV_NOWARN_DEPRECATED(
     if (ap->time_base.num) {
         snprintf(buf, sizeof(buf), "%d/%d", ap->time_base.den, ap->time_base.num);
         av_dict_set(&opts, "framerate", buf, 0);
@@ -437,6 +438,7 @@ static AVDictionary *convert_format_parameters(AVFormatParameters *ap)
     if (ap->initial_pause) {
         av_dict_set(&opts, "initial_pause", "1", 0);
     }
+    )
     return opts;
 }
 
@@ -458,10 +460,12 @@ int av_open_input_stream(AVFormatContext **ic_ptr,
     }
     opts = convert_format_parameters(ap);
 
+    AV_NOWARN_DEPRECATED(
     if(!ap->prealloced_context)
         *ic_ptr = ic = avformat_alloc_context();
     else
         ic = *ic_ptr;
+    )
     if (!ic) {
         err = AVERROR(ENOMEM);
         goto fail;
@@ -476,8 +480,8 @@ int av_open_input_stream(AVFormatContext **ic_ptr,
         goto fail;
     ic->pb = ic->pb ? ic->pb : pb; // don't leak custom pb if it wasn't set above
 
-    *ic_ptr = ic;
 fail:
+    *ic_ptr = ic;
     av_dict_free(&opts);
     return err;
 }
@@ -585,8 +589,10 @@ int av_open_input_file(AVFormatContext **ic_ptr, const char *filename,
     int err;
     AVDictionary *opts = convert_format_parameters(ap);
 
+    AV_NOWARN_DEPRECATED(
     if (!ap || !ap->prealloced_context)
         *ic_ptr = NULL;
+    )
 
     err = avformat_open_input(ic_ptr, filename, fmt, &opts);
 
@@ -887,6 +893,7 @@ static int is_intra_only(AVCodecContext *enc){
         case CODEC_ID_MJPEG:
         case CODEC_ID_MJPEGB:
         case CODEC_ID_LJPEG:
+        case CODEC_ID_PRORES:
         case CODEC_ID_RAWVIDEO:
         case CODEC_ID_DVVIDEO:
         case CODEC_ID_HUFFYUV:
@@ -896,7 +903,6 @@ static int is_intra_only(AVCodecContext *enc){
         case CODEC_ID_VCR1:
         case CODEC_ID_DNXHD:
         case CODEC_ID_JPEG2000:
-        case CODEC_ID_PRORES:
             return 1;
         default: break;
         }
@@ -1000,8 +1006,7 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
         pc && pc->pict_type != AV_PICTURE_TYPE_B)
         presentation_delayed = 1;
 
-    if(pkt->pts != AV_NOPTS_VALUE && pkt->dts != AV_NOPTS_VALUE && pkt->dts > pkt->pts && st->pts_wrap_bits<63
-       /*&& pkt->dts-(1LL<<st->pts_wrap_bits) < pkt->pts*/){
+    if(pkt->pts != AV_NOPTS_VALUE && pkt->dts != AV_NOPTS_VALUE && pkt->dts - (1LL<<(st->pts_wrap_bits-1)) > pkt->pts && st->pts_wrap_bits<63){
         pkt->dts -= 1LL<<st->pts_wrap_bits;
     }
 
@@ -1009,7 +1014,7 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
     // we take the conservative approach and discard both
     // Note, if this is misbehaving for a H.264 file then possibly presentation_delayed is not set correctly.
     if(delay==1 && pkt->dts == pkt->pts && pkt->dts != AV_NOPTS_VALUE && presentation_delayed){
-        av_log(s, AV_LOG_DEBUG, "invalid dts/pts combination %Ld\n", pkt->dts);
+        av_log(s, AV_LOG_DEBUG, "invalid dts/pts combination %"PRIi64"\n", pkt->dts);
         pkt->dts= pkt->pts= AV_NOPTS_VALUE;
     }
 
@@ -1774,10 +1779,12 @@ static int seek_frame_generic(AVFormatContext *s,
         return -1;
 
     ff_read_frame_flush(s);
+    AV_NOWARN_DEPRECATED(
     if (s->iformat->read_seek){
         if(s->iformat->read_seek(s, stream_index, timestamp, flags) >= 0)
             return 0;
     }
+    )
     ie = &st->index_entries[index];
     if ((ret = avio_seek(s->pb, ie->pos, SEEK_SET)) < 0)
         return ret;
@@ -1807,10 +1814,12 @@ int av_seek_frame(AVFormatContext *s, int stream_index, int64_t timestamp, int f
     }
 
     /* first, we try the format specific seek */
+    AV_NOWARN_DEPRECATED(
     if (s->iformat->read_seek)
         ret = s->iformat->read_seek(s, stream_index, timestamp, flags);
     else
         ret = -1;
+    )
     if (ret >= 0) {
         return 0;
     }
@@ -1839,8 +1848,10 @@ int avformat_seek_file(AVFormatContext *s, int stream_index, int64_t min_ts, int
 
     //Fallback to old API if new is not implemented but old is
     //Note the old has somewat different sematics
+    AV_NOWARN_DEPRECATED(
     if(s->iformat->read_seek || 1)
         return av_seek_frame(s, stream_index, ts, flags | (ts - min_ts > (uint64_t)(max_ts - ts) ? AVSEEK_FLAG_BACKWARD : 0));
+    )
 
     // try some generic seek like seek_frame_generic() but with new ts semantics
 }
@@ -2341,7 +2352,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
     count = 0;
     read_size = 0;
     for(;;) {
-        if(url_interrupt_cb(ic)){
+        if(url_interrupt_cb()){
             ret= AVERROR_EXIT;
             av_log(ic, AV_LOG_DEBUG, "interrupted\n");
             break;
@@ -3013,7 +3024,9 @@ int avformat_write_header(AVFormatContext *s, AVDictionary **options)
                 ret = AVERROR(EINVAL);
                 goto fail;
             }
-            if(av_cmp_q(st->sample_aspect_ratio, st->codec->sample_aspect_ratio)){
+            if(av_cmp_q(st->sample_aspect_ratio, st->codec->sample_aspect_ratio)
+               && FFABS(av_q2d(st->sample_aspect_ratio) - av_q2d(st->codec->sample_aspect_ratio)) > 0.001
+            ){
                 av_log(s, AV_LOG_ERROR, "Aspect ratio mismatch between encoder and muxer layer\n");
                 ret = AVERROR(EINVAL);
                 goto fail;
@@ -3346,8 +3359,8 @@ int av_interleaved_write_frame(AVFormatContext *s, AVPacket *pkt){
 
         if(ret<0)
             return ret;
-        if(url_ferror(s->pb))
-            return url_ferror(s->pb);
+        if(s->pb && s->pb->error)
+            return s->pb->error;
     }
 }
 
@@ -3371,7 +3384,7 @@ int av_write_trailer(AVFormatContext *s)
 
         if(ret<0)
             goto fail;
-        if(url_ferror(s->pb))
+        if(s->pb && s->pb->error)
             goto fail;
     }
 
@@ -3379,7 +3392,7 @@ int av_write_trailer(AVFormatContext *s)
         ret = s->oformat->write_trailer(s);
 fail:
     if(ret == 0)
-       ret=url_ferror(s->pb);
+       ret = s->pb ? s->pb->error : 0;
     for(i=0;i<s->nb_streams;i++) {
         av_freep(&s->streams[i]->priv_data);
         av_freep(&s->streams[i]->index_entries);
@@ -3461,7 +3474,7 @@ static void dump_stream_format(AVFormatContext *ic, int i, int index, int is_out
     int g = av_gcd(st->time_base.num, st->time_base.den);
     AVDictionaryEntry *lang = av_dict_get(st->metadata, "language", NULL, 0);
     avcodec_string(buf, sizeof(buf), st->codec, is_output);
-    av_log(NULL, AV_LOG_INFO, "    Stream #%d.%d", index, i);
+    av_log(NULL, AV_LOG_INFO, "    Stream #%d:%d", index, i);
     /* the pid is an important information, so we display it */
     /* XXX: add a generic system */
     if (flags & AVFMT_SHOW_IDS)

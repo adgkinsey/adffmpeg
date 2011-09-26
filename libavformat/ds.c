@@ -562,11 +562,11 @@ static int DSConnect( URLContext *h, const char *path, const char *hoststr, cons
                             }
                             else {
                                 /* If we haven't got a user and password string then we have to notify the client */
-                                retVal = ADFFMPEG_ERROR_AUTH_REQUIRED;
+                                retVal = ADFFMPEG_DS_ERROR_AUTH_REQUIRED;
                             }
                         }
                         else if( msg->reason == REJECT_AUTHENTIFICATION_INVALID ) { /* Supplied credentials are invalid */
-                            retVal = ADFFMPEG_ERROR_INVALID_CREDENTIALS;
+                            retVal = ADFFMPEG_DS_ERROR_INVALID_CREDENTIALS;
                         }
                         else { /* Fail */
                             retVal = AVERROR(EIO);

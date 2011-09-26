@@ -225,7 +225,7 @@ static int alloc_frame_buffer(MpegEncContext *s, Picture *pic)
     int r;
 
     if (s->avctx->hwaccel) {
-        assert(!pic->hwaccel_picture_private);
+        assert(!pic->f.hwaccel_picture_private);
         if (s->avctx->hwaccel->priv_data_size) {
             pic->f.hwaccel_picture_private = av_mallocz(s->avctx->hwaccel->priv_data_size);
             if (!pic->f.hwaccel_picture_private) {
@@ -276,7 +276,7 @@ int ff_alloc_picture(MpegEncContext *s, Picture *pic, int shared){
 
     if(shared){
         assert(pic->f.data[0]);
-        assert(pic->type == 0 || pic->type == FF_BUFFER_TYPE_SHARED);
+        assert(pic->f.type == 0 || pic->f.type == FF_BUFFER_TYPE_SHARED);
         pic->f.type = FF_BUFFER_TYPE_SHARED;
     }else{
         assert(!pic->f.data[0]);
@@ -539,7 +539,7 @@ int ff_mpeg_update_thread_context(AVCodecContext *dst, const AVCodecContext *src
         s->last_pict_type= s1->pict_type;
         if (s1->current_picture_ptr) s->last_lambda_for[s1->pict_type] = s1->current_picture_ptr->f.quality;
 
-        if(s1->pict_type!=FF_B_TYPE){
+        if (s1->pict_type != AV_PICTURE_TYPE_B) {
             s->last_non_b_pict_type= s1->pict_type;
         }
     }
@@ -687,8 +687,10 @@ av_cold int MPV_common_init(MpegEncContext *s)
         FF_ALLOCZ_OR_GOTO(s->avctx, s->lambda_table, mb_array_size * sizeof(int), fail)
 
         FF_ALLOCZ_OR_GOTO(s->avctx, s->q_intra_matrix  , 64*32   * sizeof(int), fail)
+        FF_ALLOCZ_OR_GOTO(s->avctx, s->q_chroma_intra_matrix  , 64*32   * sizeof(int), fail)
         FF_ALLOCZ_OR_GOTO(s->avctx, s->q_inter_matrix  , 64*32   * sizeof(int), fail)
         FF_ALLOCZ_OR_GOTO(s->avctx, s->q_intra_matrix16, 64*32*2 * sizeof(uint16_t), fail)
+        FF_ALLOCZ_OR_GOTO(s->avctx, s->q_chroma_intra_matrix16, 64*32*2 * sizeof(uint16_t), fail)
         FF_ALLOCZ_OR_GOTO(s->avctx, s->q_inter_matrix16, 64*32*2 * sizeof(uint16_t), fail)
         FF_ALLOCZ_OR_GOTO(s->avctx, s->input_picture, MAX_PICTURE_COUNT * sizeof(Picture*), fail)
         FF_ALLOCZ_OR_GOTO(s->avctx, s->reordered_input_picture, MAX_PICTURE_COUNT * sizeof(Picture*), fail)
@@ -846,6 +848,10 @@ void MPV_common_end(MpegEncContext *s)
     av_freep(&s->error_status_table);
     av_freep(&s->mb_index2xy);
     av_freep(&s->lambda_table);
+    if(s->q_chroma_intra_matrix   != s->q_intra_matrix  ) av_freep(&s->q_chroma_intra_matrix);
+    if(s->q_chroma_intra_matrix16 != s->q_intra_matrix16) av_freep(&s->q_chroma_intra_matrix16);
+    s->q_chroma_intra_matrix=   NULL;
+    s->q_chroma_intra_matrix16= NULL;
     av_freep(&s->q_intra_matrix);
     av_freep(&s->q_inter_matrix);
     av_freep(&s->q_intra_matrix16);
@@ -2662,6 +2668,6 @@ void ff_set_qscale(MpegEncContext * s, int qscale)
 
 void MPV_report_decode_progress(MpegEncContext *s)
 {
-    if (s->pict_type != FF_B_TYPE && !s->partitioned_frame && !s->error_occurred)
+    if (s->pict_type != AV_PICTURE_TYPE_B && !s->partitioned_frame && !s->error_occurred)
         ff_thread_report_progress((AVFrame*)s->current_picture_ptr, s->mb_y, 0);
 }

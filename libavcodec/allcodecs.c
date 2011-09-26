@@ -71,7 +71,7 @@ void avcodec_register_all(void)
     REGISTER_ENCODER (A64MULTI, a64multi);
     REGISTER_ENCODER (A64MULTI5, a64multi5);
     REGISTER_DECODER (AASC, aasc);
-    REGISTER_DECODER (AMV, amv);
+    REGISTER_ENCDEC  (AMV, amv);
     REGISTER_DECODER (ANM, anm);
     REGISTER_DECODER (ANSI, ansi);
     REGISTER_ENCDEC  (ASV1, asv1);
@@ -109,7 +109,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC  (FFV1, ffv1);
     REGISTER_ENCDEC  (FFVHUFF, ffvhuff);
     REGISTER_ENCDEC  (FLASHSV, flashsv);
-    REGISTER_ENCDEC (FLASHSV2, flashsv2);
+    REGISTER_ENCDEC  (FLASHSV2, flashsv2);
     REGISTER_DECODER (FLIC, flic);
     REGISTER_ENCDEC  (FLV, flv);
     REGISTER_DECODER (FOURXM, fourxm);
@@ -172,7 +172,8 @@ void avcodec_register_all(void)
     REGISTER_DECODER (PICTOR, pictor);
     REGISTER_ENCDEC  (PNG, png);
     REGISTER_ENCDEC  (PPM, ppm);
-    REGISTER_DECODER (PRORES, prores);
+    REGISTER_DECODER (PRORES_GPL, prores_gpl);
+    REGISTER_DECODER (PRORES_LGPL, prores_lgpl);
     REGISTER_DECODER (PTX, ptx);
     REGISTER_DECODER (QDRAW, qdraw);
     REGISTER_DECODER (QPEG, qpeg);
@@ -257,6 +258,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (DSICINAUDIO, dsicinaudio);
     REGISTER_ENCDEC  (EAC3, eac3);
     REGISTER_ENCDEC  (FLAC, flac);
+    REGISTER_DECODER (G729, g729);
     REGISTER_DECODER (GSM, gsm);
     REGISTER_DECODER (GSM_MS, gsm_ms);
     REGISTER_DECODER (IMC, imc);
@@ -372,6 +374,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC  (XSUB, xsub);
 
     /* external libraries */
+    REGISTER_ENCODER (LIBAACPLUS, libaacplus);
     REGISTER_DECODER (LIBCELT, libcelt);
     REGISTER_ENCDEC  (LIBDIRAC, libdirac);
     REGISTER_ENCODER (LIBFAAC, libfaac);

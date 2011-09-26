@@ -1845,7 +1845,6 @@ static int output_packet(InputStream *ist, int ist_index,
                         abort();
                     }
                 } else {
-                    AVFrame avframe; //FIXME/XXX remove this
                     AVPicture pict;
                     AVPacket opkt;
                     int64_t ost_tb_start_time= av_rescale_q(of->start_time, AV_TIME_BASE_Q, ost->st->time_base);
@@ -1860,10 +1859,6 @@ static int output_packet(InputStream *ist, int ist_index,
 
                     /* no reencoding needed : output the packet directly */
                     /* force the input stream PTS */
-
-                    avcodec_get_frame_defaults(&avframe);
-                    ost->st->codec->coded_frame= &avframe;
-                    avframe.key_frame = pkt->flags & AV_PKT_FLAG_KEY;
 
                     if(ost->st->codec->codec_type == AVMEDIA_TYPE_AUDIO)
                         audio_size += data_size;
@@ -2218,9 +2213,9 @@ static int transcode_init(OutputFile *output_files, int nb_output_files,
             }
         }
         if(codec->codec_type == AVMEDIA_TYPE_VIDEO){
-            /* maximum video buffer size is 6-bytes per pixel, plus DPX header size */
+            /* maximum video buffer size is 6-bytes per pixel, plus DPX header size (1664)*/
             int size= codec->width * codec->height;
-            bit_buffer_size= FFMAX(bit_buffer_size, 6*size + 1664);
+            bit_buffer_size= FFMAX(bit_buffer_size, 7*size + 10000);
         }
     }
 
@@ -2410,29 +2405,35 @@ static int transcode(OutputFile *output_files, int nb_output_files,
             }
 #if CONFIG_AVFILTER
             if (key == 'c' || key == 'C'){
-                char ret[4096], target[64], cmd[256], arg[256]={0};
-                double ts;
-                int k;
+                char buf[4096], target[64], command[256], arg[256] = {0};
+                double time;
+                int k, n = 0;
                 fprintf(stderr, "\nEnter command: <target> <time> <command>[ <argument>]\n");
-                i=0;
-                while((k=read_key()) !='\n' && k!='\r' && i<sizeof(ret)-1)
-                    if(k>0) ret[i++]= k;
-                ret[i]= 0;
-                if(k>0 && sscanf(ret, "%63[^ ] %lf %255[^ ] %255[^\n]", target, &ts, cmd, arg) >= 3){
-                    for(i=0;i<nb_output_streams;i++) {
-                        int r;
+                i = 0;
+                while ((k = read_key()) != '\n' && k != '\r' && i < sizeof(buf)-1)
+                    if (k > 0)
+                        buf[i++] = k;
+                buf[i] = 0;
+                if (k > 0 &&
+                    (n = sscanf(buf, "%63[^ ] %lf %255[^ ] %255[^\n]", target, &time, command, arg)) >= 3) {
+                    av_log(NULL, AV_LOG_DEBUG, "Processing command target:%s time:%f command:%s arg:%s",
+                           target, time, command, arg);
+                    for (i = 0; i < nb_output_streams; i++) {
                         ost = &output_streams[i];
-                        if(ost->graph){
-                            if(ts<0){
-                                r= avfilter_graph_send_command(ost->graph, target, cmd, arg, ret, sizeof(ret), key == 'c' ? AVFILTER_CMD_FLAG_ONE : 0);
-                                fprintf(stderr, "Command reply for %d: %d, %s\n", i, r, ret);
-                            }else{
-                                r= avfilter_graph_queue_command(ost->graph, target, cmd, arg, 0, ts);
+                        if (ost->graph) {
+                            if (time < 0) {
+                                ret = avfilter_graph_send_command(ost->graph, target, command, arg, buf, sizeof(buf),
+                                                                  key == 'c' ? AVFILTER_CMD_FLAG_ONE : 0);
+                                fprintf(stderr, "Command reply for stream %d: ret:%d res:%s\n", i, ret, buf);
+                            } else {
+                                ret = avfilter_graph_queue_command(ost->graph, target, command, arg, 0, time);
                             }
                         }
                     }
-                }else{
-                    fprintf(stderr, "Parse error\n");
+                } else {
+                    av_log(NULL, AV_LOG_ERROR,
+                           "Parse error, at least 3 arguments were expected, "
+                           "only %d given in string '%s'\n", n, buf);
                 }
             }
 #endif
@@ -2497,8 +2498,8 @@ static int transcode(OutputFile *output_files, int nb_output_files,
             }
             if (ost->frame_number >= ost->max_frames) {
                 int j;
-                for (j = of->ost_index; j < of->ctx->nb_streams; j++)
-                    output_streams[j].is_past_recording_time = 1;
+                for (j = 0; j < of->ctx->nb_streams; j++)
+                    output_streams[of->ost_index + j].is_past_recording_time = 1;
                 continue;
             }
         }

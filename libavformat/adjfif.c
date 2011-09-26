@@ -425,12 +425,18 @@ static void parse_comment( char *text, int text_len, struct NetVuImageData *pic,
         j = 0;
 
         // Check we haven't covered all the buffer already
-        if( i >= text_len - 1 || text[i] <= 0 )
+        if( i >= text_len || text[i] <= 0 )
             break;
 
         // Get the next line from the text block
-        while( text[i] && text[i] != '\n' && (i < (text_len - 1)) )
+        while (text[i] && text[i] != '\n' && (i < text_len))  {
             result[j++] = text[i++];
+            if ( j >= sizeof(result) )  {
+                --j;
+                break;
+            }
+        }
+        result[j] = '\0';
 
         // Skip the \n
         if( text[i] == '\n' ) {
