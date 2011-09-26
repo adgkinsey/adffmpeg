@@ -43,7 +43,6 @@ static int use_value_sexagesimal_format = 0;
 
 static char *print_format;
 
-/* globals */
 static const OptionDef options[];
 
 /* FFprobe context */
@@ -120,12 +119,6 @@ static char *ts_value_string (char *buf, int buf_size, int64_t ts)
     }
 
     return buf;
-}
-
-static const char *media_type_string(enum AVMediaType media_type)
-{
-    const char *s = av_get_media_type_string(media_type);
-    return s ? s : "unknown";
 }
 
 
@@ -315,7 +308,7 @@ static void show_packet(struct writer *w, AVFormatContext *fmt_ctx, AVPacket *pk
     if (packet_idx)
         printf("%s", w->items_sep);
     w->print_header("PACKET");
-    print_str0("codec_type",      media_type_string(st->codec->codec_type));
+    print_str0("codec_type",      av_x_if_null(av_get_media_type_string(st->codec->codec_type), "unknown"));
     print_int("stream_index",     pkt->stream_index);
     print_str("pts",              ts_value_string  (val_str, sizeof(val_str), pkt->pts));
     print_str("pts_time",         time_value_string(val_str, sizeof(val_str), pkt->pts, &st->time_base));
@@ -397,7 +390,7 @@ static void show_stream(struct writer *w, AVFormatContext *fmt_ctx, int stream_i
             print_str("codec_name",      "unknown");
         }
 
-        print_str("codec_type",               media_type_string(dec_ctx->codec_type));
+        print_str("codec_type", av_x_if_null(av_get_media_type_string(dec_ctx->codec_type), "unknown"));
         print_fmt("codec_time_base", "%d/%d", dec_ctx->time_base.num, dec_ctx->time_base.den);
 
         /* print AVI/FourCC tag */
@@ -422,7 +415,7 @@ static void show_stream(struct writer *w, AVFormatContext *fmt_ctx, int stream_i
                           display_aspect_ratio.num,
                           display_aspect_ratio.den);
             }
-            print_str("pix_fmt", dec_ctx->pix_fmt != PIX_FMT_NONE ? av_pix_fmt_descriptors[dec_ctx->pix_fmt].name : "unknown");
+            print_str("pix_fmt", av_x_if_null(av_get_pix_fmt_name(dec_ctx->pix_fmt), "unknown"));
             print_int("level",   dec_ctx->level);
             break;
 

@@ -77,7 +77,7 @@ static int dnxhd_10bit_dct_quantize(MpegEncContext *ctx, DCTELEM *block,
                                     int n, int qscale, int *overflow)
 {
     const uint8_t *scantable= ctx->intra_scantable.scantable;
-    const int *qmat = ctx->q_intra_matrix[qscale];
+    const int *qmat = n<4 ? ctx->q_intra_matrix[qscale] : ctx->q_chroma_intra_matrix[qscale];
     int last_non_zero = 0;
     int i;
 
@@ -207,6 +207,11 @@ static int dnxhd_init_qmat(DNXHDEncContext *ctx, int lbias, int cbias)
             }
         }
     }
+
+    ctx->m.q_chroma_intra_matrix16 = ctx->qmatrix_c16;
+    ctx->m.q_chroma_intra_matrix   = ctx->qmatrix_c;
+    ctx->m.q_intra_matrix16        = ctx->qmatrix_l16;
+    ctx->m.q_intra_matrix          = ctx->qmatrix_l;
 
     return 0;
  fail:
@@ -497,15 +502,8 @@ static av_always_inline void dnxhd_get_blocks(DNXHDEncContext *ctx, int mb_x, in
 
 static av_always_inline int dnxhd_switch_matrix(DNXHDEncContext *ctx, int i)
 {
-    if (i&2) {
-        ctx->m.q_intra_matrix16 = ctx->qmatrix_c16;
-        ctx->m.q_intra_matrix   = ctx->qmatrix_c;
-        return 1 + (i&1);
-    } else {
-        ctx->m.q_intra_matrix16 = ctx->qmatrix_l16;
-        ctx->m.q_intra_matrix   = ctx->qmatrix_l;
-        return 0;
-    }
+    const static uint8_t component[8]={0,0,1,2,0,0,1,2};
+    return component[i];
 }
 
 static int dnxhd_calc_bits_thread(AVCodecContext *avctx, void *arg, int jobnr, int threadnr)
@@ -535,7 +533,7 @@ static int dnxhd_calc_bits_thread(AVCodecContext *avctx, void *arg, int jobnr, i
             int n = dnxhd_switch_matrix(ctx, i);
 
             memcpy(block, src_block, 64*sizeof(*block));
-            last_index = ctx->m.dct_quantize(&ctx->m, block, i, qscale, &overflow);
+            last_index = ctx->m.dct_quantize(&ctx->m, block, 4&(2*i), qscale, &overflow);
             ac_bits += dnxhd_calc_ac_bits(ctx, block, last_index);
 
             diff = block[0] - ctx->m.last_dc[n];
@@ -582,7 +580,7 @@ static int dnxhd_encode_thread(AVCodecContext *avctx, void *arg, int jobnr, int 
             DCTELEM *block = ctx->blocks[i];
             int last_index, overflow;
             int n = dnxhd_switch_matrix(ctx, i);
-            last_index = ctx->m.dct_quantize(&ctx->m, block, i, qscale, &overflow);
+            last_index = ctx->m.dct_quantize(&ctx->m, block, 4&(2*i), qscale, &overflow);
             //START_TIMER;
             dnxhd_encode_block(ctx, block, last_index, n);
             //STOP_TIMER("encode_block");

@@ -112,6 +112,11 @@ do_video_encoding huffyuv.avi "-an -vcodec huffyuv -pix_fmt yuv422p -sws_flags n
 do_video_decoding "" "-strict -2 -pix_fmt yuv420p -sws_flags neighbor+bitexact"
 fi
 
+if [ -n "$do_amv" ] ; then
+do_video_encoding amv.avi "-an -vcodec amv"
+do_video_decoding
+fi
+
 if [ -n "$do_rc" ] ; then
 do_video_encoding mpeg4-rc.avi "-b 400k -bf 2 -an -vcodec mpeg4"
 do_video_decoding
@@ -252,7 +257,8 @@ fi
 
 if [ -n "$do_flashsv2" ] ; then
 do_video_encoding flashsv2.flv "-an -vcodec flashsv2 -sws_flags neighbor+full_chroma_int+accurate_rnd+bitexact -strict experimental"
-#do_video_decoding "" "-pix_fmt yuv420p -sws_flags area+accurate_rnd+bitexact"
+do_video_encoding flashsv2I.flv "-an -vcodec flashsv2 -sws_flags neighbor+full_chroma_int+accurate_rnd+bitexact -strict experimental -g 1"
+do_video_decoding "" "-pix_fmt yuv420p -sws_flags area+accurate_rnd+bitexact"
 fi
 
 if [ -n "$do_roq" ] ; then

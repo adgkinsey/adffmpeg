@@ -1052,6 +1052,9 @@ int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
                     color_index = 255;
                     color_dec = 256 / (color_count - 1);
                     for (j = 0; j < color_count; j++) {
+                        if (id == CODEC_ID_CINEPAK){
+                            r = g = b = color_count - 1 - color_index;
+                        }else
                         r = g = b = color_index;
                         sc->palette[j] =
                             (r << 16) | (g << 8) | (b);
@@ -1268,6 +1271,9 @@ int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
             st->codec->channels   = AV_RB8 (st->codec->extradata+21);
             st->codec->sample_rate = AV_RB32(st->codec->extradata+32);
         }
+        break;
+    case CODEC_ID_AC3:
+        st->need_parsing = AVSTREAM_PARSE_FULL;
         break;
     default:
         break;
@@ -2626,8 +2632,6 @@ static int mov_read_close(AVFormatContext *s)
         av_freep(&sc->drefs);
         if (sc->pb && sc->pb != s->pb)
             avio_close(sc->pb);
-
-        av_freep(&st->codec->palctrl);
     }
 
     if (mov->dv_demux) {

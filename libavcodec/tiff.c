@@ -129,6 +129,16 @@ static void av_always_inline horizontal_fill(unsigned int bpp, uint8_t* dst,
     }
 }
 
+static void av_always_inline split_nibbles(uint8_t *dst, const uint8_t *src,
+                                           int width)
+{
+    while (--width >= 0) {
+        // src == dst for LZW
+        dst[width * 2 + 1] = src[width] & 0xF;
+        dst[width * 2 + 0] = src[width] >> 4;
+    }
+}
+
 static int tiff_unpack_strip(TiffContext *s, uint8_t* dst, int stride, const uint8_t *src, int size, int lines){
     int c, line, pixels, code;
     const uint8_t *ssrc = src;
@@ -148,7 +158,11 @@ static int tiff_unpack_strip(TiffContext *s, uint8_t* dst, int stride, const uin
         }
         src = zbuf;
         for(line = 0; line < lines; line++){
-            memcpy(dst, src, width);
+            if(s->bpp == 4){
+                split_nibbles(dst, src, width);
+            }else{
+                memcpy(dst, src, width);
+            }
             dst += stride;
             src += width;
         }
@@ -238,6 +252,8 @@ static int tiff_unpack_strip(TiffContext *s, uint8_t* dst, int stride, const uin
                 av_log(s->avctx, AV_LOG_ERROR, "Decoded only %i bytes of %i\n", pixels, width);
                 return -1;
             }
+            if(s->bpp == 4)
+                split_nibbles(dst, dst, width);
             break;
         }
         dst += stride;
@@ -601,22 +617,33 @@ static int decode_frame(AVCodecContext *avctx,
         dst = p->data[0];
         soff = s->bpp >> 3;
         ssize = s->width * soff;
-        for(i = 0; i < s->height; i++) {
-            for(j = soff; j < ssize; j++)
-                dst[j] += dst[j - soff];
-            dst += stride;
+        if (s->avctx->pix_fmt == PIX_FMT_RGB48LE) {
+            for (i = 0; i < s->height; i++) {
+                for (j = soff; j < ssize; j += 2)
+                    AV_WL16(dst + j, AV_RL16(dst + j) + AV_RL16(dst + j - soff));
+                dst += stride;
+            }
+        } else if (s->avctx->pix_fmt == PIX_FMT_RGB48BE) {
+            for (i = 0; i < s->height; i++) {
+                for (j = soff; j < ssize; j += 2)
+                    AV_WB16(dst + j, AV_RB16(dst + j) + AV_RB16(dst + j - soff));
+                dst += stride;
+            }
+        } else {
+            for(i = 0; i < s->height; i++) {
+                for(j = soff; j < ssize; j++)
+                    dst[j] += dst[j - soff];
+                dst += stride;
+            }
         }
     }
 
     if(s->invert){
-        uint8_t *src;
-        int j;
-
-        src = s->picture.data[0];
-        for(j = 0; j < s->height; j++){
-            for(i = 0; i < s->picture.linesize[0]; i++)
-                src[i] = (s->avctx->pix_fmt == PIX_FMT_PAL8 ? (1<<s->bpp) - 1 : 255) - src[i];
-            src += s->picture.linesize[0];
+        dst = s->picture.data[0];
+        for(i = 0; i < s->height; i++){
+            for(j = 0; j < s->picture.linesize[0]; j++)
+                dst[j] = (s->avctx->pix_fmt == PIX_FMT_PAL8 ? (1<<s->bpp) - 1 : 255) - dst[j];
+            dst += s->picture.linesize[0];
         }
     }
     *picture= *(AVFrame*)&s->picture;
