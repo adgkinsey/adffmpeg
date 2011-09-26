@@ -470,11 +470,12 @@ int av_open_input_stream(AVFormatContext **ic_ptr,
     else
         ic->pb = pb;
 
-    err = avformat_open_input(&ic, filename, fmt, &opts);
+    if ((err = avformat_open_input(&ic, filename, fmt, &opts)) < 0)
+        goto fail;
     ic->pb = ic->pb ? ic->pb : pb; // don't leak custom pb if it wasn't set above
 
-    *ic_ptr = ic;
 fail:
+    *ic_ptr = ic;
     av_dict_free(&opts);
     return err;
 }
@@ -995,7 +996,7 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
     // we take the conservative approach and discard both
     // Note, if this is misbehaving for a H.264 file then possibly presentation_delayed is not set correctly.
     if(delay==1 && pkt->dts == pkt->pts && pkt->dts != AV_NOPTS_VALUE && presentation_delayed){
-        av_log(s, AV_LOG_DEBUG, "invalid dts/pts combination\n");
+        av_log(s, AV_LOG_DEBUG, "invalid dts/pts combination %Ld\n", pkt->dts);
         pkt->dts= pkt->pts= AV_NOPTS_VALUE;
     }
 
