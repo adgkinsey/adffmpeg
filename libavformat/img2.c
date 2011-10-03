@@ -436,11 +436,13 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
                 avio_wb32(pb[0], 0);
                 ffio_wfourcc(pb[0], "jp2 ");
                 avio_write(pb[0], st->codec->extradata, st->codec->extradata_size);
+            }else if(pkt->size >= 8 && AV_RB32(pkt->data) == 0xFF4FFF51){
+                //jpeg2000 codestream
             }else if(pkt->size < 8 ||
                      (!st->codec->extradata_size &&
                       AV_RL32(pkt->data+4) != MKTAG('j','P',' ',' '))){ // signature
             error:
-                av_log(s, AV_LOG_ERROR, "malformated jpeg2000 codestream\n");
+                av_log(s, AV_LOG_ERROR, "malformated jpeg2000 codestream %X\n", AV_RB32(pkt->data));
                 return -1;
             }
         }

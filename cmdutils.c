@@ -484,9 +484,9 @@ void show_banner(void)
            program_name, program_birth_year, this_year);
     av_log(NULL, AV_LOG_INFO, "  built on %s %s with %s %s\n",
            __DATE__, __TIME__, CC_TYPE, CC_VERSION);
-    av_log(NULL, AV_LOG_VERBOSE, "  configuration: " FFMPEG_CONFIGURATION "\n");
-    print_all_libs_info(INDENT|SHOW_CONFIG,  AV_LOG_VERBOSE);
-    print_all_libs_info(INDENT|SHOW_VERSION, AV_LOG_VERBOSE);
+    av_log(NULL, AV_LOG_INFO, "  configuration: " FFMPEG_CONFIGURATION "\n");
+    print_all_libs_info(INDENT|SHOW_CONFIG,  AV_LOG_INFO);
+    print_all_libs_info(INDENT|SHOW_VERSION, AV_LOG_INFO);
 }
 
 int opt_version(const char *opt, const char *arg) {
@@ -864,7 +864,7 @@ int check_stream_specifier(AVFormatContext *s, AVStream *st, const char *spec)
 {
     if (*spec <= '9' && *spec >= '0')                                        /* opt:index */
         return strtol(spec, NULL, 0) == st->index;
-    else if (*spec == 'v' || *spec == 'a' || *spec == 's' || *spec == 'd') { /* opt:[vasd] */
+    else if (*spec == 'v' || *spec == 'a' || *spec == 's' || *spec == 'd' || *spec == 't') { /* opt:[vasdt] */
         enum AVMediaType type;
 
         switch (*spec++) {
@@ -872,6 +872,7 @@ int check_stream_specifier(AVFormatContext *s, AVStream *st, const char *spec)
         case 'a': type = AVMEDIA_TYPE_AUDIO;    break;
         case 's': type = AVMEDIA_TYPE_SUBTITLE; break;
         case 'd': type = AVMEDIA_TYPE_DATA;     break;
+        case 't': type = AVMEDIA_TYPE_ATTACHMENT; break;
         default: abort(); // never reached, silence warning
         }
         if (type != st->codec->codec_type)

@@ -131,7 +131,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (INDEO3, indeo3);
     REGISTER_DECODER (INDEO5, indeo5);
     REGISTER_DECODER (INTERPLAY_VIDEO, interplay_video);
-    REGISTER_DECODER (JPEG2000, jpeg2000);
+    REGISTER_ENCDEC  (JPEG2000, jpeg2000);
     REGISTER_ENCDEC  (JPEGLS, jpegls);
     REGISTER_DECODER (JV, jv);
     REGISTER_DECODER (KGV1, kgv1);
@@ -258,6 +258,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (DSICINAUDIO, dsicinaudio);
     REGISTER_ENCDEC  (EAC3, eac3);
     REGISTER_ENCDEC  (FLAC, flac);
+    REGISTER_DECODER (G723_1, g723_1);
     REGISTER_DECODER (G729, g729);
     REGISTER_DECODER (GSM, gsm);
     REGISTER_DECODER (GSM_MS, gsm_ms);

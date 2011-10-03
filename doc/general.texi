@@ -106,6 +106,7 @@ library:
 @item framecrc testing format   @tab X @tab
 @item FunCom ISS                @tab   @tab X
     @tab Audio format used in various games from FunCom like The Longest Journey.
+@item G.723.1                   @tab   @tab X
 @item G.729 BIT                 @tab X @tab X
 @item GIF Animation             @tab X @tab
 @item GXF                       @tab X @tab X
@@ -314,7 +315,6 @@ following image formats are supported:
 @item PIC          @tab @tab X
     @tab Pictor/PC Paint
 @item PNG          @tab X @tab X
-    @tab 2/4 bpp not supported yet
 @item PPM          @tab X @tab X
     @tab Portable PixelMap image
 @item PTX          @tab   @tab X
@@ -701,7 +701,7 @@ following image formats are supported:
     @tab experimental codec
 @item Sonic lossless         @tab  X  @tab  X
     @tab experimental codec
-@item Speex                  @tab     @tab  E
+@item Speex                  @tab  E  @tab  E
     @tab supported through external library libspeex
 @item True Audio (TTA)       @tab     @tab  X
 @item TrueHD                 @tab     @tab  X

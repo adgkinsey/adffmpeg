@@ -1238,7 +1238,7 @@ lutrgb="r=negval:g=negval:b=negval"
 lutyuv="y=negval:u=negval:v=negval"
 
 # negate luminance
-lutyuv=negval
+lutyuv=y=negval
 
 # remove chroma components, turns the video into a graytone image
 lutyuv="u=128:v=128"
@@ -1686,6 +1686,9 @@ input sample aspect ratio
 
 @item dar
 input display aspect ratio, it is the same as (@var{iw} / @var{ih}) * @var{sar}
+
+@item sar
+input sample aspect ratio
 
 @item hsub, vsub
 horizontal and vertical chroma subsample values. For example for the

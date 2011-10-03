@@ -28,6 +28,7 @@
 #include "rawenc.h"
 
 typedef struct {
+    AVClass *av_class;
     int off;
     int channel_conf;
     int object_type;
@@ -119,7 +120,7 @@ static int latm_write_frame_header(AVFormatContext *s, PutBitContext *bs)
         }
 
         put_bits(bs, 3, 0); /* frameLengthType */
-        put_bits(bs, 8, 0); /* latmBufferFullness */
+        put_bits(bs, 8, 0xff); /* latmBufferFullness */
 
         put_bits(bs, 1, 0); /* otherDataPresent */
         put_bits(bs, 1, 0); /* crcCheckPresent */
