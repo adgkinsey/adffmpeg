@@ -30,12 +30,11 @@
 
 typedef struct {
     const AVClass *class;
-    char   *comp_expr_str[4];
+    char *comp_expr_str[4];
     int rgba_map[4];
     int copyplane[4];
     int skipplane[4];
     const AVPixFmtDescriptor *pix_desc;
-    uint16_t *line;
 } CopyPlaneContext;
 
 #define R 0
@@ -83,7 +82,6 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     int i;
     CopyPlaneContext *copyplane = ctx->priv;
-    av_freep(&copyplane->line);
     
     for (i = 0; i < 4; i++) {
         av_freep(&copyplane->comp_expr_str[i]);
@@ -110,9 +108,6 @@ static int config_props(AVFilterLink *inlink)
     int comp;
 
     cp->pix_desc = &av_pix_fmt_descriptors[inlink->format];
-
-    if (!(cp->line = av_malloc(sizeof(*cp->line) * inlink->w)))
-        return AVERROR(ENOMEM);
     
     switch (inlink->format) {
         case PIX_FMT_ARGB:  cp->rgba_map[A] = 0; cp->rgba_map[R] = 1; cp->rgba_map[G] = 2; cp->rgba_map[B] = 3; break;
@@ -122,34 +117,34 @@ static int config_props(AVFilterLink *inlink)
         case PIX_FMT_BGRA:
         case PIX_FMT_BGR24: cp->rgba_map[B] = 0; cp->rgba_map[G] = 1; cp->rgba_map[R] = 2; cp->rgba_map[A] = 3; break;
     }
-    //cp->step = av_get_bits_per_pixel(desc) >> 3;
-        
+
     for (comp = 0; comp < cp->pix_desc->nb_components; comp++) {
-        cp->copyplane[comp] = -1;
-        cp->skipplane[comp] = 0;
+        int plane = cp->rgba_map[comp];
+        cp->copyplane[plane] = -1;
+        cp->skipplane[plane] = 0;
         switch (cp->comp_expr_str[comp][0])  {
             case('r'):
-                if (cp->rgba_map[R] != comp)  {
-                    cp->copyplane[comp] = cp->rgba_map[R];
-                    cp->skipplane[comp] = 1;
+                if (plane != cp->rgba_map[R])  {
+                    cp->copyplane[plane] = cp->rgba_map[R];
+                    cp->skipplane[plane] = 1;
                 }
                 break;
             case('g'):
-                if (cp->rgba_map[G] != comp)  {
-                    cp->copyplane[comp] = cp->rgba_map[G];
-                    cp->skipplane[comp] = 1;
+                if (plane != cp->rgba_map[G])  {
+                    cp->copyplane[plane] = cp->rgba_map[G];
+                    cp->skipplane[plane] = 1;
                 }
                 break;
             case('b'):
-                if (cp->rgba_map[B] != comp)  {
-                    cp->copyplane[comp] = cp->rgba_map[B];
-                    cp->skipplane[comp] = 1;
+                if (plane != cp->rgba_map[B])  {
+                    cp->copyplane[plane] = cp->rgba_map[B];
+                    cp->skipplane[plane] = 1;
                 }
                 break;
             case('a'):
-                if (cp->rgba_map[A] != comp)  {
-                    cp->copyplane[comp] = cp->rgba_map[A];
-                    cp->skipplane[comp] = 1;
+                if (plane != cp->rgba_map[A])  {
+                    cp->copyplane[plane] = cp->rgba_map[A];
+                    cp->skipplane[plane] = 1;
                 }
                 break;
             case('n'):
@@ -196,6 +191,10 @@ static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
     AVFilterBufferRef *inpic  = inlink->cur_buf;
     AVFilterBufferRef *outpic = inlink->dst->outputs[0]->out_buf;
     int i, c, w = inlink->w;
+    uint16_t *line = NULL;
+    
+    if (!(line = av_malloc(sizeof(uint16_t) * w)))
+        return;
 
     for (c = 0; c < cp->pix_desc->nb_components; c++) {
         int w1 = c == 1 || c == 2 ? w>>cp->pix_desc->log2_chroma_w : w;
@@ -204,24 +203,24 @@ static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
 
         for (i = y1; i < y1 + h1; i++) {
             if (cp->copyplane[c] >= 0)  {
-                av_read_image_line(cp->line, 
+                av_read_image_line(line, 
                                    (const uint8_t **)inpic->data,
                                    inpic->linesize,
                                    cp->pix_desc,
                                    0, i, cp->copyplane[c], w1, 0);
-                av_write_image_line(cp->line,
+                av_write_image_line(line,
                                     outpic->data,
                                     outpic->linesize,
                                     cp->pix_desc,
                                     0, i, c, w1);
             }
             if (!cp->skipplane[c])  {
-                av_read_image_line(cp->line, 
+                av_read_image_line(line, 
                                    (const uint8_t **)inpic->data,
                                    inpic->linesize,
                                    cp->pix_desc,
                                    0, i, c, w1, 0);
-                av_write_image_line(cp->line,
+                av_write_image_line(line,
                                     outpic->data,
                                     outpic->linesize,
                                     cp->pix_desc,
@@ -229,6 +228,7 @@ static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
             }                
         }
     }
+    av_free(line);
 
     avfilter_draw_slice(inlink->dst->outputs[0], y, h, slice_dir);
 }
