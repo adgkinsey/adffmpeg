@@ -826,7 +826,7 @@ static int pbm_read_mem(char **comment, uint8_t **src, int size, AVPacket *pkt, 
     const char *strPtr, *endStrPtr;
     unsigned int elementsRead;
     
-    if ((size >= sizeof(pbm)) && (memcmp(ptr, pbm, sizeof(pbm)) == 0) )
+    if ((size >= sizeof(pbm)) && (ptr[0] == 'P') && (ptr[1] >= '1') && (ptr[1] <= '6') && (ptr[2] == 0x0A) )
         ptr += sizeof(pbm);
     else
         return -1;
