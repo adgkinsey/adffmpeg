@@ -34,9 +34,12 @@
 #include "adffmpeg_errors.h"
 
 
-enum pkt_offsets { PKT_DATATYPE, PKT_DATACHANNEL,
-                   PKT_SIZE_BYTE_0, PKT_SIZE_BYTE_1,
-                   PKT_SIZE_BYTE_2, PKT_SIZE_BYTE_3,
+enum pkt_offsets { PKT_DATATYPE, 
+                   PKT_DATACHANNEL,
+                   PKT_SIZE_BYTE_0, 
+                   PKT_SIZE_BYTE_1,
+                   PKT_SIZE_BYTE_2, 
+                   PKT_SIZE_BYTE_3,
                    PKT_SEPARATOR_SIZE
                  };
 
@@ -125,14 +128,14 @@ static int adbinary_mpeg(AVFormatContext *s,
 /**
  * MPEG4 or H264 video frame with a minimal header
  */
-static int ad_read_mpeg_minimal(AVFormatContext *s,
+static int adbinary_mpeg_minimal(AVFormatContext *s,
                                 AVPacket *pkt, int size, int channel,
                                 struct NetVuImageData *vidDat, char **text_data)
 {
     static const int titleLen  = sizeof(vidDat->title) / sizeof(vidDat->title[0]);
     AdContext* adContext       = s->priv_data;
     AVIOContext *    pb        = s->pb;
-    int              dataSize  = size - 6;
+    int              dataSize  = size - PKT_SEPARATOR_SIZE;
     int              errorVal  = 0;
 
     // Get the minimal video header and copy into generic video data structure
@@ -205,8 +208,9 @@ static int ad_read_audio(AVFormatContext *s,
 /**
  * Audio frame with a minimal header
  */
-static int ad_read_audio_minimal(AVFormatContext *s,
-                                 AVPacket *pkt, int size, struct NetVuAudioData *data)
+static int adbinary_audio_minimal(AVFormatContext *s,
+                                  AVPacket *pkt, int size, 
+                                  struct NetVuAudioData *data)
 {
     AVIOContext *pb = s->pb;
     int dataSize = size - sizeof(MinimalAudioHeader);
@@ -268,44 +272,44 @@ static int adbinary_probe(AVProbeData *p)
         dataPtr = &bufPtr[PKT_SEPARATOR_SIZE];
         bufferSize -= PKT_SEPARATOR_SIZE;
 
-        switch (bufPtr[PKT_DATATYPE])  {
-            case(AD_DATATYPE_JPEG):
-            case(AD_DATATYPE_MPEG4I):
-            case(AD_DATATYPE_MPEG4P):
-            case(AD_DATATYPE_H264I):
-            case(AD_DATATYPE_H264P):
+        switch (bufPtr[0])  {
+            case AD_DATATYPE_JPEG:
+            case AD_DATATYPE_MPEG4I:
+            case AD_DATATYPE_MPEG4P:
+            case AD_DATATYPE_H264I:
+            case AD_DATATYPE_H264P:
                 if (bufferSize >= NetVuImageDataHeaderSize) {
                     struct NetVuImageData test;
                     ad_network2host(&test, dataPtr);
                     if (pic_version_valid(test.version))  {
-                        av_dlog(NULL, "%s: Detected video packet\n", __func__);
+                        av_log(NULL, AV_LOG_DEBUG, "%s: Detected video packet\n", __func__);
                         score += AVPROBE_SCORE_MAX;
                     }
                 }
                 break;
-            case(AD_DATATYPE_JFIF):
+            case AD_DATATYPE_JFIF:
                 if (bufferSize >= 2)  {
                     if ( (*dataPtr == 0xFF) && (*(dataPtr + 1) == 0xD8) )  {
-                        av_dlog(NULL, "%s: Detected JFIF packet\n", __func__);
+                        av_log(NULL, AV_LOG_DEBUG, "%s: Detected JFIF packet\n", __func__);
                         score += AVPROBE_SCORE_MAX;
                     }
                 }
                 break;
-            case(AD_DATATYPE_AUDIO_ADPCM):
+            case AD_DATATYPE_AUDIO_ADPCM:
                 if (bufferSize >= NetVuAudioDataHeaderSize)  {
                     struct NetVuAudioData test;
                     audioheader_network2host(&test, dataPtr);
                     if (test.version == AUD_VERSION)  {
-                        av_dlog(NULL, "%s: Detected audio packet\n", __func__);
+                        av_log(NULL, AV_LOG_DEBUG, "%s: Detected audio packet\n", __func__);
                         score += AVPROBE_SCORE_MAX;
                     }
                 }
                 break;
-            case(AD_DATATYPE_AUDIO_RAW):
+            case AD_DATATYPE_AUDIO_RAW:
                 // We don't handle this format
                 av_log(NULL, AV_LOG_ERROR, "%s: Detected raw audio packet (unsupported)\n", __func__);
                 break;
-            case(AD_DATATYPE_MINIMAL_MPEG4):
+            case AD_DATATYPE_MINIMAL_MPEG4:
                 if (bufferSize >= 10)  {
                     uint32_t sec  = AV_RB32(dataPtr);
                     //uint16_t mil  = AV_RB16(dataPtr + 4);
@@ -316,12 +320,12 @@ static int adbinary_probe(AVProbeData *p)
                     // servers often send larger values than this,
                     // nonsensical as that is
                     if ((vos >= 0x1B0) && (vos <= 0x1B6) && (sec > 315532800)) {
-                        av_dlog(NULL, "%s: Detected minimal MPEG4 packet\n", __func__);
-                        score += AVPROBE_SCORE_MAX / 4;
+                        av_log(NULL, AV_LOG_DEBUG, "%s: Detected minimal MPEG4 packet\n", __func__);
+                        score += AVPROBE_SCORE_MAX / 2;
                     }
                 }
                 break;
-            case(AD_DATATYPE_MINIMAL_AUDIO_ADPCM):
+            case AD_DATATYPE_MINIMAL_AUDIO_ADPCM:
                 if (bufferSize >= 8)  {
                     MinimalAudioHeader test;
                     test.t     = AV_RB32(dataPtr);
@@ -329,49 +333,51 @@ static int adbinary_probe(AVProbeData *p)
                     test.mode  = AV_RB16(dataPtr + 6);
 
                     switch(test.mode)  {
-                        case(RTP_PAYLOAD_TYPE_8000HZ_ADPCM):
-                        case(RTP_PAYLOAD_TYPE_11025HZ_ADPCM):
-                        case(RTP_PAYLOAD_TYPE_16000HZ_ADPCM):
-                        case(RTP_PAYLOAD_TYPE_22050HZ_ADPCM):
-                        case(RTP_PAYLOAD_TYPE_32000HZ_ADPCM):
-                        case(RTP_PAYLOAD_TYPE_44100HZ_ADPCM):
-                        case(RTP_PAYLOAD_TYPE_48000HZ_ADPCM):
-                        case(RTP_PAYLOAD_TYPE_8000HZ_PCM):
-                        case(RTP_PAYLOAD_TYPE_11025HZ_PCM):
-                        case(RTP_PAYLOAD_TYPE_16000HZ_PCM):
-                        case(RTP_PAYLOAD_TYPE_22050HZ_PCM):
-                        case(RTP_PAYLOAD_TYPE_32000HZ_PCM):
-                        case(RTP_PAYLOAD_TYPE_44100HZ_PCM):
-                        case(RTP_PAYLOAD_TYPE_48000HZ_PCM):
-                            av_dlog(NULL, "%s: Detected minimal audio packet\n", __func__);
+                        case RTP_PAYLOAD_TYPE_8000HZ_ADPCM:
+                        case RTP_PAYLOAD_TYPE_11025HZ_ADPCM:
+                        case RTP_PAYLOAD_TYPE_16000HZ_ADPCM:
+                        case RTP_PAYLOAD_TYPE_22050HZ_ADPCM:
+                        case RTP_PAYLOAD_TYPE_32000HZ_ADPCM:
+                        case RTP_PAYLOAD_TYPE_44100HZ_ADPCM:
+                        case RTP_PAYLOAD_TYPE_48000HZ_ADPCM:
+                        case RTP_PAYLOAD_TYPE_8000HZ_PCM:
+                        case RTP_PAYLOAD_TYPE_11025HZ_PCM:
+                        case RTP_PAYLOAD_TYPE_16000HZ_PCM:
+                        case RTP_PAYLOAD_TYPE_22050HZ_PCM:
+                        case RTP_PAYLOAD_TYPE_32000HZ_PCM:
+                        case RTP_PAYLOAD_TYPE_44100HZ_PCM:
+                        case RTP_PAYLOAD_TYPE_48000HZ_PCM:
+                            av_log(NULL, AV_LOG_DEBUG, "%s: Detected minimal audio packet\n", __func__);
                             score += AVPROBE_SCORE_MAX;
                     }
                 }
                 break;
-            case(AD_DATATYPE_LAYOUT):
-                av_dlog(NULL, "%s: Detected layout packet\n", __func__);
+            case AD_DATATYPE_LAYOUT:
+                av_log(NULL, AV_LOG_DEBUG, "%s: Detected layout packet\n", __func__);
                 break;
-            case(AD_DATATYPE_INFO):
-                av_dlog(NULL, "%s: Detected info packet\n", __func__);
+            case AD_DATATYPE_INFO:
+                av_log(NULL, AV_LOG_DEBUG, "%s: Detected info packet\n", __func__);
                 break;
-            case(AD_DATATYPE_XML_INFO):
+            case AD_DATATYPE_XML_INFO:
                 if (bufferSize >= dataSize)  {
                     const char *infoString = "<infoList>";
                     int infoStringLen = strlen(infoString);
                     if (infoStringLen > dataSize)
                         infoStringLen = dataSize;
                     if (strncasecmp(dataPtr, infoString, infoStringLen) == 0)  {
-                        av_dlog(NULL, "%s: Detected xml info packet\n", __func__);
+                        av_log(NULL, AV_LOG_DEBUG, "%s: Detected xml info packet\n", __func__);
                         score += AVPROBE_SCORE_MAX;
                     }
                 }
                 break;
             case AD_DATATYPE_BMP:
-                av_dlog(NULL, "%s: Detected bmp packet\n", __func__);
+                av_log(NULL, AV_LOG_DEBUG, "%s: Detected bmp packet\n", __func__);
                 break;
             case AD_DATATYPE_PBM:
-                av_dlog(NULL, "%s: Detected pbm packet\n", __func__);
+                av_log(NULL, AV_LOG_DEBUG, "%s: Detected pbm packet\n", __func__);
                 break;
+            default:
+                return 0;
         }
 
         bufferSize -= dataSize;
@@ -381,7 +387,7 @@ static int adbinary_probe(AVProbeData *p)
     if (score > AVPROBE_SCORE_MAX)
         score = AVPROBE_SCORE_MAX;
 
-    av_dlog(NULL, "%s: Score %d\n", __func__, score);
+    av_log(NULL, AV_LOG_DEBUG, "%s: Score %d\n", __func__, score);
 
     return score;
 }
@@ -408,17 +414,17 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     data_type    = avio_r8(pb);
     if (data_type >= AD_DATATYPE_MAX)  {
         av_log(s, AV_LOG_WARNING, "%s: No handler for data_type = %d", __func__, data_type);
-        return ADFFMPEG_AD_ERROR_DEFAULT;
+        return ADFFMPEG_AD_ERROR_READ_6_BYTE_SEPARATOR;
     }
     data_channel = avio_r8(pb);
     if (data_channel >= 32)  {
         av_log(s, AV_LOG_WARNING, "%s: Channel number %d too high", __func__, data_channel);
-        return ADFFMPEG_AD_ERROR_DEFAULT;
+        return ADFFMPEG_AD_ERROR_READ_6_BYTE_SEPARATOR;
     }
     size         = avio_rb32(pb);
     if (size >= 0x1000000)  {
         av_log(s, AV_LOG_WARNING, "%s: Packet too large, %d bytes", __func__, size);
-        return ADFFMPEG_AD_ERROR_DEFAULT;
+        return ADFFMPEG_AD_ERROR_READ_6_BYTE_SEPARATOR;
     }
 
     if (size == 0)  {
@@ -450,11 +456,11 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 errorVal = adbinary_mpeg(s, pkt, payload, &txtDat);
                 break;
             case AD_DATATYPE_MINIMAL_MPEG4:
-                errorVal = ad_read_mpeg_minimal(s, pkt, size, data_channel,
-                                                payload, &txtDat);
+                errorVal = adbinary_mpeg_minimal(s, pkt, size, data_channel,
+                                                 payload, &txtDat);
                 break;
             case AD_DATATYPE_MINIMAL_AUDIO_ADPCM:
-                errorVal = ad_read_audio_minimal(s, pkt, size, payload);
+                errorVal = adbinary_audio_minimal(s, pkt, size, payload);
                 break;
             case AD_DATATYPE_AUDIO_ADPCM:
                 errorVal = ad_read_audio(s, pkt, size, payload);

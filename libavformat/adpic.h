@@ -47,13 +47,18 @@ int ad_new_packet(AVPacket *pkt, int size);
 #endif
 
 /// These are the data types that are supported by the DS2 video servers
-enum ff_ad_data_type {  AD_DATATYPE_JPEG, AD_DATATYPE_JFIF,
-                        AD_DATATYPE_MPEG4I, AD_DATATYPE_MPEG4P,
-                        AD_DATATYPE_AUDIO_ADPCM, AD_DATATYPE_AUDIO_RAW,
+enum ff_ad_data_type {  AD_DATATYPE_JPEG = 0, 
+                        AD_DATATYPE_JFIF,
+                        AD_DATATYPE_MPEG4I, 
+                        AD_DATATYPE_MPEG4P,
+                        AD_DATATYPE_AUDIO_ADPCM, 
+                        AD_DATATYPE_AUDIO_RAW,
                         AD_DATATYPE_MINIMAL_MPEG4, 
                         AD_DATATYPE_MINIMAL_AUDIO_ADPCM,
-                        AD_DATATYPE_LAYOUT, AD_DATATYPE_INFO, 
-                        AD_DATATYPE_H264I, AD_DATATYPE_H264P, 
+                        AD_DATATYPE_LAYOUT, 
+                        AD_DATATYPE_INFO, 
+                        AD_DATATYPE_H264I, 
+                        AD_DATATYPE_H264P, 
                         AD_DATATYPE_XML_INFO, 
                         AD_DATATYPE_BMP, 
                         AD_DATATYPE_PBM, 
