@@ -119,7 +119,6 @@ static int mpegps_read_header(AVFormatContext *s,
     m->sofdec = -1;
     do {
         v = avio_r8(s->pb);
-        m->header_state = m->header_state << 8 | v;
         m->sofdec++;
     } while (v == sofdec[i] && i++ < 6);
 
@@ -573,14 +572,7 @@ static int mpegps_read_packet(AVFormatContext *s,
         else if (st->codec->bits_per_coded_sample == 28)
             return AVERROR(EINVAL);
     }
-    av_new_packet(pkt, len);
-    ret = avio_read(s->pb, pkt->data, pkt->size);
-    if (ret < 0) {
-        pkt->size = 0;
-    } else if (ret < pkt->size) {
-        pkt->size = ret;
-        memset(pkt->data + ret, 0, FF_INPUT_BUFFER_PADDING_SIZE);
-    }
+    ret = av_get_packet(s->pb, pkt, len);
     pkt->pts = pts;
     pkt->dts = dts;
     pkt->pos = dummy_pos;

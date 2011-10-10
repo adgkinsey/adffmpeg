@@ -1749,6 +1749,7 @@ static int seek_frame_generic(AVFormatContext *s,
 
     if(index < 0 || index==st->nb_index_entries-1){
         AVPacket pkt;
+        int nonkey=0;
 
         if(st->nb_index_entries){
             assert(st->index_entries);
@@ -1768,9 +1769,13 @@ static int seek_frame_generic(AVFormatContext *s,
             if (read_status < 0)
                 break;
             av_free_packet(&pkt);
-            if(stream_index == pkt.stream_index){
-                if((pkt.flags & AV_PKT_FLAG_KEY) && pkt.dts > timestamp)
+            if(stream_index == pkt.stream_index && pkt.dts > timestamp){
+                if(pkt.flags & AV_PKT_FLAG_KEY)
                     break;
+                if(nonkey++ > 1000){
+                    av_log(s, AV_LOG_ERROR,"seek_frame_generic failed as this stream seems to contain no keyframes after the target timestamp, %d non keyframes found\n", nonkey);
+                    break;
+                }
             }
         }
         index = av_index_search_timestamp(st, timestamp, flags);
@@ -1898,7 +1903,7 @@ static void update_stream_timings(AVFormatContext *ic)
         st = ic->streams[i];
         if (st->start_time != AV_NOPTS_VALUE && st->time_base.den) {
             start_time1= av_rescale_q(st->start_time, st->time_base, AV_TIME_BASE_Q);
-            if (st->codec->codec_id == CODEC_ID_DVB_TELETEXT || st->codec->codec_type == AVMEDIA_TYPE_SUBTITLE) {
+            if (st->codec->codec_type == AVMEDIA_TYPE_SUBTITLE) {
                 if (start_time1 < start_time_text)
                     start_time_text = start_time1;
             } else
@@ -2430,10 +2435,10 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
         }
         {
             int64_t last = st->info->last_dts;
-            int64_t duration= pkt->dts - last;
 
-            if(pkt->dts != AV_NOPTS_VALUE && last != AV_NOPTS_VALUE && duration>0){
+            if(pkt->dts != AV_NOPTS_VALUE && last != AV_NOPTS_VALUE && pkt->dts > last){
                 double dts= pkt->dts * av_q2d(st->time_base);
+                int64_t duration= pkt->dts - last;
 
 //                if(st->codec->codec_type == AVMEDIA_TYPE_VIDEO)
 //                    av_log(NULL, AV_LOG_ERROR, "%f\n", dur);
@@ -3016,7 +3021,7 @@ int avformat_write_header(AVFormatContext *s, AVDictionary **options)
                 goto fail;
             }
             if(av_cmp_q(st->sample_aspect_ratio, st->codec->sample_aspect_ratio)
-               && FFABS(av_q2d(st->sample_aspect_ratio) - av_q2d(st->codec->sample_aspect_ratio)) > 0.001
+               && FFABS(av_q2d(st->sample_aspect_ratio) - av_q2d(st->codec->sample_aspect_ratio)) > 0.004*av_q2d(st->sample_aspect_ratio)
             ){
                 av_log(s, AV_LOG_ERROR, "Aspect ratio mismatch between encoder and muxer layer\n");
                 ret = AVERROR(EINVAL);

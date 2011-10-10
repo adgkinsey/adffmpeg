@@ -22,6 +22,7 @@
 #include "swresample_internal.h"
 #include "audioconvert.h"
 #include "libavutil/avassert.h"
+#include "libavutil/audioconvert.h"
 
 #define  C30DB  M_SQRT2
 #define  C15DB  1.189207115
@@ -110,22 +111,11 @@ void swr_free(SwrContext **ss){
         free_temp(&s->in_buffer);
         swr_audio_convert_free(&s-> in_convert);
         swr_audio_convert_free(&s->out_convert);
+        swr_audio_convert_free(&s->full_convert);
         swr_resample_free(&s->resample);
     }
 
     av_freep(ss);
-}
-
-static int64_t guess_layout(int ch){
-    switch(ch){
-    case 1: return AV_CH_LAYOUT_MONO;
-    case 2: return AV_CH_LAYOUT_STEREO;
-    case 5: return AV_CH_LAYOUT_5POINT0;
-    case 6: return AV_CH_LAYOUT_5POINT1;
-    case 7: return AV_CH_LAYOUT_7POINT0;
-    case 8: return AV_CH_LAYOUT_7POINT1;
-    default: return 0;
-    }
 }
 
 int swr_init(SwrContext *s){
@@ -138,6 +128,7 @@ int swr_init(SwrContext *s){
     free_temp(&s->in_buffer);
     swr_audio_convert_free(&s-> in_convert);
     swr_audio_convert_free(&s->out_convert);
+    swr_audio_convert_free(&s->full_convert);
 
     s-> in.planar= s-> in_sample_fmt >= 0x100;
     s->out.planar= s->out_sample_fmt >= 0x100;
@@ -175,10 +166,15 @@ int swr_init(SwrContext *s){
         return -1;
     }
 
+    if(s-> in.ch_count && s->in.ch_count != av_get_channel_layout_nb_channels(s-> in_ch_layout)){
+        av_log(s, AV_LOG_WARNING, "Input channel layout has a different number of channels than there actually is, ignoring layout\n");
+        s-> in_ch_layout= 0;
+    }
+
     if(!s-> in_ch_layout)
-        s-> in_ch_layout= guess_layout(s->in.ch_count);
+        s-> in_ch_layout= av_get_default_channel_layout(s->in.ch_count);
     if(!s->out_ch_layout)
-        s->out_ch_layout= guess_layout(s->out.ch_count);
+        s->out_ch_layout= av_get_default_channel_layout(s->out.ch_count);
 
     s->rematrix= s->out_ch_layout  !=s->in_ch_layout;
 
@@ -195,6 +191,12 @@ av_assert0(s->out.ch_count);
     s-> in.bps= av_get_bits_per_sample_fmt(s-> in_sample_fmt)/8;
     s->int_bps= av_get_bits_per_sample_fmt(s->int_sample_fmt)/8;
     s->out.bps= av_get_bits_per_sample_fmt(s->out_sample_fmt)/8;
+
+    if(!s->resample && !s->rematrix){
+        s->full_convert = swr_audio_convert_alloc(s->out_sample_fmt,
+                                                  s-> in_sample_fmt, s-> in.ch_count, 0);
+        return 0;
+    }
 
     s->in_convert = swr_audio_convert_alloc(s->int_sample_fmt,
                                             s-> in_sample_fmt, s-> in.ch_count, 0);
@@ -290,6 +292,12 @@ int swr_convert(struct SwrContext *s, uint8_t *out_arg[SWR_CH_MAX], int out_coun
 
     fill_audiodata(in ,  in_arg);
     fill_audiodata(out, out_arg);
+
+    if(s->full_convert){
+        av_assert0(!s->resample);
+        swr_audio_convert(s->full_convert, out, in, in_count);
+        return out_count;
+    }
 
 //     in_max= out_count*(int64_t)s->in_sample_rate / s->out_sample_rate + resample_filter_taps;
 //     in_count= FFMIN(in_count, in_in + 2 - s->hist_buffer_count);
