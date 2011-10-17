@@ -187,10 +187,10 @@ typedef struct InputStream {
 typedef struct InputFile {
     AVFormatContext *ctx;
     int eof_reached;      /* true if eof reached */
-    int ist_index;        /* index of first stream in ist_table */
+    int ist_index;        /* index of first stream in input_streams */
     int buffer_size;      /* current total buffer size */
     int64_t ts_offset;
-    int nb_streams;       /* number of stream that avconv is aware of; may be different
+    int nb_streams;       /* number of stream that ffmpeg is aware of; may be different
                              from ctx.nb_streams if new streams appear during av_read_frame() */
     int rate_emu;
 } InputFile;
@@ -247,7 +247,7 @@ typedef struct OutputStream {
     AVFilterGraph *graph;
 #endif
 
-   int sws_flags;
+   int64_t sws_flags;
    AVDictionary *opts;
    int is_past_recording_time;
 } OutputStream;
@@ -460,7 +460,7 @@ static int configure_video_filters(InputStream *ist, OutputStream *ost)
         snprintf(args, 255, "%d:%d:flags=0x%X",
                  codec->width,
                  codec->height,
-                 ost->sws_flags);
+                 (unsigned)ost->sws_flags);
         if ((ret = avfilter_graph_create_filter(&filter, avfilter_get_by_name("scale"),
                                                 NULL, args, NULL, ost->graph)) < 0)
             return ret;
@@ -469,7 +469,7 @@ static int configure_video_filters(InputStream *ist, OutputStream *ost)
         last_filter = filter;
     }
 
-    snprintf(args, sizeof(args), "flags=0x%X", ost->sws_flags);
+    snprintf(args, sizeof(args), "flags=0x%X", (unsigned)ost->sws_flags);
     ost->graph->scale_sws_opts = av_strdup(args);
 
     if (ost->avfilter) {
@@ -2988,6 +2988,7 @@ static AVCodec *choose_codec(OptionsContext *o, AVFormatContext *s, AVStream *st
 static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
 {
     int i, rfps, rfps_base;
+    char *next, *codec_tag = NULL;
 
     for (i = 0; i < ic->nb_streams; i++) {
         AVStream *st = ic->streams[i];
@@ -3004,6 +3005,14 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
 
         MATCH_PER_STREAM_OPT(ts_scale, dbl, scale, ic, st);
         ist->ts_scale = scale;
+
+        MATCH_PER_STREAM_OPT(codec_tags, str, codec_tag, ic, st);
+        if (codec_tag) {
+            uint32_t tag = strtol(codec_tag, &next, 0);
+            if (*next)
+                tag = AV_RL32(codec_tag);
+            st->codec->codec_tag = tag;
+        }
 
         ist->dec = choose_codec(o, ic, st, dec->codec_type);
         if (!ist->dec)
@@ -3260,7 +3269,7 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
     if (oc->oformat->flags & AVFMT_GLOBALHEADER)
         st->codec->flags |= CODEC_FLAG_GLOBAL_HEADER;
 
-    ost->sws_flags = av_get_int(sws_opts, "sws_flags", NULL);
+    av_opt_get_int(sws_opts, "sws_flags", 0, &ost->sws_flags);
     return ost;
 }
 
@@ -3907,11 +3916,7 @@ static void show_usage(void)
 
 static int opt_help(const char *opt, const char *arg)
 {
-    AVCodec *c;
-    AVOutputFormat *oformat = NULL;
-    AVInputFormat  *iformat = NULL;
-    const AVClass *class;
-
+    int flags = AV_OPT_FLAG_DECODING_PARAM | AV_OPT_FLAG_ENCODING_PARAM;
     av_log_set_callback(log_callback_help);
     show_usage();
     show_help_options(options, "Main options:\n",
@@ -3938,41 +3943,10 @@ static int opt_help(const char *opt, const char *arg)
                       OPT_GRAB,
                       OPT_GRAB);
     printf("\n");
-    class = avcodec_get_class();
-    av_opt_show2(&class, NULL, AV_OPT_FLAG_ENCODING_PARAM|AV_OPT_FLAG_DECODING_PARAM, 0);
-    printf("\n");
+    show_help_children(avcodec_get_class(), flags);
+    show_help_children(avformat_get_class(), flags);
+    show_help_children(sws_get_class(), flags);
 
-    /* individual codec options */
-    c = NULL;
-    while ((c = av_codec_next(c))) {
-        if (c->priv_class) {
-            av_opt_show2(&c->priv_class, NULL, AV_OPT_FLAG_ENCODING_PARAM|AV_OPT_FLAG_DECODING_PARAM, 0);
-            printf("\n");
-        }
-    }
-
-    class = avformat_get_class();
-    av_opt_show2(&class, NULL, AV_OPT_FLAG_ENCODING_PARAM|AV_OPT_FLAG_DECODING_PARAM, 0);
-    printf("\n");
-
-    /* individual muxer options */
-    while ((oformat = av_oformat_next(oformat))) {
-        if (oformat->priv_class) {
-            av_opt_show2(&oformat->priv_class, NULL, AV_OPT_FLAG_ENCODING_PARAM, 0);
-            printf("\n");
-        }
-    }
-
-    /* individual demuxer options */
-    while ((iformat = av_iformat_next(iformat))) {
-        if (iformat->priv_class) {
-            av_opt_show2(&iformat->priv_class, NULL, AV_OPT_FLAG_DECODING_PARAM, 0);
-            printf("\n");
-        }
-    }
-
-    class = sws_get_class();
-    av_opt_show2(&class, NULL, AV_OPT_FLAG_ENCODING_PARAM|AV_OPT_FLAG_DECODING_PARAM, 0);
     return 0;
 }
 

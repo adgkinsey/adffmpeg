@@ -33,6 +33,66 @@
 #include "libavutil/dict.h"
 #include "avio_internal.h"
 
+const AVMetadataConv ff_id3v2_34_metadata_conv[] = {
+    { "TALB", "album"},
+    { "TCOM", "composer"},
+    { "TCON", "genre"},
+    { "TCOP", "copyright"},
+    { "TENC", "encoded_by"},
+    { "TIT2", "title"},
+    { "TLAN", "language"},
+    { "TPE1", "artist"},
+    { "TPE2", "album_artist"},
+    { "TPE3", "performer"},
+    { "TPOS", "disc"},
+    { "TPUB", "publisher"},
+    { "TRCK", "track"},
+    { "TSSE", "encoder"},
+    { 0 }
+};
+
+const AVMetadataConv ff_id3v2_4_metadata_conv[] = {
+    { "TDRL", "date"},
+    { "TDRC", "date"},
+    { "TDEN", "creation_time"},
+    { "TSOA", "album-sort"},
+    { "TSOP", "artist-sort"},
+    { "TSOT", "title-sort"},
+    { 0 }
+};
+
+static const AVMetadataConv id3v2_2_metadata_conv[] = {
+    { "TAL",  "album"},
+    { "TCO",  "genre"},
+    { "TT2",  "title"},
+    { "TEN",  "encoded_by"},
+    { "TP1",  "artist"},
+    { "TP2",  "album_artist"},
+    { "TP3",  "performer"},
+    { "TRK",  "track"},
+    { 0 }
+};
+
+
+const char ff_id3v2_tags[][4] = {
+   "TALB", "TBPM", "TCOM", "TCON", "TCOP", "TDLY", "TENC", "TEXT",
+   "TFLT", "TIT1", "TIT2", "TIT3", "TKEY", "TLAN", "TLEN", "TMED",
+   "TOAL", "TOFN", "TOLY", "TOPE", "TOWN", "TPE1", "TPE2", "TPE3",
+   "TPE4", "TPOS", "TPUB", "TRCK", "TRSN", "TRSO", "TSRC", "TSSE",
+   { 0 },
+};
+
+const char ff_id3v2_4_tags[][4] = {
+   "TDEN", "TDOR", "TDRC", "TDRL", "TDTG", "TIPL", "TMCL", "TMOO",
+   "TPRO", "TSOA", "TSOP", "TSOT", "TSST",
+   { 0 },
+};
+
+const char ff_id3v2_3_tags[][4] = {
+   "TDAT", "TIME", "TORY", "TRDA", "TSIZ", "TYER",
+   { 0 },
+};
+
 int ff_id3v2_match(const uint8_t *buf, const char * magic)
 {
     return  buf[0]         == magic[0] &&
@@ -328,6 +388,18 @@ finish:
         av_dict_set(m, "date", date, 0);
 }
 
+typedef struct ID3v2EMFunc {
+    const char *tag3;
+    const char *tag4;
+    void (*read)(AVFormatContext*, AVIOContext*, int, char*, ID3v2ExtraMeta **);
+    void (*free)(void *);
+} ID3v2EMFunc;
+
+static const ID3v2EMFunc id3v2_extra_meta_funcs[] = {
+    { "GEO", "GEOB", read_geobtag, free_geobtag },
+    { NULL }
+};
+
 /**
  * Get the corresponding ID3v2EMFunc struct for a tag.
  * @param isv34 Determines if v2.2 or v2.3/4 strings are used
@@ -336,16 +408,15 @@ finish:
 static const ID3v2EMFunc *get_extra_meta_func(const char *tag, int isv34)
 {
     int i = 0;
-    while (ff_id3v2_extra_meta_funcs[i].tag3) {
+    while (id3v2_extra_meta_funcs[i].tag3) {
         if (!memcmp(tag,
-                    (isv34 ?
-                        ff_id3v2_extra_meta_funcs[i].tag4 :
-                        ff_id3v2_extra_meta_funcs[i].tag3),
+                    (isv34 ? id3v2_extra_meta_funcs[i].tag4 :
+                             id3v2_extra_meta_funcs[i].tag3),
                     (isv34 ? 4 : 3)))
-            return &ff_id3v2_extra_meta_funcs[i];
+            return &id3v2_extra_meta_funcs[i];
         i++;
     }
-    return &ff_id3v2_extra_meta_funcs[i];
+    return &id3v2_extra_meta_funcs[i];
 }
 
 static void ff_id3v2_parse(AVFormatContext *s, int len, uint8_t version, uint8_t flags, ID3v2ExtraMeta **extra_meta)
@@ -360,7 +431,7 @@ static void ff_id3v2_parse(AVFormatContext *s, int len, uint8_t version, uint8_t
     AVIOContext *pbx;
     unsigned char *buffer = NULL;
     int buffer_size = 0;
-    void (*extra_func)(AVFormatContext*, AVIOContext*, int, char*, ID3v2ExtraMeta**) = NULL;
+    const ID3v2EMFunc *extra_func;
 
     switch (version) {
     case 2:
@@ -432,7 +503,7 @@ static void ff_id3v2_parse(AVFormatContext *s, int len, uint8_t version, uint8_t
             av_log(s, AV_LOG_WARNING, "Skipping encrypted/compressed ID3v2 frame %s.\n", tag);
             avio_skip(s->pb, tlen);
         /* check for text tag or supported special meta tag */
-        } else if (tag[0] == 'T' || (extra_meta && (extra_func = get_extra_meta_func(tag, isv34)->read))) {
+        } else if (tag[0] == 'T' || (extra_meta && (extra_func = get_extra_meta_func(tag, isv34)))) {
             if (unsync || tunsync) {
                 int i, j;
                 av_fast_malloc(&buffer, &buffer_size, tlen);
@@ -458,7 +529,7 @@ static void ff_id3v2_parse(AVFormatContext *s, int len, uint8_t version, uint8_t
                 read_ttag(s, pbx, tlen, tag);
             else
                 /* parse special meta tag */
-                extra_func(s, pbx, tlen, tag, extra_meta);
+                extra_func->read(s, pbx, tlen, tag, extra_meta);
         }
         else if (!tag[0]) {
             if (tag[1])
@@ -508,7 +579,7 @@ void ff_id3v2_read_all(AVFormatContext *s, const char *magic, ID3v2ExtraMeta **e
         }
     } while (found_header);
     ff_metadata_conv(&s->metadata, NULL, ff_id3v2_34_metadata_conv);
-    ff_metadata_conv(&s->metadata, NULL, ff_id3v2_2_metadata_conv);
+    ff_metadata_conv(&s->metadata, NULL, id3v2_2_metadata_conv);
     ff_metadata_conv(&s->metadata, NULL, ff_id3v2_4_metadata_conv);
     merge_date(&s->metadata);
 }
@@ -521,78 +592,13 @@ void ff_id3v2_read(AVFormatContext *s, const char *magic)
 void ff_id3v2_free_extra_meta(ID3v2ExtraMeta **extra_meta)
 {
     ID3v2ExtraMeta *current = *extra_meta, *next;
-    void (*free_func)(void *);
+    const ID3v2EMFunc *extra_func;
 
     while (current) {
-        if ((free_func = get_extra_meta_func(current->tag, 1)->free))
-            free_func(current->data);
+        if ((extra_func = get_extra_meta_func(current->tag, 1)))
+            extra_func->free(current->data);
         next = current->next;
         av_freep(&current);
         current = next;
     }
 }
-
-const ID3v2EMFunc ff_id3v2_extra_meta_funcs[] = {
-    { "GEO", "GEOB", read_geobtag, free_geobtag },
-    { NULL,  NULL,   NULL,         NULL }
-};
-
-const AVMetadataConv ff_id3v2_34_metadata_conv[] = {
-    { "TALB", "album"},
-    { "TCOM", "composer"},
-    { "TCON", "genre"},
-    { "TCOP", "copyright"},
-    { "TENC", "encoded_by"},
-    { "TIT2", "title"},
-    { "TLAN", "language"},
-    { "TPE1", "artist"},
-    { "TPE2", "album_artist"},
-    { "TPE3", "performer"},
-    { "TPOS", "disc"},
-    { "TPUB", "publisher"},
-    { "TRCK", "track"},
-    { "TSSE", "encoder"},
-    { 0 }
-};
-
-const AVMetadataConv ff_id3v2_4_metadata_conv[] = {
-    { "TDRL", "date"},
-    { "TDRC", "date"},
-    { "TDEN", "creation_time"},
-    { "TSOA", "album-sort"},
-    { "TSOP", "artist-sort"},
-    { "TSOT", "title-sort"},
-    { 0 }
-};
-
-const AVMetadataConv ff_id3v2_2_metadata_conv[] = {
-    { "TAL",  "album"},
-    { "TCO",  "genre"},
-    { "TT2",  "title"},
-    { "TEN",  "encoded_by"},
-    { "TP1",  "artist"},
-    { "TP2",  "album_artist"},
-    { "TP3",  "performer"},
-    { "TRK",  "track"},
-    { 0 }
-};
-
-
-const char ff_id3v2_tags[][4] = {
-   "TALB", "TBPM", "TCOM", "TCON", "TCOP", "TDLY", "TENC", "TEXT",
-   "TFLT", "TIT1", "TIT2", "TIT3", "TKEY", "TLAN", "TLEN", "TMED",
-   "TOAL", "TOFN", "TOLY", "TOPE", "TOWN", "TPE1", "TPE2", "TPE3",
-   "TPE4", "TPOS", "TPUB", "TRCK", "TRSN", "TRSO", "TSRC", "TSSE",
-   { 0 },
-};
-
-const char ff_id3v2_4_tags[][4] = {
-   "TDEN", "TDOR", "TDRC", "TDRL", "TDTG", "TIPL", "TMCL", "TMOO",
-   "TPRO", "TSOA", "TSOP", "TSOT", "TSST",
-   { 0 },
-};
-
-const char ff_id3v2_3_tags[][4] = {
-   "TDAT", "TIME", "TORY", "TRDA", "TSIZ", "TYER",
-   { 0 },
-};

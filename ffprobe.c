@@ -155,6 +155,19 @@ struct WriterContext {
     unsigned int nb_chapter;        ///< number of the chapter, starting at 0
 };
 
+static const char *writer_get_name(void *p)
+{
+    WriterContext *wctx = p;
+    return wctx->writer->name;
+}
+
+static const AVClass writer_class = {
+    "Writer",
+    writer_get_name,
+    NULL,
+    LIBAVUTIL_VERSION_INT,
+};
+
 static void writer_close(WriterContext **wctx)
 {
     if (*wctx && (*wctx)->writer->uninit)
@@ -179,6 +192,7 @@ static int writer_open(WriterContext **wctx, const Writer *writer,
         goto fail;
     }
 
+    (*wctx)->class = &writer_class;
     (*wctx)->writer = writer;
     if ((*wctx)->writer->init)
         ret = (*wctx)->writer->init(*wctx, args, opaque);
@@ -336,16 +350,30 @@ static void default_print_chapter_header(WriterContext *wctx, const char *chapte
         printf("\n");
 }
 
+/* lame uppercasing routine, assumes the string is lower case ASCII */
+static inline char *upcase_string(char *dst, size_t dst_size, const char *src)
+{
+    int i;
+    for (i = 0; src[i] && i < dst_size-1; i++)
+        dst[i] = src[i]-32;
+    dst[i] = 0;
+    return dst;
+}
+
 static void default_print_section_header(WriterContext *wctx, const char *section)
 {
+    char buf[32];
+
     if (wctx->nb_section)
         printf("\n");
-    printf("[%s]\n", section);
+    printf("[%s]\n", upcase_string(buf, sizeof(buf), section));
 }
 
 static void default_print_section_footer(WriterContext *wctx, const char *section)
 {
-    printf("[/%s]", section);
+    char buf[32];
+
+    printf("[/%s]", upcase_string(buf, sizeof(buf), section));
 }
 
 static void default_print_str(WriterContext *wctx, const char *key, const char *value)
@@ -550,7 +578,7 @@ static void show_packet(WriterContext *w, AVFormatContext *fmt_ctx, AVPacket *pk
     AVStream *st = fmt_ctx->streams[pkt->stream_index];
     struct print_buf pbuf = {.s = NULL};
 
-    print_section_header("PACKET");
+    print_section_header("packet");
     print_str("codec_type",       av_x_if_null(av_get_media_type_string(st->codec->codec_type), "unknown"));
     print_int("stream_index",     pkt->stream_index);
     print_str("pts",              ts_value_string  (val_str, sizeof(val_str), pkt->pts));
@@ -562,7 +590,7 @@ static void show_packet(WriterContext *w, AVFormatContext *fmt_ctx, AVPacket *pk
     print_str("size",             value_string     (val_str, sizeof(val_str), pkt->size, unit_byte_str));
     print_fmt("pos",   "%"PRId64, pkt->pos);
     print_fmt("flags", "%c",      pkt->flags & AV_PKT_FLAG_KEY ? 'K' : '_');
-    print_section_footer("PACKET");
+    print_section_footer("packet");
 
     av_free(pbuf.s);
     fflush(stdout);
@@ -588,7 +616,7 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
     AVRational display_aspect_ratio;
     struct print_buf pbuf = {.s = NULL};
 
-    print_section_header("STREAM");
+    print_section_header("stream");
 
     print_int("index", stream->index);
 
@@ -630,6 +658,8 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
             break;
 
         case AVMEDIA_TYPE_AUDIO:
+            print_str("sample_fmt",
+                      av_x_if_null(av_get_sample_fmt_name(dec_ctx->sample_fmt), "unknown"));
             print_str("sample_rate",     value_string(val_str, sizeof(val_str), dec_ctx->sample_rate, unit_hertz_str));
             print_int("channels",        dec_ctx->channels);
             print_int("bits_per_sample", av_get_bits_per_sample(dec_ctx->codec_id));
@@ -651,7 +681,7 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
 
     show_tags(stream->metadata);
 
-    print_section_footer("STREAM");
+    print_section_footer("stream");
     av_free(pbuf.s);
     fflush(stdout);
 }
@@ -668,7 +698,7 @@ static void show_format(WriterContext *w, AVFormatContext *fmt_ctx)
     char val_str[128];
     struct print_buf pbuf = {.s = NULL};
 
-    print_section_header("FORMAT");
+    print_section_header("format");
     print_str("filename",         fmt_ctx->filename);
     print_int("nb_streams",       fmt_ctx->nb_streams);
     print_str("format_name",      fmt_ctx->iformat->name);
@@ -678,7 +708,7 @@ static void show_format(WriterContext *w, AVFormatContext *fmt_ctx)
     print_str("size",             value_string(val_str, sizeof(val_str), fmt_ctx->file_size, unit_byte_str));
     print_str("bit_rate",         value_string(val_str, sizeof(val_str), fmt_ctx->bit_rate,  unit_bit_per_second_str));
     show_tags(fmt_ctx->metadata);
-    print_section_footer("FORMAT");
+    print_section_footer("format");
     av_free(pbuf.s);
     fflush(stdout);
 }
@@ -814,13 +844,13 @@ static void opt_input_file(void *optctx, const char *arg)
 
 static int opt_help(const char *opt, const char *arg)
 {
-    const AVClass *class = avformat_get_class();
     av_log_set_callback(log_callback_help);
     show_usage();
     show_help_options(options, "Main options:\n", 0, 0);
     printf("\n");
-    av_opt_show2(&class, NULL,
-                 AV_OPT_FLAG_DECODING_PARAM, 0);
+
+    show_help_children(avformat_get_class(), AV_OPT_FLAG_DECODING_PARAM);
+
     return 0;
 }
 
