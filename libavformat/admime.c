@@ -753,14 +753,25 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
         errorVal = ad_read_packet(s, pkt, mediaType, codecId, payload, txtDat);
     }
     else  {
-        // If there was an error, release any memory that has been allocated
         av_dlog(s, "admime_read_packet: Error %d\n", errorVal);
+        
+#ifdef AD_NO_SIDEDATA
+        // If there was an error, release any memory that has been allocated
         if (payload != NULL)
             av_free(payload);
 
         if (txtDat != NULL)
             av_free( txtDat );
+#endif
     }
+
+#ifndef AD_NO_SIDEDATA
+    if (payload != NULL)
+        av_freep(&payload);
+
+    if( txtDat != NULL )
+        av_freep(&txtDat);
+#endif
 
     return errorVal;
 }
