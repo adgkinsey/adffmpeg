@@ -22,6 +22,7 @@
 
 #include "libavcodec/h264pred.h"
 
+#if HAVE_NEON
 void ff_pred16x16_vert_neon(uint8_t *src, int stride);
 void ff_pred16x16_hor_neon(uint8_t *src, int stride);
 void ff_pred16x16_plane_neon(uint8_t *src, int stride);
@@ -73,8 +74,11 @@ static void ff_h264_pred_init_neon(H264PredContext *h, int codec_id, const int b
     if (codec_id != CODEC_ID_SVQ3 && codec_id != CODEC_ID_RV40 && codec_id != CODEC_ID_VP8)
         h->pred16x16[PLANE_PRED8x8  ] = ff_pred16x16_plane_neon;
 }
+#endif
 
 void ff_h264_pred_init_arm(H264PredContext *h, int codec_id, int bit_depth)
 {
-    if (HAVE_NEON)    ff_h264_pred_init_neon(h, codec_id, bit_depth);
+#if HAVE_NEON
+    ff_h264_pred_init_neon(h, codec_id, bit_depth);
+#endif
 }
