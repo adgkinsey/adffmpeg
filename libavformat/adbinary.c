@@ -111,7 +111,7 @@ static int adbinary_mpeg(AVFormatContext *s,
         return ADFFMPEG_AD_ERROR_MPEG4_NEW_PACKET;
     }
 
-    if (vidDat->vid_format & (PIC_MODE_MPEG4_411_I | PIC_MODE_MPEG4_411_GOV_I))
+    if ( (vidDat->vid_format == PIC_MODE_MPEG4_411_I) || (vidDat->vid_format == PIC_MODE_MPEG4_411_GOV_I) )
         pkt->flags |= AV_PKT_FLAG_KEY;
 
     return errorVal;
@@ -125,7 +125,7 @@ static int adbinary_mpeg_minimal(AVFormatContext *s,
                                 struct NetVuImageData *vidDat, char **text_data)
 {
     static const int titleLen  = sizeof(vidDat->title) / sizeof(vidDat->title[0]);
-    AdContext* adContext       = s->priv_data;
+    AdContext*       adContext = s->priv_data;
     AVIOContext *    pb        = s->pb;
     int              dataSize  = size - (4 + 2);
     int              errorVal  = 0;
@@ -143,7 +143,6 @@ static int adbinary_mpeg_minimal(AVFormatContext *s,
     vidDat->version = PIC_VERSION;
     vidDat->cam = channel + 1;
     vidDat->utc_offset = adContext->utc_offset;
-    vidDat->vid_format = PIC_MODE_MPEG4_411;
     snprintf(vidDat->title, titleLen, "Camera %d", vidDat->cam);
 
     // Now get the main frame data into a new packet
@@ -153,6 +152,8 @@ static int adbinary_mpeg_minimal(AVFormatContext *s,
                __func__, dataSize, errorVal);
         return ADFFMPEG_AD_ERROR_MPEG4_MINIMAL_NEW_PACKET;
     }
+    
+    vidDat->vid_format = mpegOrH264(AV_RB32(pkt->data));
 
     return errorVal;
 }
@@ -313,9 +314,15 @@ static int adbinary_probe(AVProbeData *p)
                     // to go on.  Should be able to use milliseconds <= 1000 but
                     // servers often send larger values than this,
                     // nonsensical as that is
-                    if ((vos >= 0x1B0) && (vos <= 0x1B6) && (sec > 315532800)) {
-                        av_log(NULL, AV_LOG_DEBUG, "%s: Detected minimal MPEG4 packet\n", __func__);
-                        score += AVPROBE_SCORE_MAX / 2;
+                    if (sec > 315532800)  {
+                        if ((vos >= 0x1B0) && (vos <= 0x1B6)) {
+                            av_log(NULL, AV_LOG_DEBUG, "%s: Detected minimal MPEG4 packet\n", __func__);
+                            score += AVPROBE_SCORE_MAX / 2;
+                        }
+                        else if (vos == 0x01) {
+                            av_log(NULL, AV_LOG_DEBUG, "%s: Detected minimal h264 packet\n", __func__);
+                            score += AVPROBE_SCORE_MAX / 2;
+                        }
                     }
                 }
                 break;

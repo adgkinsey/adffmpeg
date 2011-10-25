@@ -28,6 +28,7 @@
 #include "avformat.h"
 #include "adffmpeg_errors.h"
 #include "adpic.h"
+#include "libavutil/intreadwrite.h"
 
 
 #define TEMP_BUFFER_SIZE        1024
@@ -348,8 +349,10 @@ static int process_mp4data_line( char *line, int line_count,
         vidDat->cam = strtol(p, NULL, 10);
     else if (!memcmp( tag, "Name", strlen( "Name" ) ) )
         memcpy( vidDat->title, p, FFMIN( titleLen, strlen(p) ) );
-    else if (!memcmp( tag, "Version", strlen( "Version" ) ) )
-        vidDat->version = strtol(p, NULL, 10);
+    else if (!memcmp( tag, "Version", strlen( "Version" ) ) )  {
+        int verNum = strtod(p, NULL) * 100.0 - 1;
+        vidDat->version = 0xDECADE10 + verNum;
+    }
     else if (!memcmp( tag, "Date", strlen( "Date" ) ) ) {
         sscanf( p, "%d/%d/%d", &tim->tm_mday, &tim->tm_mon, &tim->tm_year );
         tim->tm_year -= 1900;
@@ -515,7 +518,7 @@ static int admime_mpeg(AVFormatContext *s,
                     av_free( textBuffer );
                     return ADFFMPEG_AD_ERROR_MPEG4_MIME_PARSE_TEXT_DATA;
                 }
-                vidDat->vid_format = PIC_MODE_MPEG4_411;
+                vidDat->vid_format = mpegOrH264(AV_RB32(pkt->data));
             }
             else {
                 av_free( textBuffer );
