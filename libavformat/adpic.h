@@ -90,6 +90,7 @@ AVStream * ad_get_vstream(AVFormatContext *s, uint16_t w, uint16_t h,
 AVStream * ad_get_audio_stream(AVFormatContext *s, struct NetVuAudioData* audioHeader);
 void audiodata_network2host(uint8_t *data, int size);
 int ad_adFormatToCodecId(AVFormatContext *s, int32_t adFormat);
+int mpegOrH264(unsigned int startCode);
 
 
 #define PIC_REVISION 1

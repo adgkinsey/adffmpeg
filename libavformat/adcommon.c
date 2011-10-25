@@ -1073,3 +1073,11 @@ void audiodata_network2host(uint8_t *data, int size)
         *data = upper | lower;
     }
 }
+
+int mpegOrH264(unsigned int startCode)
+{
+    if ( (startCode & 0xFFFFFF00) == 0x00000100)
+        return PIC_MODE_MPEG4_411;
+    else
+        return PIC_MODE_H264I;
+}
