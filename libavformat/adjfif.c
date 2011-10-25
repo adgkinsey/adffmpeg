@@ -212,9 +212,9 @@ unsigned int build_jpeg_header(void *jfif, struct NetVuImageData *pic, unsigned 
     AV_WB16(sof_copy+5, pic->format.target_lines);
     AV_WB16(sof_copy+7, pic->format.target_pixels);
 
-    ff_copy_bits(&pb, sof_copy, sizeof(sof_copy)*8);
-    ff_copy_bits(&pb, huf_header, sizeof(huf_header)*8);
-    ff_copy_bits(&pb, sos_header, sizeof(sos_header)*8);
+    avpriv_copy_bits(&pb, sof_copy, sizeof(sof_copy)*8);
+    avpriv_copy_bits(&pb, huf_header, sizeof(huf_header)*8);
+    avpriv_copy_bits(&pb, sos_header, sizeof(sos_header)*8);
 
     return (put_bits_count(&pb) / 8);
 }
