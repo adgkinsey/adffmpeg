@@ -909,8 +909,7 @@ int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int channel, int insize, 
     AVStream *st         = NULL;
     uint8_t *inbuf       = NULL;
     int n, w, h;
-    
-    av_dlog(s, "PBM overlay\n");
+    char *comment = NULL;
     
     inbuf = av_malloc(insize);
     n = ad_get_buffer(pb, inbuf, insize);
@@ -919,15 +918,23 @@ int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int channel, int insize, 
         return ADFFMPEG_AD_ERROR_OVERLAY_GET_BUFFER;
     }
     
-    pkt->size = ad_pbmDecompress(text_data, &inbuf, insize, pkt, &w, &h);
+    pkt->size = ad_pbmDecompress(&comment, &inbuf, insize, pkt, &w, &h);
     if (pkt->size <= 0) {
 		av_log(s, AV_LOG_ERROR, "ADPIC: ad_pbmDecompress failed\n");
 		return ADFFMPEG_AD_ERROR_OVERLAY_PBM_READ;
 	}
     
-    st = ad_get_overlay_stream(s, channel, *text_data);
-    st->codec->width = w;
-    st->codec->height = h;
+    if (text_data)  {
+        int len = 12 + strlen(comment);
+        *text_data = av_malloc(len);
+        snprintf(*text_data, len-1, "Camera %u: %s", channel+1, comment);
+        
+        st = ad_get_overlay_stream(s, channel, *text_data);
+        st->codec->width = w;
+        st->codec->height = h;
+    }
+    
+    av_free(comment);
     
     if (adContext)
         pkt->dts = pkt->pts = adContext->lastVideoPTS;
