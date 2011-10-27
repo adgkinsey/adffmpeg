@@ -730,7 +730,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
             errorVal = ad_read_layout(s, pkt, size);
             break;
         case AD_DATATYPE_PBM:
-            errorVal = ad_read_overlay(s, pkt, size, &txtDat);
+            errorVal = ad_read_overlay(s, pkt, 1, size, &txtDat);
             break;
         case AD_DATATYPE_BMP:
         default: {
@@ -753,7 +753,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     if (errorVal >= 0)  {
-        errorVal = ad_read_packet(s, pkt, mediaType, codecId, payload, txtDat);
+        errorVal = ad_read_packet(s, pkt, 1, mediaType, codecId, payload, txtDat);
     }
     else  {
         av_dlog(s, "admime_read_packet: Error %d\n", errorVal);

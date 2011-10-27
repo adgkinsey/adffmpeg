@@ -205,28 +205,28 @@ AVStream * ad_get_vstream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t ca
     return st;
 }
 
-static unsigned int RSHash(const char* str, unsigned int len)
+static unsigned int RSHash(int camera, const char *name, unsigned int len)
 {
     unsigned int b    = 378551;
-    unsigned int a    = 63689;
+    unsigned int a    = (camera << 16) + (camera << 8) + camera;
     unsigned int hash = 0;
     unsigned int i    = 0;
     
-    for(i = 0; i < len; str++, i++)  {
-        hash = hash * a + (*str);
+    for(i = 0; i < len; name++, i++)  {
+        hash = hash * a + (*name);
         a    = a * b;
     }
     return hash;
 }
 
-static AVStream * ad_get_overlay_stream(AVFormatContext *s, const char *title)
+static AVStream * ad_get_overlay_stream(AVFormatContext *s, int channel, const char *title)
 {
     static const int codec_id = CODEC_ID_PBM;
     unsigned int id;
     int i, found;
     AVStream *st;
 
-    id = RSHash(title, strlen(title));
+    id = RSHash(channel+1, title, strlen(title));
 
     found = FALSE;
     for (i = 0; i < s->nb_streams; i++) {
@@ -814,7 +814,7 @@ int ad_read_layout(AVFormatContext *s, AVPacket *pkt, int size)
     return errorVal;
 }
 
-static int pbm_read_mem(char **comment, uint8_t **src, int size, AVPacket *pkt, int *width, int *height)
+int ad_pbmDecompress(char **comment, uint8_t **src, int size, AVPacket *pkt, int *width, int *height)
 {
     static const uint8_t pbm[3] = { 0x50, 0x34, 0x0A };
     static const uint8_t rle[4] = { 0x52, 0x4C, 0x45, 0x20 };
@@ -846,13 +846,14 @@ static int pbm_read_mem(char **comment, uint8_t **src, int size, AVPacket *pkt, 
         endStrPtr = ptr;
         strSize = endStrPtr - strPtr;
         
-        if (*comment)
-            av_free(*comment);
-        *comment = av_malloc(strSize + 1);
-        
-        memcpy(*comment, strPtr, strSize);
-        (*comment)[strSize] = '\0';
-        
+        if (comment)  {
+            if (*comment)
+                av_free(*comment);
+            *comment = av_malloc(strSize + 1);
+            
+            memcpy(*comment, strPtr, strSize);
+            (*comment)[strSize] = '\0';
+        }
         ++ptr;
     }
     
@@ -901,7 +902,7 @@ static int pbm_read_mem(char **comment, uint8_t **src, int size, AVPacket *pkt, 
     }
 }
 
-int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int insize, char **text_data)
+int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int channel, int insize, char **text_data)
 {
     AdContext* adContext = s->priv_data;
     AVIOContext *pb      = s->pb;
@@ -918,13 +919,13 @@ int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int insize, char **text_d
         return ADFFMPEG_AD_ERROR_OVERLAY_GET_BUFFER;
     }
     
-    pkt->size = pbm_read_mem(text_data, &inbuf, insize, pkt, &w, &h);
+    pkt->size = ad_pbmDecompress(text_data, &inbuf, insize, pkt, &w, &h);
     if (pkt->size <= 0) {
-		av_log(s, AV_LOG_ERROR, "ADPIC: pbm_read_mem failed\n");
+		av_log(s, AV_LOG_ERROR, "ADPIC: ad_pbmDecompress failed\n");
 		return ADFFMPEG_AD_ERROR_OVERLAY_PBM_READ;
 	}
     
-    st = ad_get_overlay_stream(s, *text_data);
+    st = ad_get_overlay_stream(s, channel, *text_data);
     st->codec->width = w;
     st->codec->height = h;
     
@@ -969,7 +970,7 @@ static int addSideData(AVFormatContext *s, AVPacket *pkt,
     return 0;
 }
     
-int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
+int ad_read_packet(AVFormatContext *s, AVPacket *pkt, int channel, 
                    enum AVMediaType media, enum CodecID codecId, 
                    void *data, char *text)
 {
@@ -978,7 +979,7 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
 
     if ((media == AVMEDIA_TYPE_VIDEO) && (codecId == CODEC_ID_PBM))  {
         // Get or create a data stream
-        if ( (st = ad_get_overlay_stream(s, text)) == NULL ) {
+        if ( (st = ad_get_overlay_stream(s, channel, text)) == NULL ) {
             av_log(s, AV_LOG_ERROR, "%s: ad_get_overlay_stream failed\n", __func__);
             return ADFFMPEG_AD_ERROR_GET_OVERLAY_STREAM;
         }

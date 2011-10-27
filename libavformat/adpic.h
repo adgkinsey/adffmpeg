@@ -47,21 +47,22 @@ int ad_new_packet(AVPacket *pkt, int size);
 #endif
 
 /// These are the data types that are supported by the DS2 video servers
-enum ff_ad_data_type {  AD_DATATYPE_JPEG = 0, 
+enum ff_ad_data_type {  AD_DATATYPE_JPEG = 0,
                         AD_DATATYPE_JFIF,
-                        AD_DATATYPE_MPEG4I, 
+                        AD_DATATYPE_MPEG4I,
                         AD_DATATYPE_MPEG4P,
-                        AD_DATATYPE_AUDIO_ADPCM, 
+                        AD_DATATYPE_AUDIO_ADPCM,
                         AD_DATATYPE_AUDIO_RAW,
-                        AD_DATATYPE_MINIMAL_MPEG4, 
+                        AD_DATATYPE_MINIMAL_MPEG4,
                         AD_DATATYPE_MINIMAL_AUDIO_ADPCM,
-                        AD_DATATYPE_LAYOUT, 
-                        AD_DATATYPE_INFO, 
-                        AD_DATATYPE_H264I, 
-                        AD_DATATYPE_H264P, 
-                        AD_DATATYPE_XML_INFO, 
-                        AD_DATATYPE_BMP, 
-                        AD_DATATYPE_PBM, 
+                        AD_DATATYPE_LAYOUT,
+                        AD_DATATYPE_INFO,
+                        AD_DATATYPE_H264I,
+                        AD_DATATYPE_H264P,
+                        AD_DATATYPE_XML_INFO,
+                        AD_DATATYPE_BMP,
+                        AD_DATATYPE_PBM,
+                        AD_DATATYPE_SVARS_INFO,
                         AD_DATATYPE_MAX
                       };
 
@@ -81,8 +82,8 @@ int ad_read_jfif(AVFormatContext *s, AVPacket *pkt, int manual_size, int size,
                  struct NetVuImageData *video_data, char **text_data);
 int ad_read_info(AVFormatContext *s, AVPacket *pkt, int size);
 int ad_read_layout(AVFormatContext *s, AVPacket *pkt, int size);
-int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int size, char **text_data);
-int ad_read_packet(AVFormatContext *s, AVPacket *pkt,
+int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int channel, int size, char **text_data);
+int ad_read_packet(AVFormatContext *s, AVPacket *pkt, int channel,
                    enum AVMediaType mediaType, enum CodecID codecId, 
                    void *data, char *text_data);
 AVStream * ad_get_vstream(AVFormatContext *s, uint16_t w, uint16_t h,
@@ -91,6 +92,7 @@ AVStream * ad_get_audio_stream(AVFormatContext *s, struct NetVuAudioData* audioH
 void audiodata_network2host(uint8_t *data, int size);
 int ad_adFormatToCodecId(AVFormatContext *s, int32_t adFormat);
 int mpegOrH264(unsigned int startCode);
+int ad_pbmDecompress(char **comment, uint8_t **src, int size, AVPacket *pkt, int *width, int *height);
 
 
 #define PIC_REVISION 1

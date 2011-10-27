@@ -485,7 +485,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                     return AVERROR(ENOMEM);
                 return ADFFMPEG_AD_ERROR_DEFAULT;
             case AD_DATATYPE_PBM:
-                errorVal = ad_read_overlay(s, pkt, size, &txtDat);
+                errorVal = ad_read_overlay(s, pkt, data_channel, size, &txtDat);
                 break;
             default:
                 av_log(s, AV_LOG_WARNING, "%s: No handler for data_type = %d  "
@@ -503,7 +503,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     }
 
     if (errorVal >= 0)  {
-        errorVal = ad_read_packet(s, pkt, mediaType, codecId, payload, txtDat);
+        errorVal = ad_read_packet(s, pkt, data_channel, mediaType, codecId, payload, txtDat);
     }
     else  {
         av_log(s, AV_LOG_ERROR, "%s: Error %d creating packet\n", __func__, errorVal);
