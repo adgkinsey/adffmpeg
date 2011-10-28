@@ -261,13 +261,10 @@ static int adbinary_probe(AVProbeData *p)
         if (bufPtr[PKT_DATACHANNEL] > 32)
             return 0;
 
-        if (bufPtr[PKT_DATATYPE] >= AD_DATATYPE_MAX)
-            return 0;
-
         dataPtr = &bufPtr[PKT_SEPARATOR_SIZE];
         bufferSize -= PKT_SEPARATOR_SIZE;
 
-        switch (bufPtr[0])  {
+        switch (bufPtr[PKT_DATATYPE])  {
             case AD_DATATYPE_JPEG:
             case AD_DATATYPE_MPEG4I:
             case AD_DATATYPE_MPEG4P:
@@ -357,15 +354,16 @@ static int adbinary_probe(AVProbeData *p)
                 av_log(NULL, AV_LOG_DEBUG, "%s: Detected layout packet\n", __func__);
                 break;
             case AD_DATATYPE_INFO:
-                av_log(NULL, AV_LOG_DEBUG, "%s: Detected info packet\n", __func__);
+                if ( (bufferSize >= 1) && (dataPtr[0] == 0) || (dataPtr[0] == 1) )  {
+                    av_log(NULL, AV_LOG_DEBUG, "%s: Detected info packet (%d)\n", __func__, dataPtr[0]);
+                    score += 5;
+                }
                 break;
             case AD_DATATYPE_XML_INFO:
                 if (bufferSize >= dataSize)  {
                     const char *infoString = "<infoList>";
                     int infoStringLen = strlen(infoString);
-                    if (infoStringLen > dataSize)
-                        infoStringLen = dataSize;
-                    if (strncasecmp(dataPtr, infoString, infoStringLen) == 0)  {
+                    if ( (infoStringLen <= dataSize) && (strncasecmp(dataPtr, infoString, infoStringLen) == 0) )  {
                         av_log(NULL, AV_LOG_DEBUG, "%s: Detected xml info packet\n", __func__);
                         score += AVPROBE_SCORE_MAX;
                     }
@@ -375,10 +373,20 @@ static int adbinary_probe(AVProbeData *p)
                 av_log(NULL, AV_LOG_DEBUG, "%s: Detected bmp packet\n", __func__);
                 break;
             case AD_DATATYPE_PBM:
-                av_log(NULL, AV_LOG_DEBUG, "%s: Detected pbm packet\n", __func__);
+                if (bufferSize >= 3)  {
+                    if (dataPtr[0] == 'P')  {
+                        if ((dataPtr[1] >= '1') && (dataPtr[1] <= '6'))  {
+                            if (dataPtr[2] == 0x0A)  {
+                                score += AVPROBE_SCORE_MAX;
+                                av_log(NULL, AV_LOG_DEBUG, "%s: Detected pbm packet\n", __func__);
+                            }
+                        }
+                    }
+                }
                 break;
             default:
-                return 0;
+                av_log(NULL, AV_LOG_WARNING, "%s: Detected unknown packet type\n", __func__);
+                break;
         }
 
         bufferSize -= dataSize;
