@@ -98,7 +98,7 @@ static int adraw_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         }
     }
     if (errVal >= 0)  {
-        errVal = ad_read_packet(s, pkt, AVMEDIA_TYPE_VIDEO, CODEC_ID_MJPEG, 
+        errVal = ad_read_packet(s, pkt, 1, AVMEDIA_TYPE_VIDEO, CODEC_ID_MJPEG, 
                                 vidDat, txtDat);
     }
     else  {

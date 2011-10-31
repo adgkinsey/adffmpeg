@@ -337,8 +337,8 @@ OBJS-$(CONFIG_NETVU_PROTOCOL)            += netvu.o
 OBJS-$(CONFIG_LIBMODPLUG_DEMUXER)        += libmodplug.o
 OBJS-$(CONFIG_LIBNUT_DEMUXER)            += libnut.o riff.o
 OBJS-$(CONFIG_LIBNUT_MUXER)              += libnut.o riff.o
-OBJS-$(CONFIG_LIBPARREADER_DEMUXER)      += libpar.o
-OBJS-$(CONFIG_LIBPARREADER_MUXER)        += libpar.o
+OBJS-$(CONFIG_LIBPARREADER_DEMUXER)      += libpar.o adcommon.o
+OBJS-$(CONFIG_LIBPARREADER_MUXER)        += libpar.o adcommon.o
 
 # protocols I/O
 OBJS+= avio.o aviobuf.o
