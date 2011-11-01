@@ -153,7 +153,15 @@ static int adbinary_mpeg_minimal(AVFormatContext *s,
         return ADFFMPEG_AD_ERROR_MPEG4_MINIMAL_NEW_PACKET;
     }
     
-    vidDat->vid_format = mpegOrH264(AV_RB32(pkt->data));
+    if (adContext->streamDatatype == 0)  {
+//        if (adDataType == AD_DATATYPE_H264I)
+//            adContext->streamDatatype = PIC_MODE_H264I;
+//        else if (adDataType == AD_DATATYPE_H264P)
+//            adContext->streamDatatype = PIC_MODE_H264P;
+//        else
+        adContext->streamDatatype = mpegOrH264(AV_RB32(pkt->data));
+    }
+    vidDat->vid_format = adContext->streamDatatype;
 
     return errorVal;
 }
@@ -304,7 +312,6 @@ static int adbinary_probe(AVProbeData *p)
             case AD_DATATYPE_MINIMAL_MPEG4:
                 if (bufferSize >= 10)  {
                     uint32_t sec  = AV_RB32(dataPtr);
-                    //uint16_t mil  = AV_RB16(dataPtr + 4);
                     uint32_t vos  = AV_RB32(dataPtr + 6);
                     // Check for MPEG4 start code in data along with a timestamp
                     // of 1980 or later.  Crappy test, but there isn't much data
@@ -316,7 +323,21 @@ static int adbinary_probe(AVProbeData *p)
                             av_log(NULL, AV_LOG_DEBUG, "%s: Detected minimal MPEG4 packet\n", __func__);
                             score += AVPROBE_SCORE_MAX / 2;
                         }
-                        else if (vos == 0x01) {
+                    }
+                }
+                // Servers can send h264 identified as MPEG4, so fall through
+                // to next case
+            //case(AD_DATATYPE_MINIMAL_H264):
+                if (bufferSize >= 10)  {
+                    uint32_t sec  = AV_RB32(dataPtr);
+                    uint32_t vos  = AV_RB32(dataPtr + 6);
+                    // Check for h264 start code in data along with a timestamp
+                    // of 1980 or later.  Crappy test, but there isn't much data
+                    // to go on.  Should be able to use milliseconds <= 1000 but
+                    // servers often send larger values than this,
+                    // nonsensical as that is
+                    if (sec > 315532800)  {
+                        if (vos == 0x01) {
                             av_log(NULL, AV_LOG_DEBUG, "%s: Detected minimal h264 packet\n", __func__);
                             score += AVPROBE_SCORE_MAX / 2;
                         }
@@ -465,6 +486,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 errorVal = adbinary_mpeg(s, pkt, payload, &txtDat);
                 break;
             case AD_DATATYPE_MINIMAL_MPEG4:
+            //case(AD_DATATYPE_MINIMAL_H264):
                 errorVal = adbinary_mpeg_minimal(s, pkt, size, data_channel,
                                                  payload, &txtDat);
                 break;

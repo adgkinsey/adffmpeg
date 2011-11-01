@@ -489,6 +489,7 @@ static int admime_mpeg(AVFormatContext *s,
                        int adDataType)
 {
     AVIOContext *pb = s->pb;
+    AdContext* adContext = s->priv_data;
     int errorVal = 0;
     int mimeBlockType = 0;
     uint8_t buf[TEMP_BUFFER_SIZE];
@@ -507,12 +508,15 @@ static int admime_mpeg(AVFormatContext *s,
     if (ad_get_buffer( pb, pkt->data, size ) != size )
         return ADFFMPEG_AD_ERROR_MPEG4_MIME_GET_BUFFER;
     
-    if (adDataType == AD_DATATYPE_H264I)
-        vidDat->vid_format = PIC_MODE_H264I;
-    else if (adDataType == AD_DATATYPE_H264P)
-        vidDat->vid_format = PIC_MODE_H264P;
-    else
-        vidDat->vid_format = mpegOrH264(AV_RB32(pkt->data));
+    if (adContext->streamDatatype == 0)  {
+        if (adDataType == AD_DATATYPE_H264I)
+            adContext->streamDatatype = PIC_MODE_H264I;
+        else if (adDataType == AD_DATATYPE_H264P)
+            adContext->streamDatatype = PIC_MODE_H264P;
+        else
+            adContext->streamDatatype = mpegOrH264(AV_RB32(pkt->data));
+    }
+    vidDat->vid_format = adContext->streamDatatype;
 
     // Now we should have a text block following this which contains the
     // frame data that we can place in a _image_data struct
