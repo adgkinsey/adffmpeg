@@ -55,6 +55,7 @@ static const char *     MIME_TYPE_XML    = "text/xml";
 static const char *     MIME_TYPE_ADPCM  = "audio/adpcm";
 static const char *     MIME_TYPE_LAYOUT = "data/layout";
 static const char *     MIME_TYPE_PBM    = "image/pbm";
+static const char *     MIME_TYPE_H264   = "image/adh264";
 
 static const uint8_t rawJfifHeader[] = { 0xff, 0xd8, 0xff, 0xe0,
                                          0x00, 0x10, 0x4a, 0x46,
@@ -228,6 +229,10 @@ static int process_line(char *line, int *line_count, int *dataType,
             }
             else if (strcasecmp(p, MIME_TYPE_PBM ) == 0 )  {
                 *dataType = AD_DATATYPE_PBM;
+            }
+            else if(strncasecmp(p, MIME_TYPE_H264, strlen(MIME_TYPE_H264) ) == 0) {
+                // P for now - as they are both processed the same subsequently
+                *dataType = AD_DATATYPE_H264P;
             }
             else  {
                 *dataType = AD_DATATYPE_MAX;
