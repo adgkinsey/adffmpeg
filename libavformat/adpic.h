@@ -70,6 +70,7 @@ typedef struct {
     int64_t lastVideoPTS;
     int     utc_offset;     ///< Only used in minimal video case
     int     metadataSet;
+    enum ff_ad_data_type streamDatatype;
 } AdContext;
 
 

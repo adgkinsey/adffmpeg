@@ -607,6 +607,7 @@ int initADData(int data_type, enum AVMediaType *mediaType, enum CodecID *codecId
         case(AD_DATATYPE_H264I):
         case(AD_DATATYPE_H264P):
         case(AD_DATATYPE_MINIMAL_MPEG4):
+        //case(AD_DATATYPE_MINIMAL_H264):
             *payload = av_mallocz( sizeof(struct NetVuImageData) );
             if( *payload == NULL )
                 return AVERROR(ENOMEM);
@@ -623,6 +624,7 @@ int initADData(int data_type, enum AVMediaType *mediaType, enum CodecID *codecId
                     break;
                 case(AD_DATATYPE_H264I):
                 case(AD_DATATYPE_H264P):
+                //case(AD_DATATYPE_MINIMAL_H264):
                     *codecId = CODEC_ID_H264;
                     break;
             }
