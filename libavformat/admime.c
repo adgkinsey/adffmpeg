@@ -485,7 +485,8 @@ static int parse_mp4_text_data( unsigned char *mp4TextData, int bufferSize,
  */
 static int admime_mpeg(AVFormatContext *s,
                        AVPacket *pkt, int size, long *extra,
-                       struct NetVuImageData *vidDat, char **txtDat)
+                       struct NetVuImageData *vidDat, char **txtDat,
+                       int adDataType)
 {
     AVIOContext *pb = s->pb;
     int errorVal = 0;
@@ -505,6 +506,13 @@ static int admime_mpeg(AVFormatContext *s,
     // Now read the frame data into the packet
     if (ad_get_buffer( pb, pkt->data, size ) != size )
         return ADFFMPEG_AD_ERROR_MPEG4_MIME_GET_BUFFER;
+    
+    if (adDataType == AD_DATATYPE_H264I)
+        vidDat->vid_format = PIC_MODE_H264I;
+    else if (adDataType == AD_DATATYPE_H264P)
+        vidDat->vid_format = PIC_MODE_H264P;
+    else
+        vidDat->vid_format = mpegOrH264(AV_RB32(pkt->data));
 
     // Now we should have a text block following this which contains the
     // frame data that we can place in a _image_data struct
@@ -523,7 +531,6 @@ static int admime_mpeg(AVFormatContext *s,
                     av_free( textBuffer );
                     return ADFFMPEG_AD_ERROR_MPEG4_MIME_PARSE_TEXT_DATA;
                 }
-                vidDat->vid_format = mpegOrH264(AV_RB32(pkt->data));
             }
             else {
                 av_free( textBuffer );
@@ -722,7 +729,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
         case AD_DATATYPE_MPEG4P:
         case AD_DATATYPE_H264I:
         case AD_DATATYPE_H264P:
-            errorVal = admime_mpeg(s, pkt, size, &extra, payload, &txtDat);
+            errorVal = admime_mpeg(s, pkt, size, &extra, payload, &txtDat, data_type);
             break;
         case AD_DATATYPE_AUDIO_ADPCM:
             errorVal = ad_read_audio(s, pkt, size, extra, payload);
