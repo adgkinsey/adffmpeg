@@ -1434,7 +1434,7 @@ void ff_read_frame_flush(AVFormatContext *s)
 #if FF_API_SEEK_PUBLIC
 void av_update_cur_dts(AVFormatContext *s, AVStream *ref_st, int64_t timestamp)
 {
-    return ff_update_cur_dts(s, ref_st, timestamp);
+    ff_update_cur_dts(s, ref_st, timestamp);
 }
 #endif
 
@@ -3183,9 +3183,6 @@ static int compute_pkt_fields2(AVFormatContext *s, AVStream *st, AVPacket *pkt){
     av_dlog(s, "compute_pkt_fields2: pts:%"PRId64" dts:%"PRId64" cur_dts:%"PRId64" b:%d size:%d st:%d\n",
             pkt->pts, pkt->dts, st->cur_dts, delay, pkt->size, pkt->stream_index);
 
-/*    if(pkt->pts == AV_NOPTS_VALUE && pkt->dts == AV_NOPTS_VALUE)
-        return AVERROR(EINVAL);*/
-
     /* duration field */
     if (pkt->duration == 0) {
         compute_frame_duration(&num, &den, st, NULL, pkt);
@@ -4185,4 +4182,24 @@ int avformat_query_codec(AVOutputFormat *ofmt, enum CodecID codec_id, int std_co
             return 1;
     }
     return AVERROR_PATCHWELCOME;
+}
+
+int avformat_network_init(void)
+{
+#if CONFIG_NETWORK
+    int ret;
+    if ((ret = ff_network_init()) < 0)
+        return ret;
+    ff_tls_init();
+#endif
+    return 0;
+}
+
+int avformat_network_deinit(void)
+{
+#if CONFIG_NETWORK
+    ff_network_close();
+    ff_tls_deinit();
+#endif
+    return 0;
 }
