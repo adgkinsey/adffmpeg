@@ -70,15 +70,15 @@ const unsigned int MAX_FRAMEBUFFER_SIZE = 256 * 1024;
 
 static void importMetadata(const AVDictionaryEntry *tag, struct PAREncStreamContext *ps)
 {
-    if (strcasecmp(tag->key, "title") == 0)
+    if (av_strcasecmp(tag->key, "title") == 0)
         av_strlcpy(ps->name, tag->value, sizeof(ps->name));
-    else if (strcasecmp(tag->key, "date") == 0)  {
+    else if (av_strcasecmp(tag->key, "date") == 0)  {
         av_parse_time(&ps->startTime, tag->value, 0);
         ps->startTime *= 1000;
     }
-    else if (strcasecmp(tag->key, "track") == 0)
+    else if (av_strcasecmp(tag->key, "track") == 0)
         sscanf(tag->value, "%d", &(ps->camera));
-    else if (strcasecmp(tag->key, "timezone") == 0)
+    else if (av_strcasecmp(tag->key, "timezone") == 0)
         sscanf(tag->value, "%d", &(ps->utc_offset));
 }
 

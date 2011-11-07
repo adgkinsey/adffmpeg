@@ -727,7 +727,7 @@ static int CrackURI( const char *path, int *streamType, int *res, int *cam, time
 
                     if( name != NULL && value != NULL ) {
                         /* Which parameter have we got? */
-                        if( strcasecmp(name, "res" ) == 0 ) {
+                        if( av_strcasecmp(name, "res" ) == 0 ) {
                             if( strcmp( value, "hi" ) == 0 )
                                 *res = DS_RESOLUTION_HI;
                             else if( strcmp( value, "med" ) == 0 )
@@ -735,36 +735,36 @@ static int CrackURI( const char *path, int *streamType, int *res, int *cam, time
                             else if( strcmp( value, "low" ) == 0 )
                                 *res = DS_RESOLUTION_LOW;
                         }
-                        else if( strcasecmp(name, "stream" ) == 0 ) {
-                            if( strcasecmp(value, "live" ) == 0 )
+                        else if( av_strcasecmp(name, "stream" ) == 0 ) {
+                            if( av_strcasecmp(value, "live" ) == 0 )
                                 *streamType = DS_PLAYBACK_MODE_LIVE;
-                            else if( strcasecmp(value, "play" ) == 0 )
+                            else if( av_strcasecmp(value, "play" ) == 0 )
                                 *streamType = DS_PLAYBACK_MODE_PLAY;
                         }
-                        else if( strcasecmp(name, "cam" ) == 0 ) {
+                        else if( av_strcasecmp(name, "cam" ) == 0 ) {
                             *cam = atoi( value );
                         }
-                        else if( strcasecmp(name, "from" ) == 0 ) {
+                        else if( av_strcasecmp(name, "from" ) == 0 ) {
                             *from = (time_t)atoi( value );
                         }
-                        else if( strcasecmp(name, "to" ) == 0 ) {
+                        else if( av_strcasecmp(name, "to" ) == 0 ) {
                             *to = (time_t)atoi( value );
                         }
-                        else if( strcasecmp(name, "rate" ) == 0 ) {
+                        else if( av_strcasecmp(name, "rate" ) == 0 ) {
                             *rate = atoi( value );
                         }
-                        else if( strcasecmp(name, "mode" ) == 0 ) {
-                            if( strcasecmp(value, "play" ) == 0 )
+                        else if( av_strcasecmp(name, "mode" ) == 0 ) {
+                            if( av_strcasecmp(value, "play" ) == 0 )
                                 *playMode = VM_PLAY;
-                            else if( strcasecmp(value, "rwd" ) == 0 )
+                            else if( av_strcasecmp(value, "rwd" ) == 0 )
                                 *playMode = VM_VIS_REW;
-                            else if( strcasecmp(value, "fwd" ) == 0 )
+                            else if( av_strcasecmp(value, "fwd" ) == 0 )
                                 *playMode = VM_VIS_FF;
-                            else if( strcasecmp(value, "stop" ) == 0 )
+                            else if( av_strcasecmp(value, "stop" ) == 0 )
                                 *playMode = VM_STOP;
-                            else if( strcasecmp(value, "shuttle" ) == 0 )
+                            else if( av_strcasecmp(value, "shuttle" ) == 0 )
                                 *playMode = VM_PLAY_SHUTTLE;
-                            else if( strcasecmp(value, "finish" ) == 0 )
+                            else if( av_strcasecmp(value, "finish" ) == 0 )
                                 *playMode = VM_FINISH;
                         }
                     }

@@ -513,13 +513,13 @@ static void ad_parseVSD(const char *vsd, struct ADFrameData *frame)
                 break;
         }
     }
-    else if ((strlen(key) == 3) && (strncasecmp(key, "FM0", 3) == 0))  {
+    else if ((strlen(key) == 3) && (av_strncasecmp(key, "FM0", 3) == 0))  {
         ad_splitcsv(val, frame->vsd[VSD_FM0], VSDARRAYLEN, 10);
     }
     else if ((strlen(key) == 1) && (key[0] == 'F')) {
         ad_splitcsv(val, frame->vsd[VSD_F], VSDARRAYLEN, 16);
     }
-    else if ((strlen(key) == 3) && (strncasecmp(key, "EM0", 3) == 0))  {
+    else if ((strlen(key) == 3) && (av_strncasecmp(key, "EM0", 3) == 0))  {
         ad_splitcsv(val, frame->vsd[VSD_EM0], VSDARRAYLEN, 10);
     }
     else
@@ -531,21 +531,21 @@ static void ad_parseLine(AVFormatContext *s, const char *line, struct ADFrameDat
     char key[32], val[128];
     ad_keyvalsplit(line, key, val);
     
-    if (strncasecmp(key, "Active-zones", 12) == 0)  {
+    if (av_strncasecmp(key, "Active-zones", 12) == 0)  {
         sscanf(val, "%d", &frame->activeZones);
     }
-    else if (strncasecmp(key, "FrameNum", 8) == 0)  {
+    else if (av_strncasecmp(key, "FrameNum", 8) == 0)  {
         sscanf(val, "%u", &frame->frameNum);
     }
-//    else if (strncasecmp(key, "Site-ID", 7) == 0)  {
+//    else if (av_strncasecmp(key, "Site-ID", 7) == 0)  {
 //    }
-    else if (strncasecmp(key, "ActMask", 7) == 0)  {
+    else if (av_strncasecmp(key, "ActMask", 7) == 0)  {
         for (int ii = 0, jj = 0; (ii < ACTMASKLEN) && (jj < strlen(val)); ii++)  {
             sscanf(&val[jj], "0x%04hx", &frame->activityMask[ii]);
             jj += 7;
         }
     }
-    else if (strncasecmp(key, "VSD", 3) == 0)  {
+    else if (av_strncasecmp(key, "VSD", 3) == 0)  {
         ad_parseVSD(val, frame);
     }
 }

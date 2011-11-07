@@ -29,6 +29,7 @@
 #include "adffmpeg_errors.h"
 #include "adpic.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/avstring.h"
 
 
 #define TEMP_BUFFER_SIZE        1024
@@ -160,21 +161,21 @@ static int process_line(char *line, int *line_count, int *dataType,
 
         if (!strcmp(tag, "Content-type")) {
             // Work out what type we actually have
-            if (strcasecmp(p, MIME_TYPE_JPEG ) == 0 )
+            if (av_strcasecmp(p, MIME_TYPE_JPEG ) == 0 )
                 *dataType = AD_DATATYPE_JFIF;
             // Or if it starts image/mp4 - this covers all the supported mp4
             // variations (i and p frames)
-            else if(strncasecmp(p, MIME_TYPE_MP4, strlen(MIME_TYPE_MP4) ) == 0) {
+            else if(av_strncasecmp(p, MIME_TYPE_MP4, strlen(MIME_TYPE_MP4) ) == 0) {
                 // P for now - as they are both processed the same subsequently
                 *dataType = AD_DATATYPE_MPEG4P;
             }
-            else if (strcasecmp(p, MIME_TYPE_TEXT ) == 0 )
+            else if (av_strcasecmp(p, MIME_TYPE_TEXT ) == 0 )
                 *dataType = DATA_PLAINTEXT;
-            else if (strcasecmp(p, MIME_TYPE_LAYOUT ) == 0 )
+            else if (av_strcasecmp(p, MIME_TYPE_LAYOUT ) == 0 )
                 *dataType = AD_DATATYPE_LAYOUT;
-            else if (strcasecmp(p, MIME_TYPE_XML ) == 0 )
+            else if (av_strcasecmp(p, MIME_TYPE_XML ) == 0 )
                 *dataType = AD_DATATYPE_XML_INFO;
-            else if(strncasecmp(p, MIME_TYPE_ADPCM, strlen(MIME_TYPE_ADPCM)) == 0) {
+            else if(av_strncasecmp(p, MIME_TYPE_ADPCM, strlen(MIME_TYPE_ADPCM)) == 0) {
                 *dataType = AD_DATATYPE_AUDIO_ADPCM;
 
                 // If we find audio in a mime header, we need to extract the
@@ -227,10 +228,10 @@ static int process_line(char *line, int *line_count, int *dataType,
                 else
                     *extra = RTP_PAYLOAD_TYPE_8000HZ_ADPCM; // Default
             }
-            else if (strcasecmp(p, MIME_TYPE_PBM ) == 0 )  {
+            else if (av_strcasecmp(p, MIME_TYPE_PBM ) == 0 )  {
                 *dataType = AD_DATATYPE_PBM;
             }
-            else if(strncasecmp(p, MIME_TYPE_H264, strlen(MIME_TYPE_H264) ) == 0) {
+            else if(av_strncasecmp(p, MIME_TYPE_H264, strlen(MIME_TYPE_H264) ) == 0) {
                 // P for now - as they are both processed the same subsequently
                 *dataType = AD_DATATYPE_H264P;
             }

@@ -384,7 +384,7 @@ static int adbinary_probe(AVProbeData *p)
                 if (bufferSize >= dataSize)  {
                     const char *infoString = "<infoList>";
                     int infoStringLen = strlen(infoString);
-                    if ( (infoStringLen <= dataSize) && (strncasecmp(dataPtr, infoString, infoStringLen) == 0) )  {
+                    if ( (infoStringLen <= dataSize) && (av_strncasecmp(dataPtr, infoString, infoStringLen) == 0) )  {
                         av_log(NULL, AV_LOG_DEBUG, "%s: Detected xml info packet\n", __func__);
                         score += AVPROBE_SCORE_MAX;
                     }
