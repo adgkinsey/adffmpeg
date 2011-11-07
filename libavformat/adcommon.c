@@ -825,7 +825,8 @@ int ad_pbmDecompress(char **comment, uint8_t **src, int size, AVPacket *pkt, int
     const uint8_t *endPtr       = (*src) + size;
     uint8_t *dPtr               = NULL;
     int strSize                 = 0;
-    const char *strPtr, *endStrPtr;
+    const char *strPtr          = NULL;
+    const char *endStrPtr       = NULL;
     unsigned int elementsRead;
     
     if ((size >= sizeof(pbm)) && (ptr[0] == 'P') && (ptr[1] >= '1') && (ptr[1] <= '6') && (ptr[2] == 0x0A) )
@@ -878,8 +879,10 @@ int ad_pbmDecompress(char **comment, uint8_t **src, int size, AVPacket *pkt, int
         
         memcpy(dPtr, *src, headerP1Size);
         dPtr += headerP1Size;
-        memcpy(dPtr, strPtr, headerP2Size);
-        dPtr += headerP2Size;
+        if (strPtr)  {
+            memcpy(dPtr, strPtr, headerP2Size);
+            dPtr += headerP2Size;
+        }
         
         // Decompress loop
         while (ptr < endPtr)  {
