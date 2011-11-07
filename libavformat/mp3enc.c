@@ -19,7 +19,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <strings.h>
 #include "avformat.h"
 #include "avio_internal.h"
 #include "id3v1.h"
@@ -55,11 +54,12 @@ static int id3v1_create_tag(AVFormatContext *s, uint8_t *buf)
     buf[0] = 'T';
     buf[1] = 'A';
     buf[2] = 'G';
-    count += id3v1_set_string(s, "TIT2",    buf +  3, 30);       //title
-    count += id3v1_set_string(s, "TPE1",    buf + 33, 30);       //author|artist
-    count += id3v1_set_string(s, "TALB",    buf + 63, 30);       //album
-    count += id3v1_set_string(s, "TDRL",    buf + 93,  4);       //date
-    count += id3v1_set_string(s, "comment", buf + 97, 30);
+    /* we knowingly overspecify each tag length by one byte to compensate for the mandatory null byte added by av_strlcpy */
+    count += id3v1_set_string(s, "TIT2",    buf +  3, 30 + 1);       //title
+    count += id3v1_set_string(s, "TPE1",    buf + 33, 30 + 1);       //author|artist
+    count += id3v1_set_string(s, "TALB",    buf + 63, 30 + 1);       //album
+    count += id3v1_set_string(s, "TDRL",    buf + 93,  4 + 1);       //date
+    count += id3v1_set_string(s, "comment", buf + 97, 30 + 1);
     if ((tag = av_dict_get(s->metadata, "TRCK", NULL, 0))) { //track
         buf[125] = 0;
         buf[126] = atoi(tag->value);
@@ -68,7 +68,7 @@ static int id3v1_create_tag(AVFormatContext *s, uint8_t *buf)
     buf[127] = 0xFF; /* default to unknown genre */
     if ((tag = av_dict_get(s->metadata, "TCON", NULL, 0))) { //genre
         for(i = 0; i <= ID3v1_GENRE_MAX; i++) {
-            if (!strcasecmp(tag->value, ff_id3v1_genre_str[i])) {
+            if (!av_strcasecmp(tag->value, ff_id3v1_genre_str[i])) {
                 buf[127] = i;
                 count++;
                 break;

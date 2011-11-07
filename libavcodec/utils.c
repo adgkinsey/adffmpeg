@@ -224,7 +224,7 @@ void avcodec_align_dimensions2(AVCodecContext *s, int *width, int *height, int l
 #if HAVE_MMX
     if(s->codec_id == CODEC_ID_SVQ1 || s->codec_id == CODEC_ID_VP5 ||
        s->codec_id == CODEC_ID_VP6 || s->codec_id == CODEC_ID_VP6F ||
-       s->codec_id == CODEC_ID_VP6A) {
+       s->codec_id == CODEC_ID_VP6A || s->codec_id == CODEC_ID_DIRAC) {
         linesize_align[0] =
         linesize_align[1] =
         linesize_align[2] = 16;
@@ -396,6 +396,7 @@ int avcodec_default_get_buffer(AVCodecContext *s, AVFrame *pic){
     pic->width               = s->width;
     pic->height              = s->height;
     pic->format              = s->pix_fmt;
+    pic->opaque              = s->opaque;
 
     if(s->debug&FF_DEBUG_BUFFERS)
         av_log(s, AV_LOG_DEBUG, "default_get_buffer called on pic %p, %d buffers used\n", pic, s->internal_buffer_count);
@@ -1436,6 +1437,12 @@ int avcodec_thread_init(AVCodecContext *s, int thread_count)
 
 enum AVMediaType avcodec_get_type(enum CodecID codec_id)
 {
+    AVCodec *c= avcodec_find_decoder(codec_id);
+    if(!c)
+        c= avcodec_find_encoder(codec_id);
+    if(c)
+        return c->type;
+
     if (codec_id <= CODEC_ID_NONE)
         return AVMEDIA_TYPE_UNKNOWN;
     else if (codec_id < CODEC_ID_FIRST_AUDIO)
