@@ -122,7 +122,8 @@ static int adbinary_mpeg(AVFormatContext *s,
  */
 static int adbinary_mpeg_minimal(AVFormatContext *s,
                                 AVPacket *pkt, int size, int channel,
-                                struct NetVuImageData *vidDat, char **text_data)
+                                struct NetVuImageData *vidDat, char **text_data,
+                                int adDataType)
 {
     static const int titleLen  = sizeof(vidDat->title) / sizeof(vidDat->title[0]);
     AdContext*       adContext = s->priv_data;
@@ -154,11 +155,9 @@ static int adbinary_mpeg_minimal(AVFormatContext *s,
     }
     
     if (adContext->streamDatatype == 0)  {
-//        if (adDataType == AD_DATATYPE_H264I)
-//            adContext->streamDatatype = PIC_MODE_H264I;
-//        else if (adDataType == AD_DATATYPE_H264P)
-//            adContext->streamDatatype = PIC_MODE_H264P;
-//        else
+        //if (adDataType == AD_DATATYPE_MININAL_H264)
+        //    adContext->streamDatatype = PIC_MODE_H264I;
+        //else
         adContext->streamDatatype = mpegOrH264(AV_RB32(pkt->data));
     }
     vidDat->vid_format = adContext->streamDatatype;
@@ -488,7 +487,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             case AD_DATATYPE_MINIMAL_MPEG4:
             //case(AD_DATATYPE_MINIMAL_H264):
                 errorVal = adbinary_mpeg_minimal(s, pkt, size, data_channel,
-                                                 payload, &txtDat);
+                                                 payload, &txtDat, data_type);
                 break;
             case AD_DATATYPE_MINIMAL_AUDIO_ADPCM:
                 errorVal = adbinary_audio_minimal(s, pkt, size, payload);
