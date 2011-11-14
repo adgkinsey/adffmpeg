@@ -34,7 +34,7 @@
 #if !FF_API_OLD_AVIO
 #define URL_PROTOCOL_FLAG_NESTED_SCHEME 1 /*< The protocol name can be the first part of a nested protocol scheme */
 
-extern int (*url_interrupt_cb)(void *opaque);
+extern int (*url_interrupt_cb)(void);
 
 extern const AVClass ffurl_context_class;
 
