@@ -617,7 +617,8 @@ static int mpegts_set_stream_info(AVStream *st, PESContext *pes,
     st->codec->codec_tag = pes->stream_type;
 
     mpegts_find_stream_type(st, pes->stream_type, ISO_types);
-    if (prog_reg_desc == AV_RL32("HDMV") &&
+    if ((prog_reg_desc == AV_RL32("HDMV") ||
+         prog_reg_desc == AV_RL32("HDPR")) &&
         st->codec->codec_id == CODEC_ID_NONE) {
         mpegts_find_stream_type(st, pes->stream_type, HDMV_types);
         if (pes->stream_type == 0x83) {
@@ -2112,7 +2113,7 @@ static int64_t mpegts_get_pcr(AVFormatContext *s, int stream_index,
         if (buf[0] != 0x47) {
             if (mpegts_resync(s) < 0)
                 return AV_NOPTS_VALUE;
-            pos = url_ftell(s->pb);
+            pos = avio_tell(s->pb);
             continue;
         }
         if ((pcr_pid < 0 || (AV_RB16(buf + 1) & 0x1fff) == pcr_pid) &&

@@ -602,7 +602,7 @@ int av_open_input_file(AVFormatContext **ic_ptr, const char *filename,
 #endif
 
 /* open input file and probe the format if necessary */
-static int init_input(AVFormatContext *s, const char *filename)
+static int init_input(AVFormatContext *s, const char *filename, AVDictionary **options)
 {
     int ret;
     AVProbeData pd = {filename, NULL, 0};
@@ -624,7 +624,8 @@ static int init_input(AVFormatContext *s, const char *filename)
         (!s->iformat && (s->iformat = av_probe_input_format(&pd, 0))))
         return 0;
 
-    if ((ret = avio_open(&s->pb, filename, AVIO_FLAG_READ)) < 0)
+    if ((ret = avio_open2(&s->pb, filename, AVIO_FLAG_READ,
+                          &s->interrupt_callback, options)) < 0)
         return ret;
     if (s->iformat)
         return 0;
@@ -649,7 +650,7 @@ int avformat_open_input(AVFormatContext **ps, const char *filename, AVInputForma
     if ((ret = av_opt_set_dict(s, &tmp)) < 0)
         goto fail;
 
-    if ((ret = init_input(s, filename)) < 0)
+    if ((ret = init_input(s, filename, &tmp)) < 0)
         goto fail;
 
     /* check filename in case an image number is expected */
@@ -1003,11 +1004,6 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
     /* do we have a video B-frame ? */
     delay= st->codec->has_b_frames;
     presentation_delayed = 0;
-
-    // ignore delay caused by frame threading so that the mpeg2-without-dts
-    // warning will not trigger
-    if (delay && st->codec->active_thread_type&FF_THREAD_FRAME)
-        delay -= st->codec->thread_count-1;
 
     /* XXX: need has_b_frame, but cannot get it if the codec is
         not initialized */
@@ -2401,7 +2397,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
     count = 0;
     read_size = 0;
     for(;;) {
-        if(url_interrupt_cb(ic)){
+        if (ff_check_interrupt(&ic->interrupt_callback)){
             ret= AVERROR_EXIT;
             av_log(ic, AV_LOG_DEBUG, "interrupted\n");
             break;
@@ -3262,12 +3258,14 @@ int av_write_frame(AVFormatContext *s, AVPacket *pkt)
     return ret;
 }
 
-void ff_interleave_add_packet(AVFormatContext *s, AVPacket *pkt,
+int ff_interleave_add_packet(AVFormatContext *s, AVPacket *pkt,
                               int (*compare)(AVFormatContext *, AVPacket *, AVPacket *))
 {
     AVPacketList **next_point, *this_pktl;
 
     this_pktl = av_mallocz(sizeof(AVPacketList));
+    if (!this_pktl)
+        return AVERROR(ENOMEM);
     this_pktl->pkt= *pkt;
     pkt->destruct= NULL;             // do not free original but only the copy
     av_dup_packet(&this_pktl->pkt);  // duplicate the packet if it uses non-alloced memory
@@ -3296,6 +3294,7 @@ next_non_null:
 
     s->streams[pkt->stream_index]->last_in_packet_buffer=
     *next_point= this_pktl;
+    return 0;
 }
 
 static int ff_interleave_compare_dts(AVFormatContext *s, AVPacket *next, AVPacket *pkt)
@@ -3314,10 +3313,12 @@ int av_interleave_packet_per_dts(AVFormatContext *s, AVPacket *out, AVPacket *pk
     AVPacketList *pktl;
     int stream_count=0, noninterleaved_count=0;
     int64_t delta_dts_max = 0;
-    int i;
+    int i, ret;
 
     if(pkt){
-        ff_interleave_add_packet(s, pkt, ff_interleave_compare_dts);
+        ret = ff_interleave_add_packet(s, pkt, ff_interleave_compare_dts);
+        if (ret < 0)
+            return ret;
     }
 
     for(i=0; i < s->nb_streams; i++) {
@@ -4188,6 +4189,7 @@ int avformat_network_init(void)
 {
 #if CONFIG_NETWORK
     int ret;
+    ff_network_inited_globally = 1;
     if ((ret = ff_network_init()) < 0)
         return ret;
     ff_tls_init();

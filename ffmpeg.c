@@ -134,6 +134,7 @@ static int file_overwrite = 0;
 static int do_benchmark = 0;
 static int do_hex_dump = 0;
 static int do_pkt_dump = 0;
+static int do_psnr = 0;
 static int do_pass = 0;
 static const char *pass_logfilename_prefix;
 static int video_sync_method= -1;
@@ -639,7 +640,7 @@ static int decode_interrupt_cb(void)
     return received_nb_signals > 1;
 }
 
-void exit_program(int ret)
+void av_noreturn exit_program(int ret)
 {
     int i;
 
@@ -895,14 +896,14 @@ need_realloc:
                                   dec->channel_layout, dec->sample_fmt, dec->sample_rate,
                                   ost->audio_channels_mapped ? ost->audio_channels_map : NULL,
                                   0, NULL);
-            av_set_double(ost->swr, "rmvol", ost->rematrix_volume);
+            av_opt_set_double(ost->swr, "rmvol", ost->rematrix_volume, 0);
             if (ost->audio_channels_mapped) {
-                av_set_int(ost->swr, "icl", av_get_default_channel_layout(ost->audio_channels_mapped));
-                av_set_int(ost->swr, "uch", ost->audio_channels_mapped);
+                av_opt_set_int(ost->swr, "icl", av_get_default_channel_layout(ost->audio_channels_mapped), 0);
+                av_opt_set_int(ost->swr, "uch", ost->audio_channels_mapped, 0);
             }
-            av_set_int(ost->swr, "ich", dec->channels);
-            av_set_int(ost->swr, "och", enc->channels);
-            if(audio_sync_method>1) av_set_int(ost->swr, "flags", SWR_FLAG_RESAMPLE);
+            av_opt_set_int(ost->swr, "ich", dec->channels, 0);
+            av_opt_set_int(ost->swr, "och", enc->channels, 0);
+            if(audio_sync_method>1) av_opt_set_int(ost->swr, "flags", SWR_FLAG_RESAMPLE, 0);
             if(ost->swr && swr_init(ost->swr) < 0){
                 av_log(NULL, AV_LOG_FATAL, "swr_init() failed\n");
                 swr_free(&ost->swr);
@@ -1629,6 +1630,7 @@ static int output_packet(InputStream *ist, int ist_index,
     void *buffer_to_free = NULL;
     static unsigned int samples_size= 0;
     AVSubtitle subtitle, *subtitle_to_free;
+    int64_t pkt_dts = AV_NOPTS_VALUE;
     int64_t pkt_pts = AV_NOPTS_VALUE;
 #if CONFIG_AVFILTER
     int frame_available;
@@ -1651,8 +1653,11 @@ static int output_packet(InputStream *ist, int ist_index,
         avpkt = *pkt;
     }
 
-    if(pkt->dts != AV_NOPTS_VALUE)
-        ist->next_pts = ist->pts = av_rescale_q(pkt->dts, ist->st->time_base, AV_TIME_BASE_Q);
+    if(pkt->dts != AV_NOPTS_VALUE){
+        if(ist->st->codec->codec_type != AVMEDIA_TYPE_VIDEO || !ist->decoding_needed)
+            ist->next_pts = ist->pts = av_rescale_q(pkt->dts, ist->st->time_base, AV_TIME_BASE_Q);
+        pkt_dts = av_rescale_q(pkt->dts, ist->st->time_base, AV_TIME_BASE_Q);
+    }
     if(pkt->pts != AV_NOPTS_VALUE)
         pkt_pts = av_rescale_q(pkt->pts, ist->st->time_base, AV_TIME_BASE_Q);
 
@@ -1709,8 +1714,15 @@ static int output_packet(InputStream *ist, int ist_index,
                     if (!(decoded_frame = avcodec_alloc_frame()))
                         return AVERROR(ENOMEM);
                     avpkt.pts = pkt_pts;
-                    avpkt.dts = ist->pts;
+                    avpkt.dts = pkt_dts;
                     pkt_pts = AV_NOPTS_VALUE;
+                    if(pkt_dts != AV_NOPTS_VALUE && ist->st->codec->time_base.num != 0) {
+                        int ticks= ist->st->parser ? ist->st->parser->repeat_pict+1 : ist->st->codec->ticks_per_frame;
+                        pkt_dts += ((int64_t)AV_TIME_BASE *
+                                          ist->st->codec->time_base.num * ticks) /
+                            ist->st->codec->time_base.den;
+                    }else
+                        pkt_dts = AV_NOPTS_VALUE;
 
                     ret = avcodec_decode_video2(ist->st->codec,
                                                 decoded_frame, &got_output, &avpkt);
@@ -1722,7 +1734,10 @@ static int output_packet(InputStream *ist, int ist_index,
                         av_freep(&decoded_frame);
                         goto discard_packet;
                     }
-                    ist->next_pts = ist->pts = decoded_frame->best_effort_timestamp;
+
+                    if(decoded_frame->best_effort_timestamp != AV_NOPTS_VALUE)
+                        ist->next_pts = ist->pts = decoded_frame->best_effort_timestamp;
+
                     if (ist->st->codec->time_base.num != 0) {
                         int ticks= ist->st->parser ? ist->st->parser->repeat_pict+1 : ist->st->codec->ticks_per_frame;
                         ist->next_pts += ((int64_t)AV_TIME_BASE *
@@ -2150,10 +2165,6 @@ static int transcode_init(OutputFile *output_files, int nb_output_files,
                 codec->frame_size = icodec->frame_size;
                 codec->audio_service_type = icodec->audio_service_type;
                 codec->block_align= icodec->block_align;
-                if(codec->block_align == 1 && codec->codec_id == CODEC_ID_MP3)
-                    codec->block_align= 0;
-                if(codec->codec_id == CODEC_ID_AC3)
-                    codec->block_align= 0;
                 break;
             case AVMEDIA_TYPE_VIDEO:
                 codec->pix_fmt = icodec->pix_fmt;
@@ -2564,7 +2575,8 @@ static int transcode(OutputFile *output_files, int nb_output_files,
                     while(debug & (FF_DEBUG_DCT_COEFF|FF_DEBUG_VIS_QP|FF_DEBUG_VIS_MB_TYPE)) //unsupported, would just crash
                         debug += debug;
                 }else
-                    scanf("%d", &debug);
+                    if(scanf("%d", &debug)!=1)
+                        fprintf(stderr,"error parsing debug value\n");
                 for(i=0;i<nb_input_streams;i++) {
                     input_streams[i].st->codec->debug = debug;
                 }
@@ -3660,6 +3672,9 @@ static OutputStream *new_video_stream(OptionsContext *o, AVFormatContext *oc)
             video_enc->rc_initial_buffer_occupancy = video_enc->rc_buffer_size*3/4;
         video_enc->intra_dc_precision= intra_dc_precision - 8;
 
+        if (do_psnr)
+            video_enc->flags|= CODEC_FLAG_PSNR;
+
         /* two pass mode */
         if (do_pass) {
             if (do_pass & 1) {
@@ -4624,6 +4639,7 @@ static const OptionDef options[] = {
     { "passlogfile", HAS_ARG | OPT_VIDEO, {(void*)&opt_passlogfile}, "select two pass log file name prefix", "prefix" },
     { "deinterlace", OPT_BOOL | OPT_EXPERT | OPT_VIDEO, {(void*)&do_deinterlace},
       "deinterlace pictures" },
+    { "psnr", OPT_BOOL | OPT_EXPERT | OPT_VIDEO, {(void*)&do_psnr}, "calculate PSNR of compressed frames" },
     { "vstats", OPT_EXPERT | OPT_VIDEO, {(void*)&opt_vstats}, "dump video coding statistics to file" },
     { "vstats_file", HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_vstats_file}, "dump video coding statistics to file", "file" },
 #if CONFIG_AVFILTER
