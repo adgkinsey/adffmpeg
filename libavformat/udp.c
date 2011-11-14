@@ -329,7 +329,7 @@ static void *circular_buffer_task( void *_URLContext)
         int ret;
         int len;
 
-        if (url_interrupt_cb(h)) {
+        if (url_interrupt_cb()) {
             s->circular_buffer_error = EINTR;
             return NULL;
         }
