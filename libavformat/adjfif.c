@@ -384,7 +384,7 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
     }
 
     while ( !sos && (i < imgSize) ) {
-        if (data[i++] != 0xff)
+        if (data[i] != 0xff)
             continue;
         marker = AV_RB16(&data[i]);
         i += 2;
