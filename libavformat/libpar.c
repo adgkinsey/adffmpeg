@@ -130,7 +130,7 @@ static int par_write_header(AVFormatContext *avf)
 
     result = parReader_initWritePartition(&p->frameInfo, avf->filename, -1);
 
-    if (result == 0)
+    if (result == 1)
         return 0;
     else
         return AVERROR(EIO);
