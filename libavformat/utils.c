@@ -33,6 +33,7 @@
 #include "id3v2.h"
 #include "libavutil/avstring.h"
 #include "libavutil/mathematics.h"
+#include "libavutil/parseutils.h"
 #include "riff.h"
 #include "audiointerleave.h"
 #include "url.h"
@@ -1020,7 +1021,7 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
     // Note, if this is misbehaving for a H.264 file then possibly presentation_delayed is not set correctly.
     if(delay==1 && pkt->dts == pkt->pts && pkt->dts != AV_NOPTS_VALUE && presentation_delayed){
         av_log(s, AV_LOG_DEBUG, "invalid dts/pts combination %"PRIi64"\n", pkt->dts);
-        pkt->dts= pkt->pts= AV_NOPTS_VALUE;
+        pkt->dts= AV_NOPTS_VALUE;
     }
 
     if (pkt->duration == 0) {
@@ -1822,7 +1823,7 @@ static int seek_frame_generic(AVFormatContext *s,
             if(stream_index == pkt.stream_index && pkt.dts > timestamp){
                 if(pkt.flags & AV_PKT_FLAG_KEY)
                     break;
-                if(nonkey++ > 1000){
+                if(nonkey++ > 1000 && st->codec->codec_id != CODEC_ID_CDGRAPHICS){
                     av_log(s, AV_LOG_ERROR,"seek_frame_generic failed as this stream seems to contain no keyframes after the target timestamp, %d non keyframes found\n", nonkey);
                     break;
                 }
@@ -4161,9 +4162,14 @@ void ff_make_absolute_url(char *buf, int size, const char *base,
 int64_t ff_iso8601_to_unix_time(const char *datestr)
 {
 #if HAVE_STRPTIME
-    struct tm time = {0};
-    strptime(datestr, "%Y - %m - %dT%T", &time);
-    return mktime(&time);
+    struct tm time1 = {0}, time2 = {0};
+    char *ret1, *ret2;
+    ret1 = strptime(datestr, "%Y - %m - %d %T", &time1);
+    ret2 = strptime(datestr, "%Y - %m - %dT%T", &time2);
+    if (ret2 && !ret1)
+        return av_timegm(&time2);
+    else
+        return av_timegm(&time1);
 #else
     av_log(NULL, AV_LOG_WARNING, "strptime() unavailable on this system, cannot convert "
                                  "the date string.\n");

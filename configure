@@ -110,6 +110,7 @@ Configuration options:
   --disable-mdct           disable MDCT code
   --disable-rdft           disable RDFT code
   --enable-vaapi           enable VAAPI code [autodetect]
+  --enable-vda             enable VDA code [autodetect]
   --enable-vdpau           enable VDPAU code [autodetect]
   --disable-dxva2          disable DXVA2 code
   --disable-vda            disable VDA code
@@ -182,7 +183,7 @@ External library support:
   --enable-libmp3lame      enable MP3 encoding via libmp3lame [no]
   --enable-libnut          enable NUT (de)muxing via libnut,
                            native (de)muxer exists [no]
-  --enable-libopenjpeg     enable JPEG 2000 decoding via OpenJPEG [no]
+  --enable-libopenjpeg     enable JPEG 2000 encoding/decoding via OpenJPEG [no]
   --enable-librtmp         enable RTMP[E] support via librtmp [no]
   --enable-libschroedinger enable Dirac support via libschroedinger [no]
   --enable-libspeex        enable Speex support via libspeex [no]
@@ -1389,8 +1390,8 @@ h264_crystalhd_decoder_select="crystalhd h264_mp4toannexb_bsf h264_parser"
 h264_dxva2_hwaccel_deps="dxva2api_h"
 h264_dxva2_hwaccel_select="dxva2 h264_decoder"
 h264_vaapi_hwaccel_select="vaapi h264_decoder"
-h264_vda_hwaccel_deps="VideoDecodeAcceleration_VDADecoder_h"
-h264_vda_hwaccel_select="vda"
+h264_vda_hwaccel_deps="VideoDecodeAcceleration_VDADecoder_h pthreads"
+h264_vda_hwaccel_select="vda h264_decoder"
 h264_vdpau_decoder_select="vdpau h264_decoder"
 imc_decoder_select="fft mdct sinewin"
 jpegls_decoder_select="golomb"
@@ -1498,6 +1499,7 @@ zmbv_encoder_select="zlib"
 
 crystalhd_deps="libcrystalhd_libcrystalhd_if_h"
 vaapi_deps="va_va_h"
+vda_deps="VideoDecodeAcceleration_VDADecoder_h pthreads"
 vdpau_deps="vdpau_vdpau_h vdpau_vdpau_x11_h"
 
 # parsers
@@ -1519,6 +1521,7 @@ libopencore_amrnb_decoder_deps="libopencore_amrnb"
 libopencore_amrnb_encoder_deps="libopencore_amrnb"
 libopencore_amrwb_decoder_deps="libopencore_amrwb"
 libopenjpeg_decoder_deps="libopenjpeg"
+libopenjpeg_encoder_deps="libopenjpeg"
 libschroedinger_decoder_deps="libschroedinger"
 libschroedinger_encoder_deps="libschroedinger"
 libspeex_decoder_deps="libspeex"
@@ -1597,6 +1600,8 @@ x11_grab_device_indev_extralibs="-lX11 -lXext -lXfixes"
 
 # protocols
 gopher_protocol_deps="network"
+httpproxy_protocol_deps="network"
+httpproxy_protocol_select="tcp_protocol"
 http_protocol_deps="network"
 http_protocol_select="tcp_protocol"
 https_protocol_select="tls_protocol"
@@ -2588,7 +2593,6 @@ case $target_os in
             disable network
         else
             target_os=mingw32
-            enable_weak w32threads
         fi
         LIBTARGET=i386
         if enabled x86_64; then
@@ -3002,6 +3006,10 @@ if ! disabled vda; then
         enable vda
         add_ldflags -framework CoreFoundation -framework VideoDecodeAcceleration -framework QuartzCore
     fi
+fi
+
+if ! disabled w32threads && ! enabled pthreads; then
+    check_func _beginthreadex && enable w32threads
 fi
 
 # check for some common methods of building with pthread support

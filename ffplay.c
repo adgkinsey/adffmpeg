@@ -2076,9 +2076,10 @@ static int audio_decode_frame(VideoState *is, double *pts_ptr)
             if (dec->sample_fmt != is->audio_src_fmt || dec_channel_layout != is->audio_src_channel_layout || dec->sample_rate != is->audio_src_freq) {
                 if (is->swr_ctx)
                     swr_free(&is->swr_ctx);
-                is->swr_ctx = swr_alloc2(NULL, is->audio_tgt_channel_layout, is->audio_tgt_fmt, is->audio_tgt_freq,
-                                               dec_channel_layout,          dec->sample_fmt,   dec->sample_rate,
-                                               NULL, 0, NULL);
+                is->swr_ctx = swr_alloc_set_opts(NULL,
+                                                 is->audio_tgt_channel_layout, is->audio_tgt_fmt, is->audio_tgt_freq,
+                                                 dec_channel_layout,           dec->sample_fmt,   dec->sample_rate,
+                                                 0, NULL);
                 if (!is->swr_ctx || swr_init(is->swr_ctx) < 0) {
                     fprintf(stderr, "Cannot create sample rate converter for conversion of %d Hz %s %d channels to %d Hz %s %d channels!\n",
                         dec->sample_rate,
@@ -2413,7 +2414,7 @@ static void stream_component_close(VideoState *is, int stream_index)
    variable instead of a thread local variable */
 static VideoState *global_video_state;
 
-static int decode_interrupt_cb(void)
+static int decode_interrupt_cb(void *ctx)
 {
     return (global_video_state && global_video_state->abort_request);
 }
@@ -2438,8 +2439,9 @@ static int read_thread(void *arg)
     is->subtitle_stream = -1;
 
     global_video_state = is;
-    avio_set_interrupt_cb(decode_interrupt_cb);
 
+    ic = avformat_alloc_context();
+    ic->interrupt_callback.callback = decode_interrupt_cb;
     err = avformat_open_input(&ic, is->filename, is->iformat, &format_opts);
     if (err < 0) {
         print_error(is->filename, err);
