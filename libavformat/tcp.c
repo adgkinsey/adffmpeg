@@ -200,9 +200,7 @@ static int tcp_close(URLContext *h)
 static int tcp_get_file_handle(URLContext *h)
 {
     TCPContext *s = h->priv_data;
-    if (s)
-        return s->fd;
-    return 0;
+    return s->fd;
 }
 
 URLProtocol ff_tcp_protocol = {
