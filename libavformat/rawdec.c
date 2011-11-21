@@ -59,6 +59,12 @@ int ff_raw_read_header(AVFormatContext *s, AVFormatParameters *ap)
 
             if (s1->sample_rate)
                 st->codec->sample_rate = s1->sample_rate;
+            if (st->codec->sample_rate <= 0) {
+                av_log(s, AV_LOG_WARNING, "Invalid sample rate %d specified using default of 44100\n",
+                       st->codec->sample_rate);
+                st->codec->sample_rate= 44100;
+            }
+
             if (s1->channels)
                 st->codec->channels    = s1->channels;
 
