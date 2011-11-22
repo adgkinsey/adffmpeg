@@ -150,6 +150,7 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
     int64_t srcTime = pkt->pts;
     uint32_t pktTypeCheck;
     int written = 0;
+    int isADformat = 0;
 
     // Metadata
     if (ps->camera < 1)  {
@@ -170,10 +171,32 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
             snprintf(ps->name, sizeof(ps->name), "Camera %d", ps->camera);
     }
 
-    pktTypeCheck = AV_RL32(pkt->data);
-    if (pktTypeCheck == 0xDECADE11)  {
-        p->frameInfo.frameBufferSize = pkt->size;
-        p->frameInfo.frameBuffer = pkt->data;
+    av_packet_split_side_data(pkt);
+    isADformat = 0;
+    for (int ii = 0; ii < pkt->side_data_elems; ii++)  {
+        if (pkt->side_data[ii].type == AV_PKT_DATA_AD_FRAME)
+            isADformat = 1;
+    }
+    
+    if (isADformat)  {
+        uint8_t *combBuf = NULL, *combPtr = NULL;
+        int combSize = 0;
+        for (int ii = 0; ii < pkt->side_data_elems; ii++)  {
+            if ( (pkt->side_data[ii].type == AV_PKT_DATA_AD_FRAME) || (pkt->side_data[ii].type == AV_PKT_DATA_AD_TEXT) )  {
+                combBuf = av_realloc(combBuf, combSize + pkt->side_data[ii].size);
+                combPtr = combBuf + combSize;
+                memcpy(combPtr, pkt->side_data[ii].data, pkt->side_data[ii].size);
+                combSize += pkt->side_data[ii].size;
+            }
+        }
+        
+        combBuf = av_realloc(combBuf, combSize + pkt->size);
+        combPtr = combBuf + combSize;
+        memcpy(combPtr, pkt->data, pkt->size);
+        combSize += pkt->size;
+        
+        p->frameInfo.frameBuffer = combBuf;
+        p->frameInfo.frameBufferSize = combSize;
         written = parReader_writePartition(&p->frameInfo);
         return written;
     }
