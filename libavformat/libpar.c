@@ -606,6 +606,7 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
     else  {
         pkt->pts = AV_NOPTS_VALUE;
     }
+    pkt->duration = 1;
     
 #ifdef AD_NO_SIDEDATA
     pkt->destruct = libpar_packet_destroy;
