@@ -21,6 +21,7 @@
 
 #include <strings.h>
 
+#include "internal.h"
 #include "libavutil/avstring.h"
 #include "libavutil/intreadwrite.h"
 
@@ -191,7 +192,7 @@ AVStream * ad_get_vstream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t ca
 
             // Use milliseconds as the time base
             st->r_frame_rate = MilliTB;
-            av_set_pts_info(st, 32, MilliTB.num, MilliTB.den);
+            avpriv_set_pts_info(st, 32, MilliTB.num, MilliTB.den);
             st->codec->time_base = MilliTB;
 
             if (title)
@@ -245,7 +246,7 @@ static AVStream * ad_get_overlay_stream(AVFormatContext *s, int channel, const c
 
             // Use milliseconds as the time base
             st->r_frame_rate = MilliTB;
-            av_set_pts_info(st, 32, MilliTB.num, MilliTB.den);
+            avpriv_set_pts_info(st, 32, MilliTB.num, MilliTB.den);
             st->codec->time_base = MilliTB;
 
             av_dict_set(&st->metadata, "title", title, 0);
@@ -314,7 +315,7 @@ AVStream * ad_get_audio_stream(AVFormatContext *s, struct NetVuAudioData* audioH
             }
             else
                 st->codec->sample_rate = 8000;
-            av_set_pts_info(st, 32, 1, st->codec->sample_rate);
+            avpriv_set_pts_info(st, 32, 1, st->codec->sample_rate);
 
             st->index = i;
         }
@@ -352,7 +353,7 @@ static AVStream * ad_get_data_stream(AVFormatContext *s, enum CodecID codecId)
 
             // Use milliseconds as the time base
             //st->r_frame_rate = MilliTB;
-            av_set_pts_info(st, 32, MilliTB.num, MilliTB.den);
+            avpriv_set_pts_info(st, 32, MilliTB.num, MilliTB.den);
             //st->codec->time_base = MilliTB;
 
             st->index = i;
