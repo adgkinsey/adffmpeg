@@ -22,7 +22,9 @@
  */
 
 #include "config.h"
+#include "libavformat/internal.h"
 #include "libavutil/log.h"
+#include "libavutil/mathematics.h"
 #include "libavutil/opt.h"
 #include "avdevice.h"
 
@@ -84,9 +86,9 @@ struct dc1394_frame_rate {
 #define OFFSET(x) offsetof(dc1394_data, x)
 #define DEC AV_OPT_FLAG_DECODING_PARAM
 static const AVOption options[] = {
-    { "video_size", "A string describing frame size, such as 640x480 or hd720.", OFFSET(video_size), FF_OPT_TYPE_STRING, {.str = "qvga"}, 0, 0, DEC },
-    { "pixel_format", "", OFFSET(pixel_format), FF_OPT_TYPE_STRING, {.str = "uyvy422"}, 0, 0, DEC },
-    { "framerate", "", OFFSET(framerate), FF_OPT_TYPE_STRING, {.str = "ntsc"}, 0, 0, DEC },
+    { "video_size", "A string describing frame size, such as 640x480 or hd720.", OFFSET(video_size), AV_OPT_TYPE_STRING, {.str = "qvga"}, 0, 0, DEC },
+    { "pixel_format", "", OFFSET(pixel_format), AV_OPT_TYPE_STRING, {.str = "uyvy422"}, 0, 0, DEC },
+    { "framerate", "", OFFSET(framerate), AV_OPT_TYPE_STRING, {.str = "ntsc"}, 0, 0, DEC },
     { NULL },
 };
 
@@ -153,7 +155,7 @@ static int dc1394_read_header(AVFormatContext *c, AVFormatParameters * ap)
             goto out;
         }
     }
-    
+
     /* Choose the best mode. */
     rate = (ap->time_base.num ? av_rescale(1000, ap->time_base.den, ap->time_base.num) : -1);
     max_score = -1;
@@ -252,10 +254,10 @@ static int dc1394_read_header(AVFormatContext *c, AVFormatParameters * ap)
     }
 
     /* create a video stream */
-    vst = av_new_stream(c, 0);
+    vst = avformat_new_stream(c, NULL);
     if (!vst)
         goto out_camera;
-    av_set_pts_info(vst, 64, 1, 1000);
+    avpriv_set_pts_info(vst, 64, 1, 1000);
     vst->codec->codec_type = AVMEDIA_TYPE_VIDEO;
     vst->codec->codec_id = CODEC_ID_RAWVIDEO;
     vst->codec->time_base.den = final_frame_rate;
@@ -333,8 +335,8 @@ static int dc1394_read_packet(AVFormatContext *c, AVPacket *pkt)
 
     res = dc1394_capture_dequeue(dc1394->camera, DC1394_CAPTURE_POLICY_WAIT, &dc1394->frame);
     if (res == DC1394_SUCCESS) {
-        dc1394->packet.data = (uint8_t *)(dc1394->frame->image);
-        dc1394->packet.pts = (dc1394->current_frame  * 1000000) / (dc1394->frame_rate);
+        dc1394->packet.data = (uint8_t *) dc1394->frame->image;
+        dc1394->packet.pts  = dc1394->current_frame * 1000000 / dc1394->frame_rate;
         res = dc1394->frame->image_bytes;
     } else {
         av_log(c, AV_LOG_ERROR, "DMA capture failed\n");

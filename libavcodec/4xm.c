@@ -821,7 +821,7 @@ static int decode_frame(AVCodecContext *avctx,
 
     avctx->flags |= CODEC_FLAG_EMU_EDGE; // alternatively we would have to use our own buffer management
 
-    p->reference= 1;
+    p->reference= 3;
     if (avctx->reget_buffer(avctx, p) < 0) {
         av_log(avctx, AV_LOG_ERROR, "reget_buffer() failed\n");
         return -1;
@@ -841,7 +841,7 @@ static int decode_frame(AVCodecContext *avctx,
         }
     }else if(frame_4cc == AV_RL32("pfrm") || frame_4cc == AV_RL32("pfr2")){
         if(!f->last_picture.data[0]){
-            f->last_picture.reference= 1;
+            f->last_picture.reference= 3;
             if(avctx->get_buffer(avctx, &f->last_picture) < 0){
                 av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
                 return -1;
@@ -923,15 +923,14 @@ static av_cold int decode_end(AVCodecContext *avctx){
 }
 
 AVCodec ff_fourxm_decoder = {
-    "4xm",
-    AVMEDIA_TYPE_VIDEO,
-    CODEC_ID_4XM,
-    sizeof(FourXContext),
-    decode_init,
-    NULL,
-    decode_end,
-    decode_frame,
-    CODEC_CAP_DR1,
+    .name           = "4xm",
+    .type           = AVMEDIA_TYPE_VIDEO,
+    .id             = CODEC_ID_4XM,
+    .priv_data_size = sizeof(FourXContext),
+    .init           = decode_init,
+    .close          = decode_end,
+    .decode         = decode_frame,
+    .capabilities   = CODEC_CAP_DR1,
     .long_name = NULL_IF_CONFIG_SMALL("4X Movie"),
 };
 

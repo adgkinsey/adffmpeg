@@ -146,7 +146,7 @@ static int ir2_decode_frame(AVCodecContext *avctx,
     AVFrame * const p= (AVFrame*)&s->picture;
     int start;
 
-    p->reference = 1;
+    p->reference = 3;
     p->buffer_hints = FF_BUFFER_HINTS_VALID | FF_BUFFER_HINTS_PRESERVE | FF_BUFFER_HINTS_REUSABLE;
     if (avctx->reget_buffer(avctx, p)) {
         av_log(s->avctx, AV_LOG_ERROR, "reget_buffer() failed\n");
@@ -229,14 +229,13 @@ static av_cold int ir2_decode_end(AVCodecContext *avctx){
 }
 
 AVCodec ff_indeo2_decoder = {
-    "indeo2",
-    AVMEDIA_TYPE_VIDEO,
-    CODEC_ID_INDEO2,
-    sizeof(Ir2Context),
-    ir2_decode_init,
-    NULL,
-    ir2_decode_end,
-    ir2_decode_frame,
-    CODEC_CAP_DR1,
+    .name           = "indeo2",
+    .type           = AVMEDIA_TYPE_VIDEO,
+    .id             = CODEC_ID_INDEO2,
+    .priv_data_size = sizeof(Ir2Context),
+    .init           = ir2_decode_init,
+    .close          = ir2_decode_end,
+    .decode         = ir2_decode_frame,
+    .capabilities   = CODEC_CAP_DR1,
     .long_name = NULL_IF_CONFIG_SMALL("Intel Indeo 2"),
 };

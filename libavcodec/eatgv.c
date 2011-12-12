@@ -278,7 +278,7 @@ static int tgv_decode_frame(AVCodecContext *avctx,
         pal_count = AV_RL16(&buf[6]);
         buf += 12;
         for(i=0; i<pal_count && i<AVPALETTE_COUNT && buf_end - buf >= 3; i++) {
-            s->palette[i] = AV_RB24(buf);
+            s->palette[i] = 0xFF << 24 | AV_RB24(buf);
             buf += 3;
         }
     }
@@ -289,7 +289,7 @@ static int tgv_decode_frame(AVCodecContext *avctx,
     /* shuffle */
     FFSWAP(AVFrame, s->frame, s->last_frame);
     if (!s->frame.data[0]) {
-        s->frame.reference = 1;
+        s->frame.reference = 3;
         s->frame.buffer_hints = FF_BUFFER_HINTS_VALID;
         s->frame.linesize[0] = s->width;
 
@@ -342,13 +342,12 @@ static av_cold int tgv_decode_end(AVCodecContext *avctx)
 }
 
 AVCodec ff_eatgv_decoder = {
-    "eatgv",
-    AVMEDIA_TYPE_VIDEO,
-    CODEC_ID_TGV,
-    sizeof(TgvContext),
-    tgv_decode_init,
-    NULL,
-    tgv_decode_end,
-    tgv_decode_frame,
+    .name           = "eatgv",
+    .type           = AVMEDIA_TYPE_VIDEO,
+    .id             = CODEC_ID_TGV,
+    .priv_data_size = sizeof(TgvContext),
+    .init           = tgv_decode_init,
+    .close          = tgv_decode_end,
+    .decode         = tgv_decode_frame,
     .long_name = NULL_IF_CONFIG_SMALL("Electronic Arts TGV video"),
 };

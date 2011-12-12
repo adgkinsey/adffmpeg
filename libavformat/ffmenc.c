@@ -20,7 +20,9 @@
  */
 
 #include "libavutil/intreadwrite.h"
+#include "libavutil/intfloat_readwrite.h"
 #include "avformat.h"
+#include "internal.h"
 #include "ffm.h"
 
 static void flush_packet(AVFormatContext *s)
@@ -106,14 +108,13 @@ static int ffm_write_header(AVFormatContext *s)
     /* list of streams */
     for(i=0;i<s->nb_streams;i++) {
         st = s->streams[i];
-        av_set_pts_info(st, 64, 1, 1000000);
+        avpriv_set_pts_info(st, 64, 1, 1000000);
 
         codec = st->codec;
         /* generic info */
         avio_wb32(pb, codec->codec_id);
         avio_w8(pb, codec->codec_type);
         avio_wb32(pb, codec->bit_rate);
-        avio_wb32(pb, st->quality);
         avio_wb32(pb, codec->flags);
         avio_wb32(pb, codec->flags2);
         avio_wb32(pb, codec->debug);
@@ -241,15 +242,14 @@ static int ffm_write_trailer(AVFormatContext *s)
 }
 
 AVOutputFormat ff_ffm_muxer = {
-    "ffm",
-    NULL_IF_CONFIG_SMALL("FFM (FFserver live feed) format"),
-    "",
-    "ffm",
-    sizeof(FFMContext),
-    /* not really used */
-    CODEC_ID_MP2,
-    CODEC_ID_MPEG1VIDEO,
-    ffm_write_header,
-    ffm_write_packet,
-    ffm_write_trailer,
+    .name              = "ffm",
+    .long_name         = NULL_IF_CONFIG_SMALL("FFM (FFserver live feed) format"),
+    .mime_type         = "",
+    .extensions        = "ffm",
+    .priv_data_size    = sizeof(FFMContext),
+    .audio_codec       = CODEC_ID_MP2,
+    .video_codec       = CODEC_ID_MPEG1VIDEO,
+    .write_header      = ffm_write_header,
+    .write_packet      = ffm_write_packet,
+    .write_trailer     = ffm_write_trailer,
 };

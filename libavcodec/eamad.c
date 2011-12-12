@@ -22,9 +22,9 @@
 /**
  * @file
  * Electronic Arts Madcow Video Decoder
- * by Peter Ross <pross@xvid.org>
+ * @author Peter Ross <pross@xvid.org>
  *
- * Technical details here:
+ * @see technical details at
  * http://wiki.multimedia.cx/index.php?title=Electronic_Arts_MAD
  */
 
@@ -277,7 +277,7 @@ static int decode_frame(AVCodecContext *avctx,
             avctx->release_buffer(avctx, &t->last_frame);
     }
 
-    t->frame.reference = 1;
+    t->frame.reference = 3;
     if (!t->frame.data[0]) {
         if (avctx->get_buffer(avctx, &t->frame) < 0) {
             av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
@@ -317,14 +317,13 @@ static av_cold int decode_end(AVCodecContext *avctx)
 }
 
 AVCodec ff_eamad_decoder = {
-    "eamad",
-    AVMEDIA_TYPE_VIDEO,
-    CODEC_ID_MAD,
-    sizeof(MadContext),
-    decode_init,
-    NULL,
-    decode_end,
-    decode_frame,
-    CODEC_CAP_DR1,
+    .name           = "eamad",
+    .type           = AVMEDIA_TYPE_VIDEO,
+    .id             = CODEC_ID_MAD,
+    .priv_data_size = sizeof(MadContext),
+    .init           = decode_init,
+    .close          = decode_end,
+    .decode         = decode_frame,
+    .capabilities   = CODEC_CAP_DR1,
     .long_name = NULL_IF_CONFIG_SMALL("Electronic Arts Madcow Video")
 };

@@ -19,7 +19,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/intfloat_readwrite.h"
 #include "avformat.h"
+#include "internal.h"
 #include "aiff.h"
 #include "avio_internal.h"
 #include "isom.h"
@@ -102,7 +104,7 @@ static int aiff_write_header(AVFormatContext *s)
     avio_wb32(pb, 0);                    /* Data offset */
     avio_wb32(pb, 0);                    /* Block-size (block align) */
 
-    av_set_pts_info(s->streams[0], 64, 1, s->streams[0]->codec->sample_rate);
+    avpriv_set_pts_info(s->streams[0], 64, 1, s->streams[0]->codec->sample_rate);
 
     /* Data is starting here */
     avio_flush(pb);
@@ -154,15 +156,15 @@ static int aiff_write_trailer(AVFormatContext *s)
 }
 
 AVOutputFormat ff_aiff_muxer = {
-    "aiff",
-    NULL_IF_CONFIG_SMALL("Audio IFF"),
-    "audio/aiff",
-    "aif,aiff,afc,aifc",
-    sizeof(AIFFOutputContext),
-    CODEC_ID_PCM_S16BE,
-    CODEC_ID_NONE,
-    aiff_write_header,
-    aiff_write_packet,
-    aiff_write_trailer,
+    .name              = "aiff",
+    .long_name         = NULL_IF_CONFIG_SMALL("Audio IFF"),
+    .mime_type         = "audio/aiff",
+    .extensions        = "aif,aiff,afc,aifc",
+    .priv_data_size    = sizeof(AIFFOutputContext),
+    .audio_codec       = CODEC_ID_PCM_S16BE,
+    .video_codec       = CODEC_ID_NONE,
+    .write_header      = aiff_write_header,
+    .write_packet      = aiff_write_packet,
+    .write_trailer     = aiff_write_trailer,
     .codec_tag= (const AVCodecTag* const []){ff_codec_aiff_tags, 0},
 };

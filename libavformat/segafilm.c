@@ -29,11 +29,13 @@
 
 #include "libavutil/intreadwrite.h"
 #include "avformat.h"
+#include "internal.h"
 
 #define FILM_TAG MKBETAG('F', 'I', 'L', 'M')
 #define FDSC_TAG MKBETAG('F', 'D', 'S', 'C')
 #define STAB_TAG MKBETAG('S', 'T', 'A', 'B')
 #define CVID_TAG MKBETAG('c', 'v', 'i', 'd')
+#define RAW_TAG  MKBETAG('r', 'a', 'w', ' ')
 
 typedef struct {
   int stream;
@@ -129,12 +131,15 @@ static int film_read_header(AVFormatContext *s,
 
     if (AV_RB32(&scratch[8]) == CVID_TAG) {
         film->video_type = CODEC_ID_CINEPAK;
-    } else
+    } else if (AV_RB32(&scratch[8]) == RAW_TAG) {
+        film->video_type = CODEC_ID_RAWVIDEO;
+    } else {
         film->video_type = CODEC_ID_NONE;
+    }
 
     /* initialize the decoder streams */
     if (film->video_type) {
-        st = av_new_stream(s, 0);
+        st = avformat_new_stream(s, NULL);
         if (!st)
             return AVERROR(ENOMEM);
         film->video_stream_index = st->index;
@@ -143,10 +148,19 @@ static int film_read_header(AVFormatContext *s,
         st->codec->codec_tag = 0;  /* no fourcc */
         st->codec->width = AV_RB32(&scratch[16]);
         st->codec->height = AV_RB32(&scratch[12]);
+
+        if (film->video_type == CODEC_ID_RAWVIDEO) {
+            if (scratch[20] == 24) {
+                st->codec->pix_fmt = PIX_FMT_RGB24;
+            } else {
+                av_log(s, AV_LOG_ERROR, "raw video is using unhandled %dbpp\n", scratch[20]);
+                return -1;
+            }
+        }
     }
 
     if (film->audio_type) {
-        st = av_new_stream(s, 0);
+        st = avformat_new_stream(s, NULL);
         if (!st)
             return AVERROR(ENOMEM);
         film->audio_stream_index = st->index;
@@ -154,12 +168,20 @@ static int film_read_header(AVFormatContext *s,
         st->codec->codec_id = film->audio_type;
         st->codec->codec_tag = 1;
         st->codec->channels = film->audio_channels;
-        st->codec->bits_per_coded_sample = film->audio_bits;
         st->codec->sample_rate = film->audio_samplerate;
+
+        if (film->audio_type == CODEC_ID_ADPCM_ADX) {
+            st->codec->bits_per_coded_sample = 18 * 8 / 32;
+            st->codec->block_align = st->codec->channels * 18;
+            st->need_parsing = AVSTREAM_PARSE_FULL;
+        } else {
+            st->codec->bits_per_coded_sample = film->audio_bits;
+            st->codec->block_align = st->codec->channels *
+                st->codec->bits_per_coded_sample / 8;
+        }
+
         st->codec->bit_rate = st->codec->channels * st->codec->sample_rate *
             st->codec->bits_per_coded_sample;
-        st->codec->block_align = st->codec->channels *
-            st->codec->bits_per_coded_sample / 8;
     }
 
     /* load the sample table */
@@ -176,7 +198,7 @@ static int film_read_header(AVFormatContext *s,
         return AVERROR(ENOMEM);
 
     for(i=0; i<s->nb_streams; i++)
-        av_set_pts_info(s->streams[i], 33, 1, film->base_clock);
+        avpriv_set_pts_info(s->streams[i], 33, 1, film->base_clock);
 
     audio_frame_counter = 0;
     for (i = 0; i < film->sample_count; i++) {
@@ -238,7 +260,8 @@ static int film_read_packet(AVFormatContext *s,
             return AVERROR(ENOMEM);
         avio_read(pb, pkt->data, sample->sample_size);
     } else if ((sample->stream == film->audio_stream_index) &&
-        (film->audio_channels == 2)) {
+        (film->audio_channels == 2) &&
+        (film->audio_type != CODEC_ID_ADPCM_ADX)) {
         /* stereo PCM needs to be interleaved */
 
         if (av_new_packet(pkt, sample->sample_size))
@@ -298,11 +321,11 @@ static int film_read_close(AVFormatContext *s)
 }
 
 AVInputFormat ff_segafilm_demuxer = {
-    "film_cpk",
-    NULL_IF_CONFIG_SMALL("Sega FILM/CPK format"),
-    sizeof(FilmDemuxContext),
-    film_probe,
-    film_read_header,
-    film_read_packet,
-    film_read_close,
+    .name           = "film_cpk",
+    .long_name      = NULL_IF_CONFIG_SMALL("Sega FILM/CPK format"),
+    .priv_data_size = sizeof(FilmDemuxContext),
+    .read_probe     = film_probe,
+    .read_header    = film_read_header,
+    .read_packet    = film_read_packet,
+    .read_close     = film_read_close,
 };

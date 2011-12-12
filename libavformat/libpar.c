@@ -70,15 +70,15 @@ const unsigned int MAX_FRAMEBUFFER_SIZE = 256 * 1024;
 
 static void importMetadata(const AVDictionaryEntry *tag, struct PAREncStreamContext *ps)
 {
-    if (strcasecmp(tag->key, "title") == 0)
+    if (av_strcasecmp(tag->key, "title") == 0)
         av_strlcpy(ps->name, tag->value, sizeof(ps->name));
-    else if (strcasecmp(tag->key, "date") == 0)  {
+    else if (av_strcasecmp(tag->key, "date") == 0)  {
         av_parse_time(&ps->startTime, tag->value, 0);
         ps->startTime *= 1000;
     }
-    else if (strcasecmp(tag->key, "track") == 0)
+    else if (av_strcasecmp(tag->key, "track") == 0)
         sscanf(tag->value, "%d", &(ps->camera));
-    else if (strcasecmp(tag->key, "timezone") == 0)
+    else if (av_strcasecmp(tag->key, "timezone") == 0)
         sscanf(tag->value, "%d", &(ps->utc_offset));
 }
 
@@ -124,7 +124,7 @@ static int par_write_header(AVFormatContext *avf)
         AVStream *st = avf->streams[ii];
         
         // Set timebase to 1 millisecond, and min frame rate to 1 / timebase
-        av_set_pts_info(st, 32, 1, 1000);
+        avpriv_set_pts_info(st, 32, 1, 1000);
         st->r_frame_rate = (AVRational) { 1, 1 };
     }
 
@@ -148,8 +148,9 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
     uint8_t *ptr;
     int parFrameFormat;
     int64_t srcTime = pkt->pts;
-    uint32_t pktTypeCheck;
+    //uint32_t pktTypeCheck;
     int written = 0;
+    int isADformat = 0;
 
     // Metadata
     if (ps->camera < 1)  {
@@ -170,10 +171,32 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
             snprintf(ps->name, sizeof(ps->name), "Camera %d", ps->camera);
     }
 
-    pktTypeCheck = AV_RL32(pkt->data);
-    if (pktTypeCheck == 0xDECADE11)  {
-        p->frameInfo.frameBufferSize = pkt->size;
-        p->frameInfo.frameBuffer = pkt->data;
+    av_packet_split_side_data(pkt);
+    isADformat = 0;
+    for (int ii = 0; ii < pkt->side_data_elems; ii++)  {
+        if (pkt->side_data[ii].type == AV_PKT_DATA_AD_FRAME)
+            isADformat = 1;
+    }
+    
+    if (isADformat)  {
+        uint8_t *combBuf = NULL, *combPtr = NULL;
+        int combSize = 0;
+        for (int ii = 0; ii < pkt->side_data_elems; ii++)  {
+            if ( (pkt->side_data[ii].type == AV_PKT_DATA_AD_FRAME) || (pkt->side_data[ii].type == AV_PKT_DATA_AD_TEXT) )  {
+                combBuf = av_realloc(combBuf, combSize + pkt->side_data[ii].size);
+                combPtr = combBuf + combSize;
+                memcpy(combPtr, pkt->side_data[ii].data, pkt->side_data[ii].size);
+                combSize += pkt->side_data[ii].size;
+            }
+        }
+        
+        combBuf = av_realloc(combBuf, combSize + pkt->size);
+        combPtr = combBuf + combSize;
+        memcpy(combPtr, pkt->data, pkt->size);
+        combSize += pkt->size;
+        
+        p->frameInfo.frameBuffer = combBuf;
+        p->frameInfo.frameBufferSize = combSize;
         written = parReader_writePartition(&p->frameInfo);
         return written;
     }
@@ -181,13 +204,19 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
         // PAR files have timestamps that are in UTC, not elapsed time
         // So if the pts we have been given is the latter we need to
         // add an offset to convert it to the former
+        
         if (srcTime < 0)
             srcTime = pkt->dts;
         if ( (srcTime == 0) && (ps->startTime == 0) )  {
+            AVDictionaryEntry *ffstarttime = av_dict_get(avf->metadata, "creation_time", NULL, 0);
+            int64_t ffstarttimeint = 0;        
+            if (ffstarttime)
+                sscanf(ffstarttime->value, "%"PRId64"", &ffstarttimeint);
+            
             if (avf->start_time_realtime > 0)
                 ps->startTime = avf->start_time_realtime / 1000;
-            else if (avf->timestamp > 0)
-                ps->startTime = avf->timestamp * 1000;
+            else if (&ffstarttimeint > 0)
+                ps->startTime = ffstarttimeint * 1000;
             else
                 ps->startTime = av_gettime() / 1000;
         }
@@ -329,7 +358,6 @@ static AVStream* createStream(AVFormatContext * avf)
     ParFrameInfo *fi = (ParFrameInfo *)&p->frameInfo;
     char textbuf[128];
     int w, h;
-    int streamId = -1;
     int fc = 0;
     
     unsigned long startT, endT;
@@ -338,8 +366,8 @@ static AVStream* createStream(AVFormatContext * avf)
     if ((NULL==avf) || (NULL==fi) || (NULL==fi->frameBuffer))
         return NULL;
 
-    streamId = fi->channel;
-    st = av_new_stream(avf, streamId);
+    st = avformat_new_stream(avf, NULL);
+    st->id = fi->channel;
 
     parReader_getIndexData(fi, NULL, &fc, &startT, &endT);
     
@@ -407,7 +435,7 @@ static AVStream* createStream(AVFormatContext * avf)
         }
         
         // Set timebase to 1 millisecond, and min frame rate to 1 / timebase
-        av_set_pts_info(st, 32, 1, 1000);
+        avpriv_set_pts_info(st, 32, 1, 1000);
         st->r_frame_rate = (AVRational) { 1, 1 };
         st->start_time   = fi->imageTime * 1000LL + fi->imageMS;
         st->duration     = getLastFrameTime(fc, fi, &p->dispSet) - st->start_time;
@@ -473,13 +501,13 @@ static AVStream* createStream(AVFormatContext * avf)
                 st->codec->sample_rate = 8000;
                 break;
         }
-        av_set_pts_info(st, 32, 1, st->codec->sample_rate);
+        avpriv_set_pts_info(st, 32, 1, 1000);
     }
     else  {
         st->codec->codec_type = AVMEDIA_TYPE_DATA;
         
         // Set timebase to 1 millisecond, and min frame rate to 1 / timebase
-        av_set_pts_info(st, 32, 1, 1000);
+        avpriv_set_pts_info(st, 32, 1, 1000);
         st->r_frame_rate = (AVRational) { 1, 1 };
 
         st->start_time = startT * 1000LL;
@@ -578,6 +606,7 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
     else  {
         pkt->pts = AV_NOPTS_VALUE;
     }
+    pkt->duration = 1;
     
 #ifdef AD_NO_SIDEDATA
     pkt->destruct = libpar_packet_destroy;

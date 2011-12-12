@@ -179,7 +179,7 @@ static int avs_read_packet(AVFormatContext * s, AVPacket * pkt)
 
             case AVS_VIDEO:
                 if (!avs->st_video) {
-                    avs->st_video = av_new_stream(s, AVS_VIDEO);
+                    avs->st_video = avformat_new_stream(s, NULL);
                     if (avs->st_video == NULL)
                         return AVERROR(ENOMEM);
                     avs->st_video->codec->codec_type = AVMEDIA_TYPE_VIDEO;
@@ -196,7 +196,7 @@ static int avs_read_packet(AVFormatContext * s, AVPacket * pkt)
 
             case AVS_AUDIO:
                 if (!avs->st_audio) {
-                    avs->st_audio = av_new_stream(s, AVS_AUDIO);
+                    avs->st_audio = avformat_new_stream(s, NULL);
                     if (avs->st_audio == NULL)
                         return AVERROR(ENOMEM);
                     avs->st_audio->codec->codec_type = AVMEDIA_TYPE_AUDIO;
@@ -220,11 +220,11 @@ static int avs_read_close(AVFormatContext * s)
 }
 
 AVInputFormat ff_avs_demuxer = {
-    "avs",
-    NULL_IF_CONFIG_SMALL("AVS format"),
-    sizeof(AvsFormat),
-    avs_probe,
-    avs_read_header,
-    avs_read_packet,
-    avs_read_close,
+    .name           = "avs",
+    .long_name      = NULL_IF_CONFIG_SMALL("AVS format"),
+    .priv_data_size = sizeof(AvsFormat),
+    .read_probe     = avs_probe,
+    .read_header    = avs_read_header,
+    .read_packet    = avs_read_packet,
+    .read_close     = avs_read_close,
 };

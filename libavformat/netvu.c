@@ -27,6 +27,7 @@
 #include "internal.h"
 #include "http.h"
 #include "netvu.h"
+#include "libavutil/avstring.h"
 
 
 static void copy_value_to_field(const char *value, char **dest)
@@ -93,10 +94,10 @@ static void netvu_parse_content_type_header(char * p, NetvuContext *nv)
 
             // Copy the attribute into the relevant field
             for(ii = 0; ii < NETVU_MAX_HEADERS; ii++)  {
-                if( strcasecmp(name, nv->hdrNames[ii] ) == 0 )
+                if( av_strcasecmp(name, nv->hdrNames[ii] ) == 0 )
                     copy_value_to_field(value, &nv->hdrs[ii]);
             }
-            if(strcasecmp(name, "utc_offset") == 0)
+            if(av_strcasecmp(name, "utc_offset") == 0)
                 nv->utc_offset = atoi(value);
         }
     }
@@ -118,9 +119,9 @@ static void processLine(char *line, NetvuContext *nv)
     while (isspace(*p))
         p++;
 
-    if (!strcasecmp (tag, nv->hdrNames[NETVU_CONTENT]))
+    if (!av_strcasecmp (tag, nv->hdrNames[NETVU_CONTENT]))
         netvu_parse_content_type_header(p, nv);
-    else if(!strcasecmp(tag, nv->hdrNames[NETVU_SERVER]))
+    else if(!av_strcasecmp(tag, nv->hdrNames[NETVU_SERVER]))
         copy_value_to_field( p, &nv->hdrs[NETVU_SERVER]);
 }
 
@@ -149,7 +150,7 @@ static int netvu_open(URLContext *h, const char *uri, int flags)
         port = 80;
     ff_url_join(http, sizeof(http), "http", auth, hostname, port, "%s", path);
 
-    err = ffurl_open(&nv->hd, http, URL_RDONLY);
+    err = ffurl_open(&nv->hd, http, AVIO_FLAG_READ, &h->interrupt_callback, NULL);
     if (err >= 0)  {
         char headers[1024];
         char *startOfLine = &headers[0];

@@ -21,6 +21,7 @@
 
 #include "libavcodec/get_bits.h"
 #include "avformat.h"
+#include "internal.h"
 #include "id3v1.h"
 #include "libavutil/dict.h"
 
@@ -72,16 +73,16 @@ static int tta_read_header(AVFormatContext *s, AVFormatParameters *ap)
     c->totalframes = datalen / framelen + ((datalen % framelen) ? 1 : 0);
     c->currentframe = 0;
 
-    if(c->totalframes >= UINT_MAX/sizeof(uint32_t)){
-        av_log(s, AV_LOG_ERROR, "totalframes too large\n");
+    if(c->totalframes >= UINT_MAX/sizeof(uint32_t) || c->totalframes <= 0){
+        av_log(s, AV_LOG_ERROR, "totalframes %d invalid\n", c->totalframes);
         return -1;
     }
 
-    st = av_new_stream(s, 0);
+    st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
-    av_set_pts_info(st, 64, 1, samplerate);
+    avpriv_set_pts_info(st, 64, 1, samplerate);
     st->start_time = 0;
     st->duration = datalen;
 
@@ -141,21 +142,21 @@ static int tta_read_seek(AVFormatContext *s, int stream_index, int64_t timestamp
     int index = av_index_search_timestamp(st, timestamp, flags);
     if (index < 0)
         return -1;
+    if (avio_seek(s->pb, st->index_entries[index].pos, SEEK_SET) < 0)
+        return -1;
 
     c->currentframe = index;
-    avio_seek(s->pb, st->index_entries[index].pos, SEEK_SET);
 
     return 0;
 }
 
 AVInputFormat ff_tta_demuxer = {
-    "tta",
-    NULL_IF_CONFIG_SMALL("True Audio"),
-    sizeof(TTAContext),
-    tta_probe,
-    tta_read_header,
-    tta_read_packet,
-    NULL,
-    tta_read_seek,
+    .name           = "tta",
+    .long_name      = NULL_IF_CONFIG_SMALL("True Audio"),
+    .priv_data_size = sizeof(TTAContext),
+    .read_probe     = tta_probe,
+    .read_header    = tta_read_header,
+    .read_packet    = tta_read_packet,
+    .read_seek      = tta_read_seek,
     .extensions = "tta",
 };

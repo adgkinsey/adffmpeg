@@ -68,7 +68,7 @@ static int sunrast_decode_frame(AVCodecContext *avctx, void *data,
     type      = AV_RB32(buf+20);
     maptype   = AV_RB32(buf+24);
     maplength = AV_RB32(buf+28);
-    buf += 32;
+    buf      += 32;
 
     if (type < RT_OLD || type > RT_FORMAT_IFF) {
         av_log(avctx, AV_LOG_ERROR, "invalid (compression) type\n");
@@ -135,7 +135,7 @@ static int sunrast_decode_frame(AVCodecContext *avctx, void *data,
 
         ptr = p->data[1];
         for (x=0; x<len; x++, ptr+=4)
-            *(uint32_t *)ptr = (buf[x]<<16) + (buf[len+x]<<8) + buf[len+len+x];
+            *(uint32_t *)ptr = (0xFF<<24) + (buf[x]<<16) + (buf[len+x]<<8) + buf[len+len+x];
     }
 
     buf += maplength;
@@ -199,15 +199,13 @@ static av_cold int sunrast_end(AVCodecContext *avctx) {
 }
 
 AVCodec ff_sunrast_decoder = {
-    "sunrast",
-    AVMEDIA_TYPE_VIDEO,
-    CODEC_ID_SUNRAST,
-    sizeof(SUNRASTContext),
-    sunrast_init,
-    NULL,
-    sunrast_end,
-    sunrast_decode_frame,
-    CODEC_CAP_DR1,
-    NULL,
+    .name           = "sunrast",
+    .type           = AVMEDIA_TYPE_VIDEO,
+    .id             = CODEC_ID_SUNRAST,
+    .priv_data_size = sizeof(SUNRASTContext),
+    .init           = sunrast_init,
+    .close          = sunrast_end,
+    .decode         = sunrast_decode_frame,
+    .capabilities   = CODEC_CAP_DR1,
     .long_name = NULL_IF_CONFIG_SMALL("Sun Rasterfile image"),
 };

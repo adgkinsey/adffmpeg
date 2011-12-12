@@ -22,6 +22,7 @@
 #include "libavcodec/get_bits.h"
 #include "libavcodec/unary.h"
 #include "avformat.h"
+#include "internal.h"
 #include "avio_internal.h"
 
 /// Two-byte MPC tag
@@ -222,7 +223,7 @@ static int mpc8_read_header(AVFormatContext *s, AVFormatParameters *ap)
     c->samples = ffio_read_varlen(pb);
     ffio_read_varlen(pb); //silence samples at the beginning
 
-    st = av_new_stream(s, 0);
+    st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
     st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
@@ -235,7 +236,7 @@ static int mpc8_read_header(AVFormatContext *s, AVFormatParameters *ap)
 
     st->codec->channels = (st->codec->extradata[1] >> 4) + 1;
     st->codec->sample_rate = mpc8_rate[st->codec->extradata[0] >> 5];
-    av_set_pts_info(st, 32, 1152  << (st->codec->extradata[1]&3)*2, st->codec->sample_rate);
+    avpriv_set_pts_info(st, 32, 1152  << (st->codec->extradata[1]&3)*2, st->codec->sample_rate);
     st->duration = c->samples / (1152 << (st->codec->extradata[1]&3)*2);
     size -= avio_tell(pb) - pos;
 
@@ -274,19 +275,19 @@ static int mpc8_read_seek(AVFormatContext *s, int stream_index, int64_t timestam
     int index = av_index_search_timestamp(st, timestamp, flags);
 
     if(index < 0) return -1;
-    avio_seek(s->pb, st->index_entries[index].pos, SEEK_SET);
+    if (avio_seek(s->pb, st->index_entries[index].pos, SEEK_SET) < 0)
+        return -1;
     c->frame = st->index_entries[index].timestamp;
     return 0;
 }
 
 
 AVInputFormat ff_mpc8_demuxer = {
-    "mpc8",
-    NULL_IF_CONFIG_SMALL("Musepack SV8"),
-    sizeof(MPCContext),
-    mpc8_probe,
-    mpc8_read_header,
-    mpc8_read_packet,
-    NULL,
-    mpc8_read_seek,
+    .name           = "mpc8",
+    .long_name      = NULL_IF_CONFIG_SMALL("Musepack SV8"),
+    .priv_data_size = sizeof(MPCContext),
+    .read_probe     = mpc8_probe,
+    .read_header    = mpc8_read_header,
+    .read_packet    = mpc8_read_packet,
+    .read_seek      = mpc8_read_seek,
 };

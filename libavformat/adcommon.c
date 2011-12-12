@@ -21,6 +21,7 @@
 
 #include <strings.h>
 
+#include "internal.h"
 #include "libavutil/avstring.h"
 #include "libavutil/intreadwrite.h"
 
@@ -191,7 +192,7 @@ AVStream * ad_get_vstream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t ca
 
             // Use milliseconds as the time base
             st->r_frame_rate = MilliTB;
-            av_set_pts_info(st, 32, MilliTB.num, MilliTB.den);
+            avpriv_set_pts_info(st, 32, MilliTB.num, MilliTB.den);
             st->codec->time_base = MilliTB;
 
             if (title)
@@ -245,7 +246,7 @@ static AVStream * ad_get_overlay_stream(AVFormatContext *s, int channel, const c
 
             // Use milliseconds as the time base
             st->r_frame_rate = MilliTB;
-            av_set_pts_info(st, 32, MilliTB.num, MilliTB.den);
+            avpriv_set_pts_info(st, 32, MilliTB.num, MilliTB.den);
             st->codec->time_base = MilliTB;
 
             av_dict_set(&st->metadata, "title", title, 0);
@@ -314,7 +315,7 @@ AVStream * ad_get_audio_stream(AVFormatContext *s, struct NetVuAudioData* audioH
             }
             else
                 st->codec->sample_rate = 8000;
-            av_set_pts_info(st, 32, 1, st->codec->sample_rate);
+            avpriv_set_pts_info(st, 32, 1, st->codec->sample_rate);
 
             st->index = i;
         }
@@ -352,7 +353,7 @@ static AVStream * ad_get_data_stream(AVFormatContext *s, enum CodecID codecId)
 
             // Use milliseconds as the time base
             //st->r_frame_rate = MilliTB;
-            av_set_pts_info(st, 32, MilliTB.num, MilliTB.den);
+            avpriv_set_pts_info(st, 32, MilliTB.num, MilliTB.den);
             //st->codec->time_base = MilliTB;
 
             st->index = i;
@@ -513,13 +514,13 @@ static void ad_parseVSD(const char *vsd, struct ADFrameData *frame)
                 break;
         }
     }
-    else if ((strlen(key) == 3) && (strncasecmp(key, "FM0", 3) == 0))  {
+    else if ((strlen(key) == 3) && (av_strncasecmp(key, "FM0", 3) == 0))  {
         ad_splitcsv(val, frame->vsd[VSD_FM0], VSDARRAYLEN, 10);
     }
     else if ((strlen(key) == 1) && (key[0] == 'F')) {
         ad_splitcsv(val, frame->vsd[VSD_F], VSDARRAYLEN, 16);
     }
-    else if ((strlen(key) == 3) && (strncasecmp(key, "EM0", 3) == 0))  {
+    else if ((strlen(key) == 3) && (av_strncasecmp(key, "EM0", 3) == 0))  {
         ad_splitcsv(val, frame->vsd[VSD_EM0], VSDARRAYLEN, 10);
     }
     else
@@ -531,21 +532,21 @@ static void ad_parseLine(AVFormatContext *s, const char *line, struct ADFrameDat
     char key[32], val[128];
     ad_keyvalsplit(line, key, val);
     
-    if (strncasecmp(key, "Active-zones", 12) == 0)  {
+    if (av_strncasecmp(key, "Active-zones", 12) == 0)  {
         sscanf(val, "%d", &frame->activeZones);
     }
-    else if (strncasecmp(key, "FrameNum", 8) == 0)  {
+    else if (av_strncasecmp(key, "FrameNum", 8) == 0)  {
         sscanf(val, "%u", &frame->frameNum);
     }
-//    else if (strncasecmp(key, "Site-ID", 7) == 0)  {
+//    else if (av_strncasecmp(key, "Site-ID", 7) == 0)  {
 //    }
-    else if (strncasecmp(key, "ActMask", 7) == 0)  {
+    else if (av_strncasecmp(key, "ActMask", 7) == 0)  {
         for (int ii = 0, jj = 0; (ii < ACTMASKLEN) && (jj < strlen(val)); ii++)  {
             sscanf(&val[jj], "0x%04hx", &frame->activityMask[ii]);
             jj += 7;
         }
     }
-    else if (strncasecmp(key, "VSD", 3) == 0)  {
+    else if (av_strncasecmp(key, "VSD", 3) == 0)  {
         ad_parseVSD(val, frame);
     }
 }

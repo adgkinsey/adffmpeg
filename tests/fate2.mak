@@ -125,13 +125,29 @@ fate-atrac3-3: CMP = oneoff
 fate-atrac3-3: REF = $(SAMPLES)/atrac3/mc_sich_at3_132_small.pcm
 
 FATE_TESTS += fate-gsm
-fate-gsm: CMD = framecrc -t 10 -i $(SAMPLES)/gsm/sample-gsm-8000.mov
+fate-gsm: CMD = framecrc -i $(SAMPLES)/gsm/sample-gsm-8000.mov -t 10
 
 FATE_TESTS += fate-gsm-ms
 fate-gsm-ms: CMD = framecrc -i $(SAMPLES)/gsm/ciao.wav
 
 FATE_TESTS += fate-g722dec-1
-fate-g722dec-1: CMD = framecrc -ar 16000 -i $(SAMPLES)/g722/conf-adminmenu-162.g722
+fate-g722dec-1: CMD = framecrc -i $(SAMPLES)/g722/conf-adminmenu-162.g722
+
+FATE_TESTS += fate-g722enc
+fate-g722enc: tests/data/asynth-16000-1.sw
+fate-g722enc: CMD = md5 -ar 16000 -ac 1 -f s16le -i $(TARGET_PATH)/tests/data/asynth-16000-1.sw -acodec g722 -ac 1 -f g722
+
+FATE_TESTS += fate-mapchan-6ch-extract-2
+fate-mapchan-6ch-extract-2: tests/data/mapchan-6ch.sw
+fate-mapchan-6ch-extract-2: CMD = avconv -ar 22050 -ac 6 -f s16le -i $(TARGET_PATH)/tests/data/mapchan-6ch.sw -map_channel 0.0.0 -f wav md5: -map_channel 0.0.1 -f wav md5:
+
+FATE_TESTS += fate-mapchan-6ch-extract-2-downmix-mono
+fate-mapchan-6ch-extract-2-downmix-mono: tests/data/mapchan-6ch.sw
+fate-mapchan-6ch-extract-2-downmix-mono: CMD = md5 -ar 22050 -ac 6 -f s16le -i $(TARGET_PATH)/tests/data/mapchan-6ch.sw -map_channel 0.0.1 -map_channel 0.0.0 -ac 1 -f wav
+
+FATE_TESTS += fate-mapchan-silent-mono
+fate-mapchan-silent-mono: tests/data/mapchan-mono.sw
+fate-mapchan-silent-mono: CMD = md5 -ar 22050 -ac 1 -f s16le -i $(TARGET_PATH)/tests/data/mapchan-mono.sw -map_channel -1 -map_channel 0.0.0 -f wav
 
 FATE_TESTS += fate-msmpeg4v1
 fate-msmpeg4v1: CMD = framecrc -flags +bitexact -dct fastint -idct simple -i $(SAMPLES)/msmpeg4v1/mpg4.avi -an
@@ -165,7 +181,7 @@ fate-wmapro-2ch: CMP = oneoff
 fate-wmapro-2ch: REF = $(SAMPLES)/wmapro/Beethovens_9th-1_small.pcm
 
 FATE_TESTS += fate-ansi
-fate-ansi: CMD = framecrc -ar 44100 -i $(SAMPLES)/ansi/TRE-IOM5.ANS -pix_fmt rgb24
+fate-ansi: CMD = framecrc -chars_per_frame 44100 -i $(SAMPLES)/ansi/TRE-IOM5.ANS -pix_fmt rgb24
 
 FATE_TESTS += fate-wmv8-drm
 # discard last packet to avoid fails due to overread of VC-1 decoder
@@ -213,120 +229,39 @@ fate-mjpegb: CMD = framecrc -idct simple -flags +bitexact -i $(SAMPLES)/mjpegb/m
 FATE_TESTS += fate-rv30
 fate-rv30: CMD = framecrc -flags +bitexact -dct fastint -idct simple -i $(SAMPLES)/real/rv30.rm -an
 
-FATE_TESTS += fate-sha
-fate-sha: libavutil/sha-test$(EXESUF)
-fate-sha: CMD = run libavutil/sha-test
-
 FATE_TESTS += fate-musepack7
 fate-musepack7: CMD = pcm -i $(SAMPLES)/musepack/inside-mp7.mpc
 fate-musepack7: CMP = oneoff
 fate-musepack7: REF = $(SAMPLES)/musepack/inside-mp7.pcm
 fate-musepack7: FUZZ = 1
 
-FATE_TESTS += fate-amrnb-4k75
-fate-amrnb-4k75: CMD = pcm -i $(SAMPLES)/amrnb/4.75k.amr
-fate-amrnb-4k75: CMP = stddev
-fate-amrnb-4k75: REF = $(SAMPLES)/amrnb/4.75k.pcm
-fate-amrnb-4k75: FUZZ = 1
+FATE_TESTS += fate-iirfilter
+fate-iirfilter: libavcodec/iirfilter-test$(EXESUF)
+fate-iirfilter: CMD = run libavcodec/iirfilter-test
 
-FATE_TESTS += fate-amrnb-5k15
-fate-amrnb-5k15: CMD = pcm -i $(SAMPLES)/amrnb/5.15k.amr
-fate-amrnb-5k15: CMP = stddev
-fate-amrnb-5k15: REF = $(SAMPLES)/amrnb/5.15k.pcm
-fate-amrnb-5k15: FUZZ = 1
+FATE_TESTS += fate-vble
+fate-vble: CMD = framecrc -i $(SAMPLES)/vble/flowers-partial-2MB.avi
 
-FATE_TESTS += fate-amrnb-5k9
-fate-amrnb-5k9: CMD = pcm -i $(SAMPLES)/amrnb/5.9k.amr
-fate-amrnb-5k9: CMP = stddev
-fate-amrnb-5k9: REF = $(SAMPLES)/amrnb/5.9k.pcm
-fate-amrnb-5k9: FUZZ = 1
+FATE_TESTS += fate-utvideo_rgba_left
+fate-utvideo_rgba_left: CMD = framecrc -i $(SAMPLES)/utvideo/utvideo_rgba_left.avi
 
-FATE_TESTS += fate-amrnb-6k7
-fate-amrnb-6k7: CMD = pcm -i $(SAMPLES)/amrnb/6.7k.amr
-fate-amrnb-6k7: CMP = stddev
-fate-amrnb-6k7: REF = $(SAMPLES)/amrnb/6.7k.pcm
-fate-amrnb-6k7: FUZZ = 1
+FATE_TESTS += fate-utvideo_rgba_median
+fate-utvideo_rgba_median: CMD = framecrc -i $(SAMPLES)/utvideo/utvideo_rgba_median.avi
 
-FATE_TESTS += fate-amrnb-7k4
-fate-amrnb-7k4: CMD = pcm -i $(SAMPLES)/amrnb/7.4k.amr
-fate-amrnb-7k4: CMP = stddev
-fate-amrnb-7k4: REF = $(SAMPLES)/amrnb/7.4k.pcm
-fate-amrnb-7k4: FUZZ = 1
+FATE_TESTS += fate-utvideo_rgb_left
+fate-utvideo_rgb_left: CMD = framecrc -i $(SAMPLES)/utvideo/utvideo_rgb_left.avi
 
-FATE_TESTS += fate-amrnb-7k95
-fate-amrnb-7k95: CMD = pcm -i $(SAMPLES)/amrnb/7.95k.amr
-fate-amrnb-7k95: CMP = stddev
-fate-amrnb-7k95: REF = $(SAMPLES)/amrnb/7.95k.pcm
-fate-amrnb-7k95: FUZZ = 1
+FATE_TESTS += fate-utvideo_rgb_median
+fate-utvideo_rgb_median: CMD = framecrc -i $(SAMPLES)/utvideo/utvideo_rgb_median.avi
 
-FATE_TESTS += fate-amrnb-10k2
-fate-amrnb-10k2: CMD = pcm -i $(SAMPLES)/amrnb/10.2k.amr
-fate-amrnb-10k2: CMP = stddev
-fate-amrnb-10k2: REF = $(SAMPLES)/amrnb/10.2k.pcm
-fate-amrnb-10k2: FUZZ = 1
+FATE_TESTS += fate-utvideo_yuv420_left
+fate-utvideo_yuv420_left: CMD = framecrc -i $(SAMPLES)/utvideo/utvideo_yuv420_left.avi
 
-FATE_TESTS += fate-amrnb-12k2
-fate-amrnb-12k2: CMD = pcm -i $(SAMPLES)/amrnb/12.2k.amr
-fate-amrnb-12k2: CMP = stddev
-fate-amrnb-12k2: REF = $(SAMPLES)/amrnb/12.2k.pcm
-fate-amrnb-12k2: FUZZ = 1
+FATE_TESTS += fate-utvideo_yuv420_median
+fate-utvideo_yuv420_median: CMD = framecrc -i $(SAMPLES)/utvideo/utvideo_yuv420_median.avi
 
-FATE_TESTS += fate-amrwb-6k60
-fate-amrwb-6k60: CMD = pcm -i $(SAMPLES)/amrwb/seed-6k60.awb
-fate-amrwb-6k60: CMP = stddev
-fate-amrwb-6k60: REF = $(SAMPLES)/amrwb/seed-6k60.pcm
-fate-amrwb-6k60: FUZZ = 1
+FATE_TESTS += fate-utvideo_yuv422_left
+fate-utvideo_yuv422_left: CMD = framecrc -i $(SAMPLES)/utvideo/utvideo_yuv422_left.avi
 
-FATE_TESTS += fate-amrwb-8k85
-fate-amrwb-8k85: CMD = pcm -i $(SAMPLES)/amrwb/seed-8k85.awb
-fate-amrwb-8k85: CMP = stddev
-fate-amrwb-8k85: REF = $(SAMPLES)/amrwb/seed-8k85.pcm
-fate-amrwb-8k85: FUZZ = 1
-
-FATE_TESTS += fate-amrwb-12k65
-fate-amrwb-12k65: CMD = pcm -i $(SAMPLES)/amrwb/seed-12k65.awb
-fate-amrwb-12k65: CMP = stddev
-fate-amrwb-12k65: REF = $(SAMPLES)/amrwb/seed-12k65.pcm
-fate-amrwb-12k65: FUZZ = 1
-
-FATE_TESTS += fate-amrwb-14k25
-fate-amrwb-14k25: CMD = pcm -i $(SAMPLES)/amrwb/seed-14k25.awb
-fate-amrwb-14k25: CMP = stddev
-fate-amrwb-14k25: REF = $(SAMPLES)/amrwb/seed-14k25.pcm
-fate-amrwb-14k25: FUZZ = 2.6
-
-FATE_TESTS += fate-amrwb-15k85
-fate-amrwb-15k85: CMD = pcm -i $(SAMPLES)/amrwb/seed-15k85.awb
-fate-amrwb-15k85: CMP = stddev
-fate-amrwb-15k85: REF = $(SAMPLES)/amrwb/seed-15k85.pcm
-fate-amrwb-15k85: FUZZ = 1
-
-FATE_TESTS += fate-amrwb-18k25
-fate-amrwb-18k25: CMD = pcm -i $(SAMPLES)/amrwb/seed-18k25.awb
-fate-amrwb-18k25: CMP = stddev
-fate-amrwb-18k25: REF = $(SAMPLES)/amrwb/seed-18k25.pcm
-fate-amrwb-18k25: FUZZ = 1
-
-FATE_TESTS += fate-amrwb-19k85
-fate-amrwb-19k85: CMD = pcm -i $(SAMPLES)/amrwb/seed-19k85.awb
-fate-amrwb-19k85: CMP = stddev
-fate-amrwb-19k85: REF = $(SAMPLES)/amrwb/seed-19k85.pcm
-fate-amrwb-19k85: FUZZ = 1
-
-FATE_TESTS += fate-amrwb-23k05
-fate-amrwb-23k05: CMD = pcm -i $(SAMPLES)/amrwb/seed-23k05.awb
-fate-amrwb-23k05: CMP = stddev
-fate-amrwb-23k05: REF = $(SAMPLES)/amrwb/seed-23k05.pcm
-fate-amrwb-23k05: FUZZ = 2
-
-FATE_TESTS += fate-amrwb-23k85
-fate-amrwb-23k85: CMD = pcm -i $(SAMPLES)/amrwb/seed-23k85.awb
-fate-amrwb-23k85: CMP = stddev
-fate-amrwb-23k85: REF = $(SAMPLES)/amrwb/seed-23k85.pcm
-fate-amrwb-23k85: FUZZ = 2
-
-FATE_TESTS += fate-amrwb-23k85-2
-fate-amrwb-23k85-2: CMD = pcm -i $(SAMPLES)/amrwb/deus-23k85.awb
-fate-amrwb-23k85-2: CMP = stddev
-fate-amrwb-23k85-2: REF = $(SAMPLES)/amrwb/deus-23k85.pcm
-fate-amrwb-23k85-2: FUZZ = 1
+FATE_TESTS += fate-utvideo_yuv422_median
+fate-utvideo_yuv422_median: CMD = framecrc -i $(SAMPLES)/utvideo/utvideo_yuv422_median.avi

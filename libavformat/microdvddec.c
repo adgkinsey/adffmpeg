@@ -54,7 +54,7 @@ static int microdvd_read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
     AVRational pts_info = (AVRational){ 2997, 125 };  /* default: 23.976 fps */
     MicroDVDContext *microdvd = s->priv_data;
-    AVStream *st = av_new_stream(s, 0);
+    AVStream *st = avformat_new_stream(s, NULL);
     int i, frame;
     double fps;
     char c;
@@ -74,7 +74,7 @@ static int microdvd_read_header(AVFormatContext *s, AVFormatParameters *ap)
             i--;
         }
     }
-    av_set_pts_info(st, 64, pts_info.den, pts_info.num);
+    avpriv_set_pts_info(st, 64, pts_info.den, pts_info.num);
     st->codec->codec_type = AVMEDIA_TYPE_SUBTITLE;
     st->codec->codec_id   = CODEC_ID_MICRODVD;
     return 0;

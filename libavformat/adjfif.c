@@ -28,9 +28,8 @@
  */
 
 #include <time.h>
-
-#include "libavcodec/mjpeg.h"
-#include "libavcodec/put_bits.h"
+#include "internal.h"
+#include "libavutil/intreadwrite.h"
 #include "libavutil/avstring.h"
 
 #include "adjfif.h"
@@ -57,19 +56,33 @@ static const char script_msg[] = "Comments: ";
 static const char time_zone[] = "Locale: ";
 static const char utc_offset[] = "UTCoffset: ";
 
+static const uint8_t jfif_header[] = {
+    0xFF, 0xD8,                     // SOI
+    0xFF, 0xE0,                     // APP0
+    0x00, 0x10,                     // APP0 header size (including
+                                    // this field, but excluding preceding)
+    0x4A, 0x46, 0x49, 0x46, 0x00,   // ID string 'JFIF\0'
+    0x01, 0x02,                     // version
+    0x02,                           // density units (0 - none, 1 - PPI, 2 - PPCM)
+    0x00, 0x19,                     // X density
+    0x00, 0x19,                     // Y density
+    0x00,                           // X thumbnail size
+    0x00,                           // Y thumbnail size
+};
+
 static const unsigned char sof_422_header[] = {
-    0xFF, SOF0, 0x00, 0x11, 0x08, 0x01, 0x00, 0x01,
+    0xFF, 0xC0, 0x00, 0x11, 0x08, 0x01, 0x00, 0x01,
     0x60, 0x03, 0x01, 0x21, 0x00, 0x02, 0x11, 0x01,
     0x03, 0x11, 0x01
 };
 static const unsigned char sof_411_header[] = {
-    0xFF, SOF0, 0x00, 0x11, 0x08, 0x01, 0x00, 0x01,
+    0xFF, 0xC0, 0x00, 0x11, 0x08, 0x01, 0x00, 0x01,
     0x60, 0x03, 0x01, 0x22, 0x00, 0x02, 0x11, 0x01,
     0x03, 0x11, 0x01
 };
 
 static const unsigned char huf_header[] = {
-    0xFF, DHT,  0x00, 0x1F, 0x00, 0x00, 0x01, 0x05,
+    0xFF, 0xC4, 0x00, 0x1F, 0x00, 0x00, 0x01, 0x05,
     0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02,
     0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A,
@@ -126,7 +139,7 @@ static const unsigned char huf_header[] = {
 };
 
 static const unsigned char sos_header[] = {
-    0xFF, SOS,  0x00, 0x0c, 0x03, 0x01, 0x00, 0x02,
+    0xFF, 0xDA, 0x00, 0x0c, 0x03, 0x01, 0x00, 0x02,
     0x11, 0x03, 0x11, 0x00, 0x3F, 0x00
 };
 
@@ -168,8 +181,9 @@ static int q_init;
  */
 unsigned int build_jpeg_header(void *jfif, struct NetVuImageData *pic, unsigned int max)
 {
-    PutBitContext  pb;
-    int            us1;
+    volatile unsigned int count;
+    unsigned short    us1;
+    char  *bufptr = jfif;
     char sof_copy[sizeof(sof_422_header)];
 
 
@@ -178,45 +192,66 @@ unsigned int build_jpeg_header(void *jfif, struct NetVuImageData *pic, unsigned 
         q_init = 1;
     }
 
-    init_put_bits(&pb, jfif, max);
+    // Add all the fixed length headers prior to building comment field
+    count = sizeof(jfif_header);
+    if (count > max)
+        return 0;
 
-    put_marker(&pb, SOI);
-    put_marker(&pb, APP0);
-    put_bits(&pb, 16, 16);          // APP0 header size
-    ff_put_string(&pb, "JFIF", 1);  // this puts the trailing zero-byte too
-    put_bits(&pb, 16, 0x0102);      // v 1.02 */
-    put_bits(&pb, 8, 2);            // density units (0 - none, 1 - PPI, 2 - PPCM)
-    if ((pic->format.target_pixels > 360) && (pic->format.target_lines < 480)) {
-        put_bits(&pb, 16, 0x19);    // X density
-        put_bits(&pb, 16, 0x32);    // Y density
-    }
-    else {
-        put_bits(&pb, 16, 0x19);    // X density
-        put_bits(&pb, 16, 0x19);    // Y density
-    }
-    put_bits(&pb, 16, 0); // Thumbnail dimensions WxH
+    memcpy(bufptr, jfif_header, sizeof(jfif_header));
+
+    if( (pic->format.target_pixels > 360) && (pic->format.target_lines < 480) )
+        bufptr[17] = 0x32;
+
+    bufptr += sizeof(jfif_header);
 
     // Q tables and markers
-    put_marker(&pb, DQT);
-    put_bits(&pb, 16, 0x0043);
-    put_bits(&pb, 8, 0x00);
+    count += 138;
+    if (count > max)
+        return 0;
+    *bufptr++ = 0xff;
+    *bufptr++ = 0xdb;
+    *bufptr++ = 0x00;
+    *bufptr++ = 0x43;
+    *bufptr++ = 0x00;
     for (us1 = 0; us1 < 64; us1++)
-        put_bits(&pb, 8, YQuantizationFactors[pic->factor][us1]);
-    put_marker(&pb, DQT);
-    put_bits(&pb, 16, 0x0043);
-    put_bits(&pb, 8, 0x01);
+        *bufptr++ = YQuantizationFactors[pic->factor][us1];
+    *bufptr++ = 0xff;
+    *bufptr++ = 0xdb;
+    *bufptr++ = 0x00;
+    *bufptr++ = 0x43;
+    *bufptr++ = 0x01;
     for (us1 = 0; us1 < 64; us1++)
-        put_bits(&pb, 8, UVQuantizationFactors[pic->factor][us1]);
-    
-    memcpy(sof_copy, (pic->vid_format == PIC_MODE_JPEG_411) ? sof_411_header : sof_422_header, sizeof(sof_copy) );
-    AV_WB16(sof_copy+5, pic->format.target_lines);
-    AV_WB16(sof_copy+7, pic->format.target_pixels);
+        *bufptr++ = UVQuantizationFactors[pic->factor][us1];
+    count += (sizeof(sof_copy) + sizeof(huf_header) + sizeof(sos_header));
+    if (count > max)
+        return 0;
+    else {
+        unsigned short targ;
+        char *ptr1, *ptr2;
+        memcpy(sof_copy, (pic->vid_format == PIC_MODE_JPEG_411) ? sof_411_header : sof_422_header, sizeof( sof_copy ) );
+        targ = AV_RB16(&pic->format.target_pixels); // Byte swap from native to big-endian
+        ptr1 = (char *)&targ;
+        ptr2 = &sof_copy[7];
+        *ptr2++ = *ptr1++;
+        *ptr2 = *ptr1;
 
-    ff_copy_bits(&pb, sof_copy, sizeof(sof_copy)*8);
-    ff_copy_bits(&pb, huf_header, sizeof(huf_header)*8);
-    ff_copy_bits(&pb, sos_header, sizeof(sos_header)*8);
+        targ = AV_RB16(&pic->format.target_lines); // Byte swap from native to big-endian
+        ptr1 = (char *)&targ;
+        ptr2 = &sof_copy[5];
+        *ptr2++ = *ptr1++;
+        *ptr2 = *ptr1;
 
-    return (put_bits_count(&pb) / 8);
+        memcpy(bufptr, sof_copy, sizeof(sof_copy));
+        bufptr += sizeof(sof_copy);
+
+        memcpy(bufptr, huf_header, sizeof(huf_header));
+        bufptr += sizeof(huf_header);
+
+        memcpy(bufptr, sos_header, sizeof(sos_header));
+        bufptr += sizeof(sos_header);
+    }
+
+    return bufptr - (char*)jfif;
 }
 
 /**
@@ -315,11 +350,11 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
                int imgSize, char **text)
 {
     int i, sos = FALSE;
-    uint16_t length;
-    uint8_t marker;
+    unsigned short length, marker;
     uint16_t xdensity = 0;
     uint16_t ydensity = 0;
     uint8_t *densityPtr = NULL;
+    unsigned int jfifMarker;
 
     //av_log(s, AV_LOG_DEBUG, "parse_jfif: leading bytes 0x%02X, 0x%02X, "
     //       "length=%d\n", data[0], data[1], imgSize);
@@ -329,16 +364,16 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
     pic->start_offset = 0;
     i = 0;
 
-    if(data[i] != 0xff && data[i+1] != SOI) {
+    if(data[i] != 0xff && data[i+1] != 0xd8) {
         //there is a header so skip it
-        while( (data[i] != 0xff) && (i < imgSize) )
+        while( ((unsigned char)data[i] != 0xff) && (i < imgSize) )
             i++;
         //if ( i > 0 )
         //    av_log(s, AV_LOG_DEBUG, "parse_jfif: %d leading bytes\n", i);
 
         i++;
-        if (data[i] != 0xd8) {
-            av_log(s, AV_LOG_ERROR, "parse_jfif: incorrect SOI 0xff%02x\n", data[i]);
+        if ( (unsigned char) data[i] != 0xd8) {
+            //av_log(s, AV_LOG_ERROR, "parse_jfif: incorrect SOI 0xff%02x\n", data[i]);
             return -1;
         }
         i++;
@@ -349,25 +384,27 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
     }
 
     while ( !sos && (i < imgSize) ) {
-        if (data[i++] != 0xff)
+        if (data[i] != 0xff)
             continue;
-        marker = data[i++];
+        marker = AV_RB16(&data[i]);
+        i += 2;
         length = AV_RB16(&data[i]) - 2;
         i += 2;
 
         switch (marker) {
-            case APP0:
-                if (strncmp(&data[i], "JFIF", 4) == 0)  {
+            case 0xffe0 :    // APP0
+                jfifMarker = AV_RB32(&data[i]);
+                if ( (jfifMarker==0x4A464946) && (data[i+4]==0x00) )  {
                     xdensity = AV_RB16(&data[i+8]);
                     ydensity = AV_RB16(&data[i+10]);
                     densityPtr = &data[i+8];
                 }
                 break;
-            case DQT:
+            case 0xffdb :    // Q table
                 if (!data[i])
                     pic->factor =  find_q(&data[i+1]);
                 break;
-            case SOF0:
+            case 0xffc0 :    // SOF
                 pic->format.target_lines  = AV_RB16(&data[i+1]);
                 pic->format.target_pixels = AV_RB16(&data[i+3]);
                 if (data[i+7] == 0x22)
@@ -377,10 +414,10 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
                 else
                     av_log(s, AV_LOG_WARNING, "%s: Unknown SOF format byte 0x%02X\n", __func__, data[i+7]);
                 break;
-            case SOS:
+            case 0xffda :    // SOS
                 sos = TRUE;
                 break;
-            case COM:
+            case 0xfffe :    // Comment
                 parse_comment((char *)&data[i], length - 2, pic, text);
                 break;
             default :
@@ -402,7 +439,6 @@ int parse_jfif(AVFormatContext *s, unsigned char *data, struct NetVuImageData *p
             else  {
                 // Server is sending wrong pixel aspect ratio, set it to 1:1
                 AV_WB16(densityPtr, ydensity);
-                AV_WB16(densityPtr + 2, ydensity);
             }
             xdensity = AV_RB16(densityPtr);
             ydensity = AV_RB16(densityPtr+2);
@@ -450,7 +486,7 @@ static void parse_comment( char *text, int text_len, struct NetVuImageData *pic,
         // Changed this line so it doesn't include the \r\n from the end of comment_version
         if( !memcmp( result, comment_version, strlen(comment_version) - 2 ) )
             pic->version = 0xdecade11;
-        else if ( !memcmp( result, comment_version_0_1, strlen(comment_version_0_1) - 2 ) )
+        else if ( !memcmp( result, comment_version, strlen(comment_version_0_1) - 2 ) )
             pic->version = 0xdecade10;
         else if( !memcmp( result, camera_title, strlen(camera_title) ) )  {
             av_strlcpy( pic->title, &result[strlen(camera_title)], sizeof(pic->title) );

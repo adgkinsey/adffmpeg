@@ -29,6 +29,7 @@
 
 #include "libavutil/intreadwrite.h"
 #include "avformat.h"
+#include "internal.h"
 
 #define RoQ_MAGIC_NUMBER 0x1084
 #define RoQ_CHUNK_PREAMBLE_SIZE 8
@@ -84,10 +85,10 @@ static int roq_read_header(AVFormatContext *s,
     roq->audio_frame_count = 0;
     roq->audio_stream_index = -1;
 
-    st = av_new_stream(s, 0);
+    st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
-    av_set_pts_info(st, 63, 1, framerate);
+    avpriv_set_pts_info(st, 63, 1, framerate);
     roq->video_stream_index = st->index;
     st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
     st->codec->codec_id = CODEC_ID_ROQ;
@@ -166,10 +167,10 @@ static int roq_read_packet(AVFormatContext *s,
         case RoQ_SOUND_MONO:
         case RoQ_SOUND_STEREO:
             if (roq->audio_stream_index == -1) {
-                AVStream *st = av_new_stream(s, 1);
+                AVStream *st = avformat_new_stream(s, NULL);
                 if (!st)
                     return AVERROR(ENOMEM);
-                av_set_pts_info(st, 32, 1, RoQ_AUDIO_SAMPLE_RATE);
+                avpriv_set_pts_info(st, 32, 1, RoQ_AUDIO_SAMPLE_RATE);
                 roq->audio_stream_index = st->index;
                 st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
                 st->codec->codec_id = CODEC_ID_ROQ_DPCM;
@@ -209,7 +210,6 @@ static int roq_read_packet(AVFormatContext *s,
         default:
             av_log(s, AV_LOG_ERROR, "  unknown RoQ chunk (%04X)\n", chunk_type);
             return AVERROR_INVALIDDATA;
-            break;
         }
     }
 
@@ -217,10 +217,10 @@ static int roq_read_packet(AVFormatContext *s,
 }
 
 AVInputFormat ff_roq_demuxer = {
-    "RoQ",
-    NULL_IF_CONFIG_SMALL("id RoQ format"),
-    sizeof(RoqDemuxContext),
-    roq_probe,
-    roq_read_header,
-    roq_read_packet,
+    .name           = "RoQ",
+    .long_name      = NULL_IF_CONFIG_SMALL("id RoQ format"),
+    .priv_data_size = sizeof(RoqDemuxContext),
+    .read_probe     = roq_probe,
+    .read_header    = roq_read_header,
+    .read_packet    = roq_read_packet,
 };
