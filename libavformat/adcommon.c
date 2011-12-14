@@ -1065,7 +1065,7 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt, int channel,
     if (st)  {
         pkt->stream_index = st->index;
         
-        pkt->duration = 0;
+        pkt->duration = 1;
         pkt->pos = -1;
     }
 
