@@ -52,25 +52,30 @@ static av_always_inline void AV_WN32(void *p, uint32_t v)
     __asm__ ("str  %1, %0" : "=m"(*(uint32_t *)p) : "r"(v));
 }
 
-//#define AV_RN64 AV_RN64
-//static av_always_inline uint64_t AV_RN64(const void *p)
-//{
-//    uint64_t v;
-//    __asm__ ("ldr   %Q0, %1  \n\t"
-//             "ldr   %R0, %2  \n\t"
-//             : "=&r"(v)
-//             : "m"(*(const uint32_t*)p), "m"(*((const uint32_t*)p+1)));
-//    return v;
-//}
 
-//#define AV_WN64 AV_WN64
-//static av_always_inline void AV_WN64(void *p, uint64_t v)
-//{
-//    __asm__ ("str  %Q2, %0  \n\t"
-//             "str  %R2, %1  \n\t"
-//             : "=m"(*(uint32_t*)p), "=m"(*((uint32_t*)p+1))
-//             : "r"(v));
-//}
+#if AV_GCC_VERSION_AT_LEAST(4,4)
+
+#define AV_RN64 AV_RN64
+static av_always_inline uint64_t AV_RN64(const void *p)
+{
+    uint64_t v;
+    __asm__ ("ldr   %Q0, %1  \n\t"
+             "ldr   %R0, %2  \n\t"
+             : "=&r"(v)
+             : "m"(*(const uint32_t*)p), "m"(*((const uint32_t*)p+1)));
+    return v;
+}
+
+#define AV_WN64 AV_WN64
+static av_always_inline void AV_WN64(void *p, uint64_t v)
+{
+    __asm__ ("str  %Q2, %0  \n\t"
+             "str  %R2, %1  \n\t"
+             : "=m"(*(uint32_t*)p), "=m"(*((uint32_t*)p+1))
+             : "r"(v));
+}
+
+#endif /* AV_GCC_VERSION_AT_LEAST(4,4) */
 
 #endif /* HAVE_INLINE_ASM */
 
