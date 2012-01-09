@@ -81,7 +81,7 @@ Configuration options:
                            and binaries will be unredistributable [no]
   --disable-doc            do not build documentation
   --disable-ffmpeg         disable ffmpeg build
-  --disable-avconv         disable avconv build
+  --enable-avconv          enable  avconv build
   --disable-ffplay         disable ffplay build
   --disable-ffprobe        disable ffprobe build
   --disable-ffserver       disable ffserver build
@@ -116,6 +116,9 @@ Configuration options:
   --disable-vda            disable VDA code
   --enable-runtime-cpudetect detect cpu capabilities at runtime (bigger binary)
   --enable-hardcoded-tables use hardcoded tables instead of runtime generation
+  --disable-safe-bitstream-reader
+                           disable buffer boundary checking in bitreaders
+                           (faster, but may crash)
   --enable-memalign-hack   emulate memalign, interferes with memory debuggers
   --disable-everything     disable all components listed below
   --disable-encoder=NAME   disable encoder NAME
@@ -1057,6 +1060,7 @@ CONFIG_LIST="
     rdft
     rtpdec
     runtime_cpudetect
+    safe_bitstream_reader
     shared
     sinewin
     small
@@ -1139,6 +1143,7 @@ HAVE_LIST="
     altivec_h
     arpa_inet_h
     asm_mod_y
+    asm_types_h
     attribute_may_alias
     attribute_packed
     bswap
@@ -1810,7 +1815,6 @@ enable debug
 enable doc
 enable fastdiv
 enable ffmpeg
-enable avconv
 enable ffplay
 enable ffprobe
 enable ffserver
@@ -1818,6 +1822,7 @@ enable network
 enable optimizations
 enable postproc
 enable protocols
+enable safe_bitstream_reader
 enable static
 enable stripping
 enable swresample
@@ -2305,7 +2310,7 @@ fi
 
 # Deal with common $arch aliases
 case "$arch" in
-    arm*)
+    arm*|iPad*)
         arch="arm"
     ;;
     mips|mipsel|IP*)
@@ -3008,6 +3013,7 @@ check_header termios.h
 check_header vdpau/vdpau.h
 check_header vdpau/vdpau_x11.h
 check_header X11/extensions/XvMClib.h
+check_header asm/types.h
 
 disabled  zlib || check_lib   zlib.h      zlibVersion -lz   || disable  zlib
 disabled bzlib || check_lib2 bzlib.h BZ2_bzlibVersion -lbz2 || disable bzlib
@@ -3406,6 +3412,7 @@ echo "postprocessing support    ${postproc-no}"
 echo "new filter support        ${avfilter-no}"
 echo "network support           ${network-no}"
 echo "threading support         ${thread_type-no}"
+echo "safe bitstream reader     ${safe_bitstream_reader-no}"
 echo "SDL support               ${sdl-no}"
 echo "Sun medialib support      ${mlib-no}"
 echo "libdxva2 enabled          ${dxva2-no}"

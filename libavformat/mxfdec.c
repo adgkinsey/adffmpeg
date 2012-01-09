@@ -433,7 +433,7 @@ static int mxf_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     /* TODO: better logic for this?
      * only files that lack all index segments prior to the essence need this */
-    if (!s->pb->seekable && mxf->op != OPAtom || mxf->d10 || mxf->broken_index)
+    if (mxf->op != OPAtom)
         return mxf_read_packet_old(s, pkt);
 
     if (mxf->current_stream >= s->nb_streams) {
@@ -576,6 +576,13 @@ static int mxf_read_partition_pack(void *arg, AVIOContext *pb, int tag, int size
             partition->this_partition,
             partition->previous_partition, footer_partition,
             partition->index_sid, partition->body_sid);
+
+    /* sanity check PreviousPartition if set */
+    if (partition->previous_partition &&
+        mxf->run_in + partition->previous_partition >= klv_offset) {
+        av_log(mxf->fc, AV_LOG_ERROR, "PreviousPartition points to this partition or forward\n");
+        return AVERROR_INVALIDDATA;
+    }
 
     if      (op[12] == 1 && op[13] == 1) mxf->op = OP1a;
     else if (op[12] == 1 && op[13] == 2) mxf->op = OP1b;
@@ -1080,6 +1087,7 @@ static int mxf_absolute_bodysid_offset(MXFContext *mxf, int body_sid, int64_t of
 
 static int mxf_parse_index(MXFContext *mxf, int track_id, AVStream *st)
 {
+    int64_t accumulated_offset = 0;
     int j, k, ret, nb_sorted_segments;
     MXFIndexTableSegment **sorted_segments = NULL;
     int n_delta = track_id - 1;  /* TrackID = 1-based stream index */
@@ -1103,6 +1111,10 @@ static int mxf_parse_index(MXFContext *mxf, int track_id, AVStream *st)
         int duration, sample_duration = 1, last_sample_size = 0;
         int64_t segment_size;
         MXFIndexTableSegment *tableseg = sorted_segments[j];
+
+        /* reset accumulated_offset on BodySID change */
+        if (j > 0 && tableseg->body_sid != sorted_segments[j-1]->body_sid)
+            accumulated_offset = 0;
 
         if (n_delta >= tableseg->nb_delta_entries && st->index != 0)
             continue;
@@ -1155,7 +1167,7 @@ static int mxf_parse_index(MXFContext *mxf, int track_id, AVStream *st)
                     size = 0;
                 flags = !(tableseg->flag_entries[k] & 0x30) ? AVINDEX_KEYFRAME : 0;
             } else {
-                pos = (int64_t)(tableseg->index_start_position + k) * tableseg->edit_unit_byte_count;
+                pos = (int64_t)k * tableseg->edit_unit_byte_count + accumulated_offset;
                 if (n_delta < tableseg->nb_delta_entries - 1)
                     size = tableseg->element_delta[n_delta+1] - tableseg->element_delta[n_delta];
                 else {
@@ -1183,6 +1195,7 @@ static int mxf_parse_index(MXFContext *mxf, int track_id, AVStream *st)
             if ((ret = av_add_index_entry(st, pos, sample_duration * st->nb_index_entries, size, 0, flags)) < 0)
                 return ret;
         }
+        accumulated_offset += segment_size;
     }
 
     av_free(sorted_segments);
@@ -1269,7 +1282,7 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
                 break;
             }
         }
-        if (!source_track)
+        if (!source_track || !component)
             continue;
 
         if (!(source_track->sequence = mxf_resolve_strong_ref(mxf, &source_track->sequence_ref, Sequence))) {
@@ -1431,7 +1444,7 @@ static int mxf_read_local_tags(MXFContext *mxf, KLVPacket *klv, MXFMetadataReadF
 
     if (!ctx)
         return -1;
-    while (avio_tell(pb) + 4 < klv_end) {
+    while (avio_tell(pb) + 4 < klv_end && !url_feof(pb)) {
         int tag = avio_rb16(pb);
         int size = avio_rb16(pb); /* KLV specified by 0x53 */
         uint64_t next = avio_tell(pb) + size;
@@ -1493,11 +1506,6 @@ static int mxf_parse_handle_essence(MXFContext *mxf)
 {
     AVIOContext *pb = mxf->fc->pb;
     int64_t ret;
-
-    if (!mxf->current_partition) {
-        av_log(mxf->fc, AV_LOG_ERROR, "found essence prior to PartitionPack\n");
-        return AVERROR_INVALIDDATA;
-    }
 
     if (mxf->parsing_backward) {
         return mxf_seek_to_previous_partition(mxf);
@@ -1612,6 +1620,12 @@ static int mxf_read_header(AVFormatContext *s, AVFormatParameters *ap)
         if (IS_KLV_KEY(klv.key, mxf_encrypted_triplet_key) ||
             IS_KLV_KEY(klv.key, mxf_essence_element_key) ||
             IS_KLV_KEY(klv.key, mxf_system_item_key)) {
+
+            if (!mxf->current_partition) {
+                av_log(mxf->fc, AV_LOG_ERROR, "found essence prior to first PartitionPack\n");
+                return AVERROR_INVALIDDATA;
+            }
+
             if (!mxf->current_partition->essence_offset) {
                 /* for OP1a we compute essence_offset
                  * for OPAtom we point essence_offset after the KL (usually op1a_essence_offset + 20 or 25)
@@ -1707,6 +1721,7 @@ static int mxf_read_close(AVFormatContext *s)
             break;
         case IndexTableSegment:
             seg = (MXFIndexTableSegment *)mxf->metadata_sets[i];
+            if (seg->slice_count)
             for (j = 0; j < seg->nb_index_entries; j++)
                 av_freep(&seg->slice_offset_entries[j]);
             av_freep(&seg->slice);
@@ -1754,7 +1769,7 @@ static int mxf_read_seek(AVFormatContext *s, int stream_index, int64_t sample_ti
     int64_t seekpos;
     int index;
 
-    if (mxf->d10) {
+    if (mxf->op != OPAtom) {
     if (!s->bit_rate)
         return -1;
     if (sample_time < 0)

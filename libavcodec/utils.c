@@ -33,6 +33,7 @@
 #include "libavutil/imgutils.h"
 #include "libavutil/samplefmt.h"
 #include "libavutil/dict.h"
+#include "libavutil/avassert.h"
 #include "avcodec.h"
 #include "dsputil.h"
 #include "libavutil/opt.h"
@@ -166,10 +167,8 @@ void avcodec_align_dimensions2(AVCodecContext *s, int *width, int *height,
     case PIX_FMT_GBRP9BE:
     case PIX_FMT_GBRP10LE:
     case PIX_FMT_GBRP10BE:
-        w_align= 16; //FIXME check for non mpeg style codecs and use less alignment
-        h_align= 16;
-        if(s->codec_id == CODEC_ID_MPEG2VIDEO || s->codec_id == CODEC_ID_MJPEG || s->codec_id == CODEC_ID_AMV || s->codec_id == CODEC_ID_THP || s->codec_id == CODEC_ID_H264 || s->codec_id == CODEC_ID_PRORES)
-            h_align= 32; // interlaced is rounded up to 2 MBs
+        w_align = 16; //FIXME assume 16 pixel per macroblock
+        h_align = 16 * 2; // interlaced needs 2 macroblocks height
         break;
     case PIX_FMT_YUV411P:
     case PIX_FMT_UYYVYY411:
@@ -999,9 +998,10 @@ int attribute_align_arg avcodec_decode_audio3(AVCodecContext *avctx, int16_t *sa
     int ret, got_frame = 0;
 
     if (avctx->get_buffer != avcodec_default_get_buffer) {
-        av_log(avctx, AV_LOG_ERROR, "A custom get_buffer() cannot be used with "
+        av_log(avctx, AV_LOG_ERROR, "Overriding custom get_buffer() for "
                "avcodec_decode_audio3()\n");
-        return AVERROR(EINVAL);
+        avctx->get_buffer = avcodec_default_get_buffer;
+        avctx->release_buffer = avcodec_default_release_buffer;
     }
 
     ret = avcodec_decode_audio4(avctx, &frame, &got_frame, avpkt);
@@ -1373,6 +1373,12 @@ const char *av_get_profile_name(const AVCodec *codec, int profile)
 
 unsigned avcodec_version( void )
 {
+    av_assert0(CODEC_ID_V410==164);
+    av_assert0(CODEC_ID_PCM_S8_PLANAR==65563);
+    av_assert0(CODEC_ID_ADPCM_G722==69660);
+    av_assert0(CODEC_ID_BMV_AUDIO==86071);
+    av_assert0(CODEC_ID_SRT==94216);
+
   return LIBAVCODEC_VERSION_INT;
 }
 

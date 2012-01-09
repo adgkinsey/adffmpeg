@@ -387,6 +387,11 @@ static int avi_read_header(AVFormatContext *s, AVFormatParameters *ap)
         tag = avio_rl32(pb);
         size = avio_rl32(pb);
 
+        if(size > avi->fsize){
+            av_log(s, AV_LOG_ERROR, "chunk size is too big during header parsing\n");
+            goto fail;
+        }
+
         print_tag("tag", tag, size);
 
         switch(tag) {
@@ -1050,7 +1055,7 @@ static int avi_read_packet(AVFormatContext *s, AVPacket *pkt)
             return AVERROR_EOF;
 
         best_ast = best_st->priv_data;
-        best_ts = av_rescale_q(best_ts, (AVRational){FFMAX(1, best_ast->sample_size), AV_TIME_BASE}, best_st->time_base);
+        best_ts = best_ast->frame_offset;
         if(best_ast->remaining)
             i= av_index_search_timestamp(best_st, best_ts, AVSEEK_FLAG_ANY | AVSEEK_FLAG_BACKWARD);
         else{
@@ -1227,6 +1232,9 @@ static int avi_read_idx1(AVFormatContext *s, int size)
 
     /* Read the entries and sort them in each stream component. */
     for(i = 0; i < nb_index_entries; i++) {
+        if(url_feof(pb))
+            return -1;
+
         tag = avio_rl32(pb);
         flags = avio_rl32(pb);
         pos = avio_rl32(pb);
@@ -1249,8 +1257,6 @@ static int avi_read_idx1(AVFormatContext *s, int size)
 
         av_dlog(s, "%d cum_len=%"PRId64"\n", len, ast->cum_len);
 
-        if(url_feof(pb))
-            return -1;
 
         if(last_pos == pos)
             avi->non_interleaved= 1;

@@ -53,7 +53,7 @@
 struct SwsContext *sws_opts;
 AVDictionary *format_opts, *codec_opts;
 
-static const int this_year = 2011;
+static const int this_year = 2012;
 
 static FILE *report_file;
 
@@ -582,8 +582,12 @@ static void print_all_libs_info(int flags, int level)
     PRINT_LIB_INFO(postproc, POSTPROC, flags, level);
 }
 
-void show_banner(void)
+void show_banner(int argc, char **argv, const OptionDef *options)
 {
+    int idx = locate_option(argc, argv, options, "version");
+    if (idx)
+        return;
+
     av_log(NULL, AV_LOG_INFO, "%s version " FFMPEG_VERSION ", Copyright (c) %d-%d the FFmpeg developers\n",
            program_name, program_birth_year, this_year);
     av_log(NULL, AV_LOG_INFO, "  built on %s %s with %s %s\n",

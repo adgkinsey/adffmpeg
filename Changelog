@@ -3,6 +3,9 @@ releases are sorted from youngest to oldest.
 
 version 0.9:
 
+- Indeo 4 decoder
+- SMJPEG demuxer
+- y41p Brooktree Uncompressed 4:1:1 12-bit encoder and decoder
 - openal input device added
 - boxblur filter added
 - BWF muxer
@@ -134,7 +137,7 @@ easier to use. The changes are:
 - new option: -report
 - Dxtory capture format decoder
 - cellauto source
-
+- v410 Quicktime Uncompressed 4:4:4 10-bit encoder and decoder
 
 version 0.8:
 

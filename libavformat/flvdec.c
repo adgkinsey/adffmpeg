@@ -197,7 +197,16 @@ static int parse_keyframes_index(AVFormatContext *s, AVIOContext *ioc, AVStream 
         }
     }
 
-    if (timeslen == fileposlen && fileposlen && max_pos <= filepositions[0]) {
+    if (timeslen == fileposlen && fileposlen>1 && max_pos <= filepositions[0]) {
+        int64_t dts, size0, size1;
+        avio_seek(ioc, filepositions[1]-4, SEEK_SET);
+        size0 = avio_rb32(ioc);
+                avio_r8(ioc);
+        size1 = avio_rb24(ioc);
+        dts   = avio_rb24(ioc);
+        dts  |= avio_r8(ioc) << 24;
+        if (size0 > filepositions[1] || FFABS(dts - times[1]*1000)>5000)
+            goto finish;
          for(i = 0; i < timeslen; i++)
              av_add_index_entry(vstream, filepositions[i], times[i]*1000, 0, 0, AVINDEX_KEYFRAME);
     } else
@@ -551,8 +560,8 @@ static int flv_read_packet(AVFormatContext *s, AVPacket *pkt)
                 return ret;
             if (st->codec->codec_id == CODEC_ID_AAC) {
                 MPEG4AudioConfig cfg;
-                avpriv_mpeg4audio_get_config(&cfg, st->codec->extradata,
-                                             st->codec->extradata_size * 8, 1);
+                if (avpriv_mpeg4audio_get_config(&cfg, st->codec->extradata,
+                                             st->codec->extradata_size * 8, 1) >= 0) {
                 st->codec->channels = cfg.channels;
                 if (cfg.ext_sample_rate)
                     st->codec->sample_rate = cfg.ext_sample_rate;
@@ -560,6 +569,7 @@ static int flv_read_packet(AVFormatContext *s, AVPacket *pkt)
                     st->codec->sample_rate = cfg.sample_rate;
                 av_dlog(s, "mp4a config channels %d sample rate %d\n",
                         st->codec->channels, st->codec->sample_rate);
+                }
             }
 
             ret = AVERROR(EAGAIN);

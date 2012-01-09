@@ -549,6 +549,8 @@ static void sigterm_handler(int sig)
     received_sigterm = sig;
     received_nb_signals++;
     term_exit();
+    if(received_nb_signals > 3)
+        exit(123);
 }
 
 static void term_init(void)
@@ -1902,7 +1904,10 @@ static int transcode_video(InputStream *ist, AVPacket *pkt, int *got_output, int
                 *frame_sample_aspect = ist->st->sample_aspect_ratio;
             decoded_frame->pts = ist->pts;
 
-            av_vsrc_buffer_add_frame(ost->input_video_filter, decoded_frame, AV_VSRC_BUF_FLAG_OVERWRITE);
+            if((av_vsrc_buffer_add_frame(ost->input_video_filter, decoded_frame, AV_VSRC_BUF_FLAG_OVERWRITE)) < 0){
+                av_log(0, AV_LOG_FATAL, "Failed to inject frame into filter network\n");
+                exit_program(1);
+            }
         }
     }
 #endif
@@ -2047,6 +2052,10 @@ static int output_packet(InputStream *ist,
 
         if (ret < 0)
             return ret;
+
+        avpkt.dts=
+        avpkt.pts= AV_NOPTS_VALUE;
+
         // touch data and size only if not EOF
         if (pkt) {
             if(ist->st->codec->codec_type != AVMEDIA_TYPE_AUDIO)
@@ -3293,6 +3302,7 @@ static void assert_file_overwrite(const char *filename)
                 fprintf(stderr,"File '%s' already exists. Overwrite ? [y/N] ", filename);
                 fflush(stderr);
                 term_exit();
+                signal(SIGINT, SIG_DFL);
                 if (!read_yesno()) {
                     av_log(0, AV_LOG_FATAL, "Not overwriting - exiting\n");
                     exit_program(1);
@@ -3962,6 +3972,7 @@ static int read_ffserver_streams(OptionsContext *o, AVFormatContext *s, const ch
         ost   = new_output_stream(o, s, codec->type);
         st    = ost->st;
         avctx = st->codec;
+        ost->enc = codec;
 
         // FIXME: a more elegant solution is needed
         memcpy(st, ic->streams[i], sizeof(AVStream));
@@ -4826,7 +4837,7 @@ int main(int argc, char **argv)
     av_register_all();
     avformat_network_init();
 
-    show_banner();
+    show_banner(argc, argv, options);
 
     term_init();
 

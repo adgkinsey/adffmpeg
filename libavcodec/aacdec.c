@@ -819,10 +819,10 @@ static int decode_band_types(AACContext *ac, enum BandType band_type[120],
                 av_log(ac->avctx, AV_LOG_ERROR, "invalid band type\n");
                 return -1;
             }
-            while ((sect_len_incr = get_bits(gb, bits)) == (1 << bits) - 1)
+            while ((sect_len_incr = get_bits(gb, bits)) == (1 << bits) - 1 && get_bits_left(gb) >= bits)
                 sect_end += sect_len_incr;
             sect_end += sect_len_incr;
-            if (get_bits_left(gb) < 0) {
+            if (get_bits_left(gb) < 0 || sect_len_incr == (1 << bits) - 1) {
                 av_log(ac->avctx, AV_LOG_ERROR, overread_err);
                 return -1;
             }
@@ -2125,13 +2125,14 @@ static int parse_adts_frame_header(AACContext *ac, GetBitContext *gb)
         }
         if (!ac->avctx->sample_rate)
             ac->avctx->sample_rate = hdr_info.sample_rate;
-        if (hdr_info.num_aac_frames == 1) {
-            if (!hdr_info.crc_absent)
-                skip_bits(gb, 16);
-        } else {
+        if (!ac->warned_num_aac_frames && hdr_info.num_aac_frames != 1) {
+            // This is 2 for "VLB " audio in NSV files.
+            // See samples/nsv/vlb_audio.
             av_log_missing_feature(ac->avctx, "More than one AAC RDB per ADTS frame is", 0);
-            return -1;
+            ac->warned_num_aac_frames = 1;
         }
+        if (!hdr_info.crc_absent)
+            skip_bits(gb, 16);
     }
     return size;
 }
