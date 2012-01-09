@@ -70,7 +70,7 @@ static int sunrast_decode_frame(AVCodecContext *avctx, void *data,
     maplength = AV_RB32(buf+28);
     buf      += 32;
 
-    if (type < RT_OLD || type > RT_FORMAT_IFF) {
+    if (type > RT_FORMAT_IFF) {
         av_log(avctx, AV_LOG_ERROR, "invalid (compression) type\n");
         return -1;
     }
@@ -93,10 +93,13 @@ static int sunrast_decode_frame(AVCodecContext *avctx, void *data,
             avctx->pix_fmt = PIX_FMT_MONOWHITE;
             break;
         case 8:
-            avctx->pix_fmt = PIX_FMT_PAL8;
+            avctx->pix_fmt = maplength ? PIX_FMT_PAL8 : PIX_FMT_GRAY8;
             break;
         case 24:
             avctx->pix_fmt = (type == RT_FORMAT_RGB) ? PIX_FMT_RGB24 : PIX_FMT_BGR24;
+            break;
+        case 32:
+            avctx->pix_fmt = (type == RT_FORMAT_RGB) ? PIX_FMT_RGB0 : PIX_FMT_BGR0;
             break;
         default:
             av_log(avctx, AV_LOG_ERROR, "invalid depth\n");
@@ -121,7 +124,7 @@ static int sunrast_decode_frame(AVCodecContext *avctx, void *data,
     if (depth != 8 && maplength) {
         av_log(avctx, AV_LOG_WARNING, "useless colormap found or file is corrupted, trying to recover\n");
 
-    } else if (depth == 8) {
+    } else if (maplength) {
         unsigned int len = maplength / 3;
 
         if (!maplength) {

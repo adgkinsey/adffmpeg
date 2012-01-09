@@ -580,8 +580,7 @@ void ff_rtsp_close_streams(AVFormatContext *s)
     }
     av_free(rt->rtsp_streams);
     if (rt->asf_ctx) {
-        av_close_input_stream (rt->asf_ctx);
-        rt->asf_ctx = NULL;
+        avformat_close_input(&rt->asf_ctx);
     }
     av_free(rt->p);
     av_free(rt->recvbuf);
@@ -1104,7 +1103,7 @@ int ff_rtsp_make_setup_request(AVFormatContext *s, const char *host, int port,
                               int lower_transport, const char *real_challenge)
 {
     RTSPState *rt = s->priv_data;
-    int rtx, j, i, err, interleave = 0;
+    int rtx = 0, j, i, err, interleave = 0;
     RTSPStream *rtsp_st;
     RTSPMessageHeader reply1, *reply = &reply1;
     char cmd[2048];

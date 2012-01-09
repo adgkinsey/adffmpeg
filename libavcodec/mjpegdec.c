@@ -112,12 +112,9 @@ av_cold int ff_mjpeg_decode_init(AVCodecContext *avctx)
             build_basic_mjpeg_vlc(s);
         }
     }
-    if (avctx->extradata_size > 9 &&
-        AV_RL32(avctx->extradata + 4) == MKTAG('f','i','e','l')) {
-        if (avctx->extradata[9] == 6) { /* quicktime icefloe 019 */
-            s->interlace_polarity = 1; /* bottom field first */
-            av_log(avctx, AV_LOG_DEBUG, "mjpeg bottom field first\n");
-        }
+    if (avctx->field_order == AV_FIELD_BB) { /* quicktime icefloe 019 */
+        s->interlace_polarity = 1; /* bottom field first */
+        av_log(avctx, AV_LOG_DEBUG, "mjpeg bottom field first\n");
     }
     if (avctx->codec->id == CODEC_ID_AMV)
         s->flipped = 1;
@@ -233,6 +230,11 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
         return -1;
     }
 
+    if(s->lossless && s->avctx->lowres){
+        av_log(s->avctx, AV_LOG_ERROR, "lowres is not possible with lossless jpeg\n");
+        return -1;
+    }
+
     height = get_bits(&s->gb, 16);
     width = get_bits(&s->gb, 16);
 
@@ -277,7 +279,7 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
         return -1;
     }
 
-    if(s->v_max==1 && s->h_max==1 && s->lossless==1) s->rgb=1;
+    if(s->v_max==1 && s->h_max==1 && s->lossless==1 && nb_components==3) s->rgb=1;
 
     /* if different size, realloc/alloc picture */
     /* XXX: also check h_count and v_count */
@@ -335,16 +337,52 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
         }
         assert(s->nb_components==3);
         break;
+    case 0x12121100:
+    case 0x22122100:
+        s->avctx->pix_fmt = s->cs_itu601 ? PIX_FMT_YUV444P : PIX_FMT_YUVJ444P;
+        s->avctx->color_range = s->cs_itu601 ? AVCOL_RANGE_MPEG : AVCOL_RANGE_JPEG;
+        s->upscale_v = 2;
+        s->upscale_h = (pix_fmt_id == 0x22122100);
+        s->chroma_height = s->height;
+        break;
+    case 0x21211100:
+    case 0x22211200:
+        s->avctx->pix_fmt = s->cs_itu601 ? PIX_FMT_YUV444P : PIX_FMT_YUVJ444P;
+        s->avctx->color_range = s->cs_itu601 ? AVCOL_RANGE_MPEG : AVCOL_RANGE_JPEG;
+        s->upscale_v = (pix_fmt_id == 0x22211200);
+        s->upscale_h = 2;
+        s->chroma_height = s->height;
+        break;
+    case 0x22221100:
+        s->avctx->pix_fmt = s->cs_itu601 ? PIX_FMT_YUV444P : PIX_FMT_YUVJ444P;
+        s->avctx->color_range = s->cs_itu601 ? AVCOL_RANGE_MPEG : AVCOL_RANGE_JPEG;
+        s->upscale_v = 2;
+        s->upscale_h = 2;
+        s->chroma_height = s->height / 2;
+        break;
     case 0x11000000:
-        s->avctx->pix_fmt = PIX_FMT_GRAY8;
+        if(s->bits <= 8)
+            s->avctx->pix_fmt = PIX_FMT_GRAY8;
+        else
+            s->avctx->pix_fmt = PIX_FMT_GRAY16;
         break;
     case 0x12111100:
+    case 0x22211100:
+    case 0x22112100:
         s->avctx->pix_fmt = s->cs_itu601 ? PIX_FMT_YUV440P : PIX_FMT_YUVJ440P;
         s->avctx->color_range = s->cs_itu601 ? AVCOL_RANGE_MPEG : AVCOL_RANGE_JPEG;
+        s->upscale_h = (pix_fmt_id == 0x22211100) * 2 + (pix_fmt_id == 0x22112100);
+        s->chroma_height = s->height / 2;
         break;
     case 0x21111100:
         s->avctx->pix_fmt = s->cs_itu601 ? PIX_FMT_YUV422P : PIX_FMT_YUVJ422P;
         s->avctx->color_range = s->cs_itu601 ? AVCOL_RANGE_MPEG : AVCOL_RANGE_JPEG;
+        break;
+    case 0x22121100:
+    case 0x22111200:
+        s->avctx->pix_fmt = s->cs_itu601 ? PIX_FMT_YUV422P : PIX_FMT_YUVJ422P;
+        s->avctx->color_range = s->cs_itu601 ? AVCOL_RANGE_MPEG : AVCOL_RANGE_JPEG;
+        s->upscale_v = (pix_fmt_id == 0x22121100) + 1;
         break;
     case 0x22111100:
         s->avctx->pix_fmt = s->cs_itu601 ? PIX_FMT_YUV420P : PIX_FMT_YUVJ420P;
@@ -640,21 +678,22 @@ static int decode_block_refinement(MJpegDecodeContext *s, DCTELEM *block, uint8_
 #undef REFINE_BIT
 #undef ZERO_RUN
 
-static int ljpeg_decode_rgb_scan(MJpegDecodeContext *s, int predictor, int point_transform){
+static int ljpeg_decode_rgb_scan(MJpegDecodeContext *s, int nb_components, int predictor, int point_transform){
     int i, mb_x, mb_y;
     uint16_t (*buffer)[4];
     int left[3], top[3], topleft[3];
     const int linesize= s->linesize[0];
     const int mask= (1<<s->bits)-1;
+    int resync_mb_y = 0;
+    int resync_mb_x = 0;
 
     av_fast_malloc(&s->ljpeg_buffer, &s->ljpeg_buffer_size, (unsigned)s->mb_width * 4 * sizeof(s->ljpeg_buffer[0][0]));
     buffer= s->ljpeg_buffer;
 
     for(i=0; i<3; i++){
-        buffer[0][i]= 1 << (s->bits + point_transform - 1);
+        buffer[0][i]= 1 << (s->bits - 1);
     }
     for(mb_y = 0; mb_y < s->mb_height; mb_y++) {
-        const int modified_predictor= mb_y ? predictor : 1;
         uint8_t *ptr = s->picture.data[0] + (linesize * mb_y);
 
         if (s->interlaced && s->bottom_field)
@@ -664,19 +703,32 @@ static int ljpeg_decode_rgb_scan(MJpegDecodeContext *s, int predictor, int point
             top[i]= left[i]= topleft[i]= buffer[0][i];
         }
         for(mb_x = 0; mb_x < s->mb_width; mb_x++) {
-            if (s->restart_interval && !s->restart_count)
-                s->restart_count = s->restart_interval;
+            int modified_predictor = predictor;
 
-            for(i=0;i<3;i++) {
-                int pred;
+            if (s->restart_interval && !s->restart_count){
+                s->restart_count = s->restart_interval;
+                resync_mb_x = mb_x;
+                resync_mb_y = mb_y;
+                for(i=0; i<3; i++)
+                    top[i]= left[i]= topleft[i]= 1 << (s->bits - 1);
+            }
+            if (mb_y == resync_mb_y || mb_y == resync_mb_y+1 && mb_x < resync_mb_x)
+                modified_predictor = 1;
+
+            for(i=0;i<nb_components;i++) {
+                int pred, dc;
 
                 topleft[i]= top[i];
                 top[i]= buffer[mb_x][i];
 
                 PREDICT(pred, topleft[i], top[i], left[i], modified_predictor);
 
+                dc = mjpeg_decode_dc(s, s->dc_index[i]);
+                if(dc == 0xFFFF)
+                    return -1;
+
                 left[i]=
-                buffer[mb_x][i]= mask & (pred + (mjpeg_decode_dc(s, s->dc_index[i]) << point_transform));
+                buffer[mb_x][i]= mask & (pred + (dc << point_transform));
             }
 
             if (s->restart_interval && !--s->restart_count) {
@@ -698,10 +750,11 @@ static int ljpeg_decode_rgb_scan(MJpegDecodeContext *s, int predictor, int point
                 ptr[3*mb_x+2] = buffer[mb_x][2] + ptr[3*mb_x+1];
             }
         }else{
-            for(mb_x = 0; mb_x < s->mb_width; mb_x++) {
-                ptr[3*mb_x+0] = buffer[mb_x][2];
-                ptr[3*mb_x+1] = buffer[mb_x][1];
-                ptr[3*mb_x+2] = buffer[mb_x][0];
+            for(i=0;i<nb_components;i++) {
+                int c= s->comp_index[i];
+                for(mb_x = 0; mb_x < s->mb_width; mb_x++) {
+                    ptr[3*mb_x+2-c] = buffer[mb_x][i];
+                }
             }
         }
     }
@@ -710,16 +763,29 @@ static int ljpeg_decode_rgb_scan(MJpegDecodeContext *s, int predictor, int point
 
 static int ljpeg_decode_yuv_scan(MJpegDecodeContext *s, int predictor, int point_transform){
     int i, mb_x, mb_y;
-    const int nb_components=3;
+    const int nb_components=s->nb_components;
+    int bits= (s->bits+7)&~7;
+    int resync_mb_y = 0;
+    int resync_mb_x = 0;
+
+    point_transform += bits - s->bits;
+
+    av_assert0(nb_components==1 || nb_components==3);
 
     for(mb_y = 0; mb_y < s->mb_height; mb_y++) {
         for(mb_x = 0; mb_x < s->mb_width; mb_x++) {
-            if (s->restart_interval && !s->restart_count)
+            if (s->restart_interval && !s->restart_count){
                 s->restart_count = s->restart_interval;
+                resync_mb_x = mb_x;
+                resync_mb_y = mb_y;
+            }
 
-            if(mb_x==0 || mb_y==0 || s->interlaced){
+            if(!mb_x || mb_y == resync_mb_y || mb_y == resync_mb_y+1 && mb_x < resync_mb_x || s->interlaced){
+                int toprow  = mb_y == resync_mb_y || mb_y == resync_mb_y+1 && mb_x < resync_mb_x;
+                int leftcol = !mb_x || mb_y == resync_mb_y && mb_x == resync_mb_x;
                 for(i=0;i<nb_components;i++) {
                     uint8_t *ptr;
+                    uint16_t *ptr16;
                     int n, h, v, x, y, c, j, linesize;
                     n = s->nb_blocks[i];
                     c = s->comp_index[i];
@@ -729,18 +795,24 @@ static int ljpeg_decode_yuv_scan(MJpegDecodeContext *s, int predictor, int point
                     y = 0;
                     linesize= s->linesize[c];
 
-                    for(j=0; j<n; j++) {
-                        int pred;
+                    if(bits>8) linesize /= 2;
 
+                    for(j=0; j<n; j++) {
+                        int pred, dc;
+
+                        dc = mjpeg_decode_dc(s, s->dc_index[i]);
+                        if(dc == 0xFFFF)
+                            return -1;
+                        if(bits<=8){
                         ptr = s->picture.data[c] + (linesize * (v * mb_y + y)) + (h * mb_x + x); //FIXME optimize this crap
-                        if(y==0 && mb_y==0){
-                            if(x==0 && mb_x==0){
-                                pred= 128 << point_transform;
+                        if(y==0 && toprow){
+                            if(x==0 && leftcol){
+                                pred= 1 << (bits - 1);
                             }else{
                                 pred= ptr[-1];
                             }
                         }else{
-                            if(x==0 && mb_x==0){
+                            if(x==0 && leftcol){
                                 pred= ptr[-linesize];
                             }else{
                                 PREDICT(pred, ptr[-linesize-1], ptr[-linesize], ptr[-1], predictor);
@@ -749,8 +821,29 @@ static int ljpeg_decode_yuv_scan(MJpegDecodeContext *s, int predictor, int point
 
                         if (s->interlaced && s->bottom_field)
                             ptr += linesize >> 1;
-                        *ptr= pred + (mjpeg_decode_dc(s, s->dc_index[i]) << point_transform);
+                        pred &= (-1)<<(8-s->bits);
+                        *ptr= pred + (dc << point_transform);
+                        }else{
+                            ptr16 = s->picture.data[c] + 2*(linesize * (v * mb_y + y)) + 2*(h * mb_x + x); //FIXME optimize this crap
+                            if(y==0 && toprow){
+                                if(x==0 && leftcol){
+                                    pred= 1 << (bits - 1);
+                                }else{
+                                    pred= ptr16[-1];
+                                }
+                            }else{
+                                if(x==0 && leftcol){
+                                    pred= ptr16[-linesize];
+                                }else{
+                                    PREDICT(pred, ptr16[-linesize-1], ptr16[-linesize], ptr16[-1], predictor);
+                                }
+                            }
 
+                            if (s->interlaced && s->bottom_field)
+                                ptr16 += linesize >> 1;
+                            pred &= (-1)<<(16-s->bits);
+                            *ptr16= pred + (dc << point_transform);
+                        }
                         if (++x == h) {
                             x = 0;
                             y++;
@@ -760,7 +853,8 @@ static int ljpeg_decode_yuv_scan(MJpegDecodeContext *s, int predictor, int point
             }else{
                 for(i=0;i<nb_components;i++) {
                     uint8_t *ptr;
-                    int n, h, v, x, y, c, j, linesize;
+                    uint16_t *ptr16;
+                    int n, h, v, x, y, c, j, linesize, dc;
                     n = s->nb_blocks[i];
                     c = s->comp_index[i];
                     h = s->h_scount[i];
@@ -769,12 +863,27 @@ static int ljpeg_decode_yuv_scan(MJpegDecodeContext *s, int predictor, int point
                     y = 0;
                     linesize= s->linesize[c];
 
+                    if(bits>8) linesize /= 2;
+
                     for(j=0; j<n; j++) {
                         int pred;
 
+                        dc = mjpeg_decode_dc(s, s->dc_index[i]);
+                        if(dc == 0xFFFF)
+                            return -1;
+                        if(bits<=8){
                         ptr = s->picture.data[c] + (linesize * (v * mb_y + y)) + (h * mb_x + x); //FIXME optimize this crap
                         PREDICT(pred, ptr[-linesize-1], ptr[-linesize], ptr[-1], predictor);
-                        *ptr= pred + (mjpeg_decode_dc(s, s->dc_index[i]) << point_transform);
+
+                        pred &= (-1)<<(8-s->bits);
+                        *ptr= pred + (dc << point_transform);
+                        }else{
+                            ptr16 = s->picture.data[c] + 2*(linesize * (v * mb_y + y)) + 2*(h * mb_x + x); //FIXME optimize this crap
+                            PREDICT(pred, ptr16[-linesize-1], ptr16[-linesize], ptr16[-1], predictor);
+
+                            pred &= (-1)<<(16-s->bits);
+                            *ptr16= pred + (dc << point_transform);
+                        }
                         if (++x == h) {
                             x = 0;
                             y++;
@@ -897,18 +1006,21 @@ static int mjpeg_decode_scan(MJpegDecodeContext *s, int nb_components, int Ah, i
                 }
             }
 
-            if (s->restart_interval) --s->restart_count;
-            i= 8+((-get_bits_count(&s->gb))&7);
-            if (s->restart_interval && show_bits(&s->gb, i)  == (1<<i)-1){ /* skip RSTn */
-                int pos= get_bits_count(&s->gb);
-                align_get_bits(&s->gb);
-                while(get_bits_count(&s->gb) < s->gb.size_in_bits && show_bits(&s->gb, 8) == 0xFF)
-                    skip_bits(&s->gb, 8);
-                if(get_bits_count(&s->gb) < s->gb.size_in_bits && (get_bits(&s->gb, 8)&0xF8) == 0xD0){
-                    for (i=0; i<nb_components; i++) /* reset dc */
-                        s->last_dc[i] = 1024;
-                }else{
-                    skip_bits_long(&s->gb, pos - get_bits_count(&s->gb));
+            if (s->restart_interval) {
+                s->restart_count--;
+                i = 8 + ((-get_bits_count(&s->gb)) & 7);
+                /* skip RSTn */
+                if (show_bits(&s->gb, i) == (1 << i) - 1) {
+                    int pos = get_bits_count(&s->gb);
+                    align_get_bits(&s->gb);
+                    while (get_bits_left(&s->gb) >= 8 && show_bits(&s->gb, 8) == 0xFF)
+                        skip_bits(&s->gb, 8);
+                    if (get_bits_left(&s->gb) >= 8 && (get_bits(&s->gb, 8) & 0xF8) == 0xD0) {
+                        for (i = 0; i < nb_components; i++) /* reset dc */
+                            s->last_dc[i] = 1024;
+                    } else {
+                        skip_bits_long(&s->gb, pos - get_bits_count(&s->gb));
+                    }
                 }
             }
         }
@@ -1011,7 +1123,7 @@ int ff_mjpeg_decode_sos(MJpegDecodeContext *s,
         if (s->dc_index[i] <  0 || s->ac_index[i] < 0 ||
             s->dc_index[i] >= 4 || s->ac_index[i] >= 4)
             goto out_of_range;
-        if (!s->vlcs[0][s->dc_index[i]].table || !s->vlcs[1][s->ac_index[i]].table)
+        if (!s->vlcs[0][s->dc_index[i]].table || !(s->progressive ? s->vlcs[2][s->ac_index[0]].table : s->vlcs[1][s->ac_index[i]].table))
             goto out_of_range;
     }
 
@@ -1060,7 +1172,7 @@ int ff_mjpeg_decode_sos(MJpegDecodeContext *s,
                 return -1;
         }else{
             if(s->rgb){
-                if(ljpeg_decode_rgb_scan(s, predictor, point_transform) < 0)
+                if(ljpeg_decode_rgb_scan(s, nb_components, predictor, point_transform) < 0)
                     return -1;
             }else{
                 if(ljpeg_decode_yuv_scan(s, predictor, point_transform) < 0)
@@ -1076,6 +1188,28 @@ int ff_mjpeg_decode_sos(MJpegDecodeContext *s,
             if(mjpeg_decode_scan(s, nb_components, prev_shift, point_transform,
                                  mb_bitmask, reference) < 0)
                 return -1;
+        }
+    }
+    if (s->upscale_h) {
+        uint8_t *line = s->picture_ptr->data[s->upscale_h];
+        for (i = 0; i < s->chroma_height; i++) {
+            for (index = s->width - 1; index; index--)
+                line[index] = (line[index / 2] + line[(index + 1) / 2]) >> 1;
+            line += s->linesize[s->upscale_h];
+        }
+    }
+    if (s->upscale_v) {
+        uint8_t *dst = &((uint8_t *)s->picture_ptr->data[s->upscale_v])[(s->height - 1) * s->linesize[s->upscale_v]];
+        for (i = s->height - 1; i; i--) {
+            uint8_t *src1 = &((uint8_t *)s->picture_ptr->data[s->upscale_v])[i / 2 * s->linesize[s->upscale_v]];
+            uint8_t *src2 = &((uint8_t *)s->picture_ptr->data[s->upscale_v])[(i + 1) / 2 * s->linesize[s->upscale_v]];
+            if (src1 == src2) {
+                memcpy(dst, src1, s->width);
+            } else {
+                for (index = 0; index < s->width; index++)
+                    dst[index] = (src1[index] + src2[index]) >> 1;
+            }
+            dst -= s->linesize[s->upscale_v];
         }
     }
     emms_c();

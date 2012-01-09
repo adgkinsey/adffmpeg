@@ -43,6 +43,11 @@ extern const char program_name[];
  */
 extern const int program_birth_year;
 
+/**
+ * this year, defined by the program for show_banner()
+ */
+extern const int this_year;
+
 extern AVCodecContext *avcodec_opts[AVMEDIA_TYPE_NB];
 extern AVFormatContext *avformat_opts;
 extern struct SwsContext *sws_opts;
@@ -77,6 +82,8 @@ int opt_default(const char *opt, const char *arg);
 int opt_loglevel(const char *opt, const char *arg);
 
 int opt_report(const char *opt);
+
+int opt_max_alloc(const char *opt, const char *arg);
 
 int opt_codec_debug(const char *opt, const char *arg);
 
@@ -245,7 +252,7 @@ void print_error(const char *filename, int err);
  * current version of the repository and of the libav* libraries used by
  * the program.
  */
-void show_banner(void);
+void show_banner(int argc, char **argv, const OptionDef *options);
 
 /**
  * Print the version of the program to stdout. The version message
