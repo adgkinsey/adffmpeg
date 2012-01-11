@@ -14,8 +14,8 @@ fate-wmv8-drm: CMD = framecrc -cryptokey 137381538c84c068111902a59c5cf6c340247c3
 FATE_MICROSOFT += fate-wmv8-drm-nodec
 fate-wmv8-drm-nodec: CMD = framecrc -cryptokey 137381538c84c068111902a59c5cf6c340247c39 -i $(SAMPLES)/wmv8/wmv_drm.wmv -acodec copy -vcodec copy
 
-FATE_MICROSOFT += fate-wmv8-x8intra
-fate-wmv8-x8intra: CMD = framecrc -flags +bitexact -idct 19 -i $(SAMPLES)/wmv8/wmv8_x8intra.wmv -an
+#FATE_MICROSOFT += fate-wmv8-x8intra
+#fate-wmv8-x8intra: CMD = framecrc -flags +bitexact -idct 19 -i $(SAMPLES)/wmv8/wmv8_x8intra.wmv -an
 
 FATE_MICROSOFT += fate-vc1
 fate-vc1: CMD = framecrc -i $(SAMPLES)/vc1/SA00040.vc1
@@ -28,6 +28,9 @@ fate-vc1_sa10091: CMD = framecrc -i $(SAMPLES)/vc1/SA10091.vc1
 
 FATE_MICROSOFT += fate-vc1_sa20021
 fate-vc1_sa20021: CMD = framecrc -i $(SAMPLES)/vc1/SA20021.vc1
+
+FATE_MICROSOFT += fate-vc1-ism
+fate-vc1-ism: CMD = framecrc -i $(SAMPLES)/isom/vc1-wmapro.ism -an
 
 FATE_TESTS += $(FATE_MICROSOFT)
 fate-microsoft: $(FATE_MICROSOFT)
