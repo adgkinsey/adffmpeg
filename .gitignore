@@ -51,4 +51,5 @@ tools/probetest
 tools/qt-faststart
 tools/trasher
 version.h
+build-*
 *~
