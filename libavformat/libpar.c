@@ -111,6 +111,7 @@ static int par_write_header(AVFormatContext *avf)
     PAREncContext *p = avf->priv_data;
     AVDictionaryEntry *tag = NULL;
     int ii, result;
+    char *fnameNoExt;
 
     p->picHeaderSize = parReader_getPicStructSize();
     do  {
@@ -128,7 +129,15 @@ static int par_write_header(AVFormatContext *avf)
         st->r_frame_rate = (AVRational) { 1, 1 };
     }
 
-    result = parReader_initWritePartition(&p->frameInfo, avf->filename, -1);
+    // parReader_initWritePartition will automatically append .par to filename
+    // so strip it off name passed in to prevent file being called file.par.par
+    ii = strlen(avf->filename);
+    fnameNoExt = av_malloc(ii+1);
+    strcpy(fnameNoExt, avf->filename);
+    if (av_strcasecmp(avf->filename + ii - 4, ".par") == 0)
+        fnameNoExt[ii - 4] = '\0';
+    result = parReader_initWritePartition(&p->frameInfo, fnameNoExt, -1);
+    av_free(fnameNoExt);
 
     if (result == 1)
         return 0;
