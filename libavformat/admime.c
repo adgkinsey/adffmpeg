@@ -741,6 +741,8 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
             break;
         case AD_DATATYPE_INFO:
         case AD_DATATYPE_XML_INFO:
+        case AD_DATATYPE_SVARS_INFO:
+            // May want to handle INFO, XML_INFO and SVARS_INFO separately in future
             errorVal = ad_read_info(s, pkt, size);
             break;
         case AD_DATATYPE_LAYOUT:

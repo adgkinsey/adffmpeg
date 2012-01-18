@@ -641,6 +641,7 @@ int initADData(int data_type, enum AVMediaType *mediaType, enum CodecID *codecId
         case(AD_DATATYPE_INFO):
         case(AD_DATATYPE_XML_INFO):
         case(AD_DATATYPE_LAYOUT):
+        case(AD_DATATYPE_SVARS_INFO):
             *mediaType = AVMEDIA_TYPE_DATA;
             *codecId = CODEC_ID_FFMETADATA;
             break;

@@ -404,6 +404,12 @@ static int adbinary_probe(AVProbeData *p)
                     }
                 }
                 break;
+            case AD_DATATYPE_SVARS_INFO:
+                if ( (bufferSize >= 1) && (dataPtr[0] == 0) || (dataPtr[0] == 1) )  {
+                    av_log(NULL, AV_LOG_DEBUG, "%s: Detected svars info packet (%d)\n", __func__, dataPtr[0]);
+                    score += 5;
+                }
+                break;
             default:
                 av_log(NULL, AV_LOG_WARNING, "%s: Detected unknown packet type\n", __func__);
                 break;
@@ -497,7 +503,8 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 break;
             case AD_DATATYPE_INFO:
             case AD_DATATYPE_XML_INFO:
-                // May want to handle INFO and XML_INFO separately in future
+            case AD_DATATYPE_SVARS_INFO:
+                // May want to handle INFO, XML_INFO and SVARS_INFO separately in future
                 errorVal = ad_read_info(s, pkt, size);
                 break;
             case AD_DATATYPE_LAYOUT:
