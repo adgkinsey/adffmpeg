@@ -114,7 +114,7 @@ The information for each single packet is printed within a dedicated
 section with name "PACKET".
 
 @item -show_frames
-Show information about each video frame contained in the input multimedia
+Show information about each frame contained in the input multimedia
 stream.
 
 The information for each single frame is printed within a dedicated
@@ -291,6 +291,23 @@ This option automatically sets @option{fully_qualified} to 1.
 
 For more information about the XML format, see
 @url{http://www.w3.org/XML/}.
+
+@chapter Timecode
+
+@command{ffprobe} supports Timecode extraction:
+
+@itemize
+
+@item MPEG1/2 timecode is extracted from the GOP, and is available in the video
+stream details (@option{-show_streams}, see @var{timecode}).
+
+@item MOV timecode is extracted from tmcd track, so is available in the tmcd
+stream metadatas (@option{-show_streams}, see @var{TAG:timecode}).
+
+@item DV and GXF timecodes are available in format metadata
+(@option{-show_format}, see @var{TAG:timecode}).
+
+@end itemize
 
 @c man end WRITERS
 

@@ -764,6 +764,18 @@ int opt_formats(const char *opt, const char *arg)
     return 0;
 }
 
+static char get_media_type_char(enum AVMediaType type)
+{
+    static const char map[AVMEDIA_TYPE_NB] = {
+        [AVMEDIA_TYPE_VIDEO]      = 'V',
+        [AVMEDIA_TYPE_AUDIO]      = 'A',
+        [AVMEDIA_TYPE_DATA]       = 'D',
+        [AVMEDIA_TYPE_SUBTITLE]   = 'S',
+        [AVMEDIA_TYPE_ATTACHMENT] = 'T',
+    };
+    return type >= 0 && type < AVMEDIA_TYPE_NB && map[type] ? map[type] : '?';
+}
+
 int opt_codecs(const char *opt, const char *arg)
 {
     AVCodec *p = NULL, *p2;
@@ -783,7 +795,6 @@ int opt_codecs(const char *opt, const char *arg)
         int decode = 0;
         int encode = 0;
         int cap    = 0;
-        const char *type_str;
 
         p2 = NULL;
         while ((p = av_codec_next(p))) {
@@ -804,24 +815,10 @@ int opt_codecs(const char *opt, const char *arg)
             break;
         last_name = p2->name;
 
-        switch (p2->type) {
-        case AVMEDIA_TYPE_VIDEO:
-            type_str = "V";
-            break;
-        case AVMEDIA_TYPE_AUDIO:
-            type_str = "A";
-            break;
-        case AVMEDIA_TYPE_SUBTITLE:
-            type_str = "S";
-            break;
-        default:
-            type_str = "?";
-            break;
-        }
-        printf(" %s%s%s%s%s%s %-15s %s",
+        printf(" %s%s%c%s%s%s %-15s %s",
                decode ? "D" : (/* p2->decoder ? "d" : */ " "),
                encode ? "E" : " ",
-               type_str,
+               get_media_type_char(p2->type),
                cap & CODEC_CAP_DRAW_HORIZ_BAND ? "S" : " ",
                cap & CODEC_CAP_DR1 ? "D" : " ",
                cap & CODEC_CAP_TRUNCATED ? "T" : " ",
@@ -875,11 +872,31 @@ int opt_protocols(const char *opt, const char *arg)
 int opt_filters(const char *opt, const char *arg)
 {
     AVFilter av_unused(**filter) = NULL;
+    char descr[64], *descr_cur;
+    int i, j;
+    const AVFilterPad *pad;
 
     printf("Filters:\n");
 #if CONFIG_AVFILTER
-    while ((filter = av_filter_next(filter)) && *filter)
-        printf("%-16s %s\n", (*filter)->name, (*filter)->description);
+    while ((filter = av_filter_next(filter)) && *filter) {
+        descr_cur = descr;
+        for (i = 0; i < 2; i++) {
+            if (i) {
+                *(descr_cur++) = '-';
+                *(descr_cur++) = '>';
+            }
+            pad = i ? (*filter)->outputs : (*filter)->inputs;
+            for (j = 0; pad[j].name; j++) {
+                if (descr_cur >= descr + sizeof(descr) - 4)
+                    break;
+                *(descr_cur++) = get_media_type_char(pad[j].type);
+            }
+            if (!j)
+                *(descr_cur++) = '|';
+        }
+        *descr_cur = 0;
+        printf("%-16s %-10s %s\n", (*filter)->name, descr, (*filter)->description);
+    }
 #endif
     return 0;
 }

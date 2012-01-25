@@ -13,6 +13,20 @@ libavutil:   2011-04-18
 
 API changes, most recent first:
 
+2012-01-24 - xxxxxxx - lavfi 2.60.100
+  Add avfilter_graph_dump.
+
+2012-01-15 - lavc 53.34.0
+  New audio encoding API:
+  b2c75b6 Add CODEC_CAP_VARIABLE_FRAME_SIZE capability for use by audio
+          encoders.
+  5ee5fa0 Add avcodec_fill_audio_frame() as a convenience function.
+  b2c75b6 Add avcodec_encode_audio2() and deprecate avcodec_encode_audio().
+          Add AVCodec.encode2().
+
+2012-01-12 - 3167dc9 - lavfi 2.15.0
+  Add a new installed header -- libavfilter/version.h -- with version macros.
+
 2011-12-08 - a502939 - lavfi 2.52.0
   Add av_buffersink_poll_frame() to buffersink.h.
 

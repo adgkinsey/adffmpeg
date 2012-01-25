@@ -7,10 +7,11 @@ FFLIBS-$(CONFIG_ACONVERT_FILTER) += avcodec
 FFLIBS-$(CONFIG_AMOVIE_FILTER) += avformat avcodec
 FFLIBS-$(CONFIG_ARESAMPLE_FILTER) += avcodec
 FFLIBS-$(CONFIG_MOVIE_FILTER) += avformat avcodec
+FFLIBS-$(CONFIG_PAN_FILTER) += swresample
 FFLIBS-$(CONFIG_SCALE_FILTER) += swscale
 FFLIBS-$(CONFIG_MP_FILTER) += avcodec
 
-HEADERS = avcodec.h avfilter.h avfiltergraph.h buffersink.h vsrc_buffer.h
+HEADERS = avcodec.h avfilter.h avfiltergraph.h buffersink.h version.h vsrc_buffer.h
 
 OBJS = allfilters.o                                                     \
        avfilter.o                                                       \
@@ -18,6 +19,7 @@ OBJS = allfilters.o                                                     \
        defaults.o                                                       \
        drawutils.o                                                      \
        formats.o                                                        \
+       graphdump.o                                                      \
        graphparser.o                                                    \
        transform.o                                                      \
        vsrc_buffer.o

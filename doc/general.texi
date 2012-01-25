@@ -94,7 +94,7 @@ details), you must upgrade FFmpeg's license to GPL in order to use it.
 
 
 
-@chapter Supported File Formats and Codecs
+@chapter Supported File Formats, Codecs or Features
 
 You can use the @code{-formats} and @code{-codecs} options to have an exhaustive list.
 
@@ -317,7 +317,7 @@ library:
     @tab Used in Sierra CD-ROM games.
 @item Smacker                   @tab   @tab X
     @tab Multimedia format used by many games.
-@item SMJPEG                    @tab   @tab X
+@item SMJPEG                    @tab X @tab X
     @tab Used in certain Loki game ports.
 @item Sony OpenMG (OMA)         @tab X @tab X
     @tab Audio format used in Sony Sonic Stage and Sony Vegas.
@@ -399,6 +399,8 @@ following image formats are supported:
     @tab YUV, JPEG and some extension is not supported yet.
 @item Truevision Targa  @tab X @tab X
     @tab Targa (.TGA) image format
+@item XWD  @tab X @tab X
+    @tab X Window Dump image format
 @end multitable
 
 @code{X} means that encoding (resp. decoding) is supported.
@@ -863,5 +865,16 @@ performance on systems without hardware floating point support).
 @end multitable
 
 @code{X} means that input/output is supported.
+
+@section Timecode
+
+@multitable @columnfractions .4 .1 .1
+@item Codec/format      @tab Read   @tab Write
+@item DV                @tab X      @tab X
+@item GXF               @tab X      @tab X
+@item MOV               @tab X      @tab
+@item MPEG1/2           @tab X      @tab X
+@item MXF               @tab        @tab X
+@end multitable
 
 @bye
