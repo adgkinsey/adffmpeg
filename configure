@@ -1684,9 +1684,6 @@ test_deps(){
 mxf_d10_test_deps="avfilter"
 seek_lavf_mxf_d10_test_deps="mxf_d10_test"
 
-mxf_d10_test_deps="avfilter"
-seek_lavf_mxf_d10_test_deps="mxf_d10_test"
-
 test_deps _encoder _decoder                                             \
     adpcm_g726=g726                                                     \
     adpcm_ima_qt                                                        \
@@ -3428,7 +3425,6 @@ echo "libcelt enabled           ${libcelt-no}"
 echo "libdc1394 support         ${libdc1394-no}"
 echo "libdirac enabled          ${libdirac-no}"
 echo "libfaac enabled           ${libfaac-no}"
-echo "libaacplus enabled        ${libaacplus-no}"
 echo "libgsm enabled            ${libgsm-no}"
 echo "libmodplug enabled        ${libmodplug-no}"
 echo "libmp3lame enabled        ${libmp3lame-no}"
