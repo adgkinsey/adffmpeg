@@ -27,7 +27,7 @@
  * Known FOURCCs: 'IV50'
  */
 
-#define ALT_BITSTREAM_READER_LE
+#define BITSTREAM_READER_LE
 #include "avcodec.h"
 #include "get_bits.h"
 #include "dsputil.h"
@@ -454,6 +454,10 @@ static int decode_mb_info(IVI5DecContext *ctx, IVIBandDesc *band,
     ref_mb = tile->ref_mbs;
     offs   = tile->ypos * band->pitch + tile->xpos;
 
+    if (!ref_mb &&
+        ((band->qdelta_present && band->inherit_qdelta) || band->inherit_mv))
+        return AVERROR_INVALIDDATA;
+
     /* scale factor for motion vectors */
     mv_scale = (ctx->planes[0].bands[0].mb_size >> 3) - (band->mb_size >> 3);
     mv_x = mv_y = 0;
@@ -760,7 +764,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     switch_buffers(ctx);
 
-    //START_TIMER;
+    //{ START_TIMER;
 
     if (ctx->frame_type != FRAMETYPE_NULL) {
         for (p = 0; p < 3; p++) {
@@ -775,7 +779,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         }
     }
 
-    //STOP_TIMER("decode_planes");
+    //STOP_TIMER("decode_planes"); }
 
     if (ctx->frame.data[0])
         avctx->release_buffer(avctx, &ctx->frame);

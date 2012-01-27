@@ -41,6 +41,7 @@
 typedef struct {
     AVClass *class;          ///< class for private options
     char          *graph_str;
+    char          *dump_graph;
     AVFilterGraph *graph;
     AVFilterContext **sinks;
     int *sink_stream_map;
@@ -71,6 +72,7 @@ av_cold static int lavfi_read_close(AVFormatContext *avctx)
 
     av_freep(&lavfi->sink_stream_map);
     av_freep(&lavfi->stream_sink_map);
+    av_freep(&lavfi->sinks);
     avfilter_graph_free(&lavfi->graph);
 
     return 0;
@@ -144,7 +146,7 @@ av_cold static int lavfi_read_header(AVFormatContext *avctx,
             FAIL(AVERROR(EINVAL));
         }
 
-        /* is a video output? */
+        /* is an audio or video output? */
         type = inout->filter_ctx->output_pads[inout->pad_idx].type;
         if (type != AVMEDIA_TYPE_VIDEO && type != AVMEDIA_TYPE_AUDIO) {
             av_log(avctx,  AV_LOG_ERROR,
@@ -154,7 +156,7 @@ av_cold static int lavfi_read_header(AVFormatContext *avctx,
 
         if (lavfi->stream_sink_map[stream_idx] != -1) {
             av_log(avctx,  AV_LOG_ERROR,
-                   "An with stream index %d was already specified\n",
+                   "An output with stream index %d was already specified\n",
                    stream_idx);
             FAIL(AVERROR(EINVAL));
         }
@@ -187,23 +189,22 @@ av_cold static int lavfi_read_header(AVFormatContext *avctx,
         }
 
         if (type == AVMEDIA_TYPE_VIDEO) {
-        AVBufferSinkParams *buffersink_params = av_buffersink_params_alloc();
-        buffersink_params->pixel_fmts = pix_fmts;
+            AVBufferSinkParams *buffersink_params = av_buffersink_params_alloc();
 
 #if FF_API_OLD_VSINK_API
-        ret = avfilter_graph_create_filter(&sink, buffersink,
-                                           inout->name, NULL,
-                                           pix_fmts, lavfi->graph);
+            ret = avfilter_graph_create_filter(&sink, buffersink,
+                                               inout->name, NULL,
+                                               pix_fmts, lavfi->graph);
 #else
-        buffersink_params->pixel_fmts = pix_fmts;
-        ret = avfilter_graph_create_filter(&sink, buffersink,
-                                           inout->name, NULL,
-                                           buffersink_params, lavfi->graph);
+            buffersink_params->pixel_fmts = pix_fmts;
+            ret = avfilter_graph_create_filter(&sink, buffersink,
+                                               inout->name, NULL,
+                                               buffersink_params, lavfi->graph);
 #endif
-        av_freep(&buffersink_params);
+            av_freep(&buffersink_params);
 
-        if (ret < 0)
-            goto end;
+            if (ret < 0)
+                goto end;
         } else if (type == AVMEDIA_TYPE_AUDIO) {
             enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_S16, -1 };
             const int packing_fmts[] = { AVFILTER_PACKED, -1 };
@@ -230,6 +231,13 @@ av_cold static int lavfi_read_header(AVFormatContext *avctx,
     if ((ret = avfilter_graph_config(lavfi->graph, avctx)) < 0)
         FAIL(ret);
 
+    if (lavfi->dump_graph) {
+        char *dump = avfilter_graph_dump(lavfi->graph, lavfi->dump_graph);
+        fputs(dump, stderr);
+        fflush(stderr);
+        av_free(dump);
+    }
+
     /* fill each stream with the information in the corresponding sink */
     for (i = 0; i < avctx->nb_streams; i++) {
         AVFilterLink *link = lavfi->sinks[lavfi->stream_sink_map[i]]->inputs[0];
@@ -255,6 +263,7 @@ av_cold static int lavfi_read_header(AVFormatContext *avctx,
     }
 
 end:
+    av_free(pix_fmts);
     avfilter_inout_free(&input_links);
     avfilter_inout_free(&output_links);
     if (ret < 0)
@@ -269,7 +278,8 @@ static int lavfi_read_packet(AVFormatContext *avctx, AVPacket *pkt)
     int stream_idx, min_pts_sink_idx = 0;
     AVFilterBufferRef *ref;
     AVPicture pict;
-    int ret, i, size;
+    int ret, i;
+    int size = 0;
 
     /* iterate through all the graph sinks. Select the sink with the
      * minimum PTS */
@@ -327,6 +337,7 @@ static int lavfi_read_packet(AVFormatContext *avctx, AVPacket *pkt)
 
 static const AVOption options[] = {
     { "graph", "Libavfilter graph", OFFSET(graph_str),  AV_OPT_TYPE_STRING, {.str = NULL }, 0,  0, DEC },
+    { "dumpgraph", "Dump graph to stderr", OFFSET(dump_graph), AV_OPT_TYPE_STRING, {.str = NULL}, 0,  0, DEC },
     { NULL },
 };
 

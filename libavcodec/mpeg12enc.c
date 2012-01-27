@@ -182,7 +182,7 @@ static av_cold int encode_init(AVCodecContext *avctx)
 
     if (s->tc.str) {
         s->tc.rate = avpriv_frame_rate_tab[s->frame_rate_index];
-        if (ff_init_smtpe_timecode(s, &s->tc) < 0)
+        if (avpriv_init_smpte_timecode(s, &s->tc) < 0)
             return -1;
         s->drop_frame_timecode = s->tc.drop;
         s->avctx->timecode_frame_start = s->tc.start;
@@ -304,7 +304,7 @@ static void mpeg1_encode_sequence_header(MpegEncContext *s)
             s->gop_picture_number = s->current_picture_ptr->f.coded_picture_number;
             av_assert0(s->drop_frame_timecode == s->tc.drop);
             if (s->tc.drop)
-                time_code = ff_framenum_to_drop_timecode(time_code);
+                time_code = avpriv_framenum_to_drop_timecode(time_code);
             put_bits(&s->pb, 5, (uint32_t)((time_code / (fps * 3600)) % 24));
             put_bits(&s->pb, 6, (uint32_t)((time_code / (fps * 60)) % 60));
             put_bits(&s->pb, 1, 1);
@@ -974,7 +974,7 @@ AVCodec ff_mpeg1video_encoder = {
     .close          = MPV_encode_end,
     .supported_framerates= avpriv_frame_rate_tab+1,
     .pix_fmts= (const enum PixelFormat[]){PIX_FMT_YUV420P, PIX_FMT_NONE},
-    .capabilities= CODEC_CAP_DELAY | CODEC_CAP_SLICE_THREADS,
+    .capabilities= CODEC_CAP_DELAY,
     .long_name= NULL_IF_CONFIG_SMALL("MPEG-1 video"),
     .priv_class     = &mpeg1_class,
 };

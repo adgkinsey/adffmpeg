@@ -54,7 +54,7 @@ void av_register_all(void)
     REGISTER_DEMUXER  (ACT, act);
     REGISTER_DEMUXER  (ADF, adf);
     REGISTER_MUXER    (ADTS, adts);
-    REGISTER_DEMUXER  (ADX, adx);
+    REGISTER_MUXDEMUX (ADX, adx);
     REGISTER_DEMUXER  (AEA, aea);
     REGISTER_MUXDEMUX (AIFF, aiff);
     REGISTER_MUXDEMUX (AMR, amr);
@@ -119,6 +119,7 @@ void av_register_all(void)
     REGISTER_DEMUXER  (INGENIENT, ingenient);
     REGISTER_DEMUXER  (IPMOVIE, ipmovie);
     REGISTER_MUXER    (IPOD, ipod);
+    REGISTER_MUXER    (ISMV, ismv);
     REGISTER_DEMUXER  (ISS, iss);
     REGISTER_DEMUXER  (IV8, iv8);
     REGISTER_MUXDEMUX (IVF, ivf);
@@ -166,7 +167,7 @@ void av_register_all(void)
     REGISTER_MUXDEMUX (NUT, nut);
     REGISTER_DEMUXER  (NUV, nuv);
     REGISTER_MUXDEMUX (OGG, ogg);
-    REGISTER_DEMUXER  (OMA, oma);
+    REGISTER_MUXDEMUX (OMA, oma);
     REGISTER_MUXDEMUX (PCM_ALAW,  pcm_alaw);
     REGISTER_MUXDEMUX (PCM_MULAW, pcm_mulaw);
     REGISTER_MUXDEMUX (PCM_F64BE, pcm_f64be);
@@ -201,6 +202,7 @@ void av_register_all(void)
     REGISTER_MUXDEMUX (RTP, rtp);
     REGISTER_MUXDEMUX (RTSP, rtsp);
     REGISTER_MUXDEMUX (SAP, sap);
+    REGISTER_DEMUXER  (SBG, sbg);
     REGISTER_DEMUXER  (SDP, sdp);
 #if CONFIG_RTPDEC
     av_register_rtp_dynamic_payload_handlers();
@@ -211,7 +213,7 @@ void av_register_all(void)
     REGISTER_DEMUXER  (SHORTEN, shorten);
     REGISTER_DEMUXER  (SIFF, siff);
     REGISTER_DEMUXER  (SMACKER, smacker);
-    REGISTER_DEMUXER  (SMJPEG, smjpeg);
+    REGISTER_MUXDEMUX (SMJPEG, smjpeg);
     REGISTER_DEMUXER  (SOL, sol);
     REGISTER_MUXDEMUX (SOX, sox);
     REGISTER_MUXDEMUX (SPDIF, spdif);

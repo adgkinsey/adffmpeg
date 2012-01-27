@@ -29,7 +29,7 @@
 #include <inttypes.h>
 #include <math.h>
 
-#define ALT_BITSTREAM_READER_LE
+#define BITSTREAM_READER_LE
 #include "avcodec.h"
 #include "get_bits.h"
 #include "dsputil.h"
@@ -579,6 +579,14 @@ static int vorbis_parse_setup_hdr_floors(vorbis_context *vc)
 
 // Precalculate order of x coordinates - needed for decode
             ff_vorbis_ready_floor1_list(floor_setup->data.t1.list, floor_setup->data.t1.x_list_dim);
+
+            for (j=1; j<floor_setup->data.t1.x_list_dim; j++) {
+                if (   floor_setup->data.t1.list[ floor_setup->data.t1.list[j-1].sort ].x
+                    == floor_setup->data.t1.list[ floor_setup->data.t1.list[j  ].sort ].x) {
+                    av_log(vc->avccontext, AV_LOG_ERROR, "Non unique x values in floor type 1\n");
+                    return AVERROR_INVALIDDATA;
+                }
+            }
         } else if (floor_setup->floor_type == 0) {
             unsigned max_codebook_dim = 0;
 
@@ -820,8 +828,7 @@ static void create_map(vorbis_context *vc, unsigned floor_number)
 
         for (idx = 0; idx < n; ++idx) {
             map[idx] = floor(BARK((vf->rate * idx) / (2.0f * n)) *
-                             ((vf->bark_map_size) /
-                              BARK(vf->rate / 2.0f)));
+                             (vf->bark_map_size / BARK(vf->rate / 2.0f)));
             if (vf->bark_map_size-1 < map[idx])
                 map[idx] = vf->bark_map_size - 1;
         }
@@ -979,7 +986,7 @@ static av_cold int vorbis_decode_init(AVCodecContext *avccontext)
     int headers_len    = avccontext->extradata_size;
     uint8_t *header_start[3];
     int header_len[3];
-    GetBitContext *gb = &(vc->gb);
+    GetBitContext *gb = &vc->gb;
     int hdr_type, ret;
 
     vc->avccontext = avccontext;
@@ -1642,7 +1649,7 @@ static int vorbis_decode_frame(AVCodecContext *avccontext, void *data,
     const uint8_t *buf = avpkt->data;
     int buf_size       = avpkt->size;
     vorbis_context *vc = avccontext->priv_data;
-    GetBitContext *gb = &(vc->gb);
+    GetBitContext *gb = &vc->gb;
     const float *channel_ptrs[255];
     int i, len, ret;
 

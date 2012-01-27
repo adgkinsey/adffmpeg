@@ -79,6 +79,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC  (ASV2, asv2);
     REGISTER_DECODER (AURA, aura);
     REGISTER_DECODER (AURA2, aura2);
+    REGISTER_ENCDEC  (AVRP, avrp);
     REGISTER_DECODER (AVS, avs);
     REGISTER_DECODER (BETHSOFTVID, bethsoftvid);
     REGISTER_DECODER (BFI, bfi);
@@ -183,8 +184,8 @@ void avcodec_register_all(void)
     REGISTER_DECODER (QDRAW, qdraw);
     REGISTER_DECODER (QPEG, qpeg);
     REGISTER_ENCDEC  (QTRLE, qtrle);
-    REGISTER_DECODER (R10K,  r10k);
-    REGISTER_DECODER (R210,  r210);
+    REGISTER_ENCDEC  (R10K,  r10k);
+    REGISTER_ENCDEC  (R210,  r210);
     REGISTER_ENCDEC  (RAWVIDEO, rawvideo);
     REGISTER_DECODER (RL2, rl2);
     REGISTER_ENCDEC  (ROQ, roq);
@@ -216,6 +217,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (UTVIDEO, utvideo);
     REGISTER_ENCDEC  (V210,  v210);
     REGISTER_DECODER (V210X, v210x);
+    REGISTER_ENCDEC  (V308, v308);
     REGISTER_ENCDEC  (V410, v410);
     REGISTER_DECODER (VB, vb);
     REGISTER_DECODER (VBLE, vble);
@@ -243,8 +245,10 @@ void avcodec_register_all(void)
     REGISTER_DECODER (XAN_WC3, xan_wc3);
     REGISTER_DECODER (XAN_WC4, xan_wc4);
     REGISTER_DECODER (XL, xl);
+    REGISTER_ENCDEC  (XWD, xwd);
     REGISTER_ENCDEC  (Y41P, y41p);
     REGISTER_DECODER (YOP, yop);
+    REGISTER_ENCDEC  (YUV4, yuv4);
     REGISTER_ENCDEC  (ZLIB, zlib);
     REGISTER_ENCDEC  (ZMBV, zmbv);
 
@@ -267,6 +271,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC  (DCA, dca);
     REGISTER_DECODER (DSICINAUDIO, dsicinaudio);
     REGISTER_ENCDEC  (EAC3, eac3);
+    REGISTER_DECODER (FFWAVESYNTH, ffwavesynth);
     REGISTER_ENCDEC  (FLAC, flac);
     REGISTER_ENCDEC  (G723_1, g723_1);
     REGISTER_DECODER (G729, g729);
@@ -360,6 +365,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC  (ADPCM_G722, adpcm_g722);
     REGISTER_ENCDEC  (ADPCM_G726, adpcm_g726);
     REGISTER_DECODER (ADPCM_IMA_AMV, adpcm_ima_amv);
+    REGISTER_DECODER (ADPCM_IMA_APC, adpcm_ima_apc);
     REGISTER_DECODER (ADPCM_IMA_DK3, adpcm_ima_dk3);
     REGISTER_DECODER (ADPCM_IMA_DK4, adpcm_ima_dk4);
     REGISTER_DECODER (ADPCM_IMA_EA_EACS, adpcm_ima_ea_eacs);
@@ -428,6 +434,7 @@ void avcodec_register_all(void)
     REGISTER_PARSER  (DVBSUB, dvbsub);
     REGISTER_PARSER  (DVDSUB, dvdsub);
     REGISTER_PARSER  (FLAC, flac);
+    REGISTER_PARSER  (GSM, gsm);
     REGISTER_PARSER  (H261, h261);
     REGISTER_PARSER  (H263, h263);
     REGISTER_PARSER  (H264, h264);

@@ -73,7 +73,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     ff_proresdsp_init(&ctx->prodsp, avctx);
 
     avctx->coded_frame = &ctx->frame;
-    ctx->frame.type = FF_I_TYPE;
+    ctx->frame.type = AV_PICTURE_TYPE_I;
     ctx->frame.key_frame = 1;
 
     ff_init_scantable_permutation(idct_permutation,
@@ -277,7 +277,7 @@ static int decode_picture_header(AVCodecContext *avctx, const uint8_t *buf, cons
             val = q;                                                    \
             SKIP_BITS(re, gb, q+1);                                     \
         }                                                               \
-    } while (0);                                                        \
+    } while (0)
 
 #define TOSIGNED(x) (((x) >> 1) ^ (-((x) & 1)))
 

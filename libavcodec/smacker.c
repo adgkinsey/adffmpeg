@@ -35,7 +35,7 @@
 #include "libavutil/audioconvert.h"
 #include "mathops.h"
 
-#define ALT_BITSTREAM_READER_LE
+#define BITSTREAM_READER_LE
 #include "get_bits.h"
 #include "bytestream.h"
 
@@ -259,6 +259,11 @@ static int smacker_decode_header_tree(SmackVContext *smk, GetBitContext *gb, int
     if(ctx.last[0] == -1) ctx.last[0] = huff.current++;
     if(ctx.last[1] == -1) ctx.last[1] = huff.current++;
     if(ctx.last[2] == -1) ctx.last[2] = huff.current++;
+    if(huff.current > huff.length){
+        ctx.last[0] = ctx.last[1] = ctx.last[2] = 1;
+        av_log(smk->avctx, AV_LOG_ERROR, "bigtree damaged\n");
+        return -1;
+    }
 
     *recodes = huff.values;
 

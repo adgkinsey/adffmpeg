@@ -98,6 +98,7 @@
 #include "aacsbr.h"
 #include "mpeg4audio.h"
 #include "aacadtsdec.h"
+#include "libavutil/intfloat.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -107,11 +108,6 @@
 #if ARCH_ARM
 #   include "arm/aac.h"
 #endif
-
-union float754 {
-    float f;
-    uint32_t i;
-};
 
 static VLC vlc_scalefactors;
 static VLC vlc_spectral[11];
@@ -165,6 +161,19 @@ static ChannelElement *get_che(AACContext *ac, int type, int elem_id)
     default:
         return NULL;
     }
+}
+
+static int count_channels(enum ChannelPosition che_pos[4][MAX_ELEM_ID])
+{
+    int i, type, sum = 0;
+    for (i = 0; i < MAX_ELEM_ID; i++) {
+        for (type = 0; type < 4; type++) {
+            sum += (1 + (type == TYPE_CPE)) *
+                (che_pos[type][i] != AAC_CHANNEL_OFF &&
+                 che_pos[type][i] != AAC_CHANNEL_CC);
+        }
+    }
+    return sum;
 }
 
 /**
@@ -441,6 +450,12 @@ static int decode_ga_specific_config(AACContext *ac, AVCodecContext *avctx,
         if ((ret = set_default_channel_config(avctx, new_che_pos, channel_config)))
             return ret;
     }
+
+    if (count_channels(new_che_pos) > 1) {
+        m4ac->ps = 0;
+    } else if (m4ac->sbr == 1 && m4ac->ps == -1)
+        m4ac->ps = 1;
+
     if (ac && (ret = output_configure(ac, ac->che_pos, new_che_pos, channel_config, OC_GLOBAL_HDR)))
         return ret;
 
@@ -499,8 +514,6 @@ static int decode_audio_specific_config(AACContext *ac,
         av_log(avctx, AV_LOG_ERROR, "invalid sampling rate index %d\n", m4ac->sampling_index);
         return -1;
     }
-    if (m4ac->sbr == 1 && m4ac->ps == -1)
-        m4ac->ps = 1;
 
     skip_bits_long(&gb, i);
 
@@ -726,16 +739,13 @@ static void decode_ltp(AACContext *ac, LongTermPrediction *ltp,
 
 /**
  * Decode Individual Channel Stream info; reference: table 4.6.
- *
- * @param   common_window   Channels have independent [0], or shared [1], Individual Channel Stream information.
  */
 static int decode_ics_info(AACContext *ac, IndividualChannelStream *ics,
-                           GetBitContext *gb, int common_window)
+                           GetBitContext *gb)
 {
     if (get_bits1(gb)) {
         av_log(ac->avctx, AV_LOG_ERROR, "Reserved bit set.\n");
-        memset(ics, 0, sizeof(IndividualChannelStream));
-        return -1;
+        return AVERROR_INVALIDDATA;
     }
     ics->window_sequence[1] = ics->window_sequence[0];
     ics->window_sequence[0] = get_bits(gb, 2);
@@ -770,13 +780,11 @@ static int decode_ics_info(AACContext *ac, IndividualChannelStream *ics,
         if (ics->predictor_present) {
             if (ac->m4ac.object_type == AOT_AAC_MAIN) {
                 if (decode_prediction(ac, ics, gb)) {
-                    memset(ics, 0, sizeof(IndividualChannelStream));
-                    return -1;
+                    return AVERROR_INVALIDDATA;
                 }
             } else if (ac->m4ac.object_type == AOT_AAC_LC) {
                 av_log(ac->avctx, AV_LOG_ERROR, "Prediction is not allowed in AAC-LC.\n");
-                memset(ics, 0, sizeof(IndividualChannelStream));
-                return -1;
+                return AVERROR_INVALIDDATA;
             } else {
                 if ((ics->ltp.present = get_bits(gb, 1)))
                     decode_ltp(ac, &ics->ltp, gb, ics->max_sfb);
@@ -788,8 +796,7 @@ static int decode_ics_info(AACContext *ac, IndividualChannelStream *ics,
         av_log(ac->avctx, AV_LOG_ERROR,
                "Number of scalefactor bands in group (%d) exceeds limit (%d).\n",
                ics->max_sfb, ics->num_swb);
-        memset(ics, 0, sizeof(IndividualChannelStream));
-        return -1;
+        return AVERROR_INVALIDDATA;
     }
 
     return 0;
@@ -1023,7 +1030,7 @@ static inline float *VMUL4(float *dst, const float *v, unsigned idx,
 static inline float *VMUL2S(float *dst, const float *v, unsigned idx,
                             unsigned sign, const float *scale)
 {
-    union float754 s0, s1;
+    union av_intfloat32 s0, s1;
 
     s0.f = s1.f = *scale;
     s0.i ^= sign >> 1 << 31;
@@ -1041,8 +1048,8 @@ static inline float *VMUL4S(float *dst, const float *v, unsigned idx,
                             unsigned sign, const float *scale)
 {
     unsigned nz = idx >> 12;
-    union float754 s = { .f = *scale };
-    union float754 t;
+    union av_intfloat32 s = { .f = *scale };
+    union av_intfloat32 t;
 
     t.i = s.i ^ (sign & 1U<<31);
     *dst++ = v[idx    & 3] * t.f;
@@ -1291,7 +1298,7 @@ static int decode_spectrum_and_dequant(AACContext *ac, float coef[1024],
 
 static av_always_inline float flt16_round(float pf)
 {
-    union float754 tmp;
+    union av_intfloat32 tmp;
     tmp.f = pf;
     tmp.i = (tmp.i + 0x00008000U) & 0xFFFF0000U;
     return tmp.f;
@@ -1299,7 +1306,7 @@ static av_always_inline float flt16_round(float pf)
 
 static av_always_inline float flt16_even(float pf)
 {
-    union float754 tmp;
+    union av_intfloat32 tmp;
     tmp.f = pf;
     tmp.i = (tmp.i + 0x00007FFFU + (tmp.i & 0x00010000U >> 16)) & 0xFFFF0000U;
     return tmp.f;
@@ -1307,7 +1314,7 @@ static av_always_inline float flt16_even(float pf)
 
 static av_always_inline float flt16_trunc(float pf)
 {
-    union float754 pun;
+    union av_intfloat32 pun;
     pun.f = pf;
     pun.i &= 0xFFFF0000U;
     return pun.f;
@@ -1394,8 +1401,8 @@ static int decode_ics(AACContext *ac, SingleChannelElement *sce,
     global_gain = get_bits(gb, 8);
 
     if (!common_window && !scale_flag) {
-        if (decode_ics_info(ac, ics, gb, 0) < 0)
-            return -1;
+        if (decode_ics_info(ac, ics, gb) < 0)
+            return AVERROR_INVALIDDATA;
     }
 
     if (decode_band_types(ac, sce->band_type, sce->band_type_run_end, gb, ics) < 0)
@@ -1511,8 +1518,8 @@ static int decode_cpe(AACContext *ac, GetBitContext *gb, ChannelElement *cpe)
 
     common_window = get_bits1(gb);
     if (common_window) {
-        if (decode_ics_info(ac, &cpe->ch[0].ics, gb, 1))
-            return -1;
+        if (decode_ics_info(ac, &cpe->ch[0].ics, gb))
+            return AVERROR_INVALIDDATA;
         i = cpe->ch[1].ics.use_kb_window[0];
         cpe->ch[1].ics = cpe->ch[0].ics;
         cpe->ch[1].ics.use_kb_window[1] = i;
@@ -2103,7 +2110,7 @@ static int parse_adts_frame_header(AACContext *ac, GetBitContext *gb)
 
     size = avpriv_aac_parse_header(gb, &hdr_info);
     if (size > 0) {
-        if (hdr_info.chan_config && (hdr_info.chan_config!=ac->m4ac.chan_config || ac->m4ac.sample_rate!=hdr_info.sample_rate)) {
+        if (hdr_info.chan_config) {
             enum ChannelPosition new_che_pos[4][MAX_ELEM_ID];
             memset(new_che_pos, 0, 4 * MAX_ELEM_ID * sizeof(new_che_pos[0][0]));
             ac->m4ac.chan_config = hdr_info.chan_config;
@@ -2211,10 +2218,11 @@ static int aac_decode_frame_int(AVCodecContext *avctx, void *data,
             if ((err = decode_pce(avctx, &ac->m4ac, new_che_pos, gb)))
                 break;
             if (ac->output_configured > OC_TRIAL_PCE)
-                av_log(avctx, AV_LOG_ERROR,
-                       "Not evaluating a further program_config_element as this construct is dubious at best.\n");
-            else
-                err = output_configure(ac, ac->che_pos, new_che_pos, 0, OC_TRIAL_PCE);
+                av_log(avctx, AV_LOG_INFO,
+                       "Evaluating a further program_config_element.\n");
+            err = output_configure(ac, ac->che_pos, new_che_pos, 0, OC_TRIAL_PCE);
+            if (!err)
+                ac->m4ac.chan_config = 0;
             break;
         }
 
@@ -2286,12 +2294,31 @@ static int aac_decode_frame_int(AVCodecContext *avctx, void *data,
 static int aac_decode_frame(AVCodecContext *avctx, void *data,
                             int *got_frame_ptr, AVPacket *avpkt)
 {
+    AACContext *ac = avctx->priv_data;
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
     GetBitContext gb;
     int buf_consumed;
     int buf_offset;
     int err;
+    int new_extradata_size;
+    const uint8_t *new_extradata = av_packet_get_side_data(avpkt,
+                                       AV_PKT_DATA_NEW_EXTRADATA,
+                                       &new_extradata_size);
+
+    if (new_extradata) {
+        av_free(avctx->extradata);
+        avctx->extradata = av_mallocz(new_extradata_size +
+                                      FF_INPUT_BUFFER_PADDING_SIZE);
+        if (!avctx->extradata)
+            return AVERROR(ENOMEM);
+        avctx->extradata_size = new_extradata_size;
+        memcpy(avctx->extradata, new_extradata, new_extradata_size);
+        if (decode_audio_specific_config(ac, ac->avctx, &ac->m4ac,
+                                         avctx->extradata,
+                                         avctx->extradata_size*8, 1) < 0)
+            return AVERROR_INVALIDDATA;
+    }
 
     init_get_bits(&gb, buf, buf_size * 8);
 
@@ -2366,6 +2393,8 @@ static int latm_decode_audio_specific_config(struct LATMContext *latmctx,
                                "config not byte aligned.\n", 1);
         return AVERROR_INVALIDDATA;
     }
+    if (asclen <= 0)
+        return AVERROR_INVALIDDATA;
     bits_consumed = decode_audio_specific_config(NULL, avctx, &m4ac,
                                          gb->buffer + (config_start_bit / 8),
                                          asclen, sync_extension);
