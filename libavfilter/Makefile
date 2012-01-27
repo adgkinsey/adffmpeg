@@ -3,13 +3,13 @@ include $(SUBDIR)../config.mak
 NAME = avfilter
 FFLIBS = avutil
 
-FFLIBS-$(CONFIG_ACONVERT_FILTER) += avcodec
-FFLIBS-$(CONFIG_AMOVIE_FILTER) += avformat avcodec
-FFLIBS-$(CONFIG_ARESAMPLE_FILTER) += avcodec
-FFLIBS-$(CONFIG_MOVIE_FILTER) += avformat avcodec
-FFLIBS-$(CONFIG_PAN_FILTER) += swresample
-FFLIBS-$(CONFIG_SCALE_FILTER) += swscale
-FFLIBS-$(CONFIG_MP_FILTER) += avcodec
+FFLIBS-$(CONFIG_ACONVERT_FILTER)             += avcodec
+FFLIBS-$(CONFIG_AMOVIE_FILTER)               += avformat avcodec
+FFLIBS-$(CONFIG_ARESAMPLE_FILTER)            += avcodec
+FFLIBS-$(CONFIG_MOVIE_FILTER)                += avformat avcodec
+FFLIBS-$(CONFIG_PAN_FILTER)                  += swresample
+FFLIBS-$(CONFIG_SCALE_FILTER)                += swscale
+FFLIBS-$(CONFIG_MP_FILTER)                   += avcodec
 
 HEADERS = avcodec.h avfilter.h avfiltergraph.h buffersink.h version.h vsrc_buffer.h
 
@@ -164,8 +164,6 @@ OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_yuvcsp.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_yvu9.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/pullup.o
 
-
--include $(SRC_PATH)/$(SUBDIR)$(ARCH)/Makefile
 
 DIRS = x86 libmpcodecs
 

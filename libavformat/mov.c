@@ -1643,8 +1643,10 @@ static int mov_read_stsz(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     init_get_bits(&gb, buf, 8*num_bytes);
 
-    for (i=0; i<entries; i++)
+    for (i = 0; i < entries; i++) {
         sc->sample_sizes[i] = get_bits_long(&gb, field_size);
+        sc->data_size += sc->sample_sizes[i];
+    }
 
     av_free(buf);
     return 0;
@@ -2252,6 +2254,9 @@ static int mov_read_trex(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     trex = av_realloc(c->trex_data, (c->trex_count+1)*sizeof(*c->trex_data));
     if (!trex)
         return AVERROR(ENOMEM);
+
+    c->fc->duration = AV_NOPTS_VALUE; // the duration from mvhd is not representing the whole file when fragments are used.
+
     c->trex_data = trex;
     trex = &c->trex_data[c->trex_count++];
     avio_r8(pb); /* version */
@@ -2347,6 +2352,7 @@ static int mov_read_trun(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         distance++;
         dts += sample_duration;
         offset += sample_size;
+        sc->data_size += sample_size;
     }
     frag->moof_offset = offset;
     st->duration = dts + sc->time_offset;
@@ -2720,6 +2726,16 @@ static int mov_read_header(AVFormatContext *s, AVFormatParameters *ap)
         for (i = 0; i < s->nb_streams; i++)
             if (s->streams[i]->codec->codec_tag == AV_RL32("tmcd"))
                 mov_read_timecode_track(s, s->streams[i]);
+    }
+
+    if (mov->trex_data) {
+        int i;
+        for (i = 0; i < s->nb_streams; i++) {
+            AVStream *st = s->streams[i];
+            MOVStreamContext *sc = st->priv_data;
+            if (st->duration)
+                st->codec->bit_rate = sc->data_size * 8 * sc->time_scale / st->duration;
+        }
     }
 
     return 0;
