@@ -454,6 +454,13 @@ static void parse_comment( char *text, int text_len, struct NetVuImageData *pic,
     int             i = 0;
     int             j = 0;
     struct tm       t;
+    time_t          when = 1000000000;
+
+    // Calculate timezone offset of client, needed because mktime uses local
+    // time and there is no ISO C equivalent for GMT.
+    struct tm       utc = *gmtime(&when);
+    struct tm       lcl = *localtime(&when);
+    int             delta_h = mktime(&utc) - mktime(&lcl);
 
     memset(&t, 0, sizeof(t));
 
@@ -539,5 +546,5 @@ static void parse_comment( char *text, int text_len, struct NetVuImageData *pic,
         }
     }
 
-    pic->session_time = mktime(&t);
+    pic->session_time = mktime(&t) - delta_h;
 }
