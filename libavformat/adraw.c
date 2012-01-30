@@ -49,9 +49,9 @@ static int adraw_probe(AVProbeData *p)
     return 0;
 }
 
-static int adraw_read_header(AVFormatContext *s, AVFormatParameters *ap)
+static int adraw_read_header(AVFormatContext *s)
 {
-    return ad_read_header(s, ap, NULL);
+    return ad_read_header(s, NULL);
 }
 
 static int adraw_read_packet(struct AVFormatContext *s, AVPacket *pkt)

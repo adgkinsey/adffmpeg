@@ -34,7 +34,7 @@
 
 
 static int adaudio_probe(AVProbeData *p);
-static int adaudio_read_header(AVFormatContext *s, AVFormatParameters *ap);
+static int adaudio_read_header(AVFormatContext *s);
 static int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt);
 
 
@@ -59,7 +59,7 @@ static int adaudio_probe(AVProbeData *p)
     return 0;
 }
 
-static int adaudio_read_header(AVFormatContext *s, AVFormatParameters *ap)
+static int adaudio_read_header(AVFormatContext *s)
 {
     s->ctx_flags |= AVFMTCTX_NOHEADER;
 
