@@ -97,6 +97,7 @@
 #define VSYNC_PASSTHROUGH 0
 #define VSYNC_CFR         1
 #define VSYNC_VFR         2
+#define VSYNC_DROP        0xff
 
 const char program_name[] = "ffmpeg";
 const int program_birth_year = 2000;
@@ -133,8 +134,6 @@ static int video_discard = 0;
 static int same_quant = 0;
 static int do_deinterlace = 0;
 static int intra_dc_precision = 8;
-static int loop_input = 0;
-static int loop_output = AVFMT_NOOUTPUTLOOP;
 static int qp_hist = 0;
 static int intra_only = 0;
 static const char *video_codec_name    = NULL;
@@ -1476,7 +1475,7 @@ static void do_video_out(AVFormatContext *s,
     if (format_video_sync == VSYNC_AUTO)
         format_video_sync = (s->oformat->flags & AVFMT_VARIABLE_FPS) ? ((s->oformat->flags & AVFMT_NOTIMESTAMPS) ? VSYNC_PASSTHROUGH : VSYNC_VFR) : 1;
 
-    if (format_video_sync != VSYNC_PASSTHROUGH) {
+    if (format_video_sync != VSYNC_PASSTHROUGH && format_video_sync != VSYNC_DROP) {
         double vdelta = sync_ipts - ost->sync_opts + duration;
         // FIXME set to 0.5 after we fix some dts/pts bugs like in avidec.c
         if (vdelta < -1.1)
@@ -1563,6 +1562,8 @@ static void do_video_out(AVFormatContext *s,
             if (ret > 0) {
                 pkt.data = bit_buffer;
                 pkt.size = ret;
+                if (!(enc->codec->capabilities & CODEC_CAP_DELAY))
+                    pkt.pts = av_rescale_q(ost->sync_opts, enc->time_base, ost->st->time_base);
                 if (enc->coded_frame->pts != AV_NOPTS_VALUE)
                     pkt.pts = av_rescale_q(enc->coded_frame->pts, enc->time_base, ost->st->time_base);
 /*av_log(NULL, AV_LOG_DEBUG, "encoder -> %"PRId64"/%"PRId64"\n",
@@ -1571,6 +1572,8 @@ static void do_video_out(AVFormatContext *s,
 
                 if (enc->coded_frame->key_frame)
                     pkt.flags |= AV_PKT_FLAG_KEY;
+                if (format_video_sync == VSYNC_DROP)
+                    pkt.pts = pkt.dts = AV_NOPTS_VALUE;
                 write_frame(s, &pkt, ost);
                 *frame_size = ret;
                 video_size += ret;
@@ -2602,8 +2605,8 @@ static int transcode_init(OutputFile *output_files, int nb_output_files,
                     ost->frame_rate = ost->enc->supported_framerates[idx];
                 }
                 codec->time_base = (AVRational){ost->frame_rate.den, ost->frame_rate.num};
-                if (   av_q2d(codec->time_base) < 0.001 && video_sync_method
-                   && (video_sync_method==1 || (video_sync_method<0 && !(oc->oformat->flags & AVFMT_VARIABLE_FPS)))){
+                if (   av_q2d(codec->time_base) < 0.001 && video_sync_method != VSYNC_PASSTHROUGH
+                   && (video_sync_method == VSYNC_CFR || (video_sync_method == VSYNC_AUTO && !(oc->oformat->flags & AVFMT_VARIABLE_FPS)))){
                     av_log(oc, AV_LOG_WARNING, "Frame rate very high for a muxer not effciciently supporting it.\n"
                                                "Please consider specifiying a lower framerate, a different muxer or -vsync 2\n");
                 }
@@ -3690,14 +3693,6 @@ static int opt_input_file(OptionsContext *o, const char *opt, const char *filena
     ic->flags |= AVFMT_FLAG_NONBLOCK;
     ic->interrupt_callback = int_cb;
 
-    if (loop_input) {
-        av_log(NULL, AV_LOG_WARNING,
-            "-loop_input is deprecated, use -loop 1\n"
-            "Note, both loop options only work with -f image2\n"
-        );
-        ic->loop_input = loop_input;
-    }
-
     /* open the input file with generic avformat function */
     err = avformat_open_input(&ic, filename, file_iformat, &format_opts);
     if (err < 0) {
@@ -4478,11 +4473,6 @@ static void opt_output_file(void *optctx, const char *filename)
     }
     oc->max_delay = (int)(o->mux_max_delay * AV_TIME_BASE);
 
-    if (loop_output >= 0) {
-        av_log(NULL, AV_LOG_WARNING, "-loop_output is deprecated, use -loop\n");
-        oc->loop_output = loop_output;
-    }
-
     /* copy metadata */
     for (i = 0; i < o->nb_metadata_map; i++) {
         char *p;
@@ -4942,6 +4932,7 @@ static int opt_vsync(const char *opt, const char *arg)
     if      (!av_strcasecmp(arg, "cfr"))         video_sync_method = VSYNC_CFR;
     else if (!av_strcasecmp(arg, "vfr"))         video_sync_method = VSYNC_VFR;
     else if (!av_strcasecmp(arg, "passthrough")) video_sync_method = VSYNC_PASSTHROUGH;
+    else if (!av_strcasecmp(arg, "drop"))        video_sync_method = VSYNC_DROP;
 
     if (video_sync_method == VSYNC_AUTO)
         video_sync_method = parse_number_or_die("vsync", arg, OPT_INT, VSYNC_AUTO, VSYNC_VFR);
@@ -4980,8 +4971,6 @@ static const OptionDef options[] = {
     { "hex", OPT_BOOL | OPT_EXPERT, {(void*)&do_hex_dump},
       "when dumping packets, also dump the payload" },
     { "re", OPT_BOOL | OPT_EXPERT | OPT_OFFSET, {.off = OFFSET(rate_emu)}, "read input at native frame rate", "" },
-    { "loop_input", OPT_BOOL | OPT_EXPERT, {(void*)&loop_input}, "deprecated, use -loop" },
-    { "loop_output", HAS_ARG | OPT_INT | OPT_EXPERT, {(void*)&loop_output}, "deprecated, use -loop", "" },
     { "target", HAS_ARG | OPT_FUNC2, {(void*)opt_target}, "specify target file type (\"vcd\", \"svcd\", \"dvd\", \"dv\", \"dv50\", \"pal-vcd\", \"ntsc-svcd\", ...)", "type" },
     { "vsync", HAS_ARG | OPT_EXPERT, {(void*)opt_vsync}, "video sync method", "" },
     { "async", HAS_ARG | OPT_INT | OPT_EXPERT, {(void*)&audio_sync_method}, "audio sync method", "" },

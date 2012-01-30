@@ -3,7 +3,7 @@ include $(SUBDIR)../config.mak
 NAME = avcodec
 FFLIBS = avutil
 
-HEADERS = avcodec.h avfft.h dxva2.h opt.h vaapi.h vda.h vdpau.h version.h xvmc.h
+HEADERS = avcodec.h avfft.h dxva2.h vaapi.h vda.h vdpau.h version.h xvmc.h
 
 OBJS = allcodecs.o                                                      \
        audioconvert.o                                                   \
@@ -56,7 +56,8 @@ OBJS-$(CONFIG_VDPAU)                   += vdpau.o
 OBJS-$(CONFIG_A64MULTI_ENCODER)        += a64multienc.o elbg.o
 OBJS-$(CONFIG_A64MULTI5_ENCODER)       += a64multienc.o elbg.o
 OBJS-$(CONFIG_AAC_DECODER)             += aacdec.o aactab.o aacsbr.o aacps.o \
-                                          aacadtsdec.o mpeg4audio.o kbdwin.o
+                                          aacadtsdec.o mpeg4audio.o kbdwin.o \
+                                          sbrdsp.o
 OBJS-$(CONFIG_AAC_ENCODER)             += aacenc.o aaccoder.o    \
                                           aacpsy.o aactab.o      \
                                           psymodel.o iirfilter.o \
@@ -321,7 +322,7 @@ OBJS-$(CONFIG_PGMYUV_DECODER)          += pnmdec.o pnm.o
 OBJS-$(CONFIG_PGMYUV_ENCODER)          += pnmenc.o pnm.o
 OBJS-$(CONFIG_PGSSUB_DECODER)          += pgssubdec.o
 OBJS-$(CONFIG_PICTOR_DECODER)          += pictordec.o cga_data.o
-OBJS-$(CONFIG_PNG_DECODER)             += png.o pngdec.o
+OBJS-$(CONFIG_PNG_DECODER)             += png.o pngdec.o pngdsp.o
 OBJS-$(CONFIG_PNG_ENCODER)             += png.o pngenc.o
 OBJS-$(CONFIG_PPM_DECODER)             += pnmdec.o pnm.o
 OBJS-$(CONFIG_PPM_ENCODER)             += pnmenc.o pnm.o
