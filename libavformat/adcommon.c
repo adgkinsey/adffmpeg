@@ -175,8 +175,9 @@ AVStream * ad_get_vstream(AVFormatContext *s, uint16_t w, uint16_t h, uint8_t ca
         }
     }
     if (!found) {
-        st = av_new_stream( s, id);
+        st = avformat_new_stream(s, NULL);
         if (st) {
+            st->id = id;
             st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
             st->codec->codec_id = codec_id;
             st->codec->width = w;
@@ -238,8 +239,9 @@ static AVStream * ad_get_overlay_stream(AVFormatContext *s, int channel, const c
         }
     }
     if (!found) {
-        st = av_new_stream(s, id);
+        st = avformat_new_stream(s, NULL);
         if (st) {
+            st->id = id;
             st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
             st->codec->codec_id = codec_id;
             st->index = i;
@@ -272,8 +274,9 @@ AVStream * ad_get_audio_stream(AVFormatContext *s, struct NetVuAudioData* audioH
 
     // Did we find our audio stream? If not, create a new one
     if( !found ) {
-        st = av_new_stream(s, audioHeader->channel);
+        st = avformat_new_stream(s, NULL);
         if (st) {
+            st->id = audioHeader->channel;
             st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
             st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
             st->codec->channels = 1;
@@ -346,8 +349,9 @@ static AVStream * ad_get_data_stream(AVFormatContext *s, enum CodecID codecId)
 
     // Did we find our data stream? If not, create a new one
     if( !found ) {
-        st = av_new_stream(s, codecId);
+        st = avformat_new_stream(s, NULL);
         if (st) {
+            st->id = codecId;
             st->codec->codec_type = AVMEDIA_TYPE_DATA;
             st->codec->codec_id = CODEC_ID_TEXT;
 
