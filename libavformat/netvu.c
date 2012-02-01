@@ -32,12 +32,14 @@
 
 static void copy_value_to_field(const char *value, char **dest)
 {
+    int len = strlen(value) + 1;
     if (*dest != NULL)
         av_free(*dest);
 
-    *dest = av_malloc(strlen(value) + 1);
-    strcpy(*dest, value);
-    (*dest)[strlen(value)] = '\0';
+    *dest = av_malloc(len);
+    if (*dest)  {
+        av_strlcpy(*dest, value, len);
+    }
 }
 
 static void netvu_parse_content_type_header(char * p, NetvuContext *nv)
@@ -179,7 +181,9 @@ static int netvu_open(URLContext *h, const char *uri, int flags)
 static int netvu_read(URLContext *h, uint8_t *buf, int size)
 {
     NetvuContext *nv = h->priv_data;
-    return ffurl_read(nv->hd, buf, size);
+    if (nv->hd)
+        return ffurl_read(nv->hd, buf, size);
+    return AVERROR_PROTOCOL_NOT_FOUND;
 }
 
 static int netvu_close(URLContext *h)
@@ -200,11 +204,10 @@ static int netvu_close(URLContext *h)
 
 
 URLProtocol ff_netvu_protocol = {
-    "netvu",
-    netvu_open,
-    netvu_read,
-    NULL,
-    NULL,
-    netvu_close,
-    .priv_data_size = sizeof(NetvuContext),
+    .name               = "netvu",
+    .url_open            = netvu_open,
+    .url_read            = netvu_read,
+    .url_close           = netvu_close,
+    .priv_data_size      = sizeof(NetvuContext),
+    .flags               = URL_PROTOCOL_FLAG_NETWORK,
 };
