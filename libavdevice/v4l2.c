@@ -108,16 +108,20 @@ struct fmt_map {
 static struct fmt_map fmt_conversion_table[] = {
     //ff_fmt           codec_id           v4l2_fmt
     { PIX_FMT_YUV420P, CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_YUV420  },
+    { PIX_FMT_YUV420P, CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_YVU420  },
     { PIX_FMT_YUV422P, CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_YUV422P },
     { PIX_FMT_YUYV422, CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_YUYV    },
     { PIX_FMT_UYVY422, CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_UYVY    },
     { PIX_FMT_YUV411P, CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_YUV411P },
     { PIX_FMT_YUV410P, CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_YUV410  },
-    { PIX_FMT_RGB555,  CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB555  },
-    { PIX_FMT_RGB565,  CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB565  },
+    { PIX_FMT_RGB555LE,CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB555  },
+    { PIX_FMT_RGB555BE,CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB555X },
+    { PIX_FMT_RGB565LE,CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB565  },
+    { PIX_FMT_RGB565BE,CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB565X },
     { PIX_FMT_BGR24,   CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_BGR24   },
     { PIX_FMT_RGB24,   CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB24   },
-    { PIX_FMT_BGRA,    CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_BGR32   },
+    { PIX_FMT_BGR0,    CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_BGR32   },
+    { PIX_FMT_0RGB,    CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB32   },
     { PIX_FMT_GRAY8,   CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_GREY    },
     { PIX_FMT_NV12,    CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_NV12    },
     { PIX_FMT_NONE,    CODEC_ID_MJPEG,    V4L2_PIX_FMT_MJPEG   },
@@ -790,6 +794,8 @@ static int v4l2_read_header(AVFormatContext *s1)
     if (codec_id == CODEC_ID_RAWVIDEO)
         st->codec->codec_tag =
             avcodec_pix_fmt_to_codec_tag(st->codec->pix_fmt);
+    if (desired_format == V4L2_PIX_FMT_YVU420)
+        st->codec->codec_tag = MKTAG('Y', 'V', '1', '2');
     st->codec->width = s->width;
     st->codec->height = s->height;
     st->codec->bit_rate = s->frame_size * 1/av_q2d(st->codec->time_base) * 8;

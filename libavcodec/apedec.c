@@ -20,10 +20,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#define BITSTREAM_READER_LE
 #include "avcodec.h"
 #include "dsputil.h"
-#include "get_bits.h"
 #include "bytestream.h"
 #include "libavutil/audioconvert.h"
 #include "libavutil/avassert.h"
@@ -133,6 +131,7 @@ typedef struct APEContext {
     DSPContext dsp;
     int channels;
     int samples;                             ///< samples left to decode in current frame
+    int bps;
 
     int fileversion;                         ///< codec version, very important in decoding process
     int compression_level;                   ///< compression levels
@@ -155,6 +154,7 @@ typedef struct APEContext {
 
     uint8_t *data;                           ///< current frame data
     uint8_t *data_end;                       ///< frame data end
+    int data_size;                           ///< frame data allocated size
     const uint8_t *ptr;                      ///< current position in frame data
 
     int error;
@@ -171,6 +171,8 @@ static av_cold int ape_decode_close(AVCodecContext *avctx)
         av_freep(&s->filterbuf[i]);
 
     av_freep(&s->data);
+    s->data_size = 0;
+
     return 0;
 }
 
@@ -183,13 +185,25 @@ static av_cold int ape_decode_init(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "Incorrect extradata\n");
         return AVERROR(EINVAL);
     }
-    if (avctx->bits_per_coded_sample != 16) {
-        av_log(avctx, AV_LOG_ERROR, "Only 16-bit samples are supported\n");
-        return AVERROR(EINVAL);
-    }
     if (avctx->channels > 2) {
         av_log(avctx, AV_LOG_ERROR, "Only mono and stereo is supported\n");
         return AVERROR(EINVAL);
+    }
+    s->bps = avctx->bits_per_coded_sample;
+    switch (s->bps) {
+    case 8:
+        avctx->sample_fmt = AV_SAMPLE_FMT_U8;
+        break;
+    case 16:
+        avctx->sample_fmt = AV_SAMPLE_FMT_S16;
+        break;
+    case 24:
+        avctx->sample_fmt = AV_SAMPLE_FMT_S32;
+        break;
+    default:
+        av_log_ask_for_sample(avctx, "Unsupported bits per coded sample %d\n",
+                              s->bps);
+        return AVERROR_PATCHWELCOME;
     }
     s->avctx             = avctx;
     s->channels          = avctx->channels;
@@ -214,7 +228,6 @@ static av_cold int ape_decode_init(AVCodecContext *avctx)
     }
 
     dsputil_init(&s->dsp, avctx);
-    avctx->sample_fmt = AV_SAMPLE_FMT_S16;
     avctx->channel_layout = (avctx->channels==2) ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO;
 
     avcodec_get_frame_defaults(&s->frame);
@@ -814,9 +827,10 @@ static int ape_decode_frame(AVCodecContext *avctx, void *data,
                             int *got_frame_ptr, AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
-    int buf_size = avpkt->size;
     APEContext *s = avctx->priv_data;
-    int16_t *samples;
+    uint8_t *sample8;
+    int16_t *sample16;
+    int32_t *sample24;
     int i, ret;
     int blockstodecode;
     int bytes_used = 0;
@@ -827,21 +841,25 @@ static int ape_decode_frame(AVCodecContext *avctx, void *data,
 
     if(!s->samples){
         uint32_t nblocks, offset;
-        void *tmp_data;
+        int buf_size;
 
-        if (!buf_size) {
+        if (!avpkt->size) {
             *got_frame_ptr = 0;
             return 0;
         }
-        if (buf_size < 8) {
+        if (avpkt->size < 8) {
             av_log(avctx, AV_LOG_ERROR, "Packet is too small\n");
             return AVERROR_INVALIDDATA;
         }
+        buf_size = avpkt->size & ~3;
+        if (buf_size != avpkt->size) {
+            av_log(avctx, AV_LOG_WARNING, "packet size is not a multiple of 4. "
+                   "extra bytes at the end will be skipped.\n");
+        }
 
-        tmp_data = av_realloc(s->data, FFALIGN(buf_size, 4));
-        if (!tmp_data)
+        av_fast_malloc(&s->data, &s->data_size, buf_size);
+        if (!s->data)
             return AVERROR(ENOMEM);
-        s->data = tmp_data;
         s->dsp.bswap_buf((uint32_t*)s->data, (const uint32_t*)buf, buf_size >> 2);
         s->ptr = s->data;
         s->data_end = s->data + buf_size;
@@ -874,12 +892,12 @@ static int ape_decode_frame(AVCodecContext *avctx, void *data,
             return AVERROR_INVALIDDATA;
         }
 
-        bytes_used = buf_size;
+        bytes_used = avpkt->size;
     }
 
     if (!s->data) {
         *got_frame_ptr = 0;
-        return buf_size;
+        return avpkt->size;
     }
 
     blockstodecode = FFMIN(BLOCKS_PER_LOOP, s->samples);
@@ -890,7 +908,6 @@ static int ape_decode_frame(AVCodecContext *avctx, void *data,
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
-    samples = (int16_t *)s->frame.data[0];
 
     s->error=0;
 
@@ -906,10 +923,31 @@ static int ape_decode_frame(AVCodecContext *avctx, void *data,
         return AVERROR_INVALIDDATA;
     }
 
-    for (i = 0; i < blockstodecode; i++) {
-        *samples++ = s->decoded0[i];
-        if(s->channels == 2)
-            *samples++ = s->decoded1[i];
+    switch (s->bps) {
+    case 8:
+        sample8 = (uint8_t *)s->frame.data[0];
+        for (i = 0; i < blockstodecode; i++) {
+            *sample8++ = (s->decoded0[i] + 0x80) & 0xff;
+            if (s->channels == 2)
+                *sample8++ = (s->decoded1[i] + 0x80) & 0xff;
+        }
+        break;
+    case 16:
+        sample16 = (int16_t *)s->frame.data[0];
+        for (i = 0; i < blockstodecode; i++) {
+            *sample16++ = s->decoded0[i];
+            if (s->channels == 2)
+                *sample16++ = s->decoded1[i];
+        }
+        break;
+    case 24:
+        sample24 = (int32_t *)s->frame.data[0];
+        for (i = 0; i < blockstodecode; i++) {
+            *sample24++ = s->decoded0[i] << 8;
+            if (s->channels == 2)
+                *sample24++ = s->decoded1[i] << 8;
+        }
+        break;
     }
 
     s->samples -= blockstodecode;
