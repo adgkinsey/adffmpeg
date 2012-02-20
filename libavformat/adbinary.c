@@ -76,7 +76,7 @@ static int adbinary_mpeg(AVFormatContext *s,
     int textSize = 0;
     int n, status, errorVal = 0;
 
-    n = ad_get_buffer(pb, (uint8_t *)vidDat, hdrSize);
+    n = avio_read(pb, (uint8_t *)vidDat, hdrSize);
     if (n < hdrSize) {
         av_log(s, AV_LOG_ERROR, "%s: short of data reading header, "
                                 "expected %d, read %d\n",
@@ -176,7 +176,7 @@ static int ad_read_audio(AVFormatContext *s,
 
     // Get the fixed size portion of the audio header
     size = NetVuAudioDataHeaderSize - sizeof(unsigned char *);
-    if (ad_get_buffer( pb, (uint8_t*)data, size) != size)
+    if (avio_read( pb, (uint8_t*)data, size) != size)
         return ADFFMPEG_AD_ERROR_AUDIO_ADPCM_GET_BUFFER;
 
     // endian fix it...
@@ -188,7 +188,7 @@ static int ad_read_audio(AVFormatContext *s,
         if( data->additionalData == NULL )
             return AVERROR(ENOMEM);
 
-        if (ad_get_buffer( pb, data->additionalData, data->sizeOfAdditionalData) != data->sizeOfAdditionalData)
+        if (avio_read( pb, data->additionalData, data->sizeOfAdditionalData) != data->sizeOfAdditionalData)
             return ADFFMPEG_AD_ERROR_AUDIO_ADPCM_GET_BUFFER2;
     }
     else
@@ -438,29 +438,34 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     AVIOContext *       pb        = s->pb;
     void *              payload   = NULL;
     char *              txtDat    = NULL;
-    int                 errorVal  = 0;
+    int                 errorVal  = -1;
     unsigned char *     tempbuf   = NULL;
     enum AVMediaType    mediaType = AVMEDIA_TYPE_UNKNOWN;
     enum CodecID        codecId   = CODEC_ID_NONE;
     int                 data_type, data_channel;
     unsigned int        size;
+    uint8_t             temp[6];
 
     // First read the 6 byte separator
-    data_type    = avio_r8(pb);
-    if (data_type >= AD_DATATYPE_MAX)  {
-        av_log(s, AV_LOG_WARNING, "%s: No handler for data_type = %d", __func__, data_type);
-        return ADFFMPEG_AD_ERROR_READ_6_BYTE_SEPARATOR;
+    if (avio_read(pb, temp, 6) >= 6)  {
+        data_type    = temp[0];
+        data_channel = temp[1];
+        size         = AV_RB32(temp + 2);
+        if (data_type >= AD_DATATYPE_MAX)  {
+            av_log(s, AV_LOG_WARNING, "%s: No handler for data_type = %d", __func__, data_type);
+            return ADFFMPEG_AD_ERROR_READ_6_BYTE_SEPARATOR;
+        }
+        if (data_channel >= 32)  {
+            av_log(s, AV_LOG_WARNING, "%s: Channel number %d too high", __func__, data_channel);
+            return ADFFMPEG_AD_ERROR_READ_6_BYTE_SEPARATOR;
+        }
+        if (size >= 0x1000000)  {
+            av_log(s, AV_LOG_WARNING, "%s: Packet too large, %d bytes", __func__, size);
+            return ADFFMPEG_AD_ERROR_READ_6_BYTE_SEPARATOR;
+        }
     }
-    data_channel = avio_r8(pb);
-    if (data_channel >= 32)  {
-        av_log(s, AV_LOG_WARNING, "%s: Channel number %d too high", __func__, data_channel);
+    else
         return ADFFMPEG_AD_ERROR_READ_6_BYTE_SEPARATOR;
-    }
-    size         = avio_rb32(pb);
-    if (size >= 0x1000000)  {
-        av_log(s, AV_LOG_WARNING, "%s: Packet too large, %d bytes", __func__, size);
-        return ADFFMPEG_AD_ERROR_READ_6_BYTE_SEPARATOR;
-    }
 
     if (size == 0)  {
         if(url_feof(pb))

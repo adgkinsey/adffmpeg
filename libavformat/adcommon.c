@@ -576,33 +576,6 @@ static void ad_parseText(AVFormatContext *s, struct ADFrameData *frameData)
 }
 #endif
 
-int ad_get_buffer(AVIOContext *s, uint8_t *buf, int size)
-{
-#if !defined(FF_API_OLD_AVIO) || !FF_API_OLD_AVIO
-    return avio_read(s, buf, size);
-#else
-    int TotalDataRead = 0;
-    int DataReadThisTime = 0;
-    int RetryBoundry = 200;
-    int retrys = 0;
-
-    //get data while ther is no time out and we still need data
-    while ( (TotalDataRead < size) && (retrys < RetryBoundry) )  {
-        DataReadThisTime = avio_read(s, buf, (size - TotalDataRead));
-
-        // if we retrieved some data keep trying until we get the required data
-        // or we have much longer time out
-        if(DataReadThisTime > 0)  {
-            if (RetryBoundry < 1000)
-                RetryBoundry += 10;
-            TotalDataRead += DataReadThisTime;
-        }
-        retrys++;
-    }
-    return TotalDataRead;
-#endif
-}
-
 int initADData(int data_type, enum AVMediaType *mediaType, enum CodecID *codecId, void **payload)
 {
     switch(data_type)  {
@@ -679,7 +652,7 @@ int ad_read_jpeg(AVFormatContext *s, AVPacket *pkt, struct NetVuImageData *video
     // (possible if this is called by adraw demuxer)
     if (video_data && (!pic_version_valid(video_data->version)))  {
         // Read the pic structure
-        if ((n = ad_get_buffer(pb, (uint8_t*)video_data, nviSize)) != nviSize)  {
+        if ((n = avio_read(pb, (uint8_t*)video_data, nviSize)) != nviSize)  {
             av_log(s, AV_LOG_ERROR, "%s: Short of data reading "
                                     "struct NetVuImageData, expected %d, read %d\n",
                                     __func__, nviSize, n);
@@ -706,7 +679,7 @@ int ad_read_jpeg(AVFormatContext *s, AVPacket *pkt, struct NetVuImageData *video
     }
 
     // Copy the additional text block
-    if( (n = ad_get_buffer( pb, *text_data, textSize )) != textSize )  {
+    if( (n = avio_read( pb, *text_data, textSize )) != textSize )  {
         av_log(s, AV_LOG_ERROR, "%s: short of data reading text block"
                                 " data, expected %d, read %d\n",
                                 __func__, textSize, n);
@@ -734,7 +707,7 @@ int ad_read_jpeg(AVFormatContext *s, AVPacket *pkt, struct NetVuImageData *video
     memcpy(ptr, jfif, hdrSize);
     ptr += hdrSize;
     // Now get the compressed JPEG data into the packet
-    if ((n = ad_get_buffer(pb, ptr, video_data->size)) != video_data->size) {
+    if ((n = avio_read(pb, ptr, video_data->size)) != video_data->size) {
         av_log(s, AV_LOG_ERROR, "%s: short of data reading pic body, "
                                 "expected %d, read %d\n", __func__,
                                 video_data->size, n);
@@ -760,7 +733,7 @@ int ad_read_jfif(AVFormatContext *s, AVPacket *pkt, int imgLoaded, int size,
             return ADFFMPEG_AD_ERROR_JFIF_NEW_PACKET;
         }
 
-        if ((n = ad_get_buffer(pb, pkt->data, size)) < size) {
+        if ((n = avio_read(pb, pkt->data, size)) < size) {
             av_log(s, AV_LOG_ERROR, "ad_read_jfif: short of data reading jfif image, expected %d, read %d\n", size, n);
             return ADFFMPEG_AD_ERROR_JFIF_GET_BUFFER;
         }
@@ -801,7 +774,7 @@ int ad_read_info(AVFormatContext *s, AVPacket *pkt, int size)
     //--size;
     
     // Get the data
-    if( (n = ad_get_buffer( pb, pkt->data, size)) != size )
+    if( (n = avio_read( pb, pkt->data, size)) != size )
         return ADFFMPEG_AD_ERROR_INFO_GET_BUFFER;
 
     return errorVal;
@@ -817,7 +790,7 @@ int ad_read_layout(AVFormatContext *s, AVPacket *pkt, int size)
         return ADFFMPEG_AD_ERROR_LAYOUT_NEW_PACKET;
 
     // Get the data
-    if( (n = ad_get_buffer( pb, pkt->data, size)) != size )
+    if( (n = avio_read( pb, pkt->data, size)) != size )
         return ADFFMPEG_AD_ERROR_LAYOUT_GET_BUFFER;
 
     return errorVal;
@@ -924,7 +897,7 @@ int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int channel, int insize, 
     char *comment = NULL;
     
     inbuf = av_malloc(insize);
-    n = ad_get_buffer(pb, inbuf, insize);
+    n = avio_read(pb, inbuf, insize);
     if (n != insize)  {
         av_log(s, AV_LOG_ERROR, "%s: short of data reading pbm data body, expected %d, read %d\n", __func__, insize, n);
         return ADFFMPEG_AD_ERROR_OVERLAY_GET_BUFFER;
