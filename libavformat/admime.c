@@ -506,7 +506,7 @@ static int admime_mpeg(AVFormatContext *s,
         return ADFFMPEG_AD_ERROR_MPEG4_MIME_NEW_PACKET;
 
     // Now read the frame data into the packet
-    if (ad_get_buffer( pb, pkt->data, size ) != size )
+    if (avio_read( pb, pkt->data, size ) != size )
         return ADFFMPEG_AD_ERROR_MPEG4_MIME_GET_BUFFER;
     
     if (adContext->streamDatatype == 0)  {
@@ -529,7 +529,7 @@ static int admime_mpeg(AVFormatContext *s,
         unsigned char *textBuffer = av_malloc( size );
 
         if (textBuffer != NULL ) {
-            if (ad_get_buffer( pb, textBuffer, size ) == size ) {
+            if (avio_read( pb, textBuffer, size ) == size ) {
                 // Now parse the text buffer and populate the
                 // _image_data struct
                 if (parse_mp4_text_data(textBuffer, size, vidDat, txtDat ) != 0) {
@@ -576,7 +576,7 @@ static int ad_read_audio(AVFormatContext *s,
         return ADFFMPEG_AD_ERROR_AUDIO_ADPCM_MIME_NEW_PACKET;
 
     // Now get the actual audio data
-    if (ad_get_buffer( pb, pkt->data, size) != size)
+    if (avio_read( pb, pkt->data, size) != size)
         return ADFFMPEG_AD_ERROR_AUDIO_ADPCM_MIME_GET_BUFFER;
 
     audiodata_network2host(pkt->data, size);
