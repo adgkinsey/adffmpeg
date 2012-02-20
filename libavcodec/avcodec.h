@@ -246,6 +246,7 @@ enum CodecID {
     CODEC_ID_DXTORY,
     CODEC_ID_V410,
     CODEC_ID_XWD,
+    CODEC_ID_CDXL,
     CODEC_ID_Y41P       = MKBETAG('Y','4','1','P'),
     CODEC_ID_ESCAPE130  = MKBETAG('E','1','3','0'),
     CODEC_ID_AVRP       = MKBETAG('A','V','R','P'),
@@ -1787,7 +1788,7 @@ typedef struct AVCodecContext {
 #define FF_IDCT_SIMPLE        2
 #define FF_IDCT_SIMPLEMMX     3
 #define FF_IDCT_LIBMPEG2MMX   4
-#define FF_IDCT_PS2           5
+#define FF_IDCT_MMI           5
 #define FF_IDCT_ARM           7
 #define FF_IDCT_ALTIVEC       8
 #define FF_IDCT_SH4           9

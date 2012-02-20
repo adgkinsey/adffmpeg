@@ -86,6 +86,7 @@ static const IdStrMap img_tags[] = {
     { CODEC_ID_SUNRAST   , "im1"},
     { CODEC_ID_SUNRAST   , "im8"},
     { CODEC_ID_SUNRAST   , "im24"},
+    { CODEC_ID_SUNRAST   , "im32"},
     { CODEC_ID_SUNRAST   , "sunras"},
     { CODEC_ID_JPEG2000  , "j2c"},
     { CODEC_ID_JPEG2000  , "j2k"},
@@ -520,7 +521,8 @@ AVOutputFormat ff_image2_muxer = {
     .name           = "image2",
     .long_name      = NULL_IF_CONFIG_SMALL("image2 sequence"),
     .extensions     = "bmp,dpx,jls,jpeg,jpg,ljpg,pam,pbm,pcx,pgm,pgmyuv,png,"
-                      "ppm,sgi,tga,tif,tiff,jp2,j2c,xwd",
+                      "ppm,sgi,tga,tif,tiff,jp2,j2c,xwd,sun,ras,rs,im1,im8,im24,"
+                      "sunras",
     .priv_data_size = sizeof(VideoData),
     .video_codec    = CODEC_ID_MJPEG,
     .write_header   = write_header,

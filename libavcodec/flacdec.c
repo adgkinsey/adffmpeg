@@ -288,7 +288,7 @@ static int decode_subframe_fixed(FLACContext *s, int channel, int pred_order)
 {
     const int blocksize = s->blocksize;
     int32_t *decoded = s->decoded[channel];
-    int av_uninit(a), av_uninit(b), av_uninit(c), av_uninit(d), i;
+    int a, b, c, d, i;
 
     /* warm up samples */
     for (i = 0; i < pred_order; i++) {
@@ -422,7 +422,16 @@ static inline int decode_subframe(FLACContext *s, int channel)
     type = get_bits(&s->gb, 6);
 
     if (get_bits1(&s->gb)) {
+        int left = get_bits_left(&s->gb);
         wasted = 1;
+        if ( left < 0 ||
+            (left < s->curr_bps && !show_bits_long(&s->gb, left)) ||
+                                   !show_bits_long(&s->gb, s->curr_bps)) {
+            av_log(s->avctx, AV_LOG_ERROR,
+                   "Invalid number of wasted bits > available bits (%d) - left=%d\n",
+                   s->curr_bps, left);
+            return AVERROR_INVALIDDATA;
+        }
         while (!get_bits1(&s->gb))
             wasted++;
         s->curr_bps -= wasted;

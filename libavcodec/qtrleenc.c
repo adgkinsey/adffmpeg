@@ -120,7 +120,7 @@ static void qtrle_encode_line(QtrleEncContext *s, AVFrame *p, int line, uint8_t 
     signed char rlecode;
 
     /* We will use it to compute the best bulk copy sequence */
-    unsigned int bulkcount;
+    unsigned int av_uninit(bulkcount);
     /* This will be the number of pixels equal to the preivous frame one's
      * starting from the ith pixel */
     unsigned int skipcount;

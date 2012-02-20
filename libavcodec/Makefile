@@ -111,6 +111,7 @@ OBJS-$(CONFIG_C93_DECODER)             += c93.o
 OBJS-$(CONFIG_CAVS_DECODER)            += cavs.o cavsdec.o cavsdsp.o \
                                           mpeg12data.o mpegvideo.o
 OBJS-$(CONFIG_CDGRAPHICS_DECODER)      += cdgraphics.o
+OBJS-$(CONFIG_CDXL_DECODER)            += cdxl.o
 OBJS-$(CONFIG_CINEPAK_DECODER)         += cinepak.o
 OBJS-$(CONFIG_CLJR_DECODER)            += cljr.o
 OBJS-$(CONFIG_CLJR_ENCODER)            += cljr.o
@@ -329,8 +330,10 @@ OBJS-$(CONFIG_PNG_ENCODER)             += png.o pngenc.o
 OBJS-$(CONFIG_PPM_DECODER)             += pnmdec.o pnm.o
 OBJS-$(CONFIG_PPM_ENCODER)             += pnmenc.o pnm.o
 OBJS-$(CONFIG_PRORES_DECODER)          += proresdec2.o
-OBJS-$(CONFIG_PRORES_LGPL_DECODER)     += proresdec_lgpl.o proresdsp.o
-OBJS-$(CONFIG_PRORES_ENCODER)          += proresenc.o
+OBJS-$(CONFIG_PRORES_LGPL_DECODER)     += proresdec_lgpl.o proresdsp.o proresdata.o
+OBJS-$(CONFIG_PRORES_ENCODER)          += proresenc_anatoliy.o
+OBJS-$(CONFIG_PRORES_ANATOLIY_ENCODER) += proresenc_anatoliy.o
+OBJS-$(CONFIG_PRORES_KOSTYA_ENCODER)   += proresenc_kostya.o proresdata.o proresdsp.o
 OBJS-$(CONFIG_PTX_DECODER)             += ptx.o
 OBJS-$(CONFIG_QCELP_DECODER)           += qcelpdec.o celp_math.o         \
                                           celp_filters.o acelp_vectors.o \
@@ -390,6 +393,7 @@ OBJS-$(CONFIG_SP5X_DECODER)            += sp5xdec.o mjpegdec.o mjpeg.o
 OBJS-$(CONFIG_SRT_DECODER)             += srtdec.o ass.o
 OBJS-$(CONFIG_SRT_ENCODER)             += srtenc.o ass_split.o
 OBJS-$(CONFIG_SUNRAST_DECODER)         += sunrast.o
+OBJS-$(CONFIG_SUNRAST_ENCODER)         += sunrastenc.o
 OBJS-$(CONFIG_SVQ1_DECODER)            += svq1dec.o svq1.o h263.o \
                                           mpegvideo.o error_resilience.o
 OBJS-$(CONFIG_SVQ1_ENCODER)            += svq1enc.o svq1.o    \
@@ -747,7 +751,7 @@ HOSTPROGS = aac_tablegen aacps_tablegen cbrt_tablegen cos_tablegen      \
             dv_tablegen motionpixels_tablegen mpegaudio_tablegen        \
             pcm_tablegen qdm2_tablegen sinewin_tablegen
 
-DIRS = alpha arm avr32 bfin ppc ps2 sh4 sparc x86
+DIRS = alpha arm avr32 bfin mips ppc sh4 sparc x86
 
 CLEANFILES = *_tables.c *_tables.h *_tablegen$(HOSTEXESUF)
 

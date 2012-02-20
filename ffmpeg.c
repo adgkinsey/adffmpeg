@@ -49,6 +49,7 @@
 #include "libavutil/avstring.h"
 #include "libavutil/libm.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/timestamp.h"
 #include "libavformat/os_support.h"
 #include "libswresample/swresample.h"
 
@@ -174,6 +175,7 @@ static float dts_delta_threshold = 10;
 static float dts_error_threshold = 3600*30;
 
 static int print_stats = 1;
+static int debug_ts = 0;
 
 static uint8_t *audio_buf;
 static unsigned int allocated_audio_buf_size;
@@ -500,7 +502,7 @@ static int alloc_buffer(AVCodecContext *s, InputStream *ist, FrameBuffer **pbuf)
     /* XXX this shouldn't be needed, but some tests break without this line
      * those decoders are buggy and need to be fixed.
      * the following tests fail:
-     * bethsoft-vid, cdgraphics, ansi, aasc, fraps-v1, qtrle-1bit
+     * cdgraphics, ansi, aasc, fraps-v1, qtrle-1bit
      */
     memset(buf->base[0], 128, ret);
 
@@ -508,7 +510,7 @@ static int alloc_buffer(AVCodecContext *s, InputStream *ist, FrameBuffer **pbuf)
     for (i = 0; i < FF_ARRAY_ELEMS(buf->data); i++) {
         const int h_shift = i==0 ? 0 : h_chroma_shift;
         const int v_shift = i==0 ? 0 : v_chroma_shift;
-        if (s->flags & CODEC_FLAG_EMU_EDGE)
+        if ((s->flags & CODEC_FLAG_EMU_EDGE) || !buf->linesize[1])
             buf->data[i] = buf->base[i];
         else
             buf->data[i] = buf->base[i] +
@@ -620,6 +622,8 @@ static int configure_video_filters(InputStream *ist, OutputStream *ost)
     int ret;
 
     ost->graph = avfilter_graph_alloc();
+    if (!ost->graph)
+        return AVERROR(ENOMEM);
 
     if (ist->st->sample_aspect_ratio.num) {
         sample_aspect_ratio = ist->st->sample_aspect_ratio;
@@ -1103,6 +1107,13 @@ static int encode_audio_frame(AVFormatContext *s, OutputStream *ost,
         audio_size += pkt.size;
 
         av_free_packet(&pkt);
+    }
+
+    if (debug_ts) {
+        av_log(NULL, AV_LOG_INFO, "encoder -> type:audio "
+               "pkt_pts:%s pkt_pts_time:%s pkt_dts:%s pkt_dts_time:%s\n",
+               av_ts2str(pkt.pts), av_ts2timestr(pkt.pts, &ost->st->time_base),
+               av_ts2str(pkt.dts), av_ts2timestr(pkt.dts, &ost->st->time_base));
     }
 
     return ret;
@@ -1609,6 +1620,13 @@ static void do_video_out(AVFormatContext *s, OutputStream *ost,
                 if (pkt.dts != AV_NOPTS_VALUE)
                     pkt.dts = av_rescale_q(pkt.dts, enc->time_base, ost->st->time_base);
 
+                if (debug_ts) {
+                    av_log(NULL, AV_LOG_INFO, "encoder -> type:video "
+                           "pkt_pts:%s pkt_pts_time:%s pkt_dts:%s pkt_dts_time:%s\n",
+                           av_ts2str(pkt.pts), av_ts2timestr(pkt.pts, &ost->st->time_base),
+                           av_ts2str(pkt.dts), av_ts2timestr(pkt.dts, &ost->st->time_base));
+                }
+
                 if (format_video_sync == VSYNC_DROP)
                     pkt.pts = pkt.dts = AV_NOPTS_VALUE;
 
@@ -1913,6 +1931,7 @@ static void do_streamcopy(InputStream *ist, OutputStream *ost, const AVPacket *p
     if (  ost->st->codec->codec_id != CODEC_ID_H264
        && ost->st->codec->codec_id != CODEC_ID_MPEG1VIDEO
        && ost->st->codec->codec_id != CODEC_ID_MPEG2VIDEO
+       && ost->st->codec->codec_id != CODEC_ID_VC1
        ) {
         if (av_parser_change(ist->st->parser, ost->st->codec, &opkt.data, &opkt.size, pkt->data, pkt->size, pkt->flags & AV_PKT_FLAG_KEY))
             opkt.destruct = av_destruct_packet;
@@ -2137,13 +2156,10 @@ static int transcode_video(InputStream *ist, AVPacket *pkt, int *got_output, int
                 ret = AVERROR(ENOMEM);
                 goto end;
             }
-            avcodec_get_frame_defaults(ist->filtered_frame);
             filtered_frame = ist->filtered_frame;
             *filtered_frame= *decoded_frame; //for me_threshold
-            if (ost->picref) {
-                avfilter_fill_frame_from_video_buffer_ref(filtered_frame, ost->picref);
-                filtered_frame->pts = av_rescale_q(ost->picref->pts, ist_pts_tb, AV_TIME_BASE_Q);
-            }
+            avfilter_fill_frame_from_video_buffer_ref(filtered_frame, ost->picref);
+            filtered_frame->pts = av_rescale_q(ost->picref->pts, ist_pts_tb, AV_TIME_BASE_Q);
             if (ost->picref->video && !ost->frame_aspect_ratio)
                 ost->st->codec->sample_aspect_ratio = ost->picref->video->sample_aspect_ratio;
             do_video_out(output_files[ost->file_index].ctx, ost, ist, filtered_frame);
@@ -3004,10 +3020,16 @@ static int transcode(OutputFile *output_files, int nb_output_files,
         if (pkt.dts != AV_NOPTS_VALUE)
             pkt.dts *= ist->ts_scale;
 
-        //fprintf(stderr, "next:%"PRId64" dts:%"PRId64"/%"PRId64" off:%"PRId64" %d\n",
-        //        ist->next_dts,
-        //        ist->dts, av_rescale_q(pkt.dts, ist->st->time_base, AV_TIME_BASE_Q), input_files[ist->file_index].ts_offset,
-        //        ist->st->codec->codec_type);
+        if (debug_ts) {
+            av_log(NULL, AV_LOG_INFO, "demuxer -> ist_index:%d type:%s "
+                    "next_pts:%s next_pts_time:%s pkt_pts:%s pkt_pts_time:%s pkt_dts:%s pkt_dts_time:%s off:%"PRId64"\n",
+                    ist_index, av_get_media_type_string(ist->st->codec->codec_type),
+                    av_ts2str(ist->next_pts), av_ts2timestr(ist->next_pts, &ist->st->time_base),
+                    av_ts2str(pkt.pts), av_ts2timestr(pkt.pts, &ist->st->time_base),
+                    av_ts2str(pkt.dts), av_ts2timestr(pkt.dts, &ist->st->time_base),
+                    input_files[ist->file_index].ts_offset);
+        }
+
         if (pkt.dts != AV_NOPTS_VALUE && ist->next_dts != AV_NOPTS_VALUE && !copy_ts) {
             int64_t pkt_dts = av_rescale_q(pkt.dts, ist->st->time_base, AV_TIME_BASE_Q);
             int64_t delta   = pkt_dts - ist->next_dts;
@@ -4380,6 +4402,18 @@ static void opt_output_file(void *optctx, const char *filename)
         }
     }
 
+
+    for (i = nb_output_streams - oc->nb_streams; i < nb_output_streams; i++) { //for all streams of this output file
+        AVDictionaryEntry *e;
+        ost = &output_streams[i];
+
+        if (   ost->stream_copy
+            && (e = av_dict_get(codec_opts, "flags", NULL, AV_DICT_IGNORE_SUFFIX))
+            && (!e->key[5] || check_stream_specifier(oc, ost->st, e->key+6)))
+            if (av_opt_set(ost->st->codec, "flags", e->value, 0) < 0)
+                exit_program(1);
+    }
+
     /* handle attached files */
     for (i = 0; i < o->nb_attachments; i++) {
         AVIOContext *pb;
@@ -4980,6 +5014,7 @@ static const OptionDef options[] = {
     { "stats", OPT_BOOL, {&print_stats}, "print progress report during encoding", },
     { "attach", HAS_ARG | OPT_FUNC2, {(void*)opt_attach}, "add an attachment to the output file", "filename" },
     { "dump_attachment", HAS_ARG | OPT_STRING | OPT_SPEC, {.off = OFFSET(dump_attachment)}, "extract an attachment into a file", "filename" },
+    { "debug_ts", OPT_BOOL | OPT_EXPERT, {&debug_ts}, "print timestamp debugging info" },
 
     /* video options */
     { "vframes", HAS_ARG | OPT_VIDEO | OPT_FUNC2, {(void*)opt_video_frames}, "set the number of video frames to record", "number" },

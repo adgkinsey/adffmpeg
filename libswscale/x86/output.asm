@@ -59,7 +59,7 @@ SECTION .text
 %macro yuv2planeX_fn 3
 
 %if ARCH_X86_32
-%define cntr_reg filterq
+%define cntr_reg fltsizeq
 %define movsx mov
 %else
 %define cntr_reg r11
@@ -146,7 +146,7 @@ cglobal yuv2planeX_%1, %3, 7, %2, filter, fltsize, src, dst, w, dither, offset
     mova            m1, [yuv2yuvX_%1_start]
     mova            m2,  m1
 %endif ; %1 == 8/9/10/16
-    movsx     cntr_reg,  fltsizem
+    movsx     cntr_reg,  r1m ; FIXME should be fltsizem, but the assembler does the wrong thing b/c of SUB above
 .filterloop_ %+ %%i:
     ; input pixels
     mov             r6, [srcq+gprsize*cntr_reg-2*gprsize]
@@ -264,7 +264,7 @@ yuv2planeX_fn  9,  7, 5
 yuv2planeX_fn 10,  7, 5
 yuv2planeX_fn 16,  8, 5
 
-%ifdef HAVE_AVX
+%if HAVE_AVX
 INIT_XMM avx
 yuv2planeX_fn  8, 10, 7
 yuv2planeX_fn  9,  7, 5
@@ -404,7 +404,7 @@ yuv2plane1_fn 16, 6, 3
 INIT_XMM sse4
 yuv2plane1_fn 16, 5, 3
 
-%ifdef HAVE_AVX
+%if HAVE_AVX
 INIT_XMM avx
 yuv2plane1_fn  8, 5, 5
 yuv2plane1_fn  9, 5, 3
