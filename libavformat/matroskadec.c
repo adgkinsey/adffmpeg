@@ -542,7 +542,7 @@ static EbmlSyntax matroska_clusters[] = {
     { 0 }
 };
 
-static const char *matroska_doctypes[] = { "matroska", "webm" };
+static const char *const matroska_doctypes[] = { "matroska", "webm" };
 
 static int matroska_resync(MatroskaDemuxContext *matroska, int64_t last_pos)
 {
@@ -697,16 +697,19 @@ static int ebml_read_float(AVIOContext *pb, int size, double *num)
  */
 static int ebml_read_ascii(AVIOContext *pb, int size, char **str)
 {
-    av_free(*str);
+    char *res;
+
     /* EBML strings are usually not 0-terminated, so we allocate one
      * byte more, read the string and NULL-terminate it ourselves. */
-    if (!(*str = av_malloc(size + 1)))
+    if (!(res = av_malloc(size + 1)))
         return AVERROR(ENOMEM);
-    if (avio_read(pb, (uint8_t *) *str, size) != size) {
-        av_freep(str);
+    if (avio_read(pb, (uint8_t *) res, size) != size) {
+        av_free(res);
         return AVERROR(EIO);
     }
-    (*str)[size] = '\0';
+    (res)[size] = '\0';
+    av_free(*str);
+    *str = res;
 
     return 0;
 }
@@ -1638,7 +1641,6 @@ static int matroska_read_header(AVFormatContext *s)
                       st->codec->height * track->video.display_width,
                       st->codec-> width * track->video.display_height,
                       255);
-            if (st->codec->codec_id != CODEC_ID_H264)
             st->need_parsing = AVSTREAM_PARSE_HEADERS;
             if (track->default_duration)
                 st->avg_frame_rate = av_d2q(1000000000.0/track->default_duration, INT_MAX);

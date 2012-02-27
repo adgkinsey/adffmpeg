@@ -1375,6 +1375,19 @@ typedef struct AVCodecContext {
      *           the decoder output. (we assume the decoder matches the spec)
      * Decoding: Number of frames delay in addition to what a standard decoder
      *           as specified in the spec would produce.
+     *
+     * Video:
+     *   Number of frames the decoded output will be delayed relative to the
+     *   encoded input.
+     *
+     * Audio:
+     *   Number of "priming" samples added to the beginning of the stream
+     *   during encoding. The decoded output will be delayed by this many
+     *   samples relative to the input to the encoder. Note that this field is
+     *   purely informational and does not directly affect the pts output by
+     *   the encoder, which should always be based on the actual presentation
+     *   time, including any delay.
+     *
      * - encoding: Set by libavcodec.
      * - decoding: Set by libavcodec.
      */
@@ -4058,6 +4071,14 @@ void avcodec_default_free_buffers(AVCodecContext *s);
  */
 int av_get_bits_per_sample(enum CodecID codec_id);
 
+/**
+ * Return the PCM codec associated with a sample format.
+ * @param be  endianness, 0 for little, 1 for big,
+ *            -1 (or anything else) for native
+ * @return  CODEC_ID_PCM_* or CODEC_ID_NONE
+ */
+enum CodecID av_get_pcm_codec(enum AVSampleFormat fmt, int be);
+
 /* frame parsing */
 typedef struct AVCodecParserContext {
     void *priv_data;
@@ -4185,6 +4206,13 @@ typedef struct AVCodecParserContext {
      * Previous frame byte position.
      */
     int64_t last_pos;
+
+    /**
+     * Duration of the current frame.
+     * For audio, this is in units of 1 / AVCodecContext.sample_rate.
+     * For all other types, this is in units of AVCodecContext.time_base.
+     */
+    int duration;
 } AVCodecParserContext;
 
 typedef struct AVCodecParser {

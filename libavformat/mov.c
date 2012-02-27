@@ -25,6 +25,7 @@
 //#define DEBUG
 //#define MOV_EXPORT_ALL_METADATA
 
+#include "libavutil/audioconvert.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/intfloat.h"
 #include "libavutil/mathematics.h"
@@ -32,6 +33,7 @@
 #include "libavutil/dict.h"
 #include "libavutil/opt.h"
 #include "libavutil/timecode.h"
+#include "libavcodec/ac3tab.h"
 #include "avformat.h"
 #include "internal.h"
 #include "avio_internal.h"
@@ -353,8 +355,12 @@ static int mov_read_default(MOVContext *c, AVIOContext *pb, MOVAtom atom)
             if (err < 0)
                 return err;
             if (c->found_moov && c->found_mdat &&
-                (!pb->seekable || start_pos + a.size == avio_size(pb)))
+                ((!pb->seekable || c->fc->flags & AVFMT_FLAG_IGNIDX) ||
+                 start_pos + a.size == avio_size(pb))) {
+                if (!pb->seekable || c->fc->flags & AVFMT_FLAG_IGNIDX)
+                    c->next_root_atom = start_pos + a.size;
                 return 0;
+            }
             left = a.size - avio_tell(pb) + start_pos;
             if (left > 0) /* skip garbage at atom end */
                 avio_skip(pb, left);
@@ -566,6 +572,9 @@ static int mov_read_dac3(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     acmod = (ac3info >> 11) & 0x7;
     lfeon = (ac3info >> 10) & 0x1;
     st->codec->channels = ((int[]){2,1,2,3,3,4,4,5})[acmod] + lfeon;
+    st->codec->channel_layout = avpriv_ac3_channel_layout_tab[acmod];
+    if (lfeon)
+        st->codec->channel_layout |= AV_CH_LOW_FREQUENCY;
     st->codec->audio_service_type = bsmod;
     if (st->codec->channels > 1 && bsmod == 0x7)
         st->codec->audio_service_type = AV_AUDIO_SERVICE_TYPE_KARAOKE;
@@ -2311,7 +2320,7 @@ static int mov_read_trun(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     int64_t dts;
     int data_offset = 0;
     unsigned entries, first_sample_flags = frag->flags;
-    int flags, distance, i;
+    int flags, distance, i, found_keyframe = 0;
 
     for (i = 0; i < c->fc->nb_streams; i++) {
         if (c->fc->streams[i]->id == frag->track_id) {
@@ -2365,7 +2374,7 @@ static int mov_read_trun(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         unsigned sample_size = frag->size;
         int sample_flags = i ? frag->flags : first_sample_flags;
         unsigned sample_duration = frag->duration;
-        int keyframe;
+        int keyframe = 0;
 
         if (flags & MOV_TRUN_SAMPLE_DURATION) sample_duration = avio_rb32(pb);
         if (flags & MOV_TRUN_SAMPLE_SIZE)     sample_size     = avio_rb32(pb);
@@ -2374,8 +2383,13 @@ static int mov_read_trun(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         sc->ctts_data[sc->ctts_count].duration = (flags & MOV_TRUN_SAMPLE_CTS) ?
                                                   avio_rb32(pb) : 0;
         sc->ctts_count++;
-        if ((keyframe = st->codec->codec_type == AVMEDIA_TYPE_AUDIO ||
-             (flags & MOV_TRUN_FIRST_SAMPLE_FLAGS && !i && !(sample_flags & ~MOV_FRAG_SAMPLE_FLAG_DEGRADATION_PRIORITY_MASK)) || sample_flags & MOV_FRAG_SAMPLE_FLAG_DEPENDS_NO))
+        if (st->codec->codec_type == AVMEDIA_TYPE_AUDIO)
+            keyframe = 1;
+        else if (!found_keyframe)
+            keyframe = found_keyframe =
+                !(sample_flags & (MOV_FRAG_SAMPLE_FLAG_IS_NON_SYNC |
+                                  MOV_FRAG_SAMPLE_FLAG_DEPENDS_YES));
+        if (keyframe)
             distance = 0;
         av_add_index_entry(st, offset, dts, sample_size, distance,
                            keyframe ? AVINDEX_KEYFRAME : 0);
@@ -2816,8 +2830,11 @@ static int mov_read_packet(AVFormatContext *s, AVPacket *pkt)
     sample = mov_find_next_sample(s, &st);
     if (!sample) {
         mov->found_mdat = 0;
-        if (s->pb->seekable||
-            mov_read_default(mov, s->pb, (MOVAtom){ AV_RL32("root"), INT64_MAX }) < 0 ||
+        if (!mov->next_root_atom)
+            return AVERROR_EOF;
+        avio_seek(s->pb, mov->next_root_atom, SEEK_SET);
+        mov->next_root_atom = 0;
+        if (mov_read_default(mov, s->pb, (MOVAtom){ AV_RL32("root"), INT64_MAX }) < 0 ||
             url_feof(s->pb))
             return AVERROR_EOF;
         av_dlog(s, "read fragments, offset 0x%"PRIx64"\n", avio_tell(s->pb));
