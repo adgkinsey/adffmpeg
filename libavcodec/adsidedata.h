@@ -1,0 +1,11 @@
+
+#ifndef AVCODEC_ADSIDEDATA_H
+#define AVCODEC_ADSIDEDATA_H
+
+#if (LIBAVCODEC_VERSION_MAJOR < 53)
+#define AD_SIDEDATA_IN_PRIV 1
+#else
+#define AD_SIDEDATA 1
+#endif
+
+#endif

@@ -60,7 +60,7 @@ typedef struct {
     int picHeaderSize;
 } PAREncContext;
 
-#ifdef AD_NO_SIDEDATA
+#ifdef AD_SIDEDATA_IN_PRIV
 void libpar_packet_destroy(struct AVPacket *packet);
 #endif
 
@@ -180,23 +180,27 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
             snprintf(ps->name, sizeof(ps->name), "Camera %d", ps->camera);
     }
 
-    av_packet_split_side_data(pkt);
     isADformat = 0;
+#ifdef AD_SIDEDATA
+    av_packet_split_side_data(pkt);
     for (int ii = 0; ii < pkt->side_data_elems; ii++)  {
         if (pkt->side_data[ii].type == AV_PKT_DATA_AD_FRAME)
             isADformat = 1;
     }
+#endif
     
     if (isADformat)  {
         uint8_t *combBuf = NULL, *combPtr = NULL;
         int combSize = 0;
         for (int ii = 0; ii < pkt->side_data_elems; ii++)  {
+#ifdef AD_SIDEDATA
             if ( (pkt->side_data[ii].type == AV_PKT_DATA_AD_FRAME) || (pkt->side_data[ii].type == AV_PKT_DATA_AD_TEXT) )  {
                 combBuf = av_realloc(combBuf, combSize + pkt->side_data[ii].size);
                 combPtr = combBuf + combSize;
                 memcpy(combPtr, pkt->side_data[ii].data, pkt->side_data[ii].size);
                 combSize += pkt->side_data[ii].size;
             }
+#endif
         }
         
         combBuf = av_realloc(combBuf, combSize + pkt->size);
@@ -284,7 +288,7 @@ static int par_write_trailer(AVFormatContext *avf)
     return 0;
 }
 
-#ifdef AD_NO_SIDEDATA
+#ifdef AD_SIDEDATA_IN_PRIV
 void libpar_packet_destroy(struct AVPacket *packet)
 {
     LibparFrameExtra *fed = (LibparFrameExtra*)packet->priv;
@@ -534,10 +538,10 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
     int ii;
     AVStream *st = NULL;
     
-#ifdef AD_NO_SIDEDATA
+#if defined(AD_SIDEDATA_IN_PRIV)
     LibparFrameExtra *pktExt = NULL;
     ParFrameInfo *pktFI = NULL;
-#else
+#elif defined(AD_SIDEDATA)
     int adDataSize = 0;
     uint8_t *sideData = NULL;
     int textBufSize = 0;
@@ -617,7 +621,7 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
     }
     pkt->duration = 1;
     
-#ifdef AD_NO_SIDEDATA
+#if defined(AD_SIDEDATA_IN_PRIV)
     pkt->destruct = libpar_packet_destroy;
     pktExt = av_malloc(sizeof(LibparFrameExtra));
     if (NULL == pktExt)  {
@@ -656,7 +660,7 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
     }
     
     pkt->priv = pktExt;
-#else
+#elif defined(AD_SIDEDATA)
     if (parReader_frameIsVideo(fi))
         adDataSize = parReader_getPicStructSize();
     else if (parReader_frameIsAudio(fi))

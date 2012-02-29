@@ -36,6 +36,9 @@
 #include "libavutil/rational.h"
 
 #include "libavcodec/version.h"
+
+#include "libavcodec/adsidedata.h"
+
 /**
  * @defgroup libavc Encoding/Decoding Library
  * @{
@@ -914,9 +917,11 @@ enum AVPacketSideDataType {
     AV_PKT_DATA_PALETTE,
     AV_PKT_DATA_NEW_EXTRADATA,
     AV_PKT_DATA_PARAM_CHANGE,
+#ifdef AD_SIDEDATA
     AV_PKT_DATA_AD_FRAME,
     AV_PKT_DATA_AD_TEXT,
     AV_PKT_DATA_AD_PARINF,
+#endif
 };
 
 typedef struct AVPacket {

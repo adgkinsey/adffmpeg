@@ -29,10 +29,9 @@
 
 #include "avformat.h"
 #include "ds_exports.h"
-#include "adsidedata.h"
 
 
-#ifdef AD_NO_SIDEDATA
+#ifdef AD_SIDEDATA_IN_PRIV
 int ad_new_packet(AVPacket *pkt, int size);
 #else
 #define ad_new_packet av_new_packet
