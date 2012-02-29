@@ -22,7 +22,7 @@
 #define AVFORMAT_LIBPAR_H
 
 #include "avformat.h"
-#include "adsidedata.h"
+
 
 #ifdef AD_NO_SIDEDATA
 #include <parreader_types.h>

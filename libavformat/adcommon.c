@@ -389,7 +389,7 @@ static AVStream * ad_get_data_stream(AVFormatContext *s, enum CodecID codecId)
 //    return NULL;
 //}
 
-#ifdef AD_NO_SIDEDATA
+#ifdef AD_SIDEDATA_IN_PRIV
 static void ad_release_packet( AVPacket *pkt )
 {
     if (pkt == NULL)
@@ -426,7 +426,7 @@ static void ad_release_packet( AVPacket *pkt )
 }
 #endif
 
-#ifdef AD_NO_SIDEDATA
+#ifdef AD_SIDEDATA_IN_PRIV
 int ad_new_packet(AVPacket *pkt, int size)
 {
     int retVal = av_new_packet( pkt, size );
@@ -931,7 +931,7 @@ static int addSideData(AVFormatContext *s, AVPacket *pkt,
                        enum AVMediaType media, unsigned int size, 
                        void *data, const char *text)
 {
-#ifdef AD_NO_SIDEDATA
+#if defined(AD_SIDEDATA_IN_PRIV)
     struct ADFrameData *frameData = av_mallocz(sizeof(*frameData));
     if( frameData == NULL )
         return AVERROR(ENOMEM);
@@ -947,7 +947,7 @@ static int addSideData(AVFormatContext *s, AVPacket *pkt,
     if (text != NULL)
         ad_parseText(s, frameData);
     pkt->priv = frameData;
-#else
+#elif defined(AD_SIDEDATA)
     uint8_t *side = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_FRAME, size);
     if (side)
         memcpy(side, data, size);
