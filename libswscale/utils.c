@@ -114,8 +114,8 @@ static const FormatEntry format_entries[PIX_FMT_NB] = {
     [PIX_FMT_YUVA444P]    = { 1 , 1 },
     [PIX_FMT_RGB48BE]     = { 1 , 1 },
     [PIX_FMT_RGB48LE]     = { 1 , 1 },
-    [PIX_FMT_RGBA64BE]    = { 0 , 0 },
-    [PIX_FMT_RGBA64LE]    = { 0 , 0 },
+    [PIX_FMT_RGBA64BE]    = { 1 , 0 },
+    [PIX_FMT_RGBA64LE]    = { 1 , 0 },
     [PIX_FMT_RGB565BE]    = { 1 , 1 },
     [PIX_FMT_RGB565LE]    = { 1 , 1 },
     [PIX_FMT_RGB555BE]    = { 1 , 1 },
@@ -1046,7 +1046,7 @@ int sws_init_context(SwsContext *c, SwsFilter *srcFilter, SwsFilter *dstFilter)
     c->vLumBufSize= c->vLumFilterSize;
     c->vChrBufSize= c->vChrFilterSize;
     for (i=0; i<dstH; i++) {
-        int chrI= (int64_t)i*c->chrDstH / dstH;
+        int chrI = (int64_t) i * c->chrDstH / dstH;
         int nextSlice= FFMAX(c->vLumFilterPos[i   ] + c->vLumFilterSize - 1,
                            ((c->vChrFilterPos[chrI] + c->vChrFilterSize - 1)<<c->chrSrcVSubSample));
 

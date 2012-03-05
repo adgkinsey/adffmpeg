@@ -416,7 +416,6 @@ static int update_context_from_thread(AVCodecContext *dst, AVCodecContext *src, 
     int err = 0;
 
     if (dst != src) {
-        dst->sub_id    = src->sub_id;
         dst->time_base = src->time_base;
         dst->width     = src->width;
         dst->height    = src->height;
@@ -480,7 +479,7 @@ static int update_context_from_user(AVCodecContext *dst, AVCodecContext *src)
     dst->slice_flags = src->slice_flags;
     dst->flags2      = src->flags2;
 
-    copy_fields(skip_loop_filter, bidir_refine);
+    copy_fields(skip_loop_filter, subtitle_header);
 
     dst->frame_number     = src->frame_number;
     dst->reordered_opaque = src->reordered_opaque;

@@ -573,6 +573,19 @@ static int decode_cell(Indeo3DecodeContext *ctx, AVCodecContext *avctx,
     /* setup output and reference pointers */
     offset = (cell->ypos << 2) * plane->pitch + (cell->xpos << 2);
     block  =  plane->pixels[ctx->buf_sel] + offset;
+
+    if (cell->mv_ptr) {
+        mv_y      = cell->mv_ptr[0];
+        mv_x      = cell->mv_ptr[1];
+        if (   mv_x + 4*cell->xpos < 0
+            || mv_y + 4*cell->ypos < 0
+            || mv_x + 4*cell->xpos + 4*cell->width  > plane->width
+            || mv_y + 4*cell->ypos + 4*cell->height > plane->height) {
+            av_log(avctx, AV_LOG_ERROR, "motion vector %d %d outside reference\n", mv_x + 4*cell->xpos, mv_y + 4*cell->ypos);
+            return AVERROR_INVALIDDATA;
+        }
+    }
+
     if (!cell->mv_ptr) {
         /* use previous line as reference for INTRA cells */
         ref_block = block - plane->pitch;
@@ -615,7 +628,7 @@ static int decode_cell(Indeo3DecodeContext *ctx, AVCodecContext *avctx,
     /* of the predicted cell in order to avoid overflows. */
     if (vq_index >= 8 && ref_block) {
         for (x = 0; x < cell->width << 2; x++)
-            ref_block[x] = requant_tab[vq_index & 7][ref_block[x]];
+            ref_block[x] = requant_tab[vq_index & 7][ref_block[x] & 127];
     }
 
     error = IV3_NOERR;
@@ -727,6 +740,8 @@ static int parse_bintree(Indeo3DecodeContext *ctx, AVCodecContext *avctx,
         SPLIT_CELL(ref_cell->height, curr_cell.height);
         ref_cell->ypos   += curr_cell.height;
         ref_cell->height -= curr_cell.height;
+        if (ref_cell->height <= 0 || curr_cell.height <= 0)
+            return AVERROR_INVALIDDATA;
     } else if (code == V_SPLIT) {
         if (curr_cell.width > strip_width) {
             /* split strip */
@@ -735,6 +750,8 @@ static int parse_bintree(Indeo3DecodeContext *ctx, AVCodecContext *avctx,
             SPLIT_CELL(ref_cell->width, curr_cell.width);
         ref_cell->xpos  += curr_cell.width;
         ref_cell->width -= curr_cell.width;
+        if (ref_cell->width <= 0 || curr_cell.width <= 0)
+            return AVERROR_INVALIDDATA;
     }
 
     while (get_bits_left(&ctx->gb) >= 2) { /* loop until return */
@@ -890,14 +907,16 @@ static int decode_frame_headers(Indeo3DecodeContext *ctx, AVCodecContext *avctx,
         return AVERROR_INVALIDDATA;
 
     if (width != ctx->width || height != ctx->height) {
+        int res;
+
         av_dlog(avctx, "Frame dimensions changed!\n");
 
         ctx->width  = width;
         ctx->height = height;
 
         free_frame_buffers(ctx);
-        if(allocate_frame_buffers(ctx, avctx) < 0)
-            return AVERROR_INVALIDDATA;
+        if ((res = allocate_frame_buffers(ctx, avctx)) < 0)
+             return res;
         avcodec_set_dimensions(avctx, width, height);
     }
 

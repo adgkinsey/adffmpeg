@@ -553,7 +553,7 @@ static int codec_get_buffer(AVCodecContext *s, AVFrame *frame)
     FrameBuffer *buf;
     int ret, i;
 
-    if(av_image_check_size(s->width, s->height, 0, s))
+    if(av_image_check_size(s->width, s->height, 0, s) || s->pix_fmt<0)
         return -1;
 
     if (!ist->buffer_pool && (ret = alloc_buffer(s, ist, &ist->buffer_pool)) < 0)
@@ -1267,6 +1267,10 @@ need_realloc:
         buftmp = audio_buf;
         size_out = swr_convert(ost->swr, (      uint8_t*[]){buftmp}, audio_buf_size / (enc->channels * osize),
                                          (const uint8_t*[]){buf   }, size / (dec->channels * isize));
+        if (size_out < 0) {
+            av_log(NULL, AV_LOG_FATAL, "swr_convert failed\n");
+            exit_program(1);
+        }
         size_out = size_out * enc->channels * osize;
     } else {
         buftmp = buf;
@@ -2265,7 +2269,7 @@ static int output_packet(InputStream *ist,
             ret = transcode_video    (ist, &avpkt, &got_output, &pkt_pts);
             if (avpkt.duration) {
                 duration = av_rescale_q(avpkt.duration, ist->st->time_base, AV_TIME_BASE_Q);
-            } else if(ist->st->codec->time_base.num != 0) {
+            } else if(ist->st->codec->time_base.num != 0 && ist->st->codec->time_base.den != 0) {
                 int ticks= ist->st->parser ? ist->st->parser->repeat_pict+1 : ist->st->codec->ticks_per_frame;
                 duration = ((int64_t)AV_TIME_BASE *
                                 ist->st->codec->time_base.num * ticks) /
@@ -4306,6 +4310,7 @@ static void opt_output_file(void *optctx, const char *filename)
                     ost->sync_ist= ist;
                     ost->source_index= i;
                     ist->discard = 0;
+                    ist->st->discard = AVDISCARD_NONE;
                     break;
                 }
             }

@@ -363,6 +363,7 @@ OBJS-$(CONFIG_LIBPARREADER_MUXER)        += libpar.o adcommon.o
 OBJS+= avio.o aviobuf.o
 
 OBJS-$(CONFIG_APPLEHTTP_PROTOCOL)        += hlsproto.o
+OBJS-$(CONFIG_BLURAY_PROTOCOL)           += bluray.o
 OBJS-$(CONFIG_CACHE_PROTOCOL)            += cache.o
 OBJS-$(CONFIG_CONCAT_PROTOCOL)           += concat.o
 OBJS-$(CONFIG_CRYPTO_PROTOCOL)           += crypto.o

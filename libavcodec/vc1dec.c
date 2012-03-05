@@ -1174,6 +1174,10 @@ static void vc1_mc_4mv_chroma4(VC1Context *v)
                     mquant = v->pq + mqdiff;                   \
                 else                                           \
                     mquant = get_bits(gb, 5);                  \
+                if (!mquant) {                                 \
+                    av_log(v->s.avctx,AV_LOG_ERROR, "zero mquant\n");   \
+                    mquant = 1;                                \
+                }                                              \
             }                                                  \
         }                                                      \
         if (v->dqprofile == DQPROFILE_SINGLE_EDGE)             \
@@ -5072,7 +5076,7 @@ static void vc1_draw_sprites(VC1Context *v, SpriteData* sd)
                 if (!(xoff[sprite] & 0xFFFF) && xadv[sprite] == 1 << 16) {
                         src_h[sprite][0] = iplane + (xoff[sprite] >> 16) +  yline      * iline;
                     if (ysub[sprite])
-                        src_h[sprite][1] = iplane + (xoff[sprite] >> 16) + (yline + 1) * iline;
+                        src_h[sprite][1] = iplane + (xoff[sprite] >> 16) + FFMIN(yline + 1, (v->sprite_height>>!!plane)-1) * iline;
                 } else {
                     if (sr_cache[sprite][0] != yline) {
                         if (sr_cache[sprite][1] == yline) {
@@ -5084,7 +5088,7 @@ static void vc1_draw_sprites(VC1Context *v, SpriteData* sd)
                         }
                     }
                     if (ysub[sprite] && sr_cache[sprite][1] != yline + 1) {
-                        v->vc1dsp.sprite_h(v->sr_rows[sprite][1], iplane + (yline + 1) * iline, xoff[sprite], xadv[sprite], width);
+                        v->vc1dsp.sprite_h(v->sr_rows[sprite][1], iplane + FFMIN(yline + 1, (v->sprite_height>>!!plane)-1) * iline, xoff[sprite], xadv[sprite], width);
                         sr_cache[sprite][1] = yline + 1;
                     }
                     src_h[sprite][0] = v->sr_rows[sprite][0];
@@ -5452,7 +5456,7 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
     if (buf_size == 0 || (buf_size == 4 && AV_RB32(buf) == VC1_CODE_ENDOFSEQ)) {
         /* special case for last picture */
         if (s->low_delay == 0 && s->next_picture_ptr) {
-            *pict = *(AVFrame*)s->next_picture_ptr;
+            *pict = s->next_picture_ptr->f;
             s->next_picture_ptr = NULL;
 
             *data_size = sizeof(AVFrame);
@@ -5760,9 +5764,9 @@ image:
         *data_size = sizeof(AVFrame);
     } else {
         if (s->pict_type == AV_PICTURE_TYPE_B || s->low_delay) {
-            *pict = *(AVFrame*)s->current_picture_ptr;
+            *pict = s->current_picture_ptr->f;
         } else if (s->last_picture_ptr != NULL) {
-            *pict = *(AVFrame*)s->last_picture_ptr;
+            *pict = s->last_picture_ptr->f;
         }
         if (s->last_picture_ptr || s->low_delay) {
             *data_size = sizeof(AVFrame);

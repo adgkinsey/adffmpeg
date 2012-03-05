@@ -312,8 +312,13 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
         s->first_picture = 0;
     }
 
-    if (s->interlaced && (s->bottom_field == !s->interlace_polarity))
+    if (s->interlaced && (s->bottom_field == !s->interlace_polarity)) {
+        if (s->progressive) {
+            av_log_ask_for_sample(s->avctx, "progressively coded interlaced pictures not supported\n");
+            return AVERROR_INVALIDDATA;
+        }
         return 0;
+    }
 
     /* XXX: not complete test ! */
     pix_fmt_id = (s->h_count[0] << 28) | (s->v_count[0] << 24) |
@@ -1572,7 +1577,7 @@ int ff_mjpeg_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             goto the_end;
         } else if (unescaped_buf_size > (1U<<29)) {
             av_log(avctx, AV_LOG_ERROR, "MJPEG packet 0x%x too big (0x%x/0x%x), corrupt data?\n",
-                   start_code, unescaped_buf_ptr, buf_size);
+                   start_code, unescaped_buf_size, buf_size);
             return AVERROR_INVALIDDATA;
         } else {
             av_log(avctx, AV_LOG_DEBUG, "marker=%x avail_size_in_buf=%td\n",

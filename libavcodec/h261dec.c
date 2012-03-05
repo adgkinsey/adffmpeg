@@ -286,6 +286,10 @@ static int h261_decode_mb(H261Context *h){
 
     // Read mtype
     h->mtype = get_vlc2(&s->gb, h261_mtype_vlc.table, H261_MTYPE_VLC_BITS, 2);
+    if (h->mtype < 0) {
+        av_log(s->avctx, AV_LOG_ERROR, "illegal mtype %d\n", h->mtype);
+        return SLICE_ERROR;
+    }
     h->mtype = h261_mtype_map[h->mtype];
 
     // Read mquant
@@ -624,7 +628,8 @@ retry:
 
 assert(s->current_picture.f.pict_type == s->current_picture_ptr->f.pict_type);
 assert(s->current_picture.f.pict_type == s->pict_type);
-    *pict= *(AVFrame*)s->current_picture_ptr;
+
+    *pict = s->current_picture_ptr->f;
     ff_print_debug_info(s, pict);
 
     *data_size = sizeof(AVFrame);

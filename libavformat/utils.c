@@ -545,11 +545,29 @@ static int init_input(AVFormatContext *s, const char *filename, AVDictionary **o
     return av_probe_input_buffer(s->pb, &s->iformat, filename, s, 0, 0);
 }
 
+static AVPacket *add_to_pktbuf(AVPacketList **packet_buffer, AVPacket *pkt,
+                               AVPacketList **plast_pktl){
+    AVPacketList *pktl = av_mallocz(sizeof(AVPacketList));
+    if (!pktl)
+        return NULL;
+
+    if (*packet_buffer)
+        (*plast_pktl)->next = pktl;
+    else
+        *packet_buffer = pktl;
+
+    /* add the packet in the buffered packet list */
+    *plast_pktl = pktl;
+    pktl->pkt= *pkt;
+    return &pktl->pkt;
+}
+
 int avformat_open_input(AVFormatContext **ps, const char *filename, AVInputFormat *fmt, AVDictionary **options)
 {
     AVFormatContext *s = *ps;
-    int ret = 0;
+    int i, ret = 0;
     AVDictionary *tmp = NULL;
+    ID3v2ExtraMeta *id3v2_extra_meta = NULL;
 
     if (!s && !(s = avformat_alloc_context()))
         return AVERROR(ENOMEM);
@@ -592,11 +610,24 @@ int avformat_open_input(AVFormatContext **ps, const char *filename, AVInputForma
 
     /* e.g. AVFMT_NOFILE formats will not have a AVIOContext */
     if (s->pb)
-        ff_id3v2_read(s, ID3v2_DEFAULT_MAGIC);
+        ff_id3v2_read(s, ID3v2_DEFAULT_MAGIC, &id3v2_extra_meta);
 
     if (!(s->flags&AVFMT_FLAG_PRIV_OPT) && s->iformat->read_header)
         if ((ret = s->iformat->read_header(s)) < 0)
             goto fail;
+
+    if (id3v2_extra_meta &&
+        (ret = ff_id3v2_parse_apic(s, &id3v2_extra_meta)) < 0)
+        goto fail;
+    ff_id3v2_free_extra_meta(&id3v2_extra_meta);
+
+    /* queue attached pictures */
+    for (i = 0; i < s->nb_streams; i++)
+        if (s->streams[i]->disposition & AV_DISPOSITION_ATTACHED_PIC) {
+            AVPacket copy = s->streams[i]->attached_pic;
+            copy.destruct = NULL;
+            add_to_pktbuf(&s->raw_packet_buffer, &copy, &s->raw_packet_buffer_end);
+        }
 
     if (!(s->flags&AVFMT_FLAG_PRIV_OPT) && s->pb && !s->data_offset)
         s->data_offset = avio_tell(s->pb);
@@ -611,6 +642,7 @@ int avformat_open_input(AVFormatContext **ps, const char *filename, AVInputForma
     return 0;
 
 fail:
+    ff_id3v2_free_extra_meta(&id3v2_extra_meta);
     av_dict_free(&tmp);
     if (s->pb && !(s->flags & AVFMT_FLAG_CUSTOM_IO))
         avio_close(s->pb);
@@ -620,23 +652,6 @@ fail:
 }
 
 /*******************************************************/
-
-static AVPacket *add_to_pktbuf(AVPacketList **packet_buffer, AVPacket *pkt,
-                               AVPacketList **plast_pktl){
-    AVPacketList *pktl = av_mallocz(sizeof(AVPacketList));
-    if (!pktl)
-        return NULL;
-
-    if (*packet_buffer)
-        (*plast_pktl)->next = pktl;
-    else
-        *packet_buffer = pktl;
-
-    /* add the packet in the buffered packet list */
-    *plast_pktl = pktl;
-    pktl->pkt= *pkt;
-    return &pktl->pkt;
-}
 
 int av_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
@@ -737,15 +752,23 @@ int av_read_packet(AVFormatContext *s, AVPacket *pkt)
 
 /**********************************************************/
 
+static int determinable_frame_size(AVCodecContext *avctx)
+{
+    if (avctx->codec_id == CODEC_ID_AAC ||
+        avctx->codec_id == CODEC_ID_MP1 ||
+        avctx->codec_id == CODEC_ID_MP2 ||
+        avctx->codec_id == CODEC_ID_MP3 ||
+        avctx->codec_id == CODEC_ID_CELT)
+        return 1;
+    return 0;
+}
+
 /**
  * Get the number of samples of an audio frame. Return -1 on error.
  */
 static int get_audio_frame_size(AVCodecContext *enc, int size)
 {
     int frame_size;
-
-    if(enc->codec_id == CODEC_ID_VORBIS)
-        return -1;
 
     if (enc->frame_size <= 1) {
         int bits_per_sample = av_get_bits_per_sample(enc->codec_id);
@@ -756,7 +779,7 @@ static int get_audio_frame_size(AVCodecContext *enc, int size)
             frame_size = (size << 3) / (bits_per_sample * enc->channels);
         } else {
             /* used for example by ADPCM codecs */
-            if (enc->bit_rate == 0)
+            if (enc->bit_rate == 0 || determinable_frame_size(enc))
                 return -1;
             frame_size = ((int64_t)size * 8 * enc->sample_rate) / enc->bit_rate;
         }
@@ -820,6 +843,7 @@ static int is_intra_only(AVCodecContext *enc){
         case CODEC_ID_LJPEG:
         case CODEC_ID_PRORES:
         case CODEC_ID_RAWVIDEO:
+        case CODEC_ID_V210:
         case CODEC_ID_DVVIDEO:
         case CODEC_ID_HUFFYUV:
         case CODEC_ID_FFVHUFF:
@@ -886,17 +910,17 @@ static void update_initial_durations(AVFormatContext *s, AVStream *st, AVPacket 
     for(; pktl; pktl= pktl->next){
         if(pktl->pkt.stream_index != pkt->stream_index)
             continue;
-        if(pktl->pkt.pts == pktl->pkt.dts && pktl->pkt.dts == AV_NOPTS_VALUE
+        if(pktl->pkt.pts == pktl->pkt.dts && (pktl->pkt.dts == AV_NOPTS_VALUE || pktl->pkt.dts == st->first_dts)
            && !pktl->pkt.duration){
             pktl->pkt.dts= cur_dts;
             if(!st->codec->has_b_frames)
                 pktl->pkt.pts= cur_dts;
-            cur_dts += pkt->duration;
             pktl->pkt.duration= pkt->duration;
         }else
             break;
+        cur_dts = pktl->pkt.dts + pktl->pkt.duration;
     }
-    if(st->first_dts == AV_NOPTS_VALUE)
+    if(!pktl)
         st->cur_dts= cur_dts;
 }
 
@@ -2088,13 +2112,7 @@ static int has_codec_parameters(AVCodecContext *avctx)
     switch (avctx->codec_type) {
     case AVMEDIA_TYPE_AUDIO:
         val = avctx->sample_rate && avctx->channels && avctx->sample_fmt != AV_SAMPLE_FMT_NONE;
-        if (!avctx->frame_size &&
-            (avctx->codec_id == CODEC_ID_VORBIS ||
-             avctx->codec_id == CODEC_ID_AAC ||
-             avctx->codec_id == CODEC_ID_MP1 ||
-             avctx->codec_id == CODEC_ID_MP2 ||
-             avctx->codec_id == CODEC_ID_MP3 ||
-             avctx->codec_id == CODEC_ID_CELT))
+        if (!avctx->frame_size && determinable_frame_size(avctx))
             return 0;
         break;
     case AVMEDIA_TYPE_VIDEO:
@@ -2721,6 +2739,8 @@ void avformat_free_context(AVFormatContext *s)
             av_parser_close(st->parser);
             av_free_packet(&st->cur_pkt);
         }
+        if (st->attached_pic.data)
+            av_free_packet(&st->attached_pic);
         av_dict_free(&st->metadata);
         av_freep(&st->index_entries);
         av_freep(&st->codec->extradata);

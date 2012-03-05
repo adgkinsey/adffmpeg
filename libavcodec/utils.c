@@ -118,12 +118,12 @@ static void avcodec_init(void)
     ff_dsputil_static_init();
 }
 
-static av_always_inline int codec_is_encoder(AVCodec *codec)
+int av_codec_is_encoder(AVCodec *codec)
 {
     return codec && (codec->encode || codec->encode2);
 }
 
-static av_always_inline int codec_is_decoder(AVCodec *codec)
+int av_codec_is_decoder(AVCodec *codec)
 {
     return codec && codec->decode;
 }
@@ -414,7 +414,7 @@ static int video_get_buffer(AVCodecContext *s, AVFrame *pic)
         return -1;
     }
 
-    if(av_image_check_size(w, h, 0, s))
+    if(av_image_check_size(w, h, 0, s) || s->pix_fmt<0)
         return -1;
 
     if (!avci->buffer) {
@@ -603,7 +603,7 @@ int avcodec_default_reget_buffer(AVCodecContext *s, AVFrame *pic){
         return s->get_buffer(s, pic);
     }
 
-    assert(s->pix_fmt == pic->pix_fmt);
+    assert(s->pix_fmt == pic->format);
 
     /* If internal buffer type return the same buffer */
     if(pic->type == FF_BUFFER_TYPE_INTERNAL) {
@@ -798,7 +798,7 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, AVCodec *codec, AVD
 
     /* if the decoder init function was already called previously,
        free the already allocated subtitle_header before overwriting it */
-    if (codec_is_decoder(codec))
+    if (av_codec_is_decoder(codec))
         av_freep(&avctx->subtitle_header);
 
 #define SANE_NB_CHANNELS 128U
@@ -845,7 +845,7 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, AVCodec *codec, AVD
         ret = AVERROR(EINVAL);
         goto free_and_end;
     }
-    if (codec_is_encoder(avctx->codec)) {
+    if (av_codec_is_encoder(avctx->codec)) {
         int i;
         if (avctx->codec->sample_fmts) {
             for (i = 0; avctx->codec->sample_fmts[i] != AV_SAMPLE_FMT_NONE; i++)
@@ -914,7 +914,7 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, AVCodec *codec, AVD
         }
     }
 
-    if (codec_is_decoder(avctx->codec) && !avctx->bit_rate)
+    if (av_codec_is_decoder(avctx->codec) && !avctx->bit_rate)
         avctx->bit_rate = get_bit_rate(avctx);
 
     ret=0;
@@ -945,14 +945,13 @@ int ff_alloc_packet(AVPacket *avpkt, int size)
         return AVERROR(EINVAL);
 
     if (avpkt->data) {
-        uint8_t *pkt_data;
+        void *destruct = avpkt->destruct;
 
         if (avpkt->size < size)
             return AVERROR(EINVAL);
 
-        pkt_data = avpkt->data;
         av_init_packet(avpkt);
-        avpkt->data = pkt_data;
+        avpkt->destruct = destruct;
         avpkt->size = size;
         return 0;
     } else {
@@ -972,6 +971,7 @@ int attribute_align_arg avcodec_encode_audio2(AVCodecContext *avctx,
     *got_packet_ptr = 0;
 
     if (!(avctx->codec->capabilities & CODEC_CAP_DELAY) && !frame) {
+        av_free_packet(avpkt);
         av_init_packet(avpkt);
         avpkt->size = 0;
         return 0;
@@ -1071,6 +1071,9 @@ int attribute_align_arg avcodec_encode_audio2(AVCodecContext *avctx,
     }
     if (!ret)
         avctx->frame_number++;
+
+    if (ret < 0 || !*got_packet_ptr)
+        av_free_packet(avpkt);
 
     /* NOTE: if we add any audio encoders which output non-keyframe packets,
              this needs to be moved to the encoders, but for now we can do it
@@ -1198,10 +1201,12 @@ int attribute_align_arg avcodec_encode_video2(AVCodecContext *avctx,
 {
     int ret;
     int user_packet = !!avpkt->data;
+    void *new_data;
 
     *got_packet_ptr = 0;
 
     if (!(avctx->codec->capabilities & CODEC_CAP_DELAY) && !frame) {
+        av_free_packet(avpkt);
         av_init_packet(avpkt);
         avpkt->size     = 0;
         return 0;
@@ -1219,8 +1224,18 @@ int attribute_align_arg avcodec_encode_video2(AVCodecContext *avctx,
         else if (!(avctx->codec->capabilities & CODEC_CAP_DELAY))
             avpkt->pts = avpkt->dts = frame->pts;
 
+        if (!user_packet && avpkt->data &&
+            avpkt->destruct == av_destruct_packet) {
+            uint8_t *new_data = av_realloc(avpkt->data, avpkt->size + FF_INPUT_BUFFER_PADDING_SIZE);
+            if (new_data)
+                avpkt->data = new_data;
+        }
+
         avctx->frame_number++;
     }
+
+    if (ret < 0 || !*got_packet_ptr)
+        av_free_packet(avpkt);
 
     emms_c();
     return ret;
@@ -1512,7 +1527,7 @@ av_cold int avcodec_close(AVCodecContext *avctx)
         av_opt_free(avctx->priv_data);
     av_opt_free(avctx);
     av_freep(&avctx->priv_data);
-    if (codec_is_encoder(avctx->codec))
+    if (av_codec_is_encoder(avctx->codec))
         av_freep(&avctx->extradata);
     avctx->codec = NULL;
     avctx->active_thread_type = 0;
@@ -1541,7 +1556,7 @@ AVCodec *avcodec_find_encoder(enum CodecID id)
     p = first_avcodec;
     id= remap_deprecated_codec_id(id);
     while (p) {
-        if (codec_is_encoder(p) && p->id == id) {
+        if (av_codec_is_encoder(p) && p->id == id) {
             if (p->capabilities & CODEC_CAP_EXPERIMENTAL && !experimental) {
                 experimental = p;
             } else
@@ -1559,7 +1574,7 @@ AVCodec *avcodec_find_encoder_by_name(const char *name)
         return NULL;
     p = first_avcodec;
     while (p) {
-        if (codec_is_encoder(p) && strcmp(name,p->name) == 0)
+        if (av_codec_is_encoder(p) && strcmp(name,p->name) == 0)
             return p;
         p = p->next;
     }
@@ -1572,7 +1587,7 @@ AVCodec *avcodec_find_decoder(enum CodecID id)
     p = first_avcodec;
     id= remap_deprecated_codec_id(id);
     while (p) {
-        if (codec_is_decoder(p) && p->id == id) {
+        if (av_codec_is_decoder(p) && p->id == id) {
             if (p->capabilities & CODEC_CAP_EXPERIMENTAL && !experimental) {
                 experimental = p;
             } else
@@ -1590,7 +1605,7 @@ AVCodec *avcodec_find_decoder_by_name(const char *name)
         return NULL;
     p = first_avcodec;
     while (p) {
-        if (codec_is_decoder(p) && strcmp(name,p->name) == 0)
+        if (av_codec_is_decoder(p) && strcmp(name,p->name) == 0)
             return p;
         p = p->next;
     }
