@@ -3687,8 +3687,8 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg){
                 if(s->mb_y >= s->mb_height){
                     tprintf(s->avctx, "slice end %d %d\n", get_bits_count(&s->gb), s->gb.size_in_bits);
 
-                    if(   get_bits_count(&s->gb) == s->gb.size_in_bits
-                       || get_bits_count(&s->gb) <  s->gb.size_in_bits && !(s->avctx->err_recognition & AV_EF_AGGRESSIVE)) {
+                    if (   get_bits_left(&s->gb) == 0
+                        || get_bits_left(&s->gb) > 0 && !(s->avctx->err_recognition & AV_EF_AGGRESSIVE)) {
                         ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x-1, s->mb_y, ER_MB_END&part_mask);
 
                         return 0;
@@ -3700,9 +3700,9 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg){
                 }
             }
 
-            if(get_bits_count(&s->gb) >= s->gb.size_in_bits && s->mb_skip_run<=0){
+            if (get_bits_left(&s->gb) <= 0 && s->mb_skip_run <= 0){
                 tprintf(s->avctx, "slice end %d %d\n", get_bits_count(&s->gb), s->gb.size_in_bits);
-                if(get_bits_count(&s->gb) == s->gb.size_in_bits ){
+                if (get_bits_left(&s->gb) == 0) {
                     ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x-1, s->mb_y, ER_MB_END&part_mask);
                     if (s->mb_x > lf_x_start) loop_filter(h, lf_x_start, s->mb_x);
 
@@ -3791,7 +3791,7 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size){
         int consumed;
         int dst_length;
         int bit_length;
-        uint8_t *ptr;
+        const uint8_t *ptr;
         int i, nalsize = 0;
         int err;
 
@@ -4075,7 +4075,7 @@ static int decode_frame(AVCodecContext *avctx,
     }
     if(h->is_avc && buf_size >= 9 && buf[0]==1 && buf[2]==0 && (buf[4]&0xFC)==0xFC && (buf[5]&0x1F) && buf[8]==0x67){
         int cnt= buf[5]&0x1f;
-        uint8_t *p= buf+6;
+        const uint8_t *p= buf+6;
         while(cnt--){
             int nalsize= AV_RB16(p) + 2;
             if(nalsize > buf_size - (p-buf) || p[2]!=0x67)

@@ -21,6 +21,7 @@
 
 #include "avcodec.h"
 #include "wma.h"
+#include "libavutil/avassert.h"
 
 #undef NDEBUG
 #include <assert.h>
@@ -396,16 +397,15 @@ static int encode_superframe(AVCodecContext *avctx,
     }
 #endif
 
-    if ((i = encode_frame(s, s->coefs, buf, buf_size, total_gain)) >= 0) {
-        av_log(avctx, AV_LOG_ERROR, "required frame size too large. please "
-               "use a higher bit rate.\n");
-        return AVERROR(EINVAL);
-    }
-    assert((put_bits_count(&s->pb) & 7) == 0);
-    while (i++)
+    encode_frame(s, s->coefs, buf, buf_size, total_gain);
+    av_assert0((put_bits_count(&s->pb) & 7) == 0);
+    i= s->block_align - (put_bits_count(&s->pb)+7)/8;
+    av_assert0(i>=0);
+    while(i--)
         put_bits(&s->pb, 8, 'N');
 
     flush_put_bits(&s->pb);
+    av_assert0(put_bits_ptr(&s->pb) - s->pb.buf == s->block_align);
     return s->block_align;
 }
 

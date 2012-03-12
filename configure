@@ -194,7 +194,7 @@ External library support:
   --enable-libspeex        enable Speex support via libspeex [no]
   --enable-libstagefright-h264  enable H.264 decoding via libstagefright [no]
   --enable-libtheora       enable Theora encoding via libtheora [no]
-  --enable-libutvideo      enable Ut Video decoding via libutvideo [no]
+  --enable-libutvideo      enable Ut Video encoding and decoding via libutvideo [no]
   --enable-libv4l2         enable libv4l2/v4l-utils [no]
   --enable-libvo-aacenc    enable AAC encoding via libvo-aacenc [no]
   --enable-libvo-amrwbenc  enable AMR-WB encoding via libvo-amrwbenc [no]
@@ -1576,7 +1576,8 @@ libx264_encoder_deps="libx264"
 libx264rgb_encoder_deps="libx264"
 libxavs_encoder_deps="libxavs"
 libxvid_encoder_deps="libxvid"
-libutvideo_decoder_deps="libutvideo gpl"
+libutvideo_decoder_deps="libutvideo"
+libutvideo_encoder_deps="libutvideo"
 
 # demuxers / muxers
 ac3_demuxer_select="ac3_parser"
@@ -2659,7 +2660,7 @@ case $target_os in
         enable malloc_aligned
         gas="gas-preprocessor.pl $cc"
         enabled ppc && add_asflags -force_cpusubtype_ALL
-        SHFLAGS='-dynamiclib -Wl,-single_module -Wl,-install_name,$(SHLIBDIR)/$(SLIBNAME),-current_version,$(LIBVERSION),-compatibility_version,$(LIBMAJOR)'
+        SHFLAGS='-dynamiclib -Wl,-single_module -Wl,-install_name,$(SHLIBDIR)/$(SLIBNAME_WITH_MAJOR),-current_version,$(LIBVERSION),-compatibility_version,$(LIBMAJOR)'
         enabled x86_32 && append SHFLAGS -Wl,-read_only_relocs,suppress
         strip="${strip} -x"
         add_ldflags -Wl,-dynamic,-search_paths_first
@@ -2807,6 +2808,7 @@ die_license_disabled() {
 }
 
 die_license_disabled gpl libcdio
+die_license_disabled gpl libutvideo
 die_license_disabled gpl libx264
 die_license_disabled gpl libxavs
 die_license_disabled gpl libxvid
@@ -3826,10 +3828,13 @@ enabled libavfilter_deps_swresample && prepend libavfilter_pc_deps "libswresampl
 enabled libavfilter_deps_postproc   && prepend libavfilter_pc_deps "libpostproc = $LIBPOSTPROC_VERSION,"
 libavfilter_pc_deps=${libavfilter_pc_deps%, }
 
+libavdevice_pc_deps="libavformat = $LIBAVFORMAT_VERSION"
+enabled lavfi_indev && prepend libavdevice_pc_deps "libavfilter = $LIBAVFILTER_VERSION,"
+
 pkgconfig_generate libavutil "FFmpeg utility library" "$LIBAVUTIL_VERSION" "$LIBM"
 pkgconfig_generate libavcodec "FFmpeg codec library" "$LIBAVCODEC_VERSION" "$extralibs" "libavutil = $LIBAVUTIL_VERSION"
 pkgconfig_generate libavformat "FFmpeg container format library" "$LIBAVFORMAT_VERSION" "$extralibs" "libavcodec = $LIBAVCODEC_VERSION"
-pkgconfig_generate libavdevice "FFmpeg device handling library" "$LIBAVDEVICE_VERSION" "$extralibs" "libavformat = $LIBAVFORMAT_VERSION"
+pkgconfig_generate libavdevice "FFmpeg device handling library" "$LIBAVDEVICE_VERSION" "$extralibs" "$libavdevice_pc_deps"
 pkgconfig_generate libavfilter "FFmpeg video filtering library" "$LIBAVFILTER_VERSION" "$extralibs" "$libavfilter_pc_deps"
 pkgconfig_generate libpostproc "FFmpeg postprocessing library" "$LIBPOSTPROC_VERSION" "" "libavutil = $LIBAVUTIL_VERSION"
 pkgconfig_generate libswscale "FFmpeg image rescaling library" "$LIBSWSCALE_VERSION" "$LIBM" "libavutil = $LIBAVUTIL_VERSION"
