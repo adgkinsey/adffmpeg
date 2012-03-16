@@ -41,6 +41,7 @@ typedef struct {
     ParFrameInfo frameInfo;
     int fileChanged;
     int frameCached;
+    unsigned long seqStartAdded;
 } PARDecContext;
 
 struct PAREncStreamContext {
@@ -387,7 +388,7 @@ static AVStream* createStream(AVFormatContext * avf)
     if (parReader_frameIsVideo(fi))  {
         st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
         
-        switch(getVideoFrameSubType(fi))  {
+        switch(parReader_getFrameSubType(fi))  {
             case(FRAME_FORMAT_JPEG_422):
             case(FRAME_FORMAT_JPEG_411):
                 st->codec->codec_id = CODEC_ID_MJPEG;
@@ -461,7 +462,7 @@ static AVStream* createStream(AVFormatContext * avf)
         st->codec->bits_per_coded_sample = 4;
         st->start_time = fi->imageTime * 1000LL + fi->imageMS;
 
-        switch(getAudioFrameSubType(fi))  {
+        switch(parReader_getFrameSubType(fi))  {
             case(FRAME_FORMAT_AUD_ADPCM_8000):
                 st->codec->sample_rate = 8000;
                 break;
@@ -557,6 +558,17 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
         st = createStream(avf);
         if (st == NULL)
             return -1;
+    }
+    
+    
+    // If frame is MPEG4 video and is the first sent then add a VOL header to it
+    if (st->codec->codec_id == CODEC_ID_MPEG4)  {
+        if ((ctxt->seqStartAdded & (1<<st->index)) == 0)  {
+            if (parReader_isIFrame(fi)) {
+                if (parReader_add_start_of_sequence(fi->frameBuffer))
+                    ctxt->seqStartAdded |= 1 << st->index;
+            }
+        }
     }
     
     if (st->start_time == 0)  {
@@ -789,8 +801,10 @@ static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
     }
 
     siz = parReader_loadFrame(&p->frameInfo, &p->dispSet, &p->fileChanged);
+    
     p->frameCached = siz;
     p->fileChanged = 1;
+    p->seqStartAdded = 0;
 
     snprintf(textbuf, sizeof(textbuf), "%d", parReader_getUTCOffset(&p->frameInfo));
     av_dict_set(&avf->metadata, "timezone", textbuf, 0);
@@ -831,7 +845,7 @@ static int par_read_packet(AVFormatContext * avf, AVPacket * pkt)
         p->frameCached = 0;
         return AVERROR(EAGAIN);
     }
-
+    
     createPacket(avf, pkt, siz);
 
     return 0;
@@ -853,6 +867,8 @@ static int par_read_seek(AVFormatContext *avf, int stream,
         anyStreamWillDo = 1;
     else
         streamId = avf->streams[stream]->id;
+    
+    p->seqStartAdded = 0;
 
     p->dispSet.cameraNum = streamId;
     if (flags & AVSEEK_FLAG_BACKWARD)
