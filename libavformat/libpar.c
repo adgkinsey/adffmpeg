@@ -461,6 +461,7 @@ static AVStream* createStream(AVFormatContext * avf)
         st->codec->block_align = 0;
         st->codec->bits_per_coded_sample = 4;
         st->start_time = fi->imageTime * 1000LL + fi->imageMS;
+        st->duration = getLastFrameTime(fc, fi, &p->dispSet) - st->start_time;
 
         switch(parReader_getFrameSubType(fi))  {
             case(FRAME_FORMAT_AUD_ADPCM_8000):
@@ -525,13 +526,13 @@ static AVStream* createStream(AVFormatContext * avf)
         st->r_frame_rate = (AVRational) { 1, 1 };
 
         st->start_time = startT * 1000LL;
-        st->duration   = 0;
+        st->duration   = getLastFrameTime(fc, fi, &p->dispSet) - st->start_time;
     }
 
     return st;
 }
 
-static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
+static int createPacket(AVFormatContext *avf, AVPacket *pkt, int siz)
 {
     PARDecContext *ctxt = avf->priv_data;
     ParFrameInfo *fi = &ctxt->frameInfo;
@@ -571,16 +572,6 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
         }
     }
     
-    if (st->start_time == 0)  {
-        int fc = 0;
-        unsigned long startT, endT;
-        
-        parReader_getIndexData(fi, NULL, &fc, &startT, &endT);
-        
-        st->start_time = fi->imageTime * 1000LL + fi->imageMS;
-        st->duration = getLastFrameTime(fc, fi, &ctxt->dispSet) - st->start_time;
-    }
-        
     if (st->codec->codec_id == CODEC_ID_PBM)  {
         char *comment = NULL;
         int w, h;
@@ -691,9 +682,14 @@ static int createPacket(AVFormatContext * avf, AVPacket *pkt, int siz)
     }
     
     if (ctxt->fileChanged)  {
+        int fc = 0;
+        unsigned long startT, endT, lastFT;
+    
+        parReader_getIndexData(fi, NULL, &fc, &startT, &endT);
+        lastFT = getLastFrameTime(fc, fi, &ctxt->dispSet);
         for (ii = 0; ii < avf->nb_streams; ii++)  {
-            avf->streams[ii]->start_time = 0;
-            avf->streams[ii]->duration = 0;
+            st->start_time = fi->imageTime * 1000LL + fi->imageMS;
+            st->duration = lastFT - st->start_time;
         }
         
         sideData = av_packet_new_side_data(pkt, AV_PKT_DATA_AD_PARINF, sizeof(ctxt->frameInfo));
