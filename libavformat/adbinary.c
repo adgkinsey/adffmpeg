@@ -362,11 +362,11 @@ static int adbinary_probe(AVProbeData *p)
                         case RTP_PAYLOAD_TYPE_11025HZ_PCM:
                         case RTP_PAYLOAD_TYPE_16000HZ_PCM:
                         case RTP_PAYLOAD_TYPE_22050HZ_PCM:
-                        case RTP_PAYLOAD_TYPE_32000HZ_PCM:
+                        case RTP_PAYLOAD_TYPE_32000HZ_PCM: 
                         case RTP_PAYLOAD_TYPE_44100HZ_PCM:
                         case RTP_PAYLOAD_TYPE_48000HZ_PCM:
                             av_log(NULL, AV_LOG_DEBUG, "%s: Detected minimal audio packet\n", __func__);
-                            score += AVPROBE_SCORE_MAX;
+                            score += AVPROBE_SCORE_MAX / 4;
                     }
                 }
                 break;
@@ -415,8 +415,15 @@ static int adbinary_probe(AVProbeData *p)
                 break;
         }
 
-        bufferSize -= dataSize;
-        bufPtr = dataPtr + dataSize;
+        if (dataSize <= bufferSize)  {
+            bufferSize -= dataSize;
+            bufPtr = dataPtr + dataSize;
+        }
+        else  {
+            bufferSize = 0;
+            bufPtr = p->buf;
+            score = 0;
+        }
     }
 
     if (score > AVPROBE_SCORE_MAX)
