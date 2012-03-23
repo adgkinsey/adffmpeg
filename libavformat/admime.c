@@ -777,7 +777,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     else  {
         av_dlog(s, "admime_read_packet: Error %d\n", errorVal);
         
-#ifdef AD_NO_SIDEDATA
+#ifdef AD_SIDEDATA_IN_PRIV
         // If there was an error, release any memory that has been allocated
         if (payload != NULL)
             av_free(payload);
@@ -787,7 +787,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
 #endif
     }
 
-#ifndef AD_NO_SIDEDATA
+#ifndef AD_SIDEDATA_IN_PRIV
     if (payload != NULL)
         av_freep(&payload);
 

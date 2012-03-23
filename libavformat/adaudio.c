@@ -30,7 +30,6 @@
 
 
 #define SIZEOF_RTP_HEADER       12
-#define AD_AUDIO_STREAM_ID      0x212ED83E
 
 
 static int adaudio_probe(AVProbeData *p);
@@ -74,7 +73,7 @@ static int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     int                   sampleSize = 0;
     AVStream *            st = NULL;
     int                   isPacketAlloced = 0;
-#ifdef AD_NO_SIDEDATA
+#ifdef AD_SIDEDATA_IN_PRIV
     struct ADFrameData *    frameData = NULL;
 #endif
 
@@ -103,7 +102,7 @@ static int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                     pkt->stream_index = st->index;
                     pkt->duration =  ((int)(AV_TIME_BASE * 1.0));
 
-#ifdef AD_NO_SIDEDATA
+#ifdef AD_SIDEDATA_IN_PRIV
                     if( (frameData = av_malloc(sizeof(*frameData))) != NULL )  {
                         /* Set the frame info up */
                         frameData->frameType = RTPAudio;

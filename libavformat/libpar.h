@@ -24,7 +24,7 @@
 #include "avformat.h"
 
 
-#ifdef AD_NO_SIDEDATA
+#ifdef AD_SIDEDATA_IN_PRIV
 #include <parreader_types.h>
 
 typedef struct {
@@ -34,6 +34,6 @@ typedef struct {
     int fileChanged;
 } LibparFrameExtra;
 
-#endif // AD_NO_SIDEDATA
+#endif // AD_SIDEDATA_IN_PRIV
 
 #endif /* AVFORMAT_LIBPAR_H */
