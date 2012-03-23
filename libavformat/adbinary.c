@@ -306,7 +306,7 @@ static int adbinary_probe(AVProbeData *p)
                 break;
             case AD_DATATYPE_AUDIO_RAW:
                 // We don't handle this format
-                av_log(NULL, AV_LOG_ERROR, "%s: Detected raw audio packet (unsupported)\n", __func__);
+                av_log(NULL, AV_LOG_DEBUG, "%s: Detected raw audio packet (unsupported)\n", __func__);
                 break;
             case AD_DATATYPE_MINIMAL_MPEG4:
                 if (bufferSize >= 10)  {
@@ -411,7 +411,7 @@ static int adbinary_probe(AVProbeData *p)
                 }
                 break;
             default:
-                av_log(NULL, AV_LOG_WARNING, "%s: Detected unknown packet type\n", __func__);
+                av_log(NULL, AV_LOG_DEBUG, "%s: Detected unknown packet type\n", __func__);
                 break;
         }
 
@@ -556,7 +556,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     else  {
         av_log(s, AV_LOG_ERROR, "%s: Error %d creating packet\n", __func__, errorVal);
 
-#ifdef AD_NO_SIDEDATA
+#ifdef AD_SIDEDATA_IN_PRIV
         // If there was an error, release any memory that has been allocated
         if (payload != NULL)
             av_freep(&payload);
@@ -566,7 +566,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
 #endif
     }
 
-#ifndef AD_NO_SIDEDATA
+#ifndef AD_SIDEDATA_IN_PRIV
     if (payload != NULL)
         av_freep(&payload);
 
