@@ -264,6 +264,10 @@ static int adbinary_probe(AVProbeData *p)
                     (bufPtr[PKT_SIZE_BYTE_2] << 8 ) +
                     (bufPtr[PKT_SIZE_BYTE_3]);
 
+        // Sanity check on dataSize
+        if ((dataSize < 6) || (dataSize > 0x1000000))
+            return 0;
+        
         // Maximum of 32 cameras can be connected to a system
         if (bufPtr[PKT_DATACHANNEL] > 32)
             return 0;
@@ -312,16 +316,20 @@ static int adbinary_probe(AVProbeData *p)
                 if (bufferSize >= 10)  {
                     uint32_t sec  = AV_RB32(dataPtr);
                     uint32_t vos  = AV_RB32(dataPtr + 6);
-                    // Check for MPEG4 start code in data along with a timestamp
-                    // of 1980 or later.  Crappy test, but there isn't much data
-                    // to go on.  Should be able to use milliseconds <= 1000 but
-                    // servers often send larger values than this,
-                    // nonsensical as that is
-                    if (sec > 315532800)  {
-                        if ((vos >= 0x1B0) && (vos <= 0x1B6)) {
-                            av_log(NULL, AV_LOG_DEBUG, "%s: Detected minimal MPEG4 packet\n", __func__);
-                            score += AVPROBE_SCORE_MAX / 2;
+                    
+                    if (mpegOrH264(vos) == PIC_MODE_MPEG4_411)  {
+                        // Check for MPEG4 start code in data along with a timestamp
+                        // of 1980 or later.  Crappy test, but there isn't much data
+                        // to go on.  Should be able to use milliseconds <= 1000 but
+                        // servers often send larger values than this,
+                        // nonsensical as that is
+                        if (sec > 315532800)  {
+                            if ((vos >= 0x1B0) && (vos <= 0x1B6)) {
+                                av_log(NULL, AV_LOG_WARNING, "%s: Detected minimal MPEG4 packet %u\n", __func__, dataSize);
+                                score += AVPROBE_SCORE_MAX / 4;
+                            }
                         }
+                        break;
                     }
                 }
                 // Servers can send h264 identified as MPEG4, so fall through
@@ -337,8 +345,8 @@ static int adbinary_probe(AVProbeData *p)
                     // nonsensical as that is
                     if (sec > 315532800)  {
                         if (vos == 0x01) {
-                            av_log(NULL, AV_LOG_DEBUG, "%s: Detected minimal h264 packet\n", __func__);
-                            score += AVPROBE_SCORE_MAX / 2;
+                            av_log(NULL, AV_LOG_WARNING, "%s: Detected minimal h264 packet %u\n", __func__, dataSize);
+                            score += AVPROBE_SCORE_MAX / 4;
                         }
                     }
                 }
@@ -422,7 +430,6 @@ static int adbinary_probe(AVProbeData *p)
         else  {
             bufferSize = 0;
             bufPtr = p->buf;
-            score = 0;
         }
     }
 
