@@ -753,7 +753,18 @@ using the libass library.
 To enable compilation of this filter you need to configure FFmpeg with
 @code{--enable-libass}.
 
-This filter accepts in input the name of the ass file to render.
+This filter accepts the syntax: @var{ass_filename}[:@var{options}],
+where @var{ass_filename} is the filename of the ASS file to read, and
+@var{options} is an optional sequence of @var{key}=@var{value} pairs,
+separated by ":".
+
+A description of the accepted options follows.
+
+@table @option
+@item dar
+Specifies the display aspect ratio adopted for rendering the
+subtitles. Default value is "1.0".
+@end table
 
 For example, to render the file @file{sub.ass} on top of the input
 video, use the command:
@@ -2670,6 +2681,22 @@ Complete example of a thumbnail creation with @command{ffmpeg}:
 @example
 ffmpeg -i in.avi -vf thumbnail,scale=300:200 -frames:v 1 out.png
 @end example
+
+@section tile
+
+Tile several successive frames together.
+
+It accepts as argument the tile size (i.e. the number of lines and columns)
+in the form "@var{w}x@var{h}".
+
+For example, produce 8×8 PNG tiles of all keyframes (@option{-skip_frame
+nokey}) in a movie:
+@example
+ffmpeg -skip_frame nokey -i file.avi -vf 'scale=128:72,tile=8x8' -an -vsync 0 keyframes%03d.png
+@end example
+The @option{-vsync 0} is necessary to prevent @command{ffmpeg} from
+duplicating each output frame to accomodate the originally detected frame
+rate.
 
 @section tinterlace
 

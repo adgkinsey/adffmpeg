@@ -1354,7 +1354,7 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
         if ((component = mxf_resolve_strong_ref(mxf, &material_track->sequence_ref, TimecodeComponent))) {
             mxf_tc = (MXFTimecodeComponent*)component;
             flags = mxf_tc->drop_frame == 1 ? AV_TIMECODE_FLAG_DROPFRAME : 0;
-            if (av_timecode_init(&tc, mxf_tc->rate, flags, mxf_tc->start_frame, mxf) == 0) {
+            if (av_timecode_init(&tc, mxf_tc->rate, flags, mxf_tc->start_frame, mxf->fc) == 0) {
                 mxf_add_timecode_metadata(&mxf->fc->metadata, "timecode", &tc);
             }
         }
@@ -1371,7 +1371,7 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
 
             mxf_tc = (MXFTimecodeComponent*)component;
             flags = mxf_tc->drop_frame == 1 ? AV_TIMECODE_FLAG_DROPFRAME : 0;
-            if (av_timecode_init(&tc, mxf_tc->rate, flags, mxf_tc->start_frame, mxf) == 0) {
+            if (av_timecode_init(&tc, mxf_tc->rate, flags, mxf_tc->start_frame, mxf->fc) == 0) {
                 mxf_add_timecode_metadata(&mxf->fc->metadata, "timecode", &tc);
                 break;
             }
@@ -1877,6 +1877,9 @@ static int mxf_read_header(AVFormatContext *s)
             /* next partition pack - keep going, seek to previous partition or stop */
             if(mxf_parse_handle_partition_or_eof(mxf) <= 0)
                 break;
+            else if (mxf->parsing_backward)
+                continue;
+            /* we're still parsing forward. proceed to parsing this partition pack */
         }
 
         for (metadata = mxf_metadata_read_table; metadata->read; metadata++) {
