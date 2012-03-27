@@ -384,7 +384,12 @@ static int adbinary_probe(AVProbeData *p)
             case AD_DATATYPE_INFO:
                 if ( (bufferSize >= 1) && (dataPtr[0] == 0) || (dataPtr[0] == 1) )  {
                     av_log(NULL, AV_LOG_DEBUG, "%s: Detected info packet (%d)\n", __func__, dataPtr[0]);
-                    score += 5;
+                    if ((bufferSize >= 5) && (strncmp(&dataPtr[1], "SITE", 4) == 0))
+                        score += AVPROBE_SCORE_MAX;
+                    else if ((bufferSize >= 15) && (strncmp(&dataPtr[1], "(JPEG)TARGSIZE", 14) == 0))
+                        score += AVPROBE_SCORE_MAX;
+                    else
+                        score += 5;
                 }
                 break;
             case AD_DATATYPE_XML_INFO:
@@ -402,12 +407,10 @@ static int adbinary_probe(AVProbeData *p)
                 break;
             case AD_DATATYPE_PBM:
                 if (bufferSize >= 3)  {
-                    if (dataPtr[0] == 'P')  {
-                        if ((dataPtr[1] >= '1') && (dataPtr[1] <= '6'))  {
-                            if (dataPtr[2] == 0x0A)  {
-                                score += AVPROBE_SCORE_MAX;
-                                av_log(NULL, AV_LOG_DEBUG, "%s: Detected pbm packet\n", __func__);
-                            }
+                    if ((dataPtr[0] == 'P') && (dataPtr[1] >= '1') && (dataPtr[1] <= '6'))  {
+                        if (dataPtr[2] == 0x0A)  {
+                            score += AVPROBE_SCORE_MAX;
+                            av_log(NULL, AV_LOG_DEBUG, "%s: Detected pbm packet\n", __func__);
                         }
                     }
                 }
