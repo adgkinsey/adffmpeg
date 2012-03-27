@@ -325,7 +325,7 @@ static int adbinary_probe(AVProbeData *p)
                         // nonsensical as that is
                         if (sec > 315532800)  {
                             if ((vos >= 0x1B0) && (vos <= 0x1B6)) {
-                                av_log(NULL, AV_LOG_WARNING, "%s: Detected minimal MPEG4 packet %u\n", __func__, dataSize);
+                                av_log(NULL, AV_LOG_DEBUG, "%s: Detected minimal MPEG4 packet %u\n", __func__, dataSize);
                                 score += AVPROBE_SCORE_MAX / 4;
                             }
                         }
@@ -345,7 +345,7 @@ static int adbinary_probe(AVProbeData *p)
                     // nonsensical as that is
                     if (sec > 315532800)  {
                         if (vos == 0x01) {
-                            av_log(NULL, AV_LOG_WARNING, "%s: Detected minimal h264 packet %u\n", __func__, dataSize);
+                            av_log(NULL, AV_LOG_DEBUG, "%s: Detected minimal h264 packet %u\n", __func__, dataSize);
                             score += AVPROBE_SCORE_MAX / 4;
                         }
                     }
