@@ -428,8 +428,8 @@ static int resample(SwrContext *s, AudioData *out_param, int out_count,
     return ret_sum;
 }
 
-static int swr_convert_internal(struct SwrContext *s, AudioData *out[SWR_CH_MAX], int out_count,
-                                                      AudioData *in [SWR_CH_MAX], int  in_count){
+static int swr_convert_internal(struct SwrContext *s, AudioData *out, int out_count,
+                                                      AudioData *in , int  in_count){
     AudioData *postin, *midbuf, *preout;
     int ret/*, in_max*/;
     AudioData preout_tmp, midbuf_tmp;
@@ -545,7 +545,6 @@ int swr_convert(struct SwrContext *s, uint8_t *out_arg[SWR_CH_MAX], int out_coun
         AudioData tmp= *in;
         int ret2=0;
         int ret, size;
-        int in_buffer_count= s->in_buffer_count;
         size = FFMIN(out_count, s->in_buffer_count);
         if(size){
             buf_set(&tmp, &s->in_buffer, s->in_buffer_index);

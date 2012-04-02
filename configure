@@ -118,7 +118,6 @@ Component options:
   --enable-x11grab         enable X11 grabbing [no]
   --disable-network        disable network support [no]
   --disable-dct            disable DCT code
-  --disable-fft            disable FFT code
   --disable-mdct           disable MDCT code
   --disable-rdft           disable RDFT code
   --disable-fft            disable FFT code
@@ -1186,6 +1185,7 @@ HAVE_LIST="
     GetProcessMemoryInfo
     GetProcessTimes
     getrusage
+    glob
     gnu_as
     ibm_asm
     inet_aton
@@ -1484,6 +1484,7 @@ png_encoder_select="zlib"
 qcelp_decoder_select="lsp"
 qdm2_decoder_select="mdct rdft mpegaudiodsp"
 ra_144_encoder_select="lpc"
+ralf_decoder_select="golomb"
 rv10_decoder_select="h263_decoder"
 rv10_encoder_select="h263_encoder"
 rv20_decoder_select="h263_decoder"
@@ -1547,7 +1548,7 @@ vda_deps="VideoDecodeAcceleration_VDADecoder_h pthreads"
 vdpau_deps="vdpau_vdpau_h vdpau_vdpau_x11_h"
 
 # parsers
-h264_parser_select="golomb h264chroma h264dsp h264pred h264qpel"
+h264_parser_select="golomb h264dsp h264pred"
 
 # external libraries
 libaacplus_encoder_deps="libaacplus"
@@ -3083,6 +3084,7 @@ check_func_headers windows.h GetProcessAffinityMask
 check_func_headers windows.h GetProcessTimes
 check_func_headers windows.h MapViewOfFile
 check_func_headers windows.h VirtualAlloc
+check_func_headers glob.h glob
 
 check_header dlfcn.h
 check_header dxva2api.h -D_WIN32_WINNT=0x0600
@@ -3226,7 +3228,7 @@ if enabled libdc1394; then
 fi
 
 SDL_CONFIG="${cross_prefix}sdl-config"
-if check_pkg_config sdl SDL_version.h SDL_Linked_Version; then
+if check_pkg_config sdl SDL_events.h SDL_PollEvent; then
     check_cpp_condition SDL.h "(SDL_MAJOR_VERSION<<16 | SDL_MINOR_VERSION<<8 | SDL_PATCHLEVEL) >= 0x010201" $sdl_cflags &&
     enable sdl &&
     check_struct SDL.h SDL_VideoInfo current_w $sdl_cflags && enable sdl_video_size
