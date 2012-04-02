@@ -266,7 +266,7 @@ AVStream * ad_get_audio_stream(AVFormatContext *s, struct NetVuAudioData* audioH
     found = FALSE;
     for( i = 0; i < s->nb_streams; i++ ) {
         st = s->streams[i];
-        if( st->id == audioHeader->channel ) {
+        if ( (st->codec->codec_type == AVMEDIA_TYPE_AUDIO) && (st->id == audioHeader->channel) ) {
             found = TRUE;
             break;
         }
@@ -1050,19 +1050,21 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt, int channel,
     return 0;
 }
 
-void audiodata_network2host(uint8_t *data, int size)
+void audiodata_network2host(uint8_t *dest, const uint8_t *src, int size)
 {
-    const uint8_t *dataEnd = data + size;
-    uint8_t upper, lower;
-    uint16_t predictor = AV_RB16(data);
+    const uint8_t *dataEnd = src + size;
+    
+    uint16_t predictor = AV_RB16(src);
+    src += 2;
 
-    AV_WL16(data, predictor);
-    data += 4;
+    AV_WL16(dest, predictor);
+    dest += 2;
+    
+    *dest++ = *src++;
+    *dest++ = *src++;
 
-    for (;data < dataEnd; data++)  {
-        upper = ((*data) & 0xF0) >> 4;
-        lower = ((*data) & 0x0F) << 4;
-        *data = upper | lower;
+    for (;src < dataEnd; src++, dest++)  {
+        *dest = (((*src) & 0xF0) >> 4) | (((*src) & 0x0F) << 4);
     }
 }
 

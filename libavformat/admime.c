@@ -579,7 +579,7 @@ static int ad_read_audio(AVFormatContext *s,
     if (avio_read( pb, pkt->data, size) != size)
         return ADFFMPEG_AD_ERROR_AUDIO_ADPCM_MIME_GET_BUFFER;
 
-    audiodata_network2host(pkt->data, size);
+    audiodata_network2host(pkt->data, pkt->data, size);
 
     return 0;
 }

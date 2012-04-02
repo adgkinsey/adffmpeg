@@ -201,7 +201,7 @@ static int ad_read_audio(AVFormatContext *s,
         return ADFFMPEG_AD_ERROR_AUDIO_ADPCM_MIME_NEW_PACKET;
     }
 
-    audiodata_network2host(pkt->data, data->sizeOfAudioData);
+    audiodata_network2host(pkt->data, pkt->data, data->sizeOfAudioData);
 
     return status;
 }
@@ -236,7 +236,7 @@ static int adbinary_audio_minimal(AVFormatContext *s,
         return ADFFMPEG_AD_ERROR_MINIMAL_AUDIO_ADPCM_NEW_PACKET;
     }
 
-    audiodata_network2host(pkt->data, dataSize);
+    audiodata_network2host(pkt->data, pkt->data, dataSize);
 
     return status;
 }

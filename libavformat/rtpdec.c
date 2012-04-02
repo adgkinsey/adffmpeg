@@ -88,6 +88,11 @@ void av_register_rtp_dynamic_payload_handlers(void)
     ff_register_dynamic_payload_handler(&ff_g726_24_dynamic_handler);
     ff_register_dynamic_payload_handler(&ff_g726_32_dynamic_handler);
     ff_register_dynamic_payload_handler(&ff_g726_40_dynamic_handler);
+    
+    ff_register_dynamic_payload_handler(&ff_adaudio_RTP_PAYLOAD_TYPE_8000HZ_ADPCM_dynamic_handler);
+    ff_register_dynamic_payload_handler(&ff_adaudio_RTP_PAYLOAD_TYPE_11025HZ_ADPCM_dynamic_handler);
+    ff_register_dynamic_payload_handler(&ff_adaudio_RTP_PAYLOAD_TYPE_16000HZ_ADPCM_dynamic_handler);
+    ff_register_dynamic_payload_handler(&ff_adaudio_RTP_PAYLOAD_TYPE_22050HZ_ADPCM_dynamic_handler);
 }
 
 RTPDynamicProtocolHandler *ff_rtp_handler_find_by_name(const char *name,
