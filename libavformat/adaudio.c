@@ -93,9 +93,7 @@ static int adaudio_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 isPacketAlloced = 1;
 
                 /* Copy data into packet */
-                memcpy( pkt->data, &ioContext->buf_ptr[SIZEOF_RTP_HEADER], sampleSize );
-
-                audiodata_network2host(pkt->data, sampleSize);
+                audiodata_network2host(pkt->data, &ioContext->buf_ptr[SIZEOF_RTP_HEADER], sampleSize);
 
                 /* Configure stream info */
                 if( (st = ad_get_audio_stream(s, NULL)) != NULL ) {

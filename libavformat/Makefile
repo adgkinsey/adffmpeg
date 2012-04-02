@@ -271,6 +271,7 @@ OBJS-$(CONFIG_RTP_MUXER)                 += rtp.o         \
 OBJS-$(CONFIG_RTPDEC)                    += rdt.o         \
                                             rtp.o         \
                                             rtpdec.o      \
+                                            rtpdec_adaudio.o \
                                             rtpdec_amr.o  \
                                             rtpdec_asf.o  \
                                             rtpdec_g726.o \

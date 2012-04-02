@@ -88,7 +88,7 @@ int ad_read_packet(AVFormatContext *s, AVPacket *pkt, int channel,
 AVStream * ad_get_vstream(AVFormatContext *s, uint16_t w, uint16_t h,
                           uint8_t cam, int format, const char *title);
 AVStream * ad_get_audio_stream(AVFormatContext *s, struct NetVuAudioData* audioHeader);
-void audiodata_network2host(uint8_t *data, int size);
+void audiodata_network2host(uint8_t *data, const uint8_t *src, int size);
 int ad_adFormatToCodecId(AVFormatContext *s, int32_t adFormat);
 int mpegOrH264(unsigned int startCode);
 int ad_pbmDecompress(char **comment, uint8_t **src, int size, AVPacket *pkt, int *width, int *height);
