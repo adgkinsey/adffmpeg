@@ -60,6 +60,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER (BLACKDETECT, blackdetect, vf);
     REGISTER_FILTER (BLACKFRAME,  blackframe,  vf);
     REGISTER_FILTER (BOXBLUR,     boxblur,     vf);
+    REGISTER_FILTER (COLORMATRIX, colormatrix, vf);
     REGISTER_FILTER (COPY,        copy,        vf);
     REGISTER_FILTER (COPYPLANE,   copyplane,   vf);
     REGISTER_FILTER (CROP,        crop,        vf);
@@ -76,6 +77,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER (GRADFUN,     gradfun,     vf);
     REGISTER_FILTER (HFLIP,       hflip,       vf);
     REGISTER_FILTER (HQDN3D,      hqdn3d,      vf);
+    REGISTER_FILTER (IDET,        idet,        vf);
     REGISTER_FILTER (LUT,         lut,         vf);
     REGISTER_FILTER (LUTRGB,      lutrgb,      vf);
     REGISTER_FILTER (LUTYUV,      lutyuv,      vf);
@@ -87,6 +89,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER (OVERLAY,     overlay,     vf);
     REGISTER_FILTER (PAD,         pad,         vf);
     REGISTER_FILTER (PIXDESCTEST, pixdesctest, vf);
+    REGISTER_FILTER (REMOVELOGO,  removelogo,  vf);
     REGISTER_FILTER (SCALE,       scale,       vf);
     REGISTER_FILTER (SELECT,      select,      vf);
     REGISTER_FILTER (SETDAR,      setdar,      vf);

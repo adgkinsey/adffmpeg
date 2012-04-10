@@ -20,6 +20,9 @@ version next:
 - ZeroCodec decoder
 - tile video filter
 - Metal Gear Solid: The Twin Snakes demuxer
+- OpenEXR image decoder
+- removelogo filter
+- drop support for ffmpeg without libavfilter
 
 
 version 0.10:

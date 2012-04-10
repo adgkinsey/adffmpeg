@@ -918,6 +918,18 @@ boxblur=min(h\,w)/10:1:min(cw\,ch)/10:1
 
 @end itemize
 
+@section colormatrix
+
+The colormatrix filter allows conversion between any of the following color
+space: BT.709 (@var{bt709}), BT.601 (@var{bt601}), SMPTE-240M (@var{smpte240m})
+and FCC (@var{fcc}).
+
+The syntax of the parameters is @var{source}:@var{destination}:
+
+@example
+colormatrix=bt601:smpte240m
+@end example
+
 @section copy
 
 Copy the input source unchanged to the output. Mainly useful for
@@ -1695,6 +1707,11 @@ a float number which specifies chroma temporal strength, defaults to
 @var{luma_tmp}*@var{chroma_spatial}/@var{luma_spatial}
 @end table
 
+@section idet
+
+Interlaceing detect filter. This filter tries to detect if the input is
+interlaced or progressive. Top or bottom field first.
+
 @section lut, lutrgb, lutyuv
 
 Compute a look-up table for binding each pixel component input value
@@ -1870,7 +1887,6 @@ The list of the currently supported filters follows:
 @item pullup
 @item qp
 @item rectangle
-@item remove-logo
 @item rotate
 @item sab
 @item screenshot
@@ -1893,9 +1909,6 @@ the "VIDEO FILTERS" section in the MPlayer manual.
 
 Some examples follow:
 @example
-# remove a logo by interpolating the surrounding pixels
-mp=delogo=200:200:80:20:1
-
 # adjust gamma, brightness, contrast
 mp=eq2=1.0:2:0.5
 
@@ -2219,6 +2232,32 @@ format=monow, pixdesctest
 @end example
 
 can be used to test the monowhite pixel format descriptor definition.
+
+@section removelogo
+
+Suppress a TV station logo, using an image file to determine which
+pixels comprise the logo. It works by filling in the pixels that
+comprise the logo with neighboring pixels.
+
+This filter requires one argument which specifies the filter bitmap
+file, which can be any image format supported by libavformat. The
+width and height of the image file must match those of the video
+stream being processed.
+
+Pixels in the provided bitmap image with a value of zero are not
+considered part of the logo, non-zero pixels are considered part of
+the logo. If you use white (255) for the logo and black (0) for the
+rest, you will be safe. For making the filter bitmap, it is
+recommended to take a screen capture of a black frame with the logo
+visible, and then using a threshold filter followed by the erode
+filter once or twice.
+
+If needed, little splotches can be fixed manually. Remember that if
+logo pixels are not covered, the filter quality will be much
+reduced. Marking too many pixels as part of the logo does not hurt as
+much, but it will increase the amount of blurring needed to cover over
+the image and will destroy more information than necessary, and extra
+pixels will slow things down on a large logo.
 
 @section scale
 

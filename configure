@@ -278,6 +278,8 @@ Developer options (useful when working on FFmpeg itself):
   --disable-optimizations  disable compiler optimizations
   --enable-extra-warnings  enable more compiler warnings
   --disable-stripping      disable stripping of executables and shared libraries
+  --assert-level=level     0(default), 1 or 2, amount of assertion testing,
+                           2 causes a slowdown at runtime.
   --valgrind=VALGRIND      run "make fate" tests through valgrind to detect memory
                            leaks and errors, using the specified valgrind binary.
                            Cannot be combined with --target-exec
@@ -1159,6 +1161,7 @@ HAVE_LIST="
     attribute_may_alias
     attribute_packed
     cbrtf
+    clock_gettime
     closesocket
     cmov
     dcbzl
@@ -1305,6 +1308,7 @@ CMDLINE_SET="
     ar
     arch
     as
+    assert_level
     build_suffix
     cc
     cpu
@@ -1677,11 +1681,14 @@ aresample_filter_deps="swresample"
 ass_filter_deps="libass"
 blackframe_filter_deps="gpl"
 boxblur_filter_deps="gpl"
+colormatrix_filter_deps="gpl"
 cropdetect_filter_deps="gpl"
 delogo_filter_deps="gpl"
 drawtext_filter_deps="libfreetype"
 frei0r_filter_deps="frei0r dlopen"
+frei0r_filter_extralibs='$ldl'
 frei0r_src_filter_deps="frei0r dlopen"
+frei0r_src_filter_extralibs='$ldl'
 hqdn3d_filter_deps="gpl"
 movie_filter_deps="avcodec avformat"
 mp_filter_deps="gpl avcodec swscale postproc"
@@ -1689,6 +1696,7 @@ mptestsrc_filter_deps="gpl"
 negate_filter_deps="lut_filter"
 ocv_filter_deps="libopencv"
 pan_filter_deps="swresample"
+removelogo_filter_deps="avcodec avformat swscale"
 scale_filter_deps="swscale"
 tinterlace_filter_deps="gpl"
 yadif_filter_deps="gpl"
@@ -1704,7 +1712,7 @@ ffplay_select="buffersink_filter rdft"
 ffprobe_deps="avcodec avformat"
 ffserver_deps="avformat ffm_muxer fork rtp_protocol rtsp_demuxer"
 ffserver_extralibs='$ldl'
-ffmpeg_deps="avcodec avformat swscale swresample"
+ffmpeg_deps="avcodec avfilter avformat swscale swresample"
 ffmpeg_select="buffersink_filter"
 
 doc_deps="texi2html"
@@ -3056,6 +3064,7 @@ fi
 # Solaris has nanosleep in -lrt, OpenSolaris no longer needs that
 check_func nanosleep || { check_func nanosleep -lrt && add_extralibs -lrt; }
 
+check_func  clock_gettime || { check_func clock_gettime -lrt && add_extralibs -lrt; }
 check_func  fcntl
 check_func  fork
 check_func  getaddrinfo $network_extralibs
@@ -3725,6 +3734,9 @@ cat > $TMPH <<EOF
 #define EXTERN_ASM ${extern_prefix}
 #define SLIBSUF "$SLIBSUF"
 EOF
+
+test -n "$assert_level" &&
+    echo "#define ASSERT_LEVEL $assert_level" >>$TMPH
 
 test -n "$malloc_prefix" &&
     echo "#define MALLOC_PREFIX $malloc_prefix" >>$TMPH
