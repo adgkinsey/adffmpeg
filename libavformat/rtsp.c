@@ -333,10 +333,10 @@ static void sdp_parse_line(AVFormatContext *s, SDPParseState *s1,
         av_dict_set(&s->metadata, "title", p, 0);
         break;
     case 'i':
-        if (s->nb_streams == 0) {
+        if (s->nb_streams == 0)
             av_dict_set(&s->metadata, "comment", p, 0);
-            break;
-        }
+        else
+            av_dict_set(&s->streams[s->nb_streams - 1]->metadata, "title", p, 0);
         break;
     case 'm':
         /* new stream */
