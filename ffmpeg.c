@@ -133,6 +133,7 @@ static const char *subtitle_codec_name = NULL;
 static int file_overwrite = 0;
 static int no_file_overwrite = 0;
 static int do_benchmark = 0;
+static int do_benchmark_all = 0;
 static int do_hex_dump = 0;
 static int do_pkt_dump = 0;
 static int do_psnr = 0;
@@ -165,6 +166,7 @@ static float dts_error_threshold = 3600*30;
 
 static int print_stats = 1;
 static int debug_ts = 0;
+static int current_time;
 
 static uint8_t *audio_buf;
 static unsigned int allocated_audio_buf_size;
@@ -276,6 +278,8 @@ typedef struct OutputStream {
     AVFilterGraph *graph;
 
     int64_t sws_flags;
+    int64_t swr_dither_method;
+    double swr_dither_scale;
     AVDictionary *opts;
     int is_past_recording_time;
     int stream_copy;
@@ -412,6 +416,41 @@ typedef struct OptionsContext {
         else if (ret < 0)\
             exit_program(1);\
     }\
+}
+
+static int64_t getutime(void)
+{
+#if HAVE_GETRUSAGE
+    struct rusage rusage;
+
+    getrusage(RUSAGE_SELF, &rusage);
+    return (rusage.ru_utime.tv_sec * 1000000LL) + rusage.ru_utime.tv_usec;
+#elif HAVE_GETPROCESSTIMES
+    HANDLE proc;
+    FILETIME c, e, k, u;
+    proc = GetCurrentProcess();
+    GetProcessTimes(proc, &c, &e, &k, &u);
+    return ((int64_t) u.dwHighDateTime << 32 | u.dwLowDateTime) / 10;
+#else
+    return av_gettime();
+#endif
+}
+
+static void update_benchmark(const char *fmt, ...)
+{
+    if (do_benchmark_all) {
+        int64_t t = getutime();
+        va_list va;
+        char buf[1024];
+
+        if (fmt) {
+            va_start(va, fmt);
+            vsnprintf(buf, sizeof(buf), fmt, va);
+            va_end(va);
+            printf("bench: %8"PRIu64" %s \n", t - current_time, buf);
+        }
+        current_time = t;
+    }
 }
 
 static void reset_options(OptionsContext *o, int is_input)
@@ -1081,18 +1120,26 @@ static int encode_audio_frame(AVFormatContext *s, OutputStream *ost,
     }
 
     got_packet = 0;
+    update_benchmark(NULL);
     if (avcodec_encode_audio2(enc, &pkt, frame, &got_packet) < 0) {
         av_log(NULL, AV_LOG_FATAL, "Audio encoding failed (avcodec_encode_audio2)\n");
         exit_program(1);
     }
+    update_benchmark("encode_audio %d.%d", ost->file_index, ost->index);
 
     ret = pkt.size;
 
     if (got_packet) {
         if (pkt.pts != AV_NOPTS_VALUE)
             pkt.pts      = av_rescale_q(pkt.pts,      enc->time_base, ost->st->time_base);
-        if (pkt.dts != AV_NOPTS_VALUE)
+        if (pkt.dts != AV_NOPTS_VALUE) {
+            int64_t max = ost->st->cur_dts + !(s->oformat->flags & AVFMT_TS_NONSTRICT);
             pkt.dts      = av_rescale_q(pkt.dts,      enc->time_base, ost->st->time_base);
+            if (ost->st->cur_dts && ost->st->cur_dts != AV_NOPTS_VALUE &&  max > pkt.dts) {
+                av_log(s, max - pkt.dts > 2 ? AV_LOG_WARNING : AV_LOG_DEBUG, "Audio timestamp %"PRId64" < %"PRId64" invalid, cliping\n", pkt.dts, max);
+                pkt.pts = pkt.dts = max;
+            }
+        }
         if (pkt.duration > 0)
             pkt.duration = av_rescale_q(pkt.duration, enc->time_base, ost->st->time_base);
 
@@ -1199,6 +1246,8 @@ static void do_audio_out(AVFormatContext *s, OutputStream *ost,
                                           enc->channel_layout, enc->sample_fmt, enc->sample_rate,
                                           dec->channel_layout, dec->sample_fmt, dec->sample_rate,
                                           0, NULL);
+            av_opt_set_int(ost->swr, "dither_method", ost->swr_dither_method,0);
+            av_opt_set_int(ost->swr, "dither_scale", ost->swr_dither_scale,0);
             if (ost->audio_channels_mapped)
                 swr_set_channel_mapping(ost->swr, ost->audio_channels_map);
             av_opt_set_double(ost->swr, "rmvol", ost->rematrix_volume, 0);
@@ -1282,7 +1331,7 @@ static void do_audio_out(AVFormatContext *s, OutputStream *ost,
                 swr_set_compensation(ost->swr, comp, enc->sample_rate);
             }
         }
-    } else
+    } else if (audio_sync_method == 0)
         ost->sync_opts = lrintf(get_sync_ipts(ost, ist->pts) * enc->sample_rate) -
                                 av_fifo_size(ost->fifo) / (enc->channels * osize); // FIXME wrong
 
@@ -1579,7 +1628,9 @@ static void do_video_out(AVFormatContext *s, OutputStream *ost,
                 big_picture.pict_type = AV_PICTURE_TYPE_I;
                 ost->forced_kf_index++;
             }
+            update_benchmark(NULL);
             ret = avcodec_encode_video2(enc, &pkt, &big_picture, &got_packet);
+            update_benchmark("encode_video %d.%d", ost->file_index, ost->index);
             if (ret < 0) {
                 av_log(NULL, AV_LOG_FATAL, "Video encoding failed\n");
                 exit_program(1);
@@ -1813,7 +1864,9 @@ static void flush_encoders(OutputStream *ost_table, int nb_ostreams)
                 }
                 break;
             case AVMEDIA_TYPE_VIDEO:
+                update_benchmark(NULL);
                 ret = avcodec_encode_video2(enc, &pkt, NULL, &got_packet);
+                update_benchmark("encode_video %d.%d", ost->file_index, ost->index);
                 if (ret < 0) {
                     av_log(NULL, AV_LOG_FATAL, "Video encoding failed\n");
                     exit_program(1);
@@ -1948,7 +2001,9 @@ static int transcode_audio(InputStream *ist, AVPacket *pkt, int *got_output)
         avcodec_get_frame_defaults(ist->decoded_frame);
     decoded_frame = ist->decoded_frame;
 
+    update_benchmark(NULL);
     ret = avcodec_decode_audio4(avctx, decoded_frame, got_output, pkt);
+    update_benchmark("decode_audio %d.%d", ist->file_index, ist->st->index);
     if (ret < 0) {
         return ret;
     }
@@ -2063,8 +2118,10 @@ static int transcode_video(InputStream *ist, AVPacket *pkt, int *got_output, int
     pkt->dts  = ist->dts;
     *pkt_pts  = AV_NOPTS_VALUE;
 
+    update_benchmark(NULL);
     ret = avcodec_decode_video2(ist->st->codec,
                                 decoded_frame, got_output, pkt);
+    update_benchmark("decode_video %d.%d", ist->file_index, ist->st->index);
     if (ret < 0)
         return ret;
 
@@ -2328,10 +2385,57 @@ static void print_sdp(OutputFile *output_files, int n)
     av_freep(&avc);
 }
 
+static void get_default_channel_layouts(OutputStream *ost, InputStream *ist)
+{
+    char layout_name[256];
+    AVCodecContext *enc = ost->st->codec;
+    AVCodecContext *dec = ist->st->codec;
+
+    if (!dec->channel_layout) {
+        if (enc->channel_layout && dec->channels == enc->channels) {
+            dec->channel_layout = enc->channel_layout;
+        } else {
+            dec->channel_layout = av_get_default_channel_layout(dec->channels);
+
+            if (!dec->channel_layout) {
+                av_log(NULL, AV_LOG_FATAL, "Unable to find default channel "
+                       "layout for Input Stream #%d.%d\n", ist->file_index,
+                       ist->st->index);
+                exit_program(1);
+            }
+        }
+        av_get_channel_layout_string(layout_name, sizeof(layout_name),
+                                     dec->channels, dec->channel_layout);
+        av_log(NULL, AV_LOG_WARNING, "Guessed Channel Layout for  Input Stream "
+               "#%d.%d : %s\n", ist->file_index, ist->st->index, layout_name);
+    }
+    if (!enc->channel_layout) {
+        if (dec->channels == enc->channels) {
+            enc->channel_layout = dec->channel_layout;
+            return;
+        } else {
+            enc->channel_layout = av_get_default_channel_layout(enc->channels);
+        }
+        if (!enc->channel_layout) {
+            av_log(NULL, AV_LOG_FATAL, "Unable to find default channel layout "
+                   "for Output Stream #%d.%d\n", ost->file_index,
+                   ost->st->index);
+            exit_program(1);
+        }
+        av_get_channel_layout_string(layout_name, sizeof(layout_name),
+                                     enc->channels, enc->channel_layout);
+        av_log(NULL, AV_LOG_WARNING, "Guessed Channel Layout for Output Stream "
+               "#%d.%d : %s\n", ost->file_index, ost->st->index, layout_name);
+    }
+}
+
+
 static int init_input_stream(int ist_index, OutputStream *output_streams, int nb_output_streams,
                              char *error, int error_len)
 {
     InputStream *ist = &input_streams[ist_index];
+    int i;
+
     if (ist->decoding_needed) {
         AVCodec *codec = ist->dec;
         if (!codec) {
@@ -2356,6 +2460,17 @@ static int init_input_stream(int ist_index, OutputStream *output_streams, int nb
         }
         assert_codec_experimental(ist->st->codec, 0);
         assert_avoptions(ist->opts);
+
+        if (ist->st->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
+            for (i = 0; i < nb_output_streams; i++) {
+                OutputStream *ost = &output_streams[i];
+                if (ost->source_index == ist_index) {
+                    if (!ist->st->codec->channel_layout || !ost->st->codec->channel_layout)
+                        get_default_channel_layouts(ost, ist);
+                    break;
+                }
+            }
+        }
     }
 
     ist->dts = ist->st->avg_frame_rate.num ? - ist->st->codec->has_b_frames * AV_TIME_BASE / av_q2d(ist->st->avg_frame_rate) : 0;
@@ -2453,6 +2568,7 @@ static int transcode_init(OutputFile *output_files, int nb_output_files,
                     codec->time_base = icodec->time_base;
                     codec->time_base.num *= icodec->ticks_per_frame;
                     codec->time_base.den *= 2;
+                    codec->ticks_per_frame = 2;
                 }
             } else if(!(oc->oformat->flags & AVFMT_VARIABLE_FPS)
                       && strcmp(oc->oformat->name, "mov") && strcmp(oc->oformat->name, "mp4") && strcmp(oc->oformat->name, "3gp")
@@ -3907,6 +4023,8 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
         st->codec->flags |= CODEC_FLAG_GLOBAL_HEADER;
 
     av_opt_get_int(sws_opts, "sws_flags", 0, &ost->sws_flags);
+    av_opt_get_int   (swr_opts, "dither_method", 0, &ost->swr_dither_method);
+    av_opt_get_double(swr_opts, "dither_scale" , 0, &ost->swr_dither_scale);
 
     ost->source_index = source_index;
     if (source_index >= 0) {
@@ -4559,24 +4677,6 @@ static int opt_pass(const char *opt, const char *arg)
     return 0;
 }
 
-static int64_t getutime(void)
-{
-#if HAVE_GETRUSAGE
-    struct rusage rusage;
-
-    getrusage(RUSAGE_SELF, &rusage);
-    return (rusage.ru_utime.tv_sec * 1000000LL) + rusage.ru_utime.tv_usec;
-#elif HAVE_GETPROCESSTIMES
-    HANDLE proc;
-    FILETIME c, e, k, u;
-    proc = GetCurrentProcess();
-    GetProcessTimes(proc, &c, &e, &k, &u);
-    return ((int64_t) u.dwHighDateTime << 32 | u.dwLowDateTime) / 10;
-#else
-    return av_gettime();
-#endif
-}
-
 static int64_t getmaxrss(void)
 {
 #if HAVE_GETRUSAGE && HAVE_STRUCT_RUSAGE_RU_MAXRSS
@@ -4943,6 +5043,41 @@ static void parse_cpuflags(int argc, char **argv, const OptionDef *options)
         opt_cpuflags("cpuflags", argv[idx + 1]);
 }
 
+static int opt_channel_layout(OptionsContext *o, const char *opt, const char *arg)
+{
+    char layout_str[32];
+    char *stream_str;
+    char *ac_str;
+    int ret, channels, ac_str_size;
+    uint64_t layout;
+
+    layout = av_get_channel_layout(arg);
+    if (!layout) {
+        av_log(NULL, AV_LOG_ERROR, "Unknown channel layout: %s\n", arg);
+        return AVERROR(EINVAL);
+    }
+    snprintf(layout_str, sizeof(layout_str), "%"PRIu64, layout);
+    ret = opt_default(opt, layout_str);
+    if (ret < 0)
+        return ret;
+
+    /* set 'ac' option based on channel layout */
+    channels = av_get_channel_layout_nb_channels(layout);
+    snprintf(layout_str, sizeof(layout_str), "%d", channels);
+    stream_str = strchr(opt, ':');
+    ac_str_size = 3 + (stream_str ? strlen(stream_str) : 0);
+    ac_str = av_mallocz(ac_str_size);
+    if (!ac_str)
+        return AVERROR(ENOMEM);
+    av_strlcpy(ac_str, "ac", 3);
+    if (stream_str)
+        av_strlcat(ac_str, stream_str, ac_str_size);
+    ret = parse_option(o, ac_str, layout_str, options);
+    av_free(ac_str);
+
+    return ret;
+}
+
 #define OFFSET(x) offsetof(OptionsContext, x)
 static const OptionDef options[] = {
     /* main options */
@@ -4969,6 +5104,8 @@ static const OptionDef options[] = {
     { "dframes", HAS_ARG | OPT_FUNC2, {(void*)opt_data_frames}, "set the number of data frames to record", "number" },
     { "benchmark", OPT_BOOL | OPT_EXPERT, {(void*)&do_benchmark},
       "add timings for benchmarking" },
+    { "benchmark_all", OPT_BOOL | OPT_EXPERT, {(void*)&do_benchmark_all},
+      "add timings for each task" },
     { "timelimit", HAS_ARG, {(void*)opt_timelimit}, "set max runtime in seconds", "limit" },
     { "dump", OPT_BOOL | OPT_EXPERT, {(void*)&do_pkt_dump},
       "dump each input packet" },
@@ -5051,6 +5188,7 @@ static const OptionDef options[] = {
     { "vol", OPT_INT | HAS_ARG | OPT_AUDIO, {(void*)&audio_volume}, "change audio volume (256=normal)" , "volume" }, //
     { "sample_fmt", HAS_ARG | OPT_EXPERT | OPT_AUDIO | OPT_SPEC | OPT_STRING, {.off = OFFSET(sample_fmts)}, "set sample format", "format" },
     { "rmvol", HAS_ARG | OPT_AUDIO | OPT_FLOAT | OPT_SPEC, {.off = OFFSET(rematrix_volume)}, "rematrix volume (as factor)", "volume" },
+    { "channel_layout", HAS_ARG | OPT_EXPERT | OPT_AUDIO | OPT_FUNC2, {(void*)opt_channel_layout}, "set channel layout", "layout" },
 
     /* subtitle options */
     { "sn", OPT_BOOL | OPT_SUBTITLE | OPT_OFFSET, {.off = OFFSET(subtitle_disable)}, "disable subtitle" },
@@ -5133,7 +5271,7 @@ int main(int argc, char **argv)
         exit_program(1);
     }
 
-    ti = getutime();
+    current_time = ti = getutime();
     if (transcode(output_files, nb_output_files, input_files, nb_input_files) < 0)
         exit_program(1);
     ti = getutime() - ti;
