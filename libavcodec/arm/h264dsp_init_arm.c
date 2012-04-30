@@ -20,10 +20,10 @@
 
 #include <stdint.h>
 
+#include "libavutil/arm/cpu.h"
 #include "libavcodec/dsputil.h"
 #include "libavcodec/h264dsp.h"
 
-#if HAVE_NEON
 void ff_h264_v_loop_filter_luma_neon(uint8_t *pix, int stride, int alpha,
                                      int beta, int8_t *tc0);
 void ff_h264_h_loop_filter_luma_neon(uint8_t *pix, int stride, int alpha,
@@ -97,11 +97,11 @@ static void ff_h264dsp_init_neon(H264DSPContext *c, const int bit_depth, const i
     c->h264_idct8_add4      = ff_h264_idct8_add4_neon;
     }
 }
-#endif
 
 void ff_h264dsp_init_arm(H264DSPContext *c, const int bit_depth, const int chroma_format_idc)
 {
-#if HAVE_NEON
-    if (HAVE_NEON) ff_h264dsp_init_neon(c, bit_depth, chroma_format_idc);
-#endif
+    int cpu_flags = av_get_cpu_flags();
+
+    if (have_neon(cpu_flags))
+        ff_h264dsp_init_neon(c, bit_depth, chroma_format_idc);
 }

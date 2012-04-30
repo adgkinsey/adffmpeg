@@ -589,6 +589,10 @@ int avformat_open_input(AVFormatContext **ps, const char *filename, AVInputForma
 
     if (!s && !(s = avformat_alloc_context()))
         return AVERROR(ENOMEM);
+    if (!s->av_class){
+        av_log(0, AV_LOG_ERROR, "Input context has not been properly allocated by avformat_alloc_context() and is not NULL either\n");
+        return AVERROR(EINVAL);
+    }
     if (fmt)
         s->iformat = fmt;
 
@@ -1315,6 +1319,12 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
             /* free packet */
             av_free_packet(&cur_pkt);
         }
+        if (pkt->flags & AV_PKT_FLAG_KEY)
+            st->skip_to_keyframe = 0;
+        if (st->skip_to_keyframe) {
+            av_free_packet(&cur_pkt);
+            got_packet = 0;
+        }
     }
 
     if (!got_packet && s->parse_queue)
@@ -1967,15 +1977,13 @@ static int has_duration(AVFormatContext *ic)
 {
     int i;
     AVStream *st;
-    if(ic->duration != AV_NOPTS_VALUE)
-        return 1;
 
     for(i = 0;i < ic->nb_streams; i++) {
         st = ic->streams[i];
         if (st->duration != AV_NOPTS_VALUE)
             return 1;
     }
-    if (ic->duration)
+    if (ic->duration != AV_NOPTS_VALUE)
         return 1;
     return 0;
 }
@@ -2512,6 +2520,12 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
         if (read_size >= ic->probesize) {
             ret = count;
             av_log(ic, AV_LOG_DEBUG, "Probe buffer size limit %d reached\n", ic->probesize);
+            for (i = 0; i < ic->nb_streams; i++)
+                if (!ic->streams[i]->r_frame_rate.num &&
+                    ic->streams[i]->info->duration_count <= 1)
+                    av_log(ic, AV_LOG_WARNING,
+                           "Stream #%d: not enough frames to estimate rate; "
+                           "consider increasing probesize\n", i);
             break;
         }
 

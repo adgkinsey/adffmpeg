@@ -1265,6 +1265,25 @@ typedef struct AVFrame {
      * - decoding: Read by user.
      */
     int64_t pkt_pos;
+
+    /**
+     * channel layout of the audio frame
+     * - encoding: unused
+     * - decoding: read by user.
+     * Code outside libavcodec should access this field using:
+     * av_opt_ptr(avcodec_get_frame_class(), frame, "channel_layout")
+     */
+    int64_t channel_layout;
+
+    /**
+     * sample rate of the audio frame
+     * - encoding: unused
+     * - decoding: read by user.
+     * Code outside libavcodec should access this field using:
+     * av_opt_ptr(avcodec_get_frame_class(), frame, "sample_rate")
+     */
+    int sample_rate;
+
 } AVFrame;
 
 struct AVCodecInternal;
@@ -2630,15 +2649,13 @@ typedef struct AVCodecContext {
 #define FF_IDCT_SIMPLEALPHA   23
 #define FF_IDCT_BINK          24
 
+#if FF_API_DSP_MASK
     /**
-     * dsp_mask could be add used to disable unwanted CPU features
-     * CPU features (i.e. MMX, SSE. ...)
-     *
-     * With the FORCE flag you may instead enable given CPU features.
-     * (Dangerous: Usable in case of misdetection, improper usage however will
-     * result into program crash.)
+     * Unused.
+     * @deprecated use av_set_cpu_flags_mask() instead.
      */
-    unsigned dsp_mask;
+    attribute_deprecated unsigned dsp_mask;
+#endif
 
     /**
      * bits per sample/pixel from the demuxer (needed for huffyuv).

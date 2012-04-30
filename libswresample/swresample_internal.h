@@ -30,6 +30,7 @@ typedef struct AudioData{
     int bps;                    ///< bytes per sample
     int count;                  ///< number of samples
     int planar;                 ///< 1 if planar audio, 0 otherwise
+    enum AVSampleFormat fmt;    ///< sample format
 } AudioData;
 
 struct SwrContext {
@@ -37,7 +38,7 @@ struct SwrContext {
     int log_level_offset;                           ///< logging level offset
     void *log_ctx;                                  ///< parent logging context
     enum AVSampleFormat  in_sample_fmt;             ///< input sample format
-    enum AVSampleFormat int_sample_fmt;             ///< internal sample format (AV_SAMPLE_FMT_FLT or AV_SAMPLE_FMT_S16)
+    enum AVSampleFormat int_sample_fmt;             ///< internal sample format (AV_SAMPLE_FMT_FLTP or AV_SAMPLE_FMT_S16P)
     enum AVSampleFormat out_sample_fmt;             ///< output sample format
     int64_t  in_ch_layout;                          ///< input channel layout
     int64_t out_ch_layout;                          ///< output channel layout
@@ -52,8 +53,11 @@ struct SwrContext {
     enum SwrDitherType dither_method;
     int dither_pos;
     float dither_scale;
+    int filter_size;                                /**< length of each FIR filter in the resampling filterbank relative to the cutoff frequency */
+    int phase_shift;                                /**< log2 of the number of entries in the resampling polyphase filterbank */
+    int linear_interp;                              /**< if 1 then the resampling FIR filter will be linearly interpolated */
+    double cutoff;                                  /**< resampling cutoff frequency. 1.0 corresponds to half the output sample rate */
 
-    int int_bps;                                    ///< internal bytes per sample
     int resample_first;                             ///< 1 if resampling must come first, 0 if rematrixing
     int rematrix;                                   ///< flag to indicate if rematrixing is needed (basically if input and output layouts mismatch)
     int rematrix_custom;                            ///< flag to indicate that a custom matrix has been defined
@@ -97,4 +101,8 @@ void swri_sum2(enum AVSampleFormat format, void *dst, const void *src0, const vo
 
 void swri_get_dither(SwrContext *s, void *dst, int len, unsigned seed, enum AVSampleFormat out_fmt, enum AVSampleFormat in_fmt);
 
+void swri_audio_convert_init_x86(struct AudioConvert *ac,
+                                 enum AVSampleFormat out_fmt,
+                                 enum AVSampleFormat in_fmt,
+                                 int channels);
 #endif

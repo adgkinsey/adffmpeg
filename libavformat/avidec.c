@@ -704,7 +704,7 @@ static int avi_read_header(AVFormatContext *s)
 
                 if(size<(1<<30)){
                     st->codec->extradata_size= size;
-                    st->codec->extradata= av_malloc(st->codec->extradata_size + FF_INPUT_BUFFER_PADDING_SIZE);
+                    st->codec->extradata= av_mallocz(st->codec->extradata_size + FF_INPUT_BUFFER_PADDING_SIZE);
                     if (!st->codec->extradata) {
                         st->codec->extradata_size= 0;
                         return AVERROR(ENOMEM);
@@ -895,6 +895,10 @@ static int get_stream_idx(int *d){
     }
 }
 
+/**
+ *
+ * @param exit_early set to 1 to just gather packet position without making the changes needed to actually read & return the packet
+ */
 static int avi_sync(AVFormatContext *s, int exit_early)
 {
     AVIContext *avi = s->priv_data;
@@ -953,6 +957,11 @@ start_sync:
             AVIStream *ast;
             st = s->streams[n];
             ast = st->priv_data;
+
+            if (!ast) {
+                av_log(s, AV_LOG_WARNING, "Skiping foreign stream %d packet\n", n);
+                continue;
+            }
 
             if(s->nb_streams>=2){
                 AVStream *st1  = s->streams[1];
