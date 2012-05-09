@@ -24,6 +24,9 @@
 #include "libavutil/audioconvert.h"
 #include "libavutil/opt.h"
 #include "swresample.h"
+
+#undef time
+#include "time.h"
 #undef fprintf
 
 #define SAMPLES 1000
@@ -227,25 +230,34 @@ int main(int argc, char **argv){
     uint8_t *aout[SWR_CH_MAX];
     uint8_t *amid[SWR_CH_MAX];
     int flush_i=0;
-    int mode = 0;
+    int mode;
     int max_tests = FF_ARRAY_ELEMS(rates) * FF_ARRAY_ELEMS(layouts) * FF_ARRAY_ELEMS(formats) * FF_ARRAY_ELEMS(layouts) * FF_ARRAY_ELEMS(formats);
     int num_tests = 10000;
     uint32_t seed = 0;
+    uint32_t rand_seed = 0;
     int remaining_tests[max_tests];
     int test;
+    int specific_test= -1;
 
     struct SwrContext * forw_ctx= NULL;
     struct SwrContext *backw_ctx= NULL;
 
     if (argc > 1) {
         if (!strcmp(argv[1], "-h")) {
-            av_log(NULL, AV_LOG_INFO, "Usage: swresample-test [<num_tests>]\n"
-                   "Default is %d\n", num_tests);
+            av_log(NULL, AV_LOG_INFO, "Usage: swresample-test [<num_tests>[ <test>]]  \n"
+                   "num_tests           Default is %d\n", num_tests);
             return 0;
         }
         num_tests = strtol(argv[1], NULL, 0);
+        if(num_tests < 0) {
+            num_tests = -num_tests;
+            rand_seed = time(0);
+        }
         if(num_tests<= 0 || num_tests>max_tests)
             num_tests = max_tests;
+        if(argc > 2) {
+            specific_test = strtol(argv[1], NULL, 0);
+        }
     }
 
     for(i=0; i<max_tests; i++)
@@ -253,7 +265,7 @@ int main(int argc, char **argv){
 
     for(test=0; test<num_tests; test++){
         unsigned r;
-        seed = seed * 1664525 + 1013904223;
+        uint_rand(seed);
         r = (seed * (uint64_t)(max_tests - test)) >>32;
         FFSWAP(int, remaining_tests[r], remaining_tests[max_tests - test - 1]);
     }
@@ -272,6 +284,11 @@ int main(int argc, char **argv){
         out_sample_fmt  = formats[vector % FF_ARRAY_ELEMS(formats)]; vector /= FF_ARRAY_ELEMS(formats);
         out_sample_rate = rates  [vector % FF_ARRAY_ELEMS(rates  )]; vector /= FF_ARRAY_ELEMS(rates);
         av_assert0(!vector);
+
+        if(specific_test == 0){
+            if(out_sample_rate != in_sample_rate || in_ch_layout != out_ch_layout)
+                continue;
+        }
 
         in_ch_count= av_get_channel_layout_nb_channels(in_ch_layout);
         out_ch_count= av_get_channel_layout_nb_channels(out_ch_layout);
@@ -307,8 +324,7 @@ int main(int argc, char **argv){
 #else
         audiogen(ain, in_sample_fmt, in_ch_count, SAMPLES/6+1, SAMPLES);
 #endif
-        mode++;
-        mode%=3;
+        mode = uint_rand(rand_seed) % 3;
         if(mode==0 /*|| out_sample_rate == in_sample_rate*/) {
             mid_count= swr_convert(forw_ctx, amid, 3*SAMPLES, (const uint8_t **)ain, SAMPLES);
         } else if(mode==1){
@@ -350,6 +366,7 @@ int main(int argc, char **argv){
                 maxdiff= FFMAX(maxdiff, FFABS(a-b));
             }
             sse= sum_aa + sum_bb - 2*sum_ab;
+            if(sse < 0 && sse > -0.00001) sse=0; //fix rounding error
 
             fprintf(stderr, "[e:%f c:%f max:%f] len:%5d\n", sqrt(sse/out_count), sum_ab/(sqrt(sum_aa*sum_bb)), maxdiff, out_count);
         }
@@ -379,6 +396,7 @@ int main(int argc, char **argv){
                     maxdiff= FFMAX(maxdiff, FFABS(a-b));
                 }
                 sse= sum_aa + sum_bb - 2*sum_ab;
+                if(sse < 0 && sse > -0.00001) sse=0; //fix rounding error
 
                 fprintf(stderr, "[e:%f c:%f max:%f] len:%5d F:%3d\n", sqrt(sse/flush_count), sum_ab/(sqrt(sum_aa*sum_bb)), maxdiff, flush_count, flush_i);
             }

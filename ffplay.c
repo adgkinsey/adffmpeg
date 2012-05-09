@@ -40,7 +40,6 @@
 #include "libavformat/avformat.h"
 #include "libavdevice/avdevice.h"
 #include "libswscale/swscale.h"
-#include "libavcodec/audioconvert.h"
 #include "libavutil/opt.h"
 #include "libavcodec/avfft.h"
 #include "libswresample/swresample.h"
@@ -1501,7 +1500,7 @@ static int get_video_frame(VideoState *is, AVFrame *frame, int64_t *pts, AVPacke
         int ret = 1;
 
         if (decoder_reorder_pts == -1) {
-            *pts = *(int64_t*)av_opt_ptr(avcodec_get_frame_class(), frame, "best_effort_timestamp");
+            *pts = av_frame_get_best_effort_timestamp(frame);
         } else if (decoder_reorder_pts) {
             *pts = frame->pkt_pts;
         } else {
@@ -2130,7 +2129,8 @@ static int audio_decode_frame(VideoState *is, double *pts_ptr)
             /* if no pts, then compute it */
             pts = is->audio_clock;
             *pts_ptr = pts;
-            is->audio_clock += (double)data_size / (dec->channels * dec->sample_rate * av_get_bytes_per_sample(dec->sample_fmt));
+            is->audio_clock += (double)data_size /
+                (dec->channels * dec->sample_rate * av_get_bytes_per_sample(dec->sample_fmt));
 #ifdef DEBUG
             {
                 static double last_clock;
@@ -2373,9 +2373,9 @@ static void stream_component_close(VideoState *is, int stream_index)
         SDL_CloseAudio();
 
         packet_queue_end(&is->audioq);
+        av_free_packet(&is->audio_pkt);
         if (is->swr_ctx)
             swr_free(&is->swr_ctx);
-        av_free_packet(&is->audio_pkt);
         av_freep(&is->audio_buf1);
         is->audio_buf = NULL;
         av_freep(&is->frame);

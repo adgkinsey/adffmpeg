@@ -297,6 +297,7 @@ int ffio_limit(AVIOContext *s, int size)
 int av_get_packet(AVIOContext *s, AVPacket *pkt, int size)
 {
     int ret;
+    int orig_size = size;
     size= ffio_limit(s, size);
 
     ret= av_new_packet(pkt, size);
@@ -311,6 +312,8 @@ int av_get_packet(AVIOContext *s, AVPacket *pkt, int size)
         av_free_packet(pkt);
     else
         av_shrink_packet(pkt, ret);
+    if (pkt->size < orig_size)
+        pkt->flags |= AV_PKT_FLAG_CORRUPT;
 
     return ret;
 }
@@ -1079,13 +1082,14 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
             }
 
             /* presentation is not delayed : PTS and DTS are the same */
-            if(pkt->pts == AV_NOPTS_VALUE)
+            if (pkt->pts == AV_NOPTS_VALUE)
                 pkt->pts = pkt->dts;
-            update_initial_timestamps(s, pkt->stream_index, pkt->pts, pkt->pts);
-            if(pkt->pts == AV_NOPTS_VALUE)
+            update_initial_timestamps(s, pkt->stream_index, pkt->pts,
+                                      pkt->pts);
+            if (pkt->pts == AV_NOPTS_VALUE)
                 pkt->pts = st->cur_dts;
             pkt->dts = pkt->pts;
-            if(pkt->pts != AV_NOPTS_VALUE)
+            if (pkt->pts != AV_NOPTS_VALUE)
                 st->cur_dts = pkt->pts + duration;
         }
     }

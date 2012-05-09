@@ -4,8 +4,11 @@
 *.a
 *.o
 *.d
+*.def
+*.dll
 *.exe
 *.ho
+*.lib
 *.pc
 *.so
 *.so.*
