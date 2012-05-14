@@ -27,6 +27,7 @@
 
 #include "avfilter.h"
 #include "internal.h"
+#include "audio.h"
 #include "avcodec.h"
 #include "buffersrc.h"
 #include "vsrc_buffer.h"
@@ -69,11 +70,75 @@ typedef struct {
         return AVERROR(EINVAL);\
     }
 
+static void buf_free(AVFilterBuffer *ptr)
+{
+    av_free(ptr);
+    return;
+}
+
+static void set_link_source(AVFilterContext *src, AVFilterLink *link)
+{
+    link->src       = src;
+    link->srcpad    = &(src->output_pads[0]);
+    src->outputs[0] = link;
+}
+
+static int reconfigure_filter(BufferSourceContext *abuffer, AVFilterContext *filt_ctx)
+{
+    int ret;
+    AVFilterLink * const inlink  = filt_ctx->inputs[0];
+    AVFilterLink * const outlink = filt_ctx->outputs[0];
+
+    inlink->format         = abuffer->sample_format;
+    inlink->channel_layout = abuffer->channel_layout;
+    inlink->planar         = abuffer->packing_format;
+    inlink->sample_rate    = abuffer->sample_rate;
+
+    filt_ctx->filter->uninit(filt_ctx);
+    memset(filt_ctx->priv, 0, filt_ctx->filter->priv_size);
+    if ((ret = filt_ctx->filter->init(filt_ctx, NULL , NULL)) < 0)
+        return ret;
+    if ((ret = inlink->srcpad->config_props(inlink)) < 0)
+        return ret;
+    return outlink->srcpad->config_props(outlink);
+}
+
 static int insert_filter(BufferSourceContext *abuffer,
                          AVFilterLink *link, AVFilterContext **filt_ctx,
-                         const char *filt_name);
-static void remove_filter(AVFilterContext **filt_ctx);
-static int reconfigure_filter(BufferSourceContext *abuffer, AVFilterContext *filt_ctx);
+                         const char *filt_name)
+{
+    int ret;
+
+    if ((ret = avfilter_open(filt_ctx, avfilter_get_by_name(filt_name), NULL)) < 0)
+        return ret;
+
+    link->src->outputs[0] = NULL;
+    if ((ret = avfilter_link(link->src, 0, *filt_ctx, 0)) < 0) {
+        link->src->outputs[0] = link;
+        return ret;
+    }
+
+    set_link_source(*filt_ctx, link);
+
+    if ((ret = reconfigure_filter(abuffer, *filt_ctx)) < 0) {
+        avfilter_free(*filt_ctx);
+        return ret;
+    }
+
+    return 0;
+}
+
+static void remove_filter(AVFilterContext **filt_ctx)
+{
+    AVFilterLink *outlink = (*filt_ctx)->outputs[0];
+    AVFilterContext *src  = (*filt_ctx)->inputs[0]->src;
+
+    (*filt_ctx)->outputs[0] = NULL;
+    avfilter_free(*filt_ctx);
+    *filt_ctx = NULL;
+
+    set_link_source(src, outlink);
+}
 
 static inline void log_input_change(void *ctx, AVFilterLink *link, AVFilterBufferRef *ref)
 {
@@ -233,7 +298,7 @@ static AVFilterBufferRef *copy_buffer_ref(AVFilterContext *ctx,
         break;
 
     case AVMEDIA_TYPE_AUDIO:
-        buf = avfilter_get_audio_buffer(outlink, AV_PERM_WRITE,
+        buf = ff_get_audio_buffer(outlink, AV_PERM_WRITE,
                                         ref->audio->nb_samples);
         channels = av_get_channel_layout_nb_channels(ref->audio->channel_layout);
         data_size = av_samples_get_buffer_size(NULL, channels,
@@ -498,7 +563,7 @@ static int request_frame(AVFilterLink *link)
         avfilter_unref_buffer(buf);
         break;
     case AVMEDIA_TYPE_AUDIO:
-        avfilter_filter_samples(link, avfilter_ref_buffer(buf, ~0));
+        ff_filter_samples(link, avfilter_ref_buffer(buf, ~0));
         avfilter_unref_buffer(buf);
         break;
     default:
@@ -514,76 +579,6 @@ static int poll_frame(AVFilterLink *link)
     if (!size && c->eof)
         return AVERROR_EOF;
     return size/sizeof(AVFilterBufferRef*);
-}
-
-static void buf_free(AVFilterBuffer *ptr)
-{
-    av_free(ptr);
-    return;
-}
-
-static void set_link_source(AVFilterContext *src, AVFilterLink *link)
-{
-    link->src       = src;
-    link->srcpad    = &(src->output_pads[0]);
-    src->outputs[0] = link;
-}
-
-static int reconfigure_filter(BufferSourceContext *abuffer, AVFilterContext *filt_ctx)
-{
-    int ret;
-    AVFilterLink * const inlink  = filt_ctx->inputs[0];
-    AVFilterLink * const outlink = filt_ctx->outputs[0];
-
-    inlink->format         = abuffer->sample_format;
-    inlink->channel_layout = abuffer->channel_layout;
-    inlink->planar         = abuffer->packing_format;
-    inlink->sample_rate    = abuffer->sample_rate;
-
-    filt_ctx->filter->uninit(filt_ctx);
-    memset(filt_ctx->priv, 0, filt_ctx->filter->priv_size);
-    if ((ret = filt_ctx->filter->init(filt_ctx, NULL , NULL)) < 0)
-        return ret;
-    if ((ret = inlink->srcpad->config_props(inlink)) < 0)
-        return ret;
-    return outlink->srcpad->config_props(outlink);
-}
-
-static int insert_filter(BufferSourceContext *abuffer,
-                         AVFilterLink *link, AVFilterContext **filt_ctx,
-                         const char *filt_name)
-{
-    int ret;
-
-    if ((ret = avfilter_open(filt_ctx, avfilter_get_by_name(filt_name), NULL)) < 0)
-        return ret;
-
-    link->src->outputs[0] = NULL;
-    if ((ret = avfilter_link(link->src, 0, *filt_ctx, 0)) < 0) {
-        link->src->outputs[0] = link;
-        return ret;
-    }
-
-    set_link_source(*filt_ctx, link);
-
-    if ((ret = reconfigure_filter(abuffer, *filt_ctx)) < 0) {
-        avfilter_free(*filt_ctx);
-        return ret;
-    }
-
-    return 0;
-}
-
-static void remove_filter(AVFilterContext **filt_ctx)
-{
-    AVFilterLink *outlink = (*filt_ctx)->outputs[0];
-    AVFilterContext *src  = (*filt_ctx)->inputs[0]->src;
-
-    (*filt_ctx)->outputs[0] = NULL;
-    avfilter_free(*filt_ctx);
-    *filt_ctx = NULL;
-
-    set_link_source(src, outlink);
 }
 
 int av_asrc_buffer_add_audio_buffer_ref(AVFilterContext *ctx,
@@ -658,7 +653,7 @@ AVFilter avfilter_vsrc_buffer = {
                                   { .name = NULL}},
 };
 
-#ifdef CONFIG_ABUFFER_FILTER
+#if CONFIG_ABUFFER_FILTER
 
 AVFilter avfilter_asrc_abuffer = {
     .name        = "abuffer",

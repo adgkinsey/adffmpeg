@@ -178,6 +178,8 @@ struct WriterContext {
     unsigned int nb_item;           ///< number of the item printed in the given section, starting at 0
     unsigned int nb_section;        ///< number of the section printed in the given section sequence, starting at 0
     unsigned int nb_chapter;        ///< number of the chapter, starting at 0
+
+    int is_fmt_chapter;             ///< tells if the current chapter is "format", required by the print_format_entry option
 };
 
 static const char *writer_get_name(void *p)
@@ -252,6 +254,8 @@ static inline void writer_print_chapter_header(WriterContext *wctx,
     if (wctx->writer->print_chapter_header)
         wctx->writer->print_chapter_header(wctx, chapter);
     wctx->nb_section = 0;
+
+    wctx->is_fmt_chapter = !strcmp(chapter, "format");
 }
 
 static inline void writer_print_chapter_footer(WriterContext *wctx,
@@ -281,7 +285,7 @@ static inline void writer_print_section_footer(WriterContext *wctx,
 static inline void writer_print_integer(WriterContext *wctx,
                                         const char *key, long long int val)
 {
-    if (!fmt_entries_to_show || (key && av_dict_get(fmt_entries_to_show, key, NULL, 0))) {
+    if (!wctx->is_fmt_chapter || !fmt_entries_to_show || av_dict_get(fmt_entries_to_show, key, NULL, 0)) {
         wctx->writer->print_integer(wctx, key, val);
         wctx->nb_item++;
     }
@@ -292,7 +296,7 @@ static inline void writer_print_string(WriterContext *wctx,
 {
     if (opt && !(wctx->writer->flags & WRITER_FLAG_DISPLAY_OPTIONAL_FIELDS))
         return;
-    if (!fmt_entries_to_show || (key && av_dict_get(fmt_entries_to_show, key, NULL, 0))) {
+    if (!wctx->is_fmt_chapter || !fmt_entries_to_show || av_dict_get(fmt_entries_to_show, key, NULL, 0)) {
         wctx->writer->print_string(wctx, key, val);
         wctx->nb_item++;
     }
@@ -303,7 +307,7 @@ static void writer_print_time(WriterContext *wctx, const char *key,
 {
     char buf[128];
 
-    if (!fmt_entries_to_show || (key && av_dict_get(fmt_entries_to_show, key, NULL, 0))) {
+    if (!wctx->is_fmt_chapter || !fmt_entries_to_show || av_dict_get(fmt_entries_to_show, key, NULL, 0)) {
         if (ts == AV_NOPTS_VALUE) {
             writer_print_string(wctx, key, "N/A", 1);
         } else {
@@ -397,14 +401,63 @@ fail:
 
 /* Default output */
 
+typedef struct DefaultContext {
+    const AVClass *class;
+    int nokey;
+    int noprint_wrappers;
+} DefaultContext;
+
+#define OFFSET(x) offsetof(DefaultContext, x)
+
+static const AVOption default_options[] = {
+    { "noprint_wrappers", "do not print headers and footers", OFFSET(noprint_wrappers), AV_OPT_TYPE_INT, {.dbl=0}, 0, 1 },
+    { "nw",               "do not print headers and footers", OFFSET(noprint_wrappers), AV_OPT_TYPE_INT, {.dbl=0}, 0, 1 },
+    { "nokey",          "force no key printing",     OFFSET(nokey),          AV_OPT_TYPE_INT, {.dbl=0}, 0, 1 },
+    { "nk",             "force no key printing",     OFFSET(nokey),          AV_OPT_TYPE_INT, {.dbl=0}, 0, 1 },
+    {NULL},
+};
+
+static const char *default_get_name(void *ctx)
+{
+    return "default";
+}
+
+static const AVClass default_class = {
+    "DefaultContext",
+    default_get_name,
+    default_options
+};
+
+static av_cold int default_init(WriterContext *wctx, const char *args, void *opaque)
+{
+    DefaultContext *def = wctx->priv;
+    int err;
+
+    def->class = &default_class;
+    av_opt_set_defaults(def);
+
+    if (args &&
+        (err = (av_set_options_string(def, args, "=", ":"))) < 0) {
+        av_log(wctx, AV_LOG_ERROR, "Error parsing options string: '%s'\n", args);
+        return err;
+    }
+
+    return 0;
+}
+
 static void default_print_footer(WriterContext *wctx)
 {
-    printf("\n");
+    DefaultContext *def = wctx->priv;
+
+    if (!def->noprint_wrappers)
+        printf("\n");
 }
 
 static void default_print_chapter_header(WriterContext *wctx, const char *chapter)
 {
-    if (wctx->nb_chapter)
+    DefaultContext *def = wctx->priv;
+
+    if (!def->noprint_wrappers && wctx->nb_chapter)
         printf("\n");
 }
 
@@ -420,41 +473,54 @@ static inline char *upcase_string(char *dst, size_t dst_size, const char *src)
 
 static void default_print_section_header(WriterContext *wctx, const char *section)
 {
+    DefaultContext *def = wctx->priv;
     char buf[32];
 
     if (wctx->nb_section)
         printf("\n");
-    printf("[%s]\n", upcase_string(buf, sizeof(buf), section));
+    if (!def->noprint_wrappers)
+        printf("[%s]\n", upcase_string(buf, sizeof(buf), section));
 }
 
 static void default_print_section_footer(WriterContext *wctx, const char *section)
 {
+    DefaultContext *def = wctx->priv;
     char buf[32];
 
-    printf("[/%s]", upcase_string(buf, sizeof(buf), section));
+    if (!def->noprint_wrappers)
+        printf("[/%s]", upcase_string(buf, sizeof(buf), section));
 }
 
 static void default_print_str(WriterContext *wctx, const char *key, const char *value)
 {
-    printf("%s=%s\n", key, value);
+    DefaultContext *def = wctx->priv;
+    if (!def->nokey)
+        printf("%s=", key);
+    printf("%s\n", value);
 }
 
 static void default_print_int(WriterContext *wctx, const char *key, long long int value)
 {
-    printf("%s=%lld\n", key, value);
+    DefaultContext *def = wctx->priv;
+
+    if (!def->nokey)
+        printf("%s=", key);
+    printf("%lld\n", value);
 }
 
 static void default_show_tags(WriterContext *wctx, AVDictionary *dict)
 {
     AVDictionaryEntry *tag = NULL;
     while ((tag = av_dict_get(dict, "", tag, AV_DICT_IGNORE_SUFFIX))) {
-        printf("TAG:");
+        if (!fmt_entries_to_show || (tag->key && av_dict_get(fmt_entries_to_show, tag->key, NULL, 0)))
+            printf("TAG:");
         writer_print_string(wctx, tag->key, tag->value, 0);
     }
 }
 
 static const Writer default_writer = {
     .name                  = "default",
+    .init                  = default_init,
     .print_footer          = default_print_footer,
     .print_chapter_header  = default_print_chapter_header,
     .print_section_header  = default_print_section_header,
@@ -529,6 +595,7 @@ typedef struct CompactContext {
     const char * (*escape_str)(AVBPrint *dst, const char *src, const char sep, void *log_ctx);
 } CompactContext;
 
+#undef OFFSET
 #define OFFSET(x) offsetof(CompactContext, x)
 
 static const AVOption compact_options[]= {
@@ -1434,20 +1501,6 @@ static void show_streams(WriterContext *w, AVFormatContext *fmt_ctx)
     int i;
     for (i = 0; i < fmt_ctx->nb_streams; i++)
         show_stream(w, fmt_ctx, i);
-}
-
-static void print_format_entry(const char *tag,
-                               const char *val)
-{
-    if (!fmt_entries_to_show) {
-        if (tag) {
-            printf("%s=%s\n", tag, val);
-        } else {
-            printf("%s\n", val);
-        }
-    } else if (tag && av_dict_get(fmt_entries_to_show, tag, NULL, 0)) {
-        printf("%s=%s\n", tag, val);
-    }
 }
 
 static void show_format(WriterContext *w, AVFormatContext *fmt_ctx)
