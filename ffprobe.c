@@ -51,6 +51,7 @@ static int do_show_error   = 0;
 static int do_show_format  = 0;
 static int do_show_frames  = 0;
 static AVDictionary *fmt_entries_to_show = NULL;
+static int nb_fmt_entries_to_show;
 static int do_show_packets = 0;
 static int do_show_streams = 0;
 static int do_show_program_version  = 0;
@@ -358,44 +359,6 @@ static const Writer *writer_get_by_name(const char *name)
     return NULL;
 }
 
-/* Print helpers */
-
-struct print_buf {
-    char *s;
-    int len;
-};
-
-static char *fast_asprintf(struct print_buf *pbuf, const char *fmt, ...)
-{
-    va_list va;
-    int len;
-
-    va_start(va, fmt);
-    len = vsnprintf(NULL, 0, fmt, va);
-    va_end(va);
-    if (len < 0)
-        goto fail;
-
-    if (pbuf->len < len) {
-        char *p = av_realloc(pbuf->s, len + 1);
-        if (!p)
-            goto fail;
-        pbuf->s   = p;
-        pbuf->len = len;
-    }
-
-    va_start(va, fmt);
-    len = vsnprintf(pbuf->s, len + 1, fmt, va);
-    va_end(va);
-    if (len < 0)
-        goto fail;
-    return pbuf->s;
-
-fail:
-    av_freep(&pbuf->s);
-    pbuf->len = 0;
-    return NULL;
-}
 
 /* WRITERS */
 
@@ -435,6 +398,9 @@ static av_cold int default_init(WriterContext *wctx, const char *args, void *opa
 
     def->class = &default_class;
     av_opt_set_defaults(def);
+
+    if (nb_fmt_entries_to_show == 1)
+        def->nokey = 1;
 
     if (args &&
         (err = (av_set_options_string(def, args, "=", ":"))) < 0) {
@@ -520,6 +486,7 @@ static void default_show_tags(WriterContext *wctx, AVDictionary *dict)
 
 static const Writer default_writer = {
     .name                  = "default",
+    .priv_size             = sizeof(DefaultContext),
     .init                  = default_init,
     .print_footer          = default_print_footer,
     .print_chapter_header  = default_print_chapter_header,
@@ -1214,13 +1181,9 @@ static void writer_register_all(void)
 }
 
 #define print_fmt(k, f, ...) do {              \
-    if (fast_asprintf(&pbuf, f, __VA_ARGS__))  \
-        writer_print_string(w, k, pbuf.s, 0);  \
-} while (0)
-
-#define print_fmt_opt(k, f, ...) do {          \
-    if (fast_asprintf(&pbuf, f, __VA_ARGS__))  \
-        writer_print_string(w, k, pbuf.s, 1);  \
+    av_bprint_clear(&pbuf);                    \
+    av_bprintf(&pbuf, f, __VA_ARGS__);         \
+    writer_print_string(w, k, pbuf.str, 0);    \
 } while (0)
 
 #define print_int(k, v)         writer_print_integer(w, k, v)
@@ -1238,8 +1201,10 @@ static void show_packet(WriterContext *w, AVFormatContext *fmt_ctx, AVPacket *pk
 {
     char val_str[128];
     AVStream *st = fmt_ctx->streams[pkt->stream_index];
-    struct print_buf pbuf = {.s = NULL};
+    AVBPrint pbuf;
     const char *s;
+
+    av_bprint_init(&pbuf, 1, AV_BPRINT_SIZE_UNLIMITED);
 
     print_section_header("packet");
     s = av_get_media_type_string(st->codec->codec_type);
@@ -1258,14 +1223,16 @@ static void show_packet(WriterContext *w, AVFormatContext *fmt_ctx, AVPacket *pk
     print_fmt("flags", "%c",      pkt->flags & AV_PKT_FLAG_KEY ? 'K' : '_');
     print_section_footer("packet");
 
-    av_free(pbuf.s);
+    av_bprint_finalize(&pbuf, NULL);
     fflush(stdout);
 }
 
 static void show_frame(WriterContext *w, AVFrame *frame, AVStream *stream)
 {
-    struct print_buf pbuf = {.s = NULL};
+    AVBPrint pbuf;
     const char *s;
+
+    av_bprint_init(&pbuf, 1, AV_BPRINT_SIZE_UNLIMITED);
 
     print_section_header("frame");
 
@@ -1313,7 +1280,7 @@ static void show_frame(WriterContext *w, AVFrame *frame, AVStream *stream)
 
     print_section_footer("frame");
 
-    av_free(pbuf.s);
+    av_bprint_finalize(&pbuf, NULL);
     fflush(stdout);
 }
 
@@ -1392,7 +1359,9 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
     char val_str[128];
     const char *s;
     AVRational display_aspect_ratio;
-    struct print_buf pbuf = {.s = NULL};
+    AVBPrint pbuf;
+
+    av_bprint_init(&pbuf, 1, AV_BPRINT_SIZE_UNLIMITED);
 
     print_section_header("stream");
 
@@ -1492,7 +1461,7 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
     show_tags(stream->metadata);
 
     print_section_footer("stream");
-    av_free(pbuf.s);
+    av_bprint_finalize(&pbuf, NULL);
     fflush(stdout);
 }
 
@@ -1584,6 +1553,19 @@ static int open_input_file(AVFormatContext **fmt_ctx_ptr, const char *filename)
     return 0;
 }
 
+static void close_input_file(AVFormatContext **ctx_ptr)
+{
+    int i;
+    AVFormatContext *fmt_ctx = *ctx_ptr;
+
+    /* close decoder for each stream */
+    for (i = 0; i < fmt_ctx->nb_streams; i++)
+        if (fmt_ctx->streams[i]->codec->codec_id != CODEC_ID_NONE)
+            avcodec_close(fmt_ctx->streams[i]->codec);
+
+    avformat_close_input(ctx_ptr);
+}
+
 #define PRINT_CHAPTER(name) do {                                        \
     if (do_show_ ## name) {                                             \
         writer_print_chapter_header(wctx, #name);                       \
@@ -1595,7 +1577,7 @@ static int open_input_file(AVFormatContext **fmt_ctx_ptr, const char *filename)
 static int probe_file(WriterContext *wctx, const char *filename)
 {
     AVFormatContext *fmt_ctx;
-    int ret, i;
+    int ret;
 
     do_read_frames = do_show_frames || do_count_frames;
     do_read_packets = do_show_packets || do_count_packets;
@@ -1621,10 +1603,7 @@ static int probe_file(WriterContext *wctx, const char *filename)
         }
         PRINT_CHAPTER(streams);
         PRINT_CHAPTER(format);
-        for (i = 0; i < fmt_ctx->nb_streams; i++)
-            if (fmt_ctx->streams[i]->codec->codec_id != CODEC_ID_NONE)
-                avcodec_close(fmt_ctx->streams[i]->codec);
-        avformat_close_input(&fmt_ctx);
+        close_input_file(&fmt_ctx);
         av_freep(&nb_streams_frames);
         av_freep(&nb_streams_packets);
     }
@@ -1640,7 +1619,8 @@ static void show_usage(void)
 
 static void ffprobe_show_program_version(WriterContext *w)
 {
-    struct print_buf pbuf = {.s = NULL};
+    AVBPrint pbuf;
+    av_bprint_init(&pbuf, 1, AV_BPRINT_SIZE_UNLIMITED);
 
     writer_print_chapter_header(w, "program_version");
     print_section_header("program_version");
@@ -1655,7 +1635,7 @@ static void ffprobe_show_program_version(WriterContext *w)
     print_section_footer("program_version");
     writer_print_chapter_footer(w, "program_version");
 
-    av_free(pbuf.s);
+    av_bprint_finalize(&pbuf, NULL);
 }
 
 #define SHOW_LIB_VERSION(libname, LIBNAME)                              \
@@ -1699,6 +1679,7 @@ static int opt_format(const char *opt, const char *arg)
 static int opt_show_format_entry(const char *opt, const char *arg)
 {
     do_show_format = 1;
+    nb_fmt_entries_to_show++;
     av_dict_set(&fmt_entries_to_show, arg, "", 0);
     return 0;
 }
@@ -1837,6 +1818,10 @@ int main(int argc, char **argv)
 
 end:
     av_freep(&print_format);
+
+    uninit_opts();
+    av_dict_free(&fmt_entries_to_show);
+
     avformat_network_deinit();
 
     return ret;

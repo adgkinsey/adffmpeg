@@ -61,9 +61,7 @@ stddev(){
 }
 
 oneline(){
-    val=$(cat "$2")
-    test x"$val" = x"$1" || { r=$?; printf -- '-%s\n+%s\n' "$ref" "$val"; }
-    return ${r:-0}
+    printf '%s\n' "$1" | diff -u -b - "$2"
 }
 
 run(){
@@ -163,7 +161,7 @@ fi
 
 if test -e "$ref" || test $cmp = "oneline" ; then
     case $cmp in
-        diff)   diff -u -w "$ref" "$outfile"            >$cmpfile ;;
+        diff)   diff -u -b "$ref" "$outfile"            >$cmpfile ;;
         oneoff) oneoff     "$ref" "$outfile"            >$cmpfile ;;
         stddev) stddev     "$ref" "$outfile"            >$cmpfile ;;
         oneline)oneline    "$ref" "$outfile"            >$cmpfile ;;

@@ -42,13 +42,13 @@ void avfilter_register_all(void)
     REGISTER_FILTER (ASHOWINFO,   ashowinfo,   af);
     REGISTER_FILTER (ASPLIT,      asplit,      af);
     REGISTER_FILTER (ASTREAMSYNC, astreamsync, af);
+    REGISTER_FILTER (ASYNCTS,     asyncts,     af);
     REGISTER_FILTER (EARWAX,      earwax,      af);
     REGISTER_FILTER (PAN,         pan,         af);
     REGISTER_FILTER (SILENCEDETECT, silencedetect, af);
     REGISTER_FILTER (VOLUME,      volume,      af);
     REGISTER_FILTER (RESAMPLE,    resample,    af);
 
-    REGISTER_FILTER (ABUFFER,     abuffer,     asrc);
     REGISTER_FILTER (AEVALSRC,    aevalsrc,    asrc);
     REGISTER_FILTER (AMOVIE,      amovie,      asrc);
     REGISTER_FILTER (ANULLSRC,    anullsrc,    asrc);
@@ -74,6 +74,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER (FIELDORDER,  fieldorder,  vf);
     REGISTER_FILTER (FIFO,        fifo,        vf);
     REGISTER_FILTER (FORMAT,      format,      vf);
+    REGISTER_FILTER (FPS,         fps,         vf);
     REGISTER_FILTER (FREI0R,      frei0r,      vf);
     REGISTER_FILTER (GRADFUN,     gradfun,     vf);
     REGISTER_FILTER (HFLIP,       hflip,       vf);
@@ -131,8 +132,16 @@ void avfilter_register_all(void)
         avfilter_register(&avfilter_vsrc_buffer);
     }
     {
+        extern AVFilter avfilter_asrc_abuffer;
+        avfilter_register(&avfilter_asrc_abuffer);
+    }
+    {
         extern AVFilter avfilter_vsink_buffer;
         avfilter_register(&avfilter_vsink_buffer);
+    }
+    {
+        extern AVFilter avfilter_asink_abuffer;
+        avfilter_register(&avfilter_asink_abuffer);
     }
     {
         extern AVFilter avfilter_vf_scale;

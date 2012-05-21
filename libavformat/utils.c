@@ -228,7 +228,7 @@ AVOutputFormat *av_guess_format(const char *short_name, const char *filename,
     score_max = 0;
     while ((fmt = av_oformat_next(fmt))) {
         score = 0;
-        if (fmt->name && short_name && !strcmp(fmt->name, short_name))
+        if (fmt->name && short_name && !av_strcasecmp(fmt->name, short_name))
             score += 100;
         if (fmt->mime_type && mime_type && !strcmp(fmt->mime_type, mime_type))
             score += 10;
@@ -875,6 +875,7 @@ static int is_intra_only(AVCodecContext *enc){
         case CODEC_ID_VCR1:
         case CODEC_ID_DNXHD:
         case CODEC_ID_JPEG2000:
+        case CODEC_ID_MDEC:
         case CODEC_ID_UTVIDEO:
             return 1;
         default: break;
@@ -937,6 +938,14 @@ static void update_initial_durations(AVFormatContext *s, AVStream *st,
                     break;
                 cur_dts -= duration;
             }
+        }
+        if(pktl && pktl->pkt.dts != st->first_dts) {
+            av_log(s, AV_LOG_DEBUG, "first_dts %s not matching first dts %s in que\n", av_ts2str(st->first_dts), av_ts2str(pktl->pkt.dts));
+            return;
+        }
+        if(!pktl) {
+            av_log(s, AV_LOG_DEBUG, "first_dts %s but no packet with dts in ques\n", av_ts2str(st->first_dts));
+            return;
         }
         pktl= s->parse_queue ? s->parse_queue : s->packet_buffer;
         st->first_dts = cur_dts;
@@ -4405,4 +4414,27 @@ const struct AVCodecTag *avformat_get_riff_video_tags(void)
 const struct AVCodecTag *avformat_get_riff_audio_tags(void)
 {
     return ff_codec_wav_tags;
+}
+
+AVRational av_guess_sample_aspect_ratio(AVFormatContext *format, AVStream *stream, AVFrame *frame)
+{
+    AVRational undef = {0, 1};
+    AVRational stream_sample_aspect_ratio = stream ? stream->sample_aspect_ratio : undef;
+    AVRational codec_sample_aspect_ratio  = stream && stream->codec ? stream->codec->sample_aspect_ratio : undef;
+    AVRational frame_sample_aspect_ratio  = frame  ? frame->sample_aspect_ratio  : codec_sample_aspect_ratio;
+
+    av_reduce(&stream_sample_aspect_ratio.num, &stream_sample_aspect_ratio.den,
+               stream_sample_aspect_ratio.num,  stream_sample_aspect_ratio.den, INT_MAX);
+    if (stream_sample_aspect_ratio.num <= 0 || stream_sample_aspect_ratio.den <= 0)
+        stream_sample_aspect_ratio = undef;
+
+    av_reduce(&frame_sample_aspect_ratio.num, &frame_sample_aspect_ratio.den,
+               frame_sample_aspect_ratio.num,  frame_sample_aspect_ratio.den, INT_MAX);
+    if (frame_sample_aspect_ratio.num <= 0 || frame_sample_aspect_ratio.den <= 0)
+        frame_sample_aspect_ratio = undef;
+
+    if (stream_sample_aspect_ratio.num)
+        return stream_sample_aspect_ratio;
+    else
+        return frame_sample_aspect_ratio;
 }

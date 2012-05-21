@@ -81,17 +81,15 @@ static int query_formats(AVFilterContext *ctx)
 {
     int i;
     AVFilterFormats *formats;
+    AVFilterChannelLayouts *layouts;
 
     for (i = 0; i < 2; i++) {
         formats = ctx->inputs[i]->in_formats;
         avfilter_formats_ref(formats, &ctx->inputs[i]->out_formats);
         avfilter_formats_ref(formats, &ctx->outputs[i]->in_formats);
-        formats = ctx->inputs[i]->in_packing;
-        avfilter_formats_ref(formats, &ctx->inputs[i]->out_packing);
-        avfilter_formats_ref(formats, &ctx->outputs[i]->in_packing);
-        formats = ctx->inputs[i]->in_chlayouts;
-        avfilter_formats_ref(formats, &ctx->inputs[i]->out_chlayouts);
-        avfilter_formats_ref(formats, &ctx->outputs[i]->in_chlayouts);
+        layouts = ctx->inputs[i]->in_channel_layouts;
+        ff_channel_layouts_ref(layouts, &ctx->inputs[i]->out_channel_layouts);
+        ff_channel_layouts_ref(layouts, &ctx->outputs[i]->in_channel_layouts);
     }
     return 0;
 }

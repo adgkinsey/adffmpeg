@@ -121,7 +121,9 @@ typedef struct AVFilterBufferRefAudioProps {
     uint64_t channel_layout;    ///< channel layout of audio buffer
     int nb_samples;             ///< number of audio samples per channel
     int sample_rate;            ///< audio buffer sample rate
+#if FF_API_PACKING
     int planar;                 ///< audio buffer - planar or packed
+#endif
 } AVFilterBufferRefAudioProps;
 
 /**
@@ -259,7 +261,7 @@ void avfilter_unref_bufferp(AVFilterBufferRef **ref);
  */
 typedef struct AVFilterFormats {
     unsigned format_count;      ///< number of formats
-    int64_t *formats;           ///< list of media formats
+    int *formats;               ///< list of media formats
 
     unsigned refcount;          ///< number of references to this list
     struct AVFilterFormats ***refs; ///< references to this list
@@ -274,7 +276,6 @@ typedef struct AVFilterFormats {
  * @return the format list, with no existing references
  */
 AVFilterFormats *avfilter_make_format_list(const int *fmts);
-AVFilterFormats *avfilter_make_format64_list(const int64_t *fmts);
 
 /**
  * Add fmt to the list of media formats contained in *avff.
@@ -304,15 +305,12 @@ AVFilterFormats *avfilter_make_all_formats(enum AVMediaType type);
  */
 extern const int64_t avfilter_all_channel_layouts[];
 
-/**
- * Return a list of all channel layouts supported by FFmpeg.
- */
-AVFilterFormats *avfilter_make_all_channel_layouts(void);
-
+#if FF_API_PACKING
 /**
  * Return a list of all audio packing formats.
  */
 AVFilterFormats *avfilter_make_all_packing_formats(void);
+#endif
 
 /**
  * Return a format list which contains the intersection of the formats of
@@ -373,6 +371,8 @@ void avfilter_formats_changeref(AVFilterFormats **oldref,
 
 /**
  * A filter pad used for either input or output.
+ *
+ * See doc/filter_design.txt for details on how to implement the methods.
  */
 struct AVFilterPad {
     /**
@@ -519,10 +519,13 @@ AVFilterBufferRef *avfilter_default_get_video_buffer(AVFilterLink *link,
  * formats/layouts. If there are no links hooked to this filter, the list
  * of formats is freed.
  */
+void avfilter_set_common_formats(AVFilterContext *ctx, AVFilterFormats *formats);
 void avfilter_set_common_pixel_formats(AVFilterContext *ctx, AVFilterFormats *formats);
 void avfilter_set_common_sample_formats(AVFilterContext *ctx, AVFilterFormats *formats);
 void avfilter_set_common_channel_layouts(AVFilterContext *ctx, AVFilterFormats *formats);
+#if FF_API_PACKING
 void avfilter_set_common_packing_formats(AVFilterContext *ctx, AVFilterFormats *formats);
+#endif
 
 /** Default handler for query_formats() */
 int avfilter_default_query_formats(AVFilterContext *ctx);
@@ -619,10 +622,12 @@ struct AVFilterContext {
     struct AVFilterCommand *command_queue;
 };
 
+#if FF_API_PACKING
 enum AVFilterPacking {
     AVFILTER_PACKED = 0,
     AVFILTER_PLANAR,
 };
+#endif
 
 /**
  * A link between two filters. This contains pointers to the source and
@@ -658,7 +663,9 @@ struct AVFilterLink {
 #else
     int sample_rate;            ///< samples per second
 #endif
+#if FF_API_PACKING
     int planar;                 ///< agreed upon packing mode of audio buffers. true if planar.
+#endif
 
     int format;                 ///< agreed upon media format
 
@@ -672,10 +679,10 @@ struct AVFilterLink {
     AVFilterFormats *in_formats;
     AVFilterFormats *out_formats;
 
-    AVFilterFormats *in_chlayouts;
-    AVFilterFormats *out_chlayouts;
+#if FF_API_PACKING
     AVFilterFormats *in_packing;
     AVFilterFormats *out_packing;
+#endif
 
     /**
      * The buffer reference currently being sent across the link by the source
@@ -698,6 +705,22 @@ struct AVFilterLink {
      */
     AVRational time_base;
 
+    /*****************************************************************
+     * All fields below this line are not part of the public API. They
+     * may not be used outside of libavfilter and can be changed and
+     * removed at will.
+     * New public fields should be added right above.
+     *****************************************************************
+     */
+    /**
+     * Lists of channel layouts and sample rates used for automatic
+     * negotiation.
+     */
+    AVFilterFormats  *in_samplerates;
+    AVFilterFormats *out_samplerates;
+    struct AVFilterChannelLayouts  *in_channel_layouts;
+    struct AVFilterChannelLayouts *out_channel_layouts;
+
     struct AVFilterPool *pool;
 
     /**
@@ -712,16 +735,10 @@ struct AVFilterLink {
     int64_t current_pts;
 
     /**
-     * Private fields
-     *
-     * The following fields are for internal use only.
-     * Their type, offset, number and semantic can change without notice.
-     */
-
-    /**
      * Index in the age array.
      */
     int age_index;
+
 };
 
 /**
@@ -788,27 +805,8 @@ avfilter_get_video_buffer_ref_from_arrays(uint8_t * const data[4], const int lin
  * @param nb_samples     number of samples per channel
  * @param sample_fmt     the format of each sample in the buffer to allocate
  * @param channel_layout the channel layout of the buffer
- * @param planar         audio data layout - planar or packed
  */
-AVFilterBufferRef *avfilter_get_audio_buffer_ref_from_arrays(uint8_t *data[8],
-                                                             int linesize[8],
-                                                             int perms,
-                                                             int nb_samples,
-                                                             enum AVSampleFormat sample_fmt,
-                                                             uint64_t channel_layout,
-                                                             int planar);
-/**
- * Create an audio buffer reference wrapped around an already
- * allocated samples buffer.
- *
- * @param data           pointers to the samples plane buffers
- * @param linesize       linesize for the samples plane buffers
- * @param perms          the required access permissions
- * @param nb_samples     number of samples per channel
- * @param sample_fmt     the format of each sample in the buffer to allocate
- * @param channel_layout the channel layout of the buffer
- */
-AVFilterBufferRef *avfilter_get_audio_buffer_ref_from_arrays_alt(uint8_t **data,
+AVFilterBufferRef *avfilter_get_audio_buffer_ref_from_arrays(uint8_t **data,
                                                              int linesize,
                                                              int perms,
                                                              int nb_samples,
