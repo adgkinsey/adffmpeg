@@ -959,6 +959,7 @@ static int par_read_seek(AVFormatContext *avf, int stream,
 static int par_read_close(AVFormatContext * avf)
 {
     PARDecContext *p = avf->priv_data;
+    av_log(avf, AV_LOG_DEBUG, "par_read_close");
     av_free(p->frameInfo.frameBuffer);
     parReader_closeParFile(&p->frameInfo);
     return 0;
