@@ -25,6 +25,7 @@
 
 #include "avfilter.h"
 #include "audio.h"
+#include "video.h"
 
 static int split_init(AVFilterContext *ctx, const char *args, void *opaque)
 {
@@ -100,7 +101,7 @@ AVFilter avfilter_vf_split = {
 
     .inputs    = (const AVFilterPad[]) {{ .name      = "default",
                                     .type            = AVMEDIA_TYPE_VIDEO,
-                                    .get_video_buffer= avfilter_null_get_video_buffer,
+                                    .get_video_buffer= ff_null_get_video_buffer,
                                     .start_frame     = start_frame,
                                     .draw_slice      = draw_slice,
                                     .end_frame       = end_frame, },
@@ -119,20 +120,16 @@ static void filter_samples(AVFilterLink *inlink, AVFilterBufferRef *samplesref)
 }
 
 AVFilter avfilter_af_asplit = {
-    .name      = "asplit",
+    .name        = "asplit",
     .description = NULL_IF_CONFIG_SMALL("Pass on the audio input to N audio outputs."),
 
     .init   = split_init,
     .uninit = split_uninit,
 
-    .inputs = (const AVFilterPad[]) {
-        {
-            .name             = "default",
-            .type             = AVMEDIA_TYPE_AUDIO,
-            .get_audio_buffer = ff_null_get_audio_buffer,
-            .filter_samples   = filter_samples,
-        },
-        { .name = NULL }
-    },
+    .inputs  = (const AVFilterPad[]) {{ .name             = "default",
+                                        .type             = AVMEDIA_TYPE_AUDIO,
+                                        .get_audio_buffer = ff_null_get_audio_buffer,
+                                        .filter_samples   = filter_samples },
+                                      { .name = NULL }},
     .outputs = (const AVFilterPad[]) {{ .name = NULL }},
 };

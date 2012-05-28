@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010 Mans Rullgard
+ * Copyright (c) 2007 Bobby Bingham
  *
  * This file is part of FFmpeg.
  *
@@ -18,20 +18,19 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVCODEC_PPC_REGS_H
-#define AVCODEC_PPC_REGS_H
 
-#include "libavutil/avutil.h"
-#include "config.h"
+#ifndef AVFILTER_VIDEO_H
+#define AVFILTER_VIDEO_H
 
-#if HAVE_IBM_ASM
-#   define r(n) AV_TOSTRING(n)
-#   define f(n) AV_TOSTRING(n)
-#   define v(n) AV_TOSTRING(n)
-#else
-#   define r(n) AV_TOSTRING(r ## n)
-#   define f(n) AV_TOSTRING(f ## n)
-#   define v(n) AV_TOSTRING(v ## n)
-#endif
+#include "avfilter.h"
 
-#endif /* AVCODEC_PPC_REGS_H */
+AVFilterBufferRef *ff_default_get_video_buffer(AVFilterLink *link,
+                                               int perms, int w, int h);
+AVFilterBufferRef *ff_null_get_video_buffer(AVFilterLink *link, int perms, int w, int h);
+
+
+void ff_null_start_frame(AVFilterLink *link, AVFilterBufferRef *picref);
+void ff_null_draw_slice(AVFilterLink *link, int y, int h, int slice_dir);
+void ff_null_end_frame(AVFilterLink *link);
+
+#endif /* AVFILTER_VIDEO_H */
