@@ -1689,6 +1689,7 @@ boxblur_filter_deps="gpl"
 colormatrix_filter_deps="gpl"
 cropdetect_filter_deps="gpl"
 delogo_filter_deps="gpl"
+deshake_filter_deps="avcodec"
 drawtext_filter_deps="libfreetype"
 frei0r_filter_deps="frei0r dlopen"
 frei0r_filter_extralibs='$ldl'
@@ -1720,8 +1721,8 @@ ffplay_select="buffersink_filter rdft"
 ffprobe_deps="avcodec avformat"
 ffserver_deps="avformat ffm_muxer fork rtp_protocol rtsp_demuxer"
 ffserver_extralibs='$ldl'
-ffmpeg_deps="avcodec avfilter avformat swscale swresample format_filter"
-ffmpeg_select="buffersink_filter"
+ffmpeg_deps="avcodec avfilter avformat swscale swresample"
+ffmpeg_select="buffersink_filter format_filter aformat_filter"
 
 doc_deps="texi2html"
 

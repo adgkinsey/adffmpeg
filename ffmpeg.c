@@ -872,29 +872,6 @@ static int configure_audio_filters(FilterGraph *fg, AVFilterContext **in_filter,
         *out_filter = format;
     }
 
-    if (audio_sync_method > 0) {
-        AVFilterContext *aswr;
-        char args[256] = {0};
-
-        av_strlcatf(args, sizeof(args), "min_comp=0.001:min_hard_comp=%f", audio_drift_threshold);
-
-        if (audio_sync_method > 1)
-            av_strlcatf(args, sizeof(args), ":max_soft_comp=%f", audio_sync_method/(double)icodec->sample_rate);
-
-        av_log(NULL, AV_LOG_INFO, "-async %d is forwarded to lavfi similarly to -af aresample=%s\n", audio_sync_method, args);
-
-        ret = avfilter_graph_create_filter(&aswr, avfilter_get_by_name("aresample"),
-                                           "aresample", args, NULL, fg->graph);
-        if (ret < 0)
-            return ret;
-
-        ret = avfilter_link(*in_filter, 0, aswr, 0);
-        if (ret < 0)
-            return ret;
-
-        *in_filter = aswr;
-    }
-
 #define AUTO_INSERT_FILTER(opt_name, filter_name, arg) do {                 \
     AVFilterContext *filt_ctx;                                              \
                                                                             \
@@ -913,6 +890,15 @@ static int configure_audio_filters(FilterGraph *fg, AVFilterContext **in_filter,
                                                                             \
     *in_filter = filt_ctx;                                                  \
 } while (0)
+
+    if (audio_sync_method > 0) {
+        char args[256] = {0};
+
+        av_strlcatf(args, sizeof(args), "min_comp=0.001:min_hard_comp=%f", audio_drift_threshold);
+        if (audio_sync_method > 1)
+            av_strlcatf(args, sizeof(args), ":max_soft_comp=%f", audio_sync_method/(double)icodec->sample_rate);
+        AUTO_INSERT_FILTER("-async", "aresample", args);
+    }
 
     if (ost->audio_channels_mapped) {
         int i;
@@ -2538,7 +2524,7 @@ static int guess_input_channel_layout(InputStream *ist)
     return 1;
 }
 
-static int transcode_audio(InputStream *ist, AVPacket *pkt, int *got_output)
+static int decode_audio(InputStream *ist, AVPacket *pkt, int *got_output)
 {
     AVFrame *decoded_frame;
     AVCodecContext *avctx = ist->st->codec;
@@ -2639,7 +2625,7 @@ static int transcode_audio(InputStream *ist, AVPacket *pkt, int *got_output)
     return ret;
 }
 
-static int transcode_video(InputStream *ist, AVPacket *pkt, int *got_output)
+static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output)
 {
     AVFrame *decoded_frame;
     void *buffer_to_free = NULL;
@@ -2824,10 +2810,10 @@ static int output_packet(InputStream *ist, const AVPacket *pkt)
 
         switch (ist->st->codec->codec_type) {
         case AVMEDIA_TYPE_AUDIO:
-            ret = transcode_audio    (ist, &avpkt, &got_output);
+            ret = decode_audio    (ist, &avpkt, &got_output);
             break;
         case AVMEDIA_TYPE_VIDEO:
-            ret = transcode_video    (ist, &avpkt, &got_output);
+            ret = decode_video    (ist, &avpkt, &got_output);
             if (avpkt.duration) {
                 duration = av_rescale_q(avpkt.duration, ist->st->time_base, AV_TIME_BASE_Q);
             } else if(ist->st->codec->time_base.num != 0 && ist->st->codec->time_base.den != 0) {
@@ -3308,8 +3294,12 @@ static int transcode_init(void)
     for (i = 0; i < nb_output_files; i++) {
         oc = output_files[i]->ctx;
         oc->interrupt_callback = int_cb;
-        if (avformat_write_header(oc, &output_files[i]->opts) < 0) {
-            snprintf(error, sizeof(error), "Could not write header for output file #%d (incorrect codec parameters ?)", i);
+        if ((ret = avformat_write_header(oc, &output_files[i]->opts)) < 0) {
+            char errbuf[128];
+            const char *errbuf_ptr = errbuf;
+            if (av_strerror(ret, errbuf, sizeof(errbuf)) < 0)
+                errbuf_ptr = strerror(AVUNERROR(ret));
+            snprintf(error, sizeof(error), "Could not write header for output file #%d (incorrect codec parameters ?): %s", i, errbuf_ptr);
             ret = AVERROR(EINVAL);
             goto dump_format;
         }

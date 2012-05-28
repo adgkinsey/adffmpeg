@@ -51,7 +51,6 @@ static int do_show_error   = 0;
 static int do_show_format  = 0;
 static int do_show_frames  = 0;
 static AVDictionary *fmt_entries_to_show = NULL;
-static int nb_fmt_entries_to_show;
 static int do_show_packets = 0;
 static int do_show_streams = 0;
 static int do_show_program_version  = 0;
@@ -399,9 +398,6 @@ static av_cold int default_init(WriterContext *wctx, const char *args, void *opa
     def->class = &default_class;
     av_opt_set_defaults(def);
 
-    if (nb_fmt_entries_to_show == 1)
-        def->nokey = 1;
-
     if (args &&
         (err = (av_set_options_string(def, args, "=", ":"))) < 0) {
         av_log(wctx, AV_LOG_ERROR, "Error parsing options string: '%s'\n", args);
@@ -666,19 +662,17 @@ static void compact_show_tags(WriterContext *wctx, AVDictionary *dict)
     AVDictionaryEntry *tag = NULL;
     AVBPrint buf;
 
+    av_bprint_init(&buf, 1, AV_BPRINT_SIZE_UNLIMITED);
     while ((tag = av_dict_get(dict, "", tag, AV_DICT_IGNORE_SUFFIX))) {
         if (wctx->nb_item) printf("%c", compact->item_sep);
-
         if (!compact->nokey) {
-            av_bprint_init(&buf, 1, AV_BPRINT_SIZE_UNLIMITED);
+            av_bprint_clear(&buf);
             printf("tag:%s=", compact->escape_str(&buf, tag->key, compact->item_sep, wctx));
-            av_bprint_finalize(&buf, NULL);
         }
-
-        av_bprint_init(&buf, 1, AV_BPRINT_SIZE_UNLIMITED);
+        av_bprint_clear(&buf);
         printf("%s", compact->escape_str(&buf, tag->value, compact->item_sep, wctx));
-        av_bprint_finalize(&buf, NULL);
     }
+    av_bprint_finalize(&buf, NULL);
 }
 
 static const Writer compact_writer = {
@@ -871,9 +865,7 @@ static inline void json_print_item_str(WriterContext *wctx,
 
     av_bprint_init(&buf, 1, AV_BPRINT_SIZE_UNLIMITED);
     printf("\"%s\":", json_escape_str(&buf, key,   wctx));
-    av_bprint_finalize(&buf, NULL);
-
-    av_bprint_init(&buf, 1, AV_BPRINT_SIZE_UNLIMITED);
+    av_bprint_clear(&buf);
     printf(" \"%s\"", json_escape_str(&buf, value, wctx));
     av_bprint_finalize(&buf, NULL);
 }
@@ -1128,6 +1120,7 @@ static void xml_show_tags(WriterContext *wctx, AVDictionary *dict)
     int is_first = 1;
     AVBPrint buf;
 
+    av_bprint_init(&buf, 1, AV_BPRINT_SIZE_UNLIMITED);
     xml->indent_level++;
     while ((tag = av_dict_get(dict, "", tag, AV_DICT_IGNORE_SUFFIX))) {
         if (is_first) {
@@ -1138,14 +1131,12 @@ static void xml_show_tags(WriterContext *wctx, AVDictionary *dict)
         }
         XML_INDENT();
 
-        av_bprint_init(&buf, 1, AV_BPRINT_SIZE_UNLIMITED);
+        av_bprint_clear(&buf);
         printf("<tag key=\"%s\"", xml_escape_str(&buf, tag->key, wctx));
-        av_bprint_finalize(&buf, NULL);
-
-        av_bprint_init(&buf, 1, AV_BPRINT_SIZE_UNLIMITED);
+        av_bprint_clear(&buf);
         printf(" value=\"%s\"/>\n", xml_escape_str(&buf, tag->value, wctx));
-        av_bprint_finalize(&buf, NULL);
     }
+    av_bprint_finalize(&buf, NULL);
     xml->indent_level--;
 }
 
@@ -1368,6 +1359,7 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
     print_int("index", stream->index);
 
     if ((dec_ctx = stream->codec)) {
+        const char *profile = NULL;
         if ((dec = dec_ctx->codec)) {
             print_str("codec_name",      dec->name);
             print_str("codec_long_name", dec->long_name);
@@ -1375,6 +1367,11 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
             print_str_opt("codec_name",      "unknown");
             print_str_opt("codec_long_name", "unknown");
         }
+
+        if (dec && (profile = av_get_profile_name(dec, dec_ctx->profile)))
+            print_str("profile", profile);
+        else
+            print_str_opt("profile", "unknown");
 
         s = av_get_media_type_string(dec_ctx->codec_type);
         if (s) print_str    ("codec_type", s);
@@ -1679,7 +1676,6 @@ static int opt_format(const char *opt, const char *arg)
 static int opt_show_format_entry(const char *opt, const char *arg)
 {
     do_show_format = 1;
-    nb_fmt_entries_to_show++;
     av_dict_set(&fmt_entries_to_show, arg, "", 0);
     return 0;
 }
