@@ -22,6 +22,7 @@
 #include <strings.h>
 
 #include "internal.h"
+#include "url.h"
 #include "libavutil/avstring.h"
 #include "libavutil/intreadwrite.h"
 
@@ -34,7 +35,7 @@
 static const AVRational MilliTB = {1, 1000};
 
 
-int ad_read_header(AVFormatContext *s, AVFormatParameters *ap, int *utcOffset)
+int ad_read_header(AVFormatContext *s, int *utcOffset)
 {
     AVIOContext*    pb          = s->pb;
     URLContext*     urlContext  = pb->opaque;

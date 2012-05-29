@@ -102,7 +102,7 @@ void ff_lzw_decode_tail(LZWState *p)
 
     if(s->mode == FF_LZW_GIF) {
         while (s->bs > 0) {
-            if (s->pbuf + s->bs >= s->ebuf) {
+            if (s->bs >= s->ebuf - s->pbuf) {
                 s->pbuf = s->ebuf;
                 break;
             } else {
@@ -189,6 +189,10 @@ int ff_lzw_decode(LZWState *p, uint8_t *buf, int len){
             *buf++ = *(--sp);
             if ((--l) == 0)
                 goto the_end;
+        }
+        if (s->ebuf < s->pbuf) {
+            av_log(0, AV_LOG_ERROR, "lzw overread\n");
+            goto the_end;
         }
         c = lzw_get_code(s);
         if (c == s->end_code) {

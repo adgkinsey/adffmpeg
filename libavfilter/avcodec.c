@@ -1,4 +1,6 @@
 /*
+ * Copyright 2011 Stefano Sabatini | stefasab at gmail.com
+ *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -22,26 +24,7 @@
  */
 
 #include "avcodec.h"
-
-int avfilter_copy_frame_props(AVFilterBufferRef *dst, const AVFrame *src)
-{
-    dst->pts    = src->pts;
-    dst->pos    = src->pkt_pos;
-    dst->format = src->format;
-
-    switch (dst->type) {
-    case AVMEDIA_TYPE_VIDEO:
-        dst->video->w                   = src->width;
-        dst->video->h                   = src->height;
-        dst->video->sample_aspect_ratio = src->sample_aspect_ratio;
-        dst->video->interlaced          = src->interlaced_frame;
-        dst->video->top_field_first     = src->top_field_first;
-        dst->video->key_frame           = src->key_frame;
-        dst->video->pict_type           = src->pict_type;
-    }
-
-    return 0;
-}
+#include "libavutil/opt.h"
 
 AVFilterBufferRef *avfilter_get_video_buffer_ref_from_frame(const AVFrame *frame,
                                                             int perms)
@@ -54,6 +37,34 @@ AVFilterBufferRef *avfilter_get_video_buffer_ref_from_frame(const AVFrame *frame
         return NULL;
     avfilter_copy_frame_props(picref, frame);
     return picref;
+}
+
+AVFilterBufferRef *avfilter_get_audio_buffer_ref_from_frame(const AVFrame *frame,
+                                                            int perms)
+{
+    AVFilterBufferRef *picref =
+        avfilter_get_audio_buffer_ref_from_arrays((uint8_t **)frame->data, frame->linesize[0], perms,
+                                                  frame->nb_samples, frame->format,
+                                                  av_frame_get_channel_layout(frame));
+    if (!picref)
+        return NULL;
+    avfilter_copy_frame_props(picref, frame);
+    return picref;
+}
+
+int avfilter_fill_frame_from_audio_buffer_ref(AVFrame *frame,
+                                              const AVFilterBufferRef *samplesref)
+{
+    if (!samplesref || !samplesref->audio || !frame)
+        return AVERROR(EINVAL);
+
+    memcpy(frame->data, samplesref->data, sizeof(frame->data));
+    frame->pkt_pos    = samplesref->pos;
+    frame->format     = samplesref->format;
+    frame->nb_samples = samplesref->audio->nb_samples;
+    frame->pts        = samplesref->pts;
+
+    return 0;
 }
 
 int avfilter_fill_frame_from_video_buffer_ref(AVFrame *frame,
@@ -70,6 +81,19 @@ int avfilter_fill_frame_from_video_buffer_ref(AVFrame *frame,
     frame->key_frame        = picref->video->key_frame;
     frame->pict_type        = picref->video->pict_type;
     frame->sample_aspect_ratio = picref->video->sample_aspect_ratio;
+    frame->width            = picref->video->w;
+    frame->height           = picref->video->h;
+    frame->format           = picref->format;
+    frame->pts              = picref->pts;
 
     return 0;
+}
+
+int avfilter_fill_frame_from_buffer_ref(AVFrame *frame,
+                                        const AVFilterBufferRef *ref)
+{
+    if (!ref)
+        return AVERROR(EINVAL);
+    return ref->video ? avfilter_fill_frame_from_video_buffer_ref(frame, ref)
+                      : avfilter_fill_frame_from_audio_buffer_ref(frame, ref);
 }

@@ -444,10 +444,10 @@ static int adbinary_probe(AVProbeData *p)
     return score;
 }
 
-static int adbinary_read_header(AVFormatContext *s, AVFormatParameters *ap)
+static int adbinary_read_header(AVFormatContext *s)
 {
     AdContext *adContext = s->priv_data;
-    return ad_read_header(s, ap, &adContext->utc_offset);
+    return ad_read_header(s, &adContext->utc_offset);
 }
 
 static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)

@@ -23,6 +23,7 @@
 
 #include "avformat.h"
 #include "internal.h"
+#include "url.h"
 #include "libavutil/avstring.h"
 #include "libavutil/bswap.h"
 
@@ -379,7 +380,7 @@ static int DSOpen( URLContext *h, const char *uri, int flags )
     snprintf(buf, sizeof(buf), "tcp://%s:%d", hostname, port);
 
     /* Now open a connection to that TCP address */
-    if( (err = url_open( &TCPContext, buf, URL_RDWR )) < 0 ) {
+    if( (err = ffurl_open(&TCPContext, buf, AVIO_FLAG_READ_WRITE, &TCPContext->interrupt_callback, NULL)) < 0 ) {
         goto fail;
     }
 
@@ -394,7 +395,7 @@ static int DSOpen( URLContext *h, const char *uri, int flags )
     return 0;
 fail:
     if( TCPContext ) {
-        url_close( TCPContext );
+        ffurl_close( TCPContext );
     }
 
     av_free( s );
@@ -418,7 +419,7 @@ static int DSRead( URLContext *h, uint8_t *buf, int size )
     DSContext *         context = (DSContext *)h->priv_data;
 
     if( context != NULL )
-        return url_read( context->TCPContext, buf, size );
+        return ffurl_read( context->TCPContext, buf, size );
 
     return AVERROR(EIO);
 }
@@ -439,7 +440,7 @@ static int DSWrite( URLContext *h, const uint8_t *buf, int size )
     DSContext *     context = (DSContext *)h->priv_data;
 
     if( context != NULL )
-        return url_write( context->TCPContext, buf, size );
+        return ffurl_write( context->TCPContext, buf, size );
 
     return AVERROR(EIO);
 }
@@ -457,7 +458,7 @@ static int DSClose( URLContext *h )
     DSContext * context = (DSContext *)h->priv_data;
 
     if( context != NULL ) {
-        url_close( context->TCPContext );
+        ffurl_close( context->TCPContext );
 
         av_free( context );
     }

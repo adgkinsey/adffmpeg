@@ -98,7 +98,7 @@ static int smacker_probe(AVProbeData *p)
         return 0;
 }
 
-static int smacker_read_header(AVFormatContext *s, AVFormatParameters *ap)
+static int smacker_read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     SmackerContext *smk = s->priv_data;
@@ -203,7 +203,7 @@ static int smacker_read_header(AVFormatContext *s, AVFormatParameters *ap)
 
 
     /* load trees to extradata, they will be unpacked by decoder */
-    st->codec->extradata = av_malloc(smk->treesize + 16);
+    st->codec->extradata = av_malloc(smk->treesize + 16 + FF_INPUT_BUFFER_PADDING_SIZE);
     st->codec->extradata_size = smk->treesize + 16;
     if(!st->codec->extradata){
         av_log(s, AV_LOG_ERROR, "Cannot allocate %i bytes of extradata\n", smk->treesize + 16);

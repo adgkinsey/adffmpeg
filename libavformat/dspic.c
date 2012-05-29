@@ -26,7 +26,7 @@
 #include "adpic.h"
 
 static int dspicProbe( AVProbeData *p );
-static int dspicReadHeader( AVFormatContext *s, AVFormatParameters *ap );
+static int dspicReadHeader( AVFormatContext *s );
 static int dspicReadPacket( AVFormatContext *s, AVPacket *pkt );
 static int dspicReadClose( AVFormatContext *s );
 static int ReadNetworkMessageHeader( AVIOContext *context, MessageHeader *header );
@@ -60,7 +60,7 @@ static int dspicProbe( AVProbeData *p )
     return 0;
 }
 
-static int dspicReadHeader( AVFormatContext *s, AVFormatParameters *ap )
+static int dspicReadHeader( AVFormatContext *s )
 {
     return 0;
 }

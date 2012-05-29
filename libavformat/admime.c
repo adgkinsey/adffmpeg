@@ -680,9 +680,9 @@ static int admime_probe(AVProbeData *p)
     return 0;
 }
 
-static int admime_read_header(AVFormatContext *s, AVFormatParameters *ap)
+static int admime_read_header(AVFormatContext *s)
 {
-    return ad_read_header(s, ap, NULL);
+    return ad_read_header(s, NULL);
 }
 
 

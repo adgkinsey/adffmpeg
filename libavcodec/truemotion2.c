@@ -193,7 +193,7 @@ static void tm2_free_codes(TM2Codes *code)
 {
     av_free(code->recode);
     if(code->vlc.table)
-        free_vlc(&code->vlc);
+        ff_free_vlc(&code->vlc);
 }
 
 static inline int tm2_get_token(GetBitContext *gb, TM2Codes *code)
@@ -259,6 +259,11 @@ static int tm2_read_stream(TM2Context *ctx, const uint8_t *buf, int stream_id, i
     TM2Codes codes;
     GetByteContext gb;
 
+    if (buf_size < 4) {
+        av_log(ctx->avctx, AV_LOG_ERROR, "not enough space for len left\n");
+        return AVERROR_INVALIDDATA;
+    }
+
     /* get stream length in dwords */
     bytestream2_init(&gb, buf, buf_size);
     len  = bytestream2_get_be32(&gb);
@@ -267,7 +272,7 @@ static int tm2_read_stream(TM2Context *ctx, const uint8_t *buf, int stream_id, i
     if(len == 0)
         return 4;
 
-    if (len >= INT_MAX/4-1 || len < 0 || len > buf_size) {
+    if (len >= INT_MAX/4-1 || len < 0 || skip > buf_size) {
         av_log(ctx->avctx, AV_LOG_ERROR, "Error, invalid stream size.\n");
         return -1;
     }
@@ -351,8 +356,13 @@ static inline int GET_TOK(TM2Context *ctx,int type) {
         av_log(ctx->avctx, AV_LOG_ERROR, "Read token from stream %i out of bounds (%i>=%i)\n", type, ctx->tok_ptrs[type], ctx->tok_lens[type]);
         return 0;
     }
-    if(type <= TM2_MOT)
+    if(type <= TM2_MOT) {
+        if (ctx->tokens[type][ctx->tok_ptrs[type]] >= TM2_DELTAS) {
+            av_log(ctx->avctx, AV_LOG_ERROR, "token %d is too large\n", ctx->tokens[type][ctx->tok_ptrs[type]]);
+            return 0;
+        }
         return ctx->deltas[type][ctx->tokens[type][ctx->tok_ptrs[type]++]];
+    }
     return ctx->tokens[type][ctx->tok_ptrs[type]++];
 }
 
@@ -657,6 +667,11 @@ static inline void tm2_motion_block(TM2Context *ctx, AVFrame *pic, int bx, int b
     mx = av_clip(mx, -(bx * 4 + 4), ctx->avctx->width  - bx * 4);
     my = av_clip(my, -(by * 4 + 4), ctx->avctx->height - by * 4);
 
+    if (4*bx+mx<0 || 4*by+my<0 || 4*bx+mx+4 > ctx->avctx->width || 4*by+my+4 > ctx->avctx->height) {
+        av_log(0,0, "MV out of picture\n");
+        return;
+    }
+
     Yo += my * oYstride + mx;
     Uo += (my >> 1) * oUstride + (mx >> 1);
     Vo += (my >> 1) * oVstride + (mx >> 1);
@@ -820,7 +835,7 @@ static int decode_frame(AVCodecContext *avctx,
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size & ~3;
     TM2Context * const l = avctx->priv_data;
-    AVFrame * const p= (AVFrame*)&l->pic;
+    AVFrame * const p = &l->pic;
     int i, skip, t;
 
     av_fast_padded_malloc(&l->buffer, &l->buffer_size, buf_size);
@@ -844,8 +859,10 @@ static int decode_frame(AVCodecContext *avctx,
 
     for(i = 0; i < TM2_NUM_STREAMS; i++){
         if (skip >= buf_size) {
+            av_log(avctx, AV_LOG_ERROR, "no space for tm2_read_stream\n");
             return AVERROR_INVALIDDATA;
         }
+
         t = tm2_read_stream(l, l->buffer + skip, tm2_stream_order[i], buf_size - skip);
         if(t < 0){
             return t;
@@ -879,7 +896,7 @@ static av_cold int decode_init(AVCodecContext *avctx){
     avctx->pix_fmt = PIX_FMT_BGR24;
     avcodec_get_frame_defaults(&l->pic);
 
-    dsputil_init(&l->dsp, avctx);
+    ff_dsputil_init(&l->dsp, avctx);
 
     l->last  = av_malloc(4 * sizeof(*l->last)  * (w >> 2));
     l->clast = av_malloc(4 * sizeof(*l->clast) * (w >> 2));
@@ -960,5 +977,5 @@ AVCodec ff_truemotion2_decoder = {
     .close          = decode_end,
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name = NULL_IF_CONFIG_SMALL("Duck TrueMotion 2.0"),
+    .long_name      = NULL_IF_CONFIG_SMALL("Duck TrueMotion 2.0"),
 };

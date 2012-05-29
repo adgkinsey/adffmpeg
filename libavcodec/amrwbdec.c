@@ -27,7 +27,6 @@
 #include "libavutil/lfg.h"
 
 #include "avcodec.h"
-#include "get_bits.h"
 #include "lsp.h"
 #include "celp_math.h"
 #include "celp_filters.h"
@@ -120,14 +119,9 @@ static av_cold int amrwb_decode_init(AVCodecContext *avctx)
  */
 static int decode_mime_header(AMRWBContext *ctx, const uint8_t *buf)
 {
-    GetBitContext gb;
-    init_get_bits(&gb, buf, 8);
-
     /* Decode frame header (1st octet) */
-    skip_bits(&gb, 1);  // padding bit
-    ctx->fr_cur_mode  = get_bits(&gb, 4);
-    ctx->fr_quality   = get_bits1(&gb);
-    skip_bits(&gb, 2);  // padding bits
+    ctx->fr_cur_mode  = buf[0] >> 3 & 0x0F;
+    ctx->fr_quality   = (buf[0] & 0x4) != 0x4;
 
     return 1;
 }
@@ -1249,5 +1243,6 @@ AVCodec ff_amrwb_decoder = {
     .decode         = amrwb_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
     .long_name      = NULL_IF_CONFIG_SMALL("Adaptive Multi-Rate WideBand"),
-    .sample_fmts    = (const enum AVSampleFormat[]){AV_SAMPLE_FMT_FLT,AV_SAMPLE_FMT_NONE},
+    .sample_fmts    = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_FLT,
+                                                     AV_SAMPLE_FMT_NONE },
 };

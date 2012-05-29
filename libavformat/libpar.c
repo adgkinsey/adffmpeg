@@ -116,7 +116,7 @@ static int par_write_header(AVFormatContext *avf)
 
     p->picHeaderSize = parReader_getPicStructSize();
     do  {
-        tag = av_dict_get(avf->metadata, "", tag, AV_METADATA_IGNORE_SUFFIX);
+        tag = av_dict_get(avf->metadata, "", tag, AV_DICT_IGNORE_SUFFIX);
         if (tag)
             importMetadata(tag, &(p->master));
     }
@@ -169,7 +169,7 @@ static int par_write_packet(AVFormatContext *avf, AVPacket * pkt)
 
         // Now check if there are stream-specific values
         do  {
-            tag = av_dict_get(stream->metadata, "", tag, AV_METADATA_IGNORE_SUFFIX);
+            tag = av_dict_get(stream->metadata, "", tag, AV_DICT_IGNORE_SUFFIX);
             if (tag)
                 importMetadata(tag, ps);
         }
@@ -719,7 +719,7 @@ static int par_probe(AVProbeData *p)
         return 0;
 }
 
-static int par_read_header(AVFormatContext * avf, AVFormatParameters * ap)
+static int par_read_header(AVFormatContext * avf)
 {
     int res, siz;
     PARDecContext *p = avf->priv_data;

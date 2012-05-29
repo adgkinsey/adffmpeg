@@ -43,10 +43,10 @@ static void roqvideo_decode_frame(RoqContext *ri)
     roq_qcell *qcell;
     int64_t chunk_start;
 
-    while (bytestream2_get_bytes_left(&ri->gb) > 0) {
-        chunk_id = bytestream2_get_le16(&ri->gb);
+    while (bytestream2_get_bytes_left(&ri->gb) >= 8) {
+        chunk_id   = bytestream2_get_le16(&ri->gb);
         chunk_size = bytestream2_get_le32(&ri->gb);
-        chunk_arg = bytestream2_get_le16(&ri->gb);
+        chunk_arg  = bytestream2_get_le16(&ri->gb);
 
         if(chunk_id == RoQ_QUAD_VQ)
             break;
@@ -60,8 +60,8 @@ static void roqvideo_decode_frame(RoqContext *ri)
                 ri->cb2x2[i].y[1] = bytestream2_get_byte(&ri->gb);
                 ri->cb2x2[i].y[2] = bytestream2_get_byte(&ri->gb);
                 ri->cb2x2[i].y[3] = bytestream2_get_byte(&ri->gb);
-                ri->cb2x2[i].u = bytestream2_get_byte(&ri->gb);
-                ri->cb2x2[i].v = bytestream2_get_byte(&ri->gb);
+                ri->cb2x2[i].u    = bytestream2_get_byte(&ri->gb);
+                ri->cb2x2[i].v    = bytestream2_get_byte(&ri->gb);
             }
             for(i = 0; i < nv2; i++)
                 for(j = 0; j < 4; j++)
@@ -104,10 +104,10 @@ static void roqvideo_decode_frame(RoqContext *ri)
                 }
                 case RoQ_ID_SLD:
                     qcell = ri->cb4x4 + bytestream2_get_byte(&ri->gb);
-                    ff_apply_vector_4x4(ri, xp, yp, ri->cb2x2 + qcell->idx[0]);
-                    ff_apply_vector_4x4(ri, xp+4, yp, ri->cb2x2 + qcell->idx[1]);
-                    ff_apply_vector_4x4(ri, xp, yp+4, ri->cb2x2 + qcell->idx[2]);
-                    ff_apply_vector_4x4(ri, xp+4, yp+4, ri->cb2x2 + qcell->idx[3]);
+                    ff_apply_vector_4x4(ri, xp,     yp,     ri->cb2x2 + qcell->idx[0]);
+                    ff_apply_vector_4x4(ri, xp + 4, yp,     ri->cb2x2 + qcell->idx[1]);
+                    ff_apply_vector_4x4(ri, xp,     yp + 4, ri->cb2x2 + qcell->idx[2]);
+                    ff_apply_vector_4x4(ri, xp + 4, yp + 4, ri->cb2x2 + qcell->idx[3]);
                     break;
                 case RoQ_ID_CCC:
                     for (k = 0; k < 4; k++) {
@@ -138,16 +138,16 @@ static void roqvideo_decode_frame(RoqContext *ri)
                         }
                         case RoQ_ID_SLD:
                             qcell = ri->cb4x4 + bytestream2_get_byte(&ri->gb);
-                            ff_apply_vector_2x2(ri, x, y, ri->cb2x2 + qcell->idx[0]);
-                            ff_apply_vector_2x2(ri, x+2, y, ri->cb2x2 + qcell->idx[1]);
-                            ff_apply_vector_2x2(ri, x, y+2, ri->cb2x2 + qcell->idx[2]);
-                            ff_apply_vector_2x2(ri, x+2, y+2, ri->cb2x2 + qcell->idx[3]);
+                            ff_apply_vector_2x2(ri, x,     y,     ri->cb2x2 + qcell->idx[0]);
+                            ff_apply_vector_2x2(ri, x + 2, y,     ri->cb2x2 + qcell->idx[1]);
+                            ff_apply_vector_2x2(ri, x,     y + 2, ri->cb2x2 + qcell->idx[2]);
+                            ff_apply_vector_2x2(ri, x + 2, y + 2, ri->cb2x2 + qcell->idx[3]);
                             break;
                         case RoQ_ID_CCC:
-                            ff_apply_vector_2x2(ri, x, y, ri->cb2x2 + bytestream2_get_byte(&ri->gb));
-                            ff_apply_vector_2x2(ri, x+2, y, ri->cb2x2 + bytestream2_get_byte(&ri->gb));
-                            ff_apply_vector_2x2(ri, x, y+2, ri->cb2x2 + bytestream2_get_byte(&ri->gb));
-                            ff_apply_vector_2x2(ri, x+2, y+2, ri->cb2x2 + bytestream2_get_byte(&ri->gb));
+                            ff_apply_vector_2x2(ri, x,     y,     ri->cb2x2 + bytestream2_get_byte(&ri->gb));
+                            ff_apply_vector_2x2(ri, x + 2, y,     ri->cb2x2 + bytestream2_get_byte(&ri->gb));
+                            ff_apply_vector_2x2(ri, x,     y + 2, ri->cb2x2 + bytestream2_get_byte(&ri->gb));
+                            ff_apply_vector_2x2(ri, x + 2, y + 2, ri->cb2x2 + bytestream2_get_byte(&ri->gb));
                             break;
                         }
                     }
@@ -237,5 +237,5 @@ AVCodec ff_roq_decoder = {
     .close          = roq_decode_end,
     .decode         = roq_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name = NULL_IF_CONFIG_SMALL("id RoQ video"),
+    .long_name      = NULL_IF_CONFIG_SMALL("id RoQ video"),
 };

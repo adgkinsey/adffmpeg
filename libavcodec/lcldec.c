@@ -263,9 +263,14 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
          * gives a file with ZLIB fourcc, but frame is really uncompressed.
          * To be sure that's true check also frame size */
         if (c->compression == COMP_ZLIB_NORMAL && c->imgtype == IMGTYPE_RGB24 &&
-            len == width * height * 3)
-            break;
-        if (c->flags & FLAG_MULTITHREAD) {
+            len == width * height * 3) {
+            if (c->flags & FLAG_PNGFILTER) {
+                memcpy(c->decomp_buf, encoded, len);
+                encoded = c->decomp_buf;
+            } else {
+                break;
+            }
+        } else if (c->flags & FLAG_MULTITHREAD) {
             int ret;
             mthread_inlen = AV_RL32(encoded);
             mthread_inlen = FFMIN(mthread_inlen, len - 8);
@@ -646,7 +651,7 @@ AVCodec ff_mszh_decoder = {
     .close          = decode_end,
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name = NULL_IF_CONFIG_SMALL("LCL (LossLess Codec Library) MSZH"),
+    .long_name      = NULL_IF_CONFIG_SMALL("LCL (LossLess Codec Library) MSZH"),
 };
 #endif
 
@@ -660,6 +665,6 @@ AVCodec ff_zlib_decoder = {
     .close          = decode_end,
     .decode         = decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name = NULL_IF_CONFIG_SMALL("LCL (LossLess Codec Library) ZLIB"),
+    .long_name      = NULL_IF_CONFIG_SMALL("LCL (LossLess Codec Library) ZLIB"),
 };
 #endif
