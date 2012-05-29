@@ -1,7 +1,7 @@
 include $(SUBDIR)../config.mak
 
 NAME = avfilter
-FFLIBS = avutil swscale
+FFLIBS = avutil avcodec swscale
 FFLIBS-$(CONFIG_ASYNCTS_FILTER) += avresample
 FFLIBS-$(CONFIG_RESAMPLE_FILTER) += avresample
 
@@ -12,6 +12,7 @@ FFLIBS-$(CONFIG_MOVIE_FILTER)                += avformat avcodec
 FFLIBS-$(CONFIG_PAN_FILTER)                  += swresample
 FFLIBS-$(CONFIG_REMOVELOGO_FILTER)           += avformat avcodec
 FFLIBS-$(CONFIG_MP_FILTER)                   += avcodec postproc
+FFLIBS-$(CONFIG_AVFORMAT)                    += avformat
 
 HEADERS = asrc_abuffer.h                                                \
           avcodec.h                                                     \
