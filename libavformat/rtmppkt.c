@@ -151,10 +151,7 @@ int ff_rtmp_packet_read(URLContext *h, RTMPPacket *p,
         offset    += chunk_size;
         size      += chunk_size;
         if (data_size > 0) {
-            if ((ret = ffurl_read_complete(h, &t, 1)) < 0) { // marker
-                ff_rtmp_packet_destroy(p);
-                return ret;
-            }
+            ffurl_read_complete(h, &t, 1); //marker
             size++;
             if (t != (0xC0 + channel_id))
                 return -1;
@@ -170,7 +167,6 @@ int ff_rtmp_packet_write(URLContext *h, RTMPPacket *pkt,
     int mode = RTMP_PS_TWELVEBYTES;
     int off = 0;
     int size = 0;
-    int ret;
 
     pkt->ts_delta = pkt->timestamp - prev_pkt[pkt->channel_id].timestamp;
 
@@ -222,18 +218,15 @@ int ff_rtmp_packet_write(URLContext *h, RTMPPacket *pkt,
     }
     prev_pkt[pkt->channel_id].extra      = pkt->extra;
 
-    if ((ret = ffurl_write(h, pkt_hdr, p - pkt_hdr)) < 0)
-        return ret;
+    ffurl_write(h, pkt_hdr, p-pkt_hdr);
     size = p - pkt_hdr + pkt->data_size;
     while (off < pkt->data_size) {
         int towrite = FFMIN(chunk_size, pkt->data_size - off);
-        if ((ret = ffurl_write(h, pkt->data + off, towrite)) < 0)
-            return ret;
+        ffurl_write(h, pkt->data + off, towrite);
         off += towrite;
         if (off < pkt->data_size) {
             uint8_t marker = 0xC0 | pkt->channel_id;
-            if ((ret = ffurl_write(h, &marker, 1)) < 0)
-                return ret;
+            ffurl_write(h, &marker, 1);
             size++;
         }
     }

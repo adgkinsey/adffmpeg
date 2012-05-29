@@ -20,7 +20,7 @@
 
 /*
  * To create a simple file for smooth streaming:
- * ffmpeg <normal input/transcoding options> -movflags frag_keyframe foo.ismv
+ * avconv <normal input/transcoding options> -movflags frag_keyframe foo.ismv
  * ismindex -n foo foo.ismv
  * This step creates foo.ism and foo.ismc that is required by IIS for
  * serving it.
