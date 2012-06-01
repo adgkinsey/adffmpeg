@@ -856,104 +856,90 @@ static int par_read_seek(AVFormatContext *avf, int stream,
     int isKeyFrame = 0;
     int step;
     int anyStreamWillDo = 0;
+    int prevPlayMode, prevLock;
 
     av_log(avf, AV_LOG_DEBUG, "par_read_seek target    = %"PRId64"\n", target);
     
-    if (stream >= avf->nb_streams)
+    if ((stream < 0) || (stream >= avf->nb_streams))  {
         anyStreamWillDo = 1;
+        streamId = avf->streams[0]->id;
+    }
     else
         streamId = avf->streams[stream]->id;
     
+    prevPlayMode = p->dispSet.playMode;
+    prevLock = p->dispSet.fileLock;
+    
     p->seqStartAdded = 0;
-
     p->dispSet.cameraNum = streamId;
     if (flags & AVSEEK_FLAG_BACKWARD)
         p->dispSet.playMode = RWND;
 
-    do  {
-        if ( (flags & AVSEEK_FLAG_FRAME) && (target < 0) )   {
-            p->dispSet.fileSeqNo = (-target) - 1;
-            p->dispSet.frameNumber = 0;
+    if ( (flags & AVSEEK_FLAG_FRAME) && (target < 0) )   {
+        p->dispSet.fileSeqNo = (-target) - 1;
+        p->dispSet.frameNumber = 0;
+    }
+    else  {
+        p->dispSet.fileSeqNo = -1;
+        
+        if (flags & AVSEEK_FLAG_FRAME)  {
+            // Don't seek beyond the file
+            p->dispSet.fileLock = 1;
+            p->dispSet.frameNumber = target;
         }
         else  {
-            p->dispSet.fileSeqNo = -1;
-            
-            if (flags & AVSEEK_FLAG_FRAME)  {
-                // Don't seek beyond the file
-                p->dispSet.fileLock = 1;
-                p->dispSet.frameNumber = target;
-            }
-            else  {
-                p->dispSet.timestamp = target / 1000LL;
-                p->dispSet.millisecs = target % 1000;
-            }
-        }
-
-        do  {
-            siz = parReader_loadFrame(&p->frameInfo, &p->dispSet, &p->fileChanged);
-
-            // If this frame is not acceptable we want to just iterate through
-            // until we find one that is, not seek again, so reset targets
-            p->dispSet.frameNumber = -1;
-            p->dispSet.timestamp = 0;
-            p->dispSet.millisecs = 0;
-
-            if (siz < 0)
-                break;
-
-            if (parReader_frameIsVideo(&p->frameInfo))  {
-                if (flags & AVSEEK_FLAG_ANY)
-                    isKeyFrame = 1;
-                else
-                    isKeyFrame = parReader_isIFrame(&p->frameInfo);
-            }
-            else  {
-                // Always seek to a video frame
-                isKeyFrame = 0;
-            }
-            
-            // If we don't care which stream then force the streamId to match
-            if (anyStreamWillDo)
-                streamId = p->frameInfo.channel;
-        }
-        while ( (streamId != p->frameInfo.channel) || (0 == isKeyFrame) );
-
-        if (siz <= 0)  {
-            // If we have failed to load a frame then try again with (target - 1)
-            if (target >= 0)  {
-                if (flags & AVSEEK_FLAG_FRAME)
-                    step = 1;
-                else
-                    step = 1000;
-
-                if (RWND == p->dispSet.playMode)
-                    target = target + step;
-                else
-                    target = target - step;
-            }
-            else  {
-                // Jumping to file failed, should never happen
-                break;
-            }
-        }
-        else  {
-            p->frameCached = siz;
-            for(step = 0; step < avf->nb_streams; step++)  {
-                if ( (NULL != avf->streams[step]) && (avf->streams[step]->id == streamId) )  {
-                    avf->streams[step]->codec->frame_number = p->frameInfo.frameNumber;
-                    break;
-                }
-            }
+            p->dispSet.timestamp = target / 1000LL;
+            p->dispSet.millisecs = target % 1000;
         }
     }
-    while (siz <= 0);
 
-    p->dispSet.fileLock = 0;
-    p->dispSet.playMode = PLAY;
+    do  {
+        siz = parReader_loadFrame(&p->frameInfo, &p->dispSet, &p->fileChanged);
 
-    av_log(avf, AV_LOG_DEBUG, "par_read_seek seek_done = %lu\n", p->frameInfo.imageTime);
+        // If this frame is not acceptable we want to just iterate through
+        // until we find one that is, not seek again, so reset targets
+        p->dispSet.frameNumber = -1;
+        p->dispSet.timestamp = 0;
+        p->dispSet.millisecs = 0;
 
-    return p->frameInfo.imageTime;
+        if (siz < 0)
+            break;
+
+        if (parReader_frameIsVideo(&p->frameInfo))  {
+            if (flags & AVSEEK_FLAG_ANY)
+                isKeyFrame = 1;
+            else
+                isKeyFrame = parReader_isIFrame(&p->frameInfo);
+        }
+        else  {
+            // Always seek to a video frame
+            isKeyFrame = 0;
+        }
+        
+        // If we don't care which stream then force the streamId to match
+        if (anyStreamWillDo)
+            streamId = p->frameInfo.channel;
+    }
+    while ( (streamId != p->frameInfo.channel) || (0 == isKeyFrame) );
+
+    p->dispSet.fileLock = prevLock;
+    p->dispSet.playMode = prevPlayMode;
+
+    if (siz > 0)  {
+        p->frameCached = siz;
+        for(step = 0; step < avf->nb_streams; step++)  {
+            if ( (NULL != avf->streams[step]) && (avf->streams[step]->id == streamId) )  {
+                avf->streams[step]->codec->frame_number = p->frameInfo.frameNumber;
+                break;
+            }
+        }
+        av_log(avf, AV_LOG_DEBUG, "par_read_seek seek done = %lu\n", p->frameInfo.imageTime);
+        return p->frameInfo.imageTime;
+    }
+    else  {
+        av_log(avf, AV_LOG_DEBUG, "par_read_seek seek failed\n");
+        return -1;
+    }
 }
 
 static int par_read_close(AVFormatContext * avf)

@@ -344,6 +344,8 @@ static int http_read_header(URLContext *h, int *new_location)
     char line[1024];
     int err = 0;
 
+    s->response_headers[0] = '\0';
+
     for (;;) {
         if (http_get_line(s, line, sizeof(line)) < 0)
             return AVERROR(EIO);
@@ -440,7 +442,6 @@ static int http_connect(URLContext *h, const char *path, const char *local_path,
         s->http_code = 200;
         return 0;
     }
-    s->response_headers[0] = '\0';
     s->chunksize = -1;
 
     /* wait for header */
