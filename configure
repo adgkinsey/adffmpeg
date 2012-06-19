@@ -112,7 +112,7 @@ Component options:
   --disable-swscale        disable libswscale build
   --disable-postproc       disable libpostproc build
   --disable-avfilter       disable video filter support [no]
-  --disable-avresample     disable libavresample build [no]
+  --enable-avresample      enable libavresample build [no]
   --disable-pthreads       disable pthreads [auto]
   --disable-w32threads     disable Win32 threads [auto]
   --disable-os2threads     disable OS/2 threads [auto]
@@ -1684,6 +1684,7 @@ aconvert_filter_deps="swresample"
 amovie_filter_deps="avcodec avformat"
 aresample_filter_deps="swresample"
 ass_filter_deps="libass"
+asyncts_filter_deps="avresample"
 blackframe_filter_deps="gpl"
 boxblur_filter_deps="gpl"
 colormatrix_filter_deps="gpl"
@@ -1887,7 +1888,6 @@ enable avcodec
 enable avdevice
 enable avfilter
 enable avformat
-enable avresample
 enable avutil
 enable postproc
 enable stripping
@@ -2861,6 +2861,10 @@ die_license_disabled() {
     enabled $1 || { enabled $2 && die "$2 is $1 and --enable-$1 is not specified."; }
 }
 
+die_license_disabled_gpl() {
+    enabled $1 || { enabled $2 && die "$2 is incompatible with the gpl and --enable-$1 is not specified."; }
+}
+
 die_license_disabled gpl libcdio
 die_license_disabled gpl libutvideo
 die_license_disabled gpl libx264
@@ -2870,7 +2874,7 @@ die_license_disabled gpl x11grab
 
 die_license_disabled nonfree libaacplus
 die_license_disabled nonfree libfaac
-die_license_disabled nonfree openssl
+enabled gpl && die_license_disabled_gpl nonfree openssl
 
 die_license_disabled version3 libopencore_amrnb
 die_license_disabled version3 libopencore_amrwb

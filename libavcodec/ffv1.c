@@ -1651,9 +1651,9 @@ static int read_quant_table(RangeCoder *c, int16_t *quant_table, int scale){
     memset(state, 128, sizeof(state));
 
     for(v=0; i<128 ; v++){
-        int len= get_symbol(c, state, 0) + 1;
+        unsigned len= get_symbol(c, state, 0) + 1;
 
-        if(len + i > 128) return -1;
+        if(len > 128 - i) return -1;
 
         while(len--){
             quant_table[i] = scale*v;
@@ -1697,8 +1697,10 @@ static int read_extra_header(FFV1Context *f){
     ff_build_rac_states(c, 0.05*(1LL<<32), 256-8);
 
     f->version= get_symbol(c, state, 0);
-    if(f->version > 2)
+    if(f->version > 2) {
+        c->bytestream_end -= 4;
         f->minor_version= get_symbol(c, state, 0);
+    }
     f->ac= f->avctx->coder_type= get_symbol(c, state, 0);
     if(f->ac>1){
         for(i=1; i<256; i++){
@@ -1767,7 +1769,12 @@ static int read_header(FFV1Context *f){
     memset(state, 128, sizeof(state));
 
     if(f->version < 2){
-        f->version= get_symbol(c, state, 0);
+        unsigned v= get_symbol(c, state, 0);
+        if(v >= 2){
+            av_log(f->avctx, AV_LOG_ERROR, "invalid version %d in ver01 header\n", v);
+            return AVERROR_INVALIDDATA;
+        }
+        f->version = v;
         f->ac= f->avctx->coder_type= get_symbol(c, state, 0);
         if(f->ac>1){
             for(i=1; i<256; i++){
@@ -1984,7 +1991,8 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
     }
 
     if(avctx->debug&FF_DEBUG_PICT_INFO)
-        av_log(avctx, AV_LOG_ERROR, "keyframe:%d coder:%d\n", p->key_frame, f->ac);
+        av_log(avctx, AV_LOG_DEBUG, "ver:%d keyframe:%d coder:%d ec:%d slices:%d\n",
+               f->version, p->key_frame, f->ac, f->ec, f->slice_count);
 
     buf_p= buf + buf_size;
     for(i=f->slice_count-1; i>=0; i--){
