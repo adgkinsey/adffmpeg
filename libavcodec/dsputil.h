@@ -403,7 +403,6 @@ typedef struct DSPContext {
     void (*vorbis_inverse_coupling)(float *mag, float *ang, int blocksize);
     void (*ac3_downmix)(float (*samples)[256], float (*matrix)[2], int out_ch, int in_ch, int len);
     /* assume len is a multiple of 16, and arrays are 32-byte aligned */
-    void (*vector_fmul)(float *dst, const float *src0, const float *src1, int len);
     void (*vector_fmul_reverse)(float *dst, const float *src0, const float *src1, int len);
     /* assume len is a multiple of 8, and src arrays are 16-byte aligned */
     void (*vector_fmul_add)(float *dst, const float *src0, const float *src1, const float *src2, int len);
@@ -445,7 +444,7 @@ typedef struct DSPContext {
      * @param v2  second input vector, difference output, 16-byte aligned
      * @param len length of vectors, multiple of 4
      */
-    void (*butterflies_float)(float *restrict v1, float *restrict v2, int len);
+    void (*butterflies_float)(float *av_restrict v1, float *av_restrict v2, int len);
 
     /**
      * Calculate the sum and difference of two vectors of floats and interleave

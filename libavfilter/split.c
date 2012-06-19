@@ -25,6 +25,7 @@
 
 #include "avfilter.h"
 #include "audio.h"
+#include "internal.h"
 #include "video.h"
 
 static int split_init(AVFilterContext *ctx, const char *args, void *opaque)
@@ -48,7 +49,7 @@ static int split_init(AVFilterContext *ctx, const char *args, void *opaque)
         pad.type = ctx->filter->inputs[0].type;
         pad.name = av_strdup(name);
 
-        avfilter_insert_outpad(ctx, i, &pad);
+        ff_insert_outpad(ctx, i, &pad);
     }
 
     return 0;
@@ -58,7 +59,7 @@ static void split_uninit(AVFilterContext *ctx)
 {
     int i;
 
-    for (i = 0; i < ctx->output_count; i++)
+    for (i = 0; i < ctx->nb_outputs; i++)
         av_freep(&ctx->output_pads[i].name);
 }
 
@@ -67,9 +68,9 @@ static void start_frame(AVFilterLink *inlink, AVFilterBufferRef *picref)
     AVFilterContext *ctx = inlink->dst;
     int i;
 
-    for (i = 0; i < ctx->output_count; i++)
-        avfilter_start_frame(ctx->outputs[i],
-                             avfilter_ref_buffer(picref, ~AV_PERM_WRITE));
+    for (i = 0; i < ctx->nb_outputs; i++)
+        ff_start_frame(ctx->outputs[i],
+                       avfilter_ref_buffer(picref, ~AV_PERM_WRITE));
 }
 
 static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
@@ -77,8 +78,8 @@ static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
     AVFilterContext *ctx = inlink->dst;
     int i;
 
-    for (i = 0; i < ctx->output_count; i++)
-        avfilter_draw_slice(ctx->outputs[i], y, h, slice_dir);
+    for (i = 0; i < ctx->nb_outputs; i++)
+        ff_draw_slice(ctx->outputs[i], y, h, slice_dir);
 }
 
 static void end_frame(AVFilterLink *inlink)
@@ -86,15 +87,15 @@ static void end_frame(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     int i;
 
-    for (i = 0; i < ctx->output_count; i++)
-        avfilter_end_frame(ctx->outputs[i]);
+    for (i = 0; i < ctx->nb_outputs; i++)
+        ff_end_frame(ctx->outputs[i]);
 
     avfilter_unref_buffer(inlink->cur_buf);
 }
 
 AVFilter avfilter_vf_split = {
     .name      = "split",
-    .description = NULL_IF_CONFIG_SMALL("Pass on the input to two outputs."),
+    .description = NULL_IF_CONFIG_SMALL("Pass on the input video to N outputs."),
 
     .init   = split_init,
     .uninit = split_uninit,
@@ -114,7 +115,7 @@ static void filter_samples(AVFilterLink *inlink, AVFilterBufferRef *samplesref)
     AVFilterContext *ctx = inlink->dst;
     int i;
 
-    for (i = 0; i < ctx->output_count; i++)
+    for (i = 0; i < ctx->nb_outputs; i++)
         ff_filter_samples(inlink->dst->outputs[i],
                           avfilter_ref_buffer(samplesref, ~AV_PERM_WRITE));
 }

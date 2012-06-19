@@ -99,13 +99,14 @@ static const struct algo fdct_tab[] = {
     { 0 }
 };
 
-#if HAVE_MMX && HAVE_YASM
+#if ARCH_X86_64 && HAVE_MMX && HAVE_YASM
 void ff_prores_idct_put_10_sse2(uint16_t *dst, int linesize,
                                 DCTELEM *block, int16_t *qmat);
 
 static void ff_prores_idct_put_10_sse2_wrap(DCTELEM *dst){
-    int16_t qmat[64]; int i;
-    int16_t tmp[64];
+    DECLARE_ALIGNED(16, static int16_t, qmat)[64];
+    DECLARE_ALIGNED(16, static int16_t, tmp)[64];
+    int i;
 
     for(i=0; i<64; i++){
         qmat[i]=4;
@@ -204,7 +205,7 @@ static inline void mmx_emms(void)
 {
 #if HAVE_MMX
     if (cpu_flags & AV_CPU_FLAG_MMX)
-        __asm__ volatile ("emms\n\t");
+        __asm__ volatile ("emms\n\t" ::: "memory");
 #endif
 }
 
@@ -351,10 +352,10 @@ static int dct_error(const struct algo *dct, int test, int is_idct, int speed, c
             memcpy(block, block1, sizeof(block));
             dct->func(block);
         }
+        mmx_emms();
         it1 += NB_ITS_SPEED;
         ti1 = gettime() - ti;
     } while (ti1 < 1000000);
-    mmx_emms();
 
     printf("%s %s: %0.1f kdct/s\n", is_idct ? "IDCT" : "DCT", dct->name,
            (double) it1 * 1000.0 / (double) ti1);
@@ -512,10 +513,10 @@ static void idct248_error(const char *name,
                 block[i] = block1[i];
             idct248_put(img_dest, 8, block);
         }
+        mmx_emms();
         it1 += NB_ITS_SPEED;
         ti1 = gettime() - ti;
     } while (ti1 < 1000000);
-    mmx_emms();
 
     printf("%s %s: %0.1f kdct/s\n", 1 ? "IDCT248" : "DCT248", name,
            (double) it1 * 1000.0 / (double) ti1);

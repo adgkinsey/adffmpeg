@@ -39,6 +39,8 @@
 #include "avcodec.h"
 #include "avfilter.h"
 #include "formats.h"
+#include "internal.h"
+#include "video.h"
 
 typedef struct {
     /* common A/V fields */
@@ -78,15 +80,12 @@ static const AVOption movie_options[]= {
 {NULL},
 };
 
-static const char *movie_get_name(void *ctx)
-{
-    return "movie";
-}
-
 static const AVClass movie_class = {
-    "MovieContext",
-    movie_get_name,
-    movie_options
+    .class_name = "movie",
+    .item_name  = av_default_item_name,
+    .option     = movie_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_FILTER,
 };
 
 static av_cold int movie_common_init(AVFilterContext *ctx, const char *args, void *opaque,
@@ -224,7 +223,7 @@ static int movie_query_formats(AVFilterContext *ctx)
     MovieContext *movie = ctx->priv;
     enum PixelFormat pix_fmts[] = { movie->codec_ctx->pix_fmt, PIX_FMT_NONE };
 
-    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
+    ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
     return 0;
 }
 
@@ -276,8 +275,8 @@ static int movie_get_frame(AVFilterLink *outlink)
 
             if (frame_decoded) {
                 /* FIXME: avoid the memcpy */
-                movie->picref = avfilter_get_video_buffer(outlink, AV_PERM_WRITE | AV_PERM_PRESERVE |
-                                                          AV_PERM_REUSE2, outlink->w, outlink->h);
+                movie->picref = ff_get_video_buffer(outlink, AV_PERM_WRITE | AV_PERM_PRESERVE |
+                                                    AV_PERM_REUSE2, outlink->w, outlink->h);
                 av_image_copy(movie->picref->data, movie->picref->linesize,
                               (void*)movie->frame->data,  movie->frame->linesize,
                               movie->picref->format, outlink->w, outlink->h);
@@ -323,9 +322,9 @@ static int movie_request_frame(AVFilterLink *outlink)
         return ret;
 
     outpicref = avfilter_ref_buffer(movie->picref, ~0);
-    avfilter_start_frame(outlink, outpicref);
-    avfilter_draw_slice(outlink, 0, outlink->h, 1);
-    avfilter_end_frame(outlink);
+    ff_start_frame(outlink, outpicref);
+    ff_draw_slice(outlink, 0, outlink->h, 1);
+    ff_end_frame(outlink);
     avfilter_unref_buffer(movie->picref);
     movie->picref = NULL;
 
@@ -374,8 +373,8 @@ static int amovie_query_formats(AVFilterContext *ctx)
     int64_t chlayouts[] = { c->channel_layout ? c->channel_layout :
                             av_get_default_channel_layout(c->channels), -1 };
 
-    avfilter_set_common_sample_formats (ctx, avfilter_make_format_list(sample_fmts));
-    ff_set_common_samplerates          (ctx, avfilter_make_format_list(sample_rates));
+    ff_set_common_formats        (ctx, ff_make_format_list(sample_fmts));
+    ff_set_common_samplerates    (ctx, ff_make_format_list(sample_rates));
     ff_set_common_channel_layouts(ctx, avfilter_make_format64_list(chlayouts));
 
     return 0;

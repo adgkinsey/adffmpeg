@@ -83,6 +83,7 @@ static const AVClass av_format_context_class = {
     .version        = LIBAVUTIL_VERSION_INT,
     .child_next     = format_child_next,
     .child_class_next = format_child_class_next,
+    .category       = AV_CLASS_CATEGORY_MUXER,
 };
 
 static void avformat_get_context_defaults(AVFormatContext *s)
@@ -101,6 +102,11 @@ AVFormatContext *avformat_alloc_context(void)
     if (!ic) return ic;
     avformat_get_context_defaults(ic);
     return ic;
+}
+
+int av_fmt_ctx_get_duration_estimation_method(const AVFormatContext* ctx)
+{
+    return ctx->duration_estimation_method;
 }
 
 const AVClass *avformat_get_class(void)

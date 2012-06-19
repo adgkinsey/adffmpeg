@@ -77,6 +77,7 @@ static av_always_inline av_const int16_t av_clip_int16_arm(int a)
 
 #if AV_GCC_VERSION_AT_LEAST(4,5)
 
+#if !CONFIG_SMALL //the code below cannot be compiled without always_inline
 #define av_clip_uintp2 av_clip_uintp2_arm
 static av_always_inline av_const unsigned av_clip_uintp2_arm(int a, int p)
 {
@@ -85,8 +86,9 @@ static av_always_inline av_const unsigned av_clip_uintp2_arm(int a, int p)
     return x;
 }
 
-#endif /* AV_GCC_VERSION_AT_LEAST(4,5) */
+#endif //!CONFIG_SMALL
 
+#endif /* AV_GCC_VERSION_AT_LEAST(4,5) */
 
 #else /* HAVE_ARMV6 */
 

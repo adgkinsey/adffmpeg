@@ -2,7 +2,14 @@ Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
 version next:
-- INI output in ffprobe
+- INI and flat output in ffprobe
+- Scene detection in libavfilter
+- Indeo Audio decoder
+- channelsplit audio filter
+- setnsamples audio filter
+- atempo filter
+- ffprobe -show_data option
+- RTMPT protocol support
 
 
 version 0.11:

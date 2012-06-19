@@ -73,6 +73,7 @@ typedef struct {
     const UID *codec_ul;
     int order;               ///< interleaving order if dts are equal
     int interlaced;          ///< whether picture is interlaced
+    int field_dominance;     ///< tff=1, bff=2
     int temporal_reordering;
     AVRational aspect_ratio; ///< display aspect ratio
     int closed_gop;          ///< gop is closed, used in mpeg-2 frame parsing
@@ -189,7 +190,6 @@ typedef struct MXFContext {
     unsigned body_partitions_count;
     int last_key_index;  ///< index of last key frame
     uint64_t duration;
-    char *tc_opt_str;    ///< timecode option string
     AVTimecode tc;       ///< timecode context
     AVStream *timecode_track;
     int timecode_base;       ///< rounded time code base (25 or 30)
@@ -285,6 +285,7 @@ static const MXFLocalTagPair mxf_local_tag_batch[] = {
     { 0x3208, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x01,0x04,0x01,0x05,0x01,0x0B,0x00,0x00,0x00}}, /* Display Height */
     { 0x320E, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x01,0x04,0x01,0x01,0x01,0x01,0x00,0x00,0x00}}, /* Aspect Ratio */
     { 0x3201, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x02,0x04,0x01,0x06,0x01,0x00,0x00,0x00,0x00}}, /* Picture Essence Coding */
+    { 0x3212, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x02,0x04,0x01,0x03,0x01,0x06,0x00,0x00,0x00}}, /* Field Dominance (Opt) */
     // CDCI Picture Essence Descriptor
     { 0x3301, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x02,0x04,0x01,0x05,0x03,0x0A,0x00,0x00,0x00}}, /* Component Depth */
     { 0x3302, {0x06,0x0E,0x2B,0x34,0x01,0x01,0x01,0x01,0x04,0x01,0x05,0x01,0x05,0x00,0x00,0x00}}, /* Horizontal Subsampling */
@@ -790,8 +791,11 @@ static void mxf_write_cdci_common(AVFormatContext *s, AVStream *st, const UID ke
     int stored_height = (st->codec->height+15)/16*16;
     int display_height;
     int f1, f2;
+    unsigned desc_size = size+8+8+8+8+8+8+5+16+sc->interlaced*4+12+20;
+    if (sc->interlaced && sc->field_dominance)
+        desc_size += 5;
 
-    mxf_write_generic_desc(s, st, key, size+8+8+8+8+8+8+5+16+sc->interlaced*4+12+20);
+    mxf_write_generic_desc(s, st, key, desc_size);
 
     mxf_write_local_tag(pb, 4, 0x3203);
     avio_wb32(pb, st->codec->width);
@@ -853,6 +857,12 @@ static void mxf_write_cdci_common(AVFormatContext *s, AVStream *st, const UID ke
 
     mxf_write_local_tag(pb, 16, 0x3201);
     avio_write(pb, *sc->codec_ul, 16);
+
+    if (sc->interlaced && sc->field_dominance) {
+        mxf_write_local_tag(pb, 1, 0x3212);
+        avio_w8(pb, sc->field_dominance);
+    }
+
 }
 
 static void mxf_write_cdci_desc(AVFormatContext *s, AVStream *st)
@@ -1329,6 +1339,8 @@ static int mxf_parse_mpeg2_frame(AVFormatContext *s, AVStream *st,
                 st->codec->level   = pkt->data[i+2] >> 4;
             } else if (i + 5 < pkt->size && (pkt->data[i+1] & 0xf0) == 0x80) { // pict coding ext
                 sc->interlaced = !(pkt->data[i+5] & 0x80); // progressive frame
+                if (sc->interlaced)
+                    sc->field_dominance = 1 + !(pkt->data[i+4] & 0x80); // top field first
                 break;
             }
         } else if (c == 0x1b8) { // gop
@@ -1403,6 +1415,7 @@ static int mxf_write_header(AVFormatContext *s)
     const int *samples_per_frame = NULL;
     AVDictionaryEntry *t;
     int64_t timestamp = 0;
+    AVDictionaryEntry *tcr = av_dict_get(s->metadata, "timecode", NULL, 0);
 
     if (!s->nb_streams)
         return -1;
@@ -1443,9 +1456,10 @@ static int mxf_write_header(AVFormatContext *s)
             }
             rate = (AVRational){mxf->time_base.den, mxf->time_base.num};
             avpriv_set_pts_info(st, 64, mxf->time_base.num, mxf->time_base.den);
-            if (mxf->tc_opt_str)
-                ret = av_timecode_init_from_string(&mxf->tc, rate,
-                                                   mxf->tc_opt_str, s);
+            if (!tcr)
+                tcr = av_dict_get(st->metadata, "timecode", NULL, 0);
+            if (tcr)
+                ret = av_timecode_init_from_string(&mxf->tc, rate, tcr->value, s);
             else
                 ret = av_timecode_init(&mxf->tc, rate, 0, 0, s);
             if (ret < 0)
@@ -1877,26 +1891,6 @@ static int mxf_interleave(AVFormatContext *s, AVPacket *out, AVPacket *pkt, int 
                                mxf_interleave_get_packet, mxf_compare_timestamps);
 }
 
-static const AVClass mxf_class = {
-    .class_name = "mxf",
-    .item_name  = av_default_item_name,
-    .version    = LIBAVUTIL_VERSION_INT,
-    .option     = (const AVOption[]){
-        {AV_TIMECODE_OPTION(MXFContext, tc_opt_str, AV_OPT_FLAG_ENCODING_PARAM)},
-        {NULL}
-    },
-};
-
-static const AVClass mxf_d10_class = {
-    .class_name = "mxf_d10",
-    .item_name  = av_default_item_name,
-    .version    = LIBAVUTIL_VERSION_INT,
-    .option     = (const AVOption[]){
-        {AV_TIMECODE_OPTION(MXFContext, tc_opt_str, AV_OPT_FLAG_ENCODING_PARAM)},
-        {NULL}
-    },
-};
-
 AVOutputFormat ff_mxf_muxer = {
     .name              = "mxf",
     .long_name         = NULL_IF_CONFIG_SMALL("Material eXchange Format"),
@@ -1910,7 +1904,6 @@ AVOutputFormat ff_mxf_muxer = {
     .write_trailer     = mxf_write_footer,
     .flags             = AVFMT_NOTIMESTAMPS,
     .interleave_packet = mxf_interleave,
-    .priv_class        = &mxf_class,
 };
 
 AVOutputFormat ff_mxf_d10_muxer = {
@@ -1925,5 +1918,4 @@ AVOutputFormat ff_mxf_d10_muxer = {
     .write_trailer     = mxf_write_footer,
     .flags             = AVFMT_NOTIMESTAMPS,
     .interleave_packet = mxf_interleave,
-    .priv_class        = &mxf_d10_class,
 };

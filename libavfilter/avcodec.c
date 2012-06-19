@@ -24,7 +24,35 @@
  */
 
 #include "avcodec.h"
+#include "libavutil/avassert.h"
 #include "libavutil/opt.h"
+
+int avfilter_copy_frame_props(AVFilterBufferRef *dst, const AVFrame *src)
+{
+    dst->pts    = src->pts;
+    dst->pos    = av_frame_get_pkt_pos(src);
+    dst->format = src->format;
+
+    switch (dst->type) {
+    case AVMEDIA_TYPE_VIDEO:
+        dst->video->w                   = src->width;
+        dst->video->h                   = src->height;
+        dst->video->sample_aspect_ratio = src->sample_aspect_ratio;
+        dst->video->interlaced          = src->interlaced_frame;
+        dst->video->top_field_first     = src->top_field_first;
+        dst->video->key_frame           = src->key_frame;
+        dst->video->pict_type           = src->pict_type;
+        break;
+    case AVMEDIA_TYPE_AUDIO:
+        dst->audio->sample_rate         = src->sample_rate;
+        dst->audio->channel_layout      = src->channel_layout;
+        break;
+    default:
+        return AVERROR(EINVAL);
+    }
+
+    return 0;
+}
 
 AVFilterBufferRef *avfilter_get_video_buffer_ref_from_frame(const AVFrame *frame,
                                                             int perms)
@@ -50,6 +78,57 @@ AVFilterBufferRef *avfilter_get_audio_buffer_ref_from_frame(const AVFrame *frame
         return NULL;
     avfilter_copy_frame_props(picref, frame);
     return picref;
+}
+
+int avfilter_copy_buf_props(AVFrame *dst, const AVFilterBufferRef *src)
+{
+    int planes, nb_channels;
+
+    if (!dst)
+        return AVERROR(EINVAL);
+    /* abort in case the src is NULL and dst is not, avoid inconsistent state in dst */
+    av_assert0(src);
+
+    memcpy(dst->data, src->data, sizeof(dst->data));
+    memcpy(dst->linesize, src->linesize, sizeof(dst->linesize));
+
+    dst->pts     = src->pts;
+    dst->format  = src->format;
+
+    switch (src->type) {
+    case AVMEDIA_TYPE_VIDEO:
+        av_assert0(src->video);
+        dst->width               = src->video->w;
+        dst->height              = src->video->h;
+        dst->sample_aspect_ratio = src->video->sample_aspect_ratio;
+        dst->interlaced_frame    = src->video->interlaced;
+        dst->top_field_first     = src->video->top_field_first;
+        dst->key_frame           = src->video->key_frame;
+        dst->pict_type           = src->video->pict_type;
+        break;
+    case AVMEDIA_TYPE_AUDIO:
+        av_assert0(src->audio);
+        nb_channels = av_get_channel_layout_nb_channels(src->audio->channel_layout);
+        planes      = av_sample_fmt_is_planar(src->format) ? nb_channels : 1;
+
+        if (planes > FF_ARRAY_ELEMS(dst->data)) {
+            dst->extended_data = av_mallocz(planes * sizeof(*dst->extended_data));
+            if (!dst->extended_data)
+                return AVERROR(ENOMEM);
+            memcpy(dst->extended_data, src->extended_data,
+                   planes * sizeof(dst->extended_data));
+        } else
+            dst->extended_data = dst->data;
+
+        dst->sample_rate         = src->audio->sample_rate;
+        dst->channel_layout      = src->audio->channel_layout;
+        dst->nb_samples          = src->audio->nb_samples;
+        break;
+    default:
+        return AVERROR(EINVAL);
+    }
+
+    return 0;
 }
 
 int avfilter_fill_frame_from_audio_buffer_ref(AVFrame *frame,

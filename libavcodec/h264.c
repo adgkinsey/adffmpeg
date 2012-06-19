@@ -1615,7 +1615,7 @@ static void decode_postinit(H264Context *h, int setup_finished)
        || (h->last_pocs[MAX_DELAYED_PIC_COUNT-2] > INT_MIN && h->last_pocs[MAX_DELAYED_PIC_COUNT-1] - h->last_pocs[MAX_DELAYED_PIC_COUNT-2] > 2))
         out_of_order = FFMAX(out_of_order, 1);
     if(s->avctx->has_b_frames < out_of_order && !h->sps.bitstream_restriction_flag){
-        av_log(s->avctx, AV_LOG_WARNING, "Increasing reorder buffer to %d\n", out_of_order);
+        av_log(s->avctx, AV_LOG_VERBOSE, "Increasing reorder buffer to %d\n", out_of_order);
         s->avctx->has_b_frames = out_of_order;
         s->low_delay = 0;
     }
@@ -2969,7 +2969,6 @@ static int decode_slice_header(H264Context *h, H264Context *h0)
     s->width  = 16 * s->mb_width;
     s->height = 16 * s->mb_height;
 
-
     if(must_reinit) {
         free_tables(h, 0);
         flush_dpb(s->avctx);
@@ -2983,9 +2982,19 @@ static int decode_slice_header(H264Context *h, H264Context *h0)
                    "Cannot (re-)initialize context during parallel decoding.\n");
             return -1;
         }
-        avcodec_set_dimensions(s->avctx, s->width, s->height);
-        s->avctx->width  -= (2>>CHROMA444)*FFMIN(h->sps.crop_right, (8<<CHROMA444)-1);
-        s->avctx->height -= (1<<s->chroma_y_shift)*FFMIN(h->sps.crop_bottom, (16>>s->chroma_y_shift)-1) * (2 - h->sps.frame_mbs_only_flag);
+        if(   FFALIGN(s->avctx->width , 16                                 ) == s->width
+           && FFALIGN(s->avctx->height, 16*(2 - h->sps.frame_mbs_only_flag)) == s->height
+           && !h->sps.crop_right && !h->sps.crop_bottom
+           && (s->avctx->width != s->width || s->avctx->height && s->height)
+        ) {
+            av_log(h->s.avctx, AV_LOG_DEBUG, "Using externally provided dimensions\n");
+            s->avctx->coded_width  = s->width;
+            s->avctx->coded_height = s->height;
+        } else{
+            avcodec_set_dimensions(s->avctx, s->width, s->height);
+            s->avctx->width  -= (2>>CHROMA444)*FFMIN(h->sps.crop_right, (8<<CHROMA444)-1);
+            s->avctx->height -= (1<<s->chroma_y_shift)*FFMIN(h->sps.crop_bottom, (16>>s->chroma_y_shift)-1) * (2 - h->sps.frame_mbs_only_flag);
+        }
         s->avctx->sample_aspect_ratio = h->sps.sar;
         av_assert0(s->avctx->sample_aspect_ratio.den);
 
@@ -4032,7 +4041,9 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
                     loop_filter(h, lf_x_start, s->mb_x + 1);
                 return 0;
             }
-            if (ret < 0 || h->cabac.bytestream > h->cabac.bytestream_end + 2) {
+            if (h->cabac.bytestream > h->cabac.bytestream_end + 2 )
+                av_log(h->s.avctx, AV_LOG_DEBUG, "bytestream overread %td\n", h->cabac.bytestream_end - h->cabac.bytestream);
+            if (ret < 0 || h->cabac.bytestream > h->cabac.bytestream_end + 4) {
                 av_log(h->s.avctx, AV_LOG_ERROR,
                        "error while decoding MB %d %d, bytestream (%td)\n",
                        s->mb_x, s->mb_y,

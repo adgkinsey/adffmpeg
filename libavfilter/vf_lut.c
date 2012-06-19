@@ -28,7 +28,9 @@
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "avfilter.h"
+#include "formats.h"
 #include "internal.h"
+#include "video.h"
 
 static const char *const var_names[] = {
     "w",        ///< width of the input video
@@ -60,7 +62,6 @@ typedef struct {
     int hsub, vsub;
     double var_values[VAR_VARS_NB];
     int is_rgb, is_yuv;
-    int rgba_map[4];
     int step;
     int negate_alpha; /* only used by negate */
 } LutContext;
@@ -90,15 +91,12 @@ static const AVOption lut_options[] = {
     {NULL},
 };
 
-static const char *lut_get_name(void *ctx)
-{
-    return "lut";
-}
-
 static const AVClass lut_class = {
-    "LutContext",
-    lut_get_name,
-    lut_options
+    .class_name = "lut",
+    .item_name  = av_default_item_name,
+    .option     = lut_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_FILTER,
 };
 
 static int init(AVFilterContext *ctx, const char *args, void *opaque)
@@ -152,7 +150,7 @@ static int query_formats(AVFilterContext *ctx)
     const enum PixelFormat *pix_fmts = lut->is_rgb ? rgb_pix_fmts :
                                        lut->is_yuv ? yuv_pix_fmts : all_pix_fmts;
 
-    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
+    ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
     return 0;
 }
 
@@ -199,6 +197,7 @@ static int config_props(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     LutContext *lut = ctx->priv;
     const AVPixFmtDescriptor *desc = &av_pix_fmt_descriptors[inlink->format];
+    int rgba_map[4]; /* component index -> RGBA color index map */
     int min[4], max[4];
     int val, comp, ret;
 
@@ -232,54 +231,50 @@ static int config_props(AVFilterLink *inlink)
 
     if (lut->is_rgb) {
         switch (inlink->format) {
-        case PIX_FMT_ARGB:  lut->rgba_map[A] = 0; lut->rgba_map[R] = 1; lut->rgba_map[G] = 2; lut->rgba_map[B] = 3; break;
-        case PIX_FMT_ABGR:  lut->rgba_map[A] = 0; lut->rgba_map[B] = 1; lut->rgba_map[G] = 2; lut->rgba_map[R] = 3; break;
+        case PIX_FMT_ARGB:  rgba_map[0] = A; rgba_map[1] = R; rgba_map[2] = G; rgba_map[3] = B; break;
+        case PIX_FMT_ABGR:  rgba_map[0] = A; rgba_map[1] = B; rgba_map[2] = G; rgba_map[3] = R; break;
         case PIX_FMT_RGBA:
-        case PIX_FMT_RGB24: lut->rgba_map[R] = 0; lut->rgba_map[G] = 1; lut->rgba_map[B] = 2; lut->rgba_map[A] = 3; break;
+        case PIX_FMT_RGB24: rgba_map[0] = R; rgba_map[1] = G; rgba_map[2] = B; rgba_map[3] = A; break;
         case PIX_FMT_BGRA:
-        case PIX_FMT_BGR24: lut->rgba_map[B] = 0; lut->rgba_map[G] = 1; lut->rgba_map[R] = 2; lut->rgba_map[A] = 3; break;
+        case PIX_FMT_BGR24: rgba_map[0] = B; rgba_map[1] = G; rgba_map[2] = R; rgba_map[3] = A; break;
         }
         lut->step = av_get_bits_per_pixel(desc) >> 3;
     }
 
     for (comp = 0; comp < desc->nb_components; comp++) {
         double res;
-        int tcomp;
-        if (lut->is_rgb) {
-            for (tcomp = 0; lut->rgba_map[tcomp] != comp; tcomp++)
-                ;
-        } else
-            tcomp = comp;
+        int color = lut->is_rgb ? rgba_map[comp] : comp;
+
         /* create the parsed expression */
-        ret = av_expr_parse(&lut->comp_expr[comp], lut->comp_expr_str[comp],
+        ret = av_expr_parse(&lut->comp_expr[color], lut->comp_expr_str[color],
                             var_names, funcs1_names, funcs1, NULL, NULL, 0, ctx);
         if (ret < 0) {
             av_log(ctx, AV_LOG_ERROR,
-                   "Error when parsing the expression '%s' for the component %d.\n",
-                   lut->comp_expr_str[comp], comp);
+                   "Error when parsing the expression '%s' for the component %d and color %d.\n",
+                   lut->comp_expr_str[comp], comp, color);
             return AVERROR(EINVAL);
         }
 
         /* compute the lut */
-        lut->var_values[VAR_MAXVAL] = max[comp];
-        lut->var_values[VAR_MINVAL] = min[comp];
+        lut->var_values[VAR_MAXVAL] = max[color];
+        lut->var_values[VAR_MINVAL] = min[color];
 
         for (val = 0; val < 256; val++) {
             lut->var_values[VAR_VAL] = val;
-            lut->var_values[VAR_CLIPVAL] = av_clip(val, min[comp], max[comp]);
+            lut->var_values[VAR_CLIPVAL] = av_clip(val, min[color], max[color]);
             lut->var_values[VAR_NEGVAL] =
-                av_clip(min[comp] + max[comp] - lut->var_values[VAR_VAL],
-                        min[comp], max[comp]);
+                av_clip(min[color] + max[color] - lut->var_values[VAR_VAL],
+                        min[color], max[color]);
 
-            res = av_expr_eval(lut->comp_expr[comp], lut->var_values, lut);
+            res = av_expr_eval(lut->comp_expr[color], lut->var_values, lut);
             if (isnan(res)) {
                 av_log(ctx, AV_LOG_ERROR,
-                       "Error when evaluating the expression '%s' for the value %d for the component #%d.\n",
-                       lut->comp_expr_str[comp], val, comp);
+                       "Error when evaluating the expression '%s' for the value %d for the component %d.\n",
+                       lut->comp_expr_str[color], val, comp);
                 return AVERROR(EINVAL);
             }
-            lut->lut[tcomp][val] = av_clip((int)res, min[comp], max[comp]);
-            av_log(ctx, AV_LOG_DEBUG, "val[%d][%d] = %d\n", comp, val, lut->lut[tcomp][val]);
+            lut->lut[comp][val] = av_clip((int)res, min[color], max[color]);
+            av_log(ctx, AV_LOG_DEBUG, "val[%d][%d] = %d\n", comp, val, lut->lut[comp][val]);
         }
     }
 
@@ -343,7 +338,7 @@ static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
         }
     }
 
-    avfilter_draw_slice(outlink, y, h, slice_dir);
+    ff_draw_slice(outlink, y, h, slice_dir);
 }
 
 #define DEFINE_LUT_FILTER(name_, description_, init_)                   \

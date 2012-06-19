@@ -60,6 +60,7 @@ const char *avfilter_license(void);
 typedef struct AVFilterContext AVFilterContext;
 typedef struct AVFilterLink    AVFilterLink;
 typedef struct AVFilterPad     AVFilterPad;
+typedef struct AVFilterFormats AVFilterFormats;
 
 /**
  * A reference-counted buffer data type used by the filter system. Filters
@@ -210,6 +211,7 @@ AVFilterBufferRef *avfilter_ref_buffer(AVFilterBufferRef *ref, int pmask);
  */
 void avfilter_unref_buffer(AVFilterBufferRef *ref);
 
+#if FF_API_FILTERS_PUBLIC
 /**
  * Remove a reference to a buffer and set the pointer to NULL.
  * If this is the last reference to the buffer, the buffer itself
@@ -258,14 +260,18 @@ void avfilter_unref_bufferp(AVFilterBufferRef **ref);
  * we must ensure that all links which reference either pre-merge format list
  * get updated as well. Therefore, we have the format list structure store a
  * pointer to each of the pointers to itself.
+ * @addtogroup lavfi_deprecated
+ * @deprecated Those functions are only useful inside filters and
+ * user filters are not supported at this point.
+ * @{
  */
-typedef struct AVFilterFormats {
+struct AVFilterFormats {
     unsigned format_count;      ///< number of formats
     int *formats;               ///< list of media formats
 
     unsigned refcount;          ///< number of references to this list
     struct AVFilterFormats ***refs; ///< references to this list
-}  AVFilterFormats;
+};
 
 /**
  * Create a list of supported formats. This is intended for use in
@@ -275,6 +281,7 @@ typedef struct AVFilterFormats {
  *        empty list is created.
  * @return the format list, with no existing references
  */
+attribute_deprecated
 AVFilterFormats *avfilter_make_format_list(const int *fmts);
 
 /**
@@ -284,16 +291,12 @@ AVFilterFormats *avfilter_make_format_list(const int *fmts);
  *
  * @return a non negative value in case of success, or a negative
  * value corresponding to an AVERROR code in case of error
- */
-int avfilter_add_format(AVFilterFormats **avff, int64_t fmt);
-
-#if FF_API_OLD_ALL_FORMATS_API
-/**
  * @deprecated Use avfilter_make_all_formats() instead.
  */
 attribute_deprecated
+int avfilter_add_format(AVFilterFormats **avff, int64_t fmt);
+attribute_deprecated
 AVFilterFormats *avfilter_all_formats(enum AVMediaType type);
-#endif
 
 /**
  * Return a list of all formats supported by FFmpeg for the given media type.
@@ -320,6 +323,7 @@ AVFilterFormats *avfilter_make_all_packing_formats(void);
  * If a and b do not share any common formats, neither is modified, and NULL
  * is returned.
  */
+attribute_deprecated
 AVFilterFormats *avfilter_merge_formats(AVFilterFormats *a, AVFilterFormats *b);
 
 /**
@@ -334,45 +338,47 @@ AVFilterFormats *avfilter_merge_formats(AVFilterFormats *a, AVFilterFormats *b);
  *  | |____| |    | |____|
  *  |________|    |________________________
  */
+attribute_deprecated
 void avfilter_formats_ref(AVFilterFormats *formats, AVFilterFormats **ref);
-
-/**
- * If *ref is non-NULL, remove *ref as a reference to the format list
- * it currently points to, deallocates that list if this was the last
- * reference, and sets *ref to NULL.
- *
- *         Before                                 After
- *   ________                               ________         NULL
- *  |formats |<--------.                   |formats |         ^
- *  |  ____  |     ____|________________   |  ____  |     ____|________________
- *  | |refs| |    |  __|_                  | |refs| |    |  __|_
- *  | |* * | |    | |  | |  AVFilterLink   | |* * | |    | |  | |  AVFilterLink
- *  | |* *--------->|*ref|                 | |*   | |    | |*ref|
- *  | |____| |    | |____|                 | |____| |    | |____|
- *  |________|    |_____________________   |________|    |_____________________
- */
+attribute_deprecated
 void avfilter_formats_unref(AVFilterFormats **ref);
-
-/**
- *
- *         Before                                 After
- *   ________                         ________
- *  |formats |<---------.            |formats |<---------.
- *  |  ____  |       ___|___         |  ____  |       ___|___
- *  | |refs| |      |   |   |        | |refs| |      |   |   |   NULL
- *  | |* *--------->|*oldref|        | |* *--------->|*newref|     ^
- *  | |* * | |      |_______|        | |* * | |      |_______|  ___|___
- *  | |____| |                       | |____| |                |   |   |
- *  |________|                       |________|                |*oldref|
- *                                                             |_______|
- */
+attribute_deprecated
 void avfilter_formats_changeref(AVFilterFormats **oldref,
                                 AVFilterFormats **newref);
+/**
+ * Helpers for query_formats() which set all links to the same list of
+ * formats/layouts. If there are no links hooked to this filter, the list
+ * of formats is freed.
+ */
+attribute_deprecated
+void avfilter_set_common_formats(AVFilterContext *ctx, AVFilterFormats *formats);
 
+attribute_deprecated
+void avfilter_set_common_pixel_formats(AVFilterContext *ctx, AVFilterFormats *formats);
+attribute_deprecated
+void avfilter_set_common_sample_formats(AVFilterContext *ctx, AVFilterFormats *formats);
+attribute_deprecated
+void avfilter_set_common_channel_layouts(AVFilterContext *ctx, AVFilterFormats *formats);
+#if FF_API_PACKING
+attribute_deprecated
+void avfilter_set_common_packing_formats(AVFilterContext *ctx, AVFilterFormats *formats);
+#endif
+
+/**
+ * @}
+ */
+#endif
+
+#if FF_API_AVFILTERPAD_PUBLIC
 /**
  * A filter pad used for either input or output.
  *
  * See doc/filter_design.txt for details on how to implement the methods.
+ *
+ * @warning this struct might be removed from public API.
+ * users should call avfilter_pad_get_name() and avfilter_pad_get_type()
+ * to access the name and type fields; there should be no need to access
+ * any other fields from outside of libavfilter.
  */
 struct AVFilterPad {
     /**
@@ -499,6 +505,29 @@ struct AVFilterPad {
      */
     int (*config_props)(AVFilterLink *link);
 };
+#endif
+
+/**
+ * Get the name of an AVFilterPad.
+ *
+ * @param pads an array of AVFilterPads
+ * @param pad_idx index of the pad in the array it; is the caller's
+ *                responsibility to ensure the index is valid
+ *
+ * @return name of the pad_idx'th pad in pads
+ */
+const char *avfilter_pad_get_name(AVFilterPad *pads, int pad_idx);
+
+/**
+ * Get the type of an AVFilterPad.
+ *
+ * @param pads an array of AVFilterPads
+ * @param pad_idx index of the pad in the array; it is the caller's
+ *                responsibility to ensure the index is valid
+ *
+ * @return type of the pad_idx'th pad in pads
+ */
+enum AVMediaType avfilter_pad_get_type(AVFilterPad *pads, int pad_idx);
 
 #if FF_API_FILTERS_PUBLIC
 /** default handler for start_frame() for video inputs */
@@ -521,19 +550,6 @@ AVFilterBufferRef *avfilter_default_get_video_buffer(AVFilterLink *link,
 /** Default handler for query_formats() */
 attribute_deprecated
 int avfilter_default_query_formats(AVFilterContext *ctx);
-#endif
-
-/**
- * Helpers for query_formats() which set all links to the same list of
- * formats/layouts. If there are no links hooked to this filter, the list
- * of formats is freed.
- */
-void avfilter_set_common_formats(AVFilterContext *ctx, AVFilterFormats *formats);
-void avfilter_set_common_pixel_formats(AVFilterContext *ctx, AVFilterFormats *formats);
-void avfilter_set_common_sample_formats(AVFilterContext *ctx, AVFilterFormats *formats);
-void avfilter_set_common_channel_layouts(AVFilterContext *ctx, AVFilterFormats *formats);
-#if FF_API_PACKING
-void avfilter_set_common_packing_formats(AVFilterContext *ctx, AVFilterFormats *formats);
 #endif
 
 #if FF_API_FILTERS_PUBLIC
@@ -621,15 +637,22 @@ struct AVFilterContext {
 
     char *name;                     ///< name of this filter instance
 
-    unsigned input_count;           ///< number of input pads
+#if FF_API_FOO_COUNT
+    unsigned input_count;           ///< @deprecated use nb_inputs
+#endif
     AVFilterPad   *input_pads;      ///< array of input pads
     AVFilterLink **inputs;          ///< array of pointers to input links
 
-    unsigned output_count;          ///< number of output pads
+#if FF_API_FOO_COUNT
+    unsigned output_count;          ///< @deprecated use nb_outputs
+#endif
     AVFilterPad   *output_pads;     ///< array of output pads
     AVFilterLink **outputs;         ///< array of pointers to output links
 
     void *priv;                     ///< private data for use by the filter
+
+    unsigned nb_inputs;             ///< number of input pads
+    unsigned nb_outputs;            ///< number of output pads
 
     struct AVFilterCommand *command_queue;
 };
@@ -751,6 +774,18 @@ struct AVFilterLink {
      */
     int age_index;
 
+    /**
+     * Frame rate of the stream on the link, or 1/0 if unknown;
+     * if left to 0/0, will be automatically be copied from the first input
+     * of the source filter if it exists.
+     *
+     * Sources should set it to the best estimation of the real frame rate.
+     * Filters should update it if necessary depending on their function.
+     * Sinks can use it to set a default output frame rate.
+     * It is similar to the r_frae_rate field in AVStream.
+     */
+    AVRational frame_rate;
+
 };
 
 /**
@@ -778,19 +813,11 @@ void avfilter_link_free(AVFilterLink **link);
  */
 int avfilter_config_links(AVFilterContext *filter);
 
-/**
- * Request a picture buffer with a specific set of permissions.
- *
- * @param link  the output link to the filter from which the buffer will
- *              be requested
- * @param perms the required access permissions
- * @param w     the minimum width of the buffer to allocate
- * @param h     the minimum height of the buffer to allocate
- * @return      A reference to the buffer. This must be unreferenced with
- *              avfilter_unref_buffer when you are finished with it.
- */
+#if FF_API_FILTERS_PUBLIC
+attribute_deprecated
 AVFilterBufferRef *avfilter_get_video_buffer(AVFilterLink *link, int perms,
                                           int w, int h);
+#endif
 
 /**
  * Create a buffer reference wrapped around an already allocated image
@@ -825,6 +852,7 @@ AVFilterBufferRef *avfilter_get_audio_buffer_ref_from_arrays(uint8_t **data,
                                                              enum AVSampleFormat sample_fmt,
                                                              uint64_t channel_layout);
 
+#if FF_API_FILTERS_PUBLIC
 /**
  * Request an input frame from the filter at the other end of the link.
  *
@@ -836,24 +864,10 @@ AVFilterBufferRef *avfilter_get_audio_buffer_ref_from_arrays(uint8_t **data,
  */
 int avfilter_request_frame(AVFilterLink *link);
 
-/**
- * Poll a frame from the filter chain.
- *
- * @param  link the input link
- * @return the number of immediately available frames, a negative
- * number in case of error
- */
+attribute_deprecated
 int avfilter_poll_frame(AVFilterLink *link);
 
-/**
- * Notify the next filter of the start of a frame.
- *
- * @param link   the output link the frame will be sent over
- * @param picref A reference to the frame about to be sent. The data for this
- *               frame need only be valid once draw_slice() is called for that
- *               portion. The receiving filter will free this reference when
- *               it no longer needs it.
- */
+attribute_deprecated
 void avfilter_start_frame(AVFilterLink *link, AVFilterBufferRef *picref);
 
 /**
@@ -861,24 +875,11 @@ void avfilter_start_frame(AVFilterLink *link, AVFilterBufferRef *picref);
  *
  * @param link the output link the frame was sent over
  */
+attribute_deprecated
 void avfilter_end_frame(AVFilterLink *link);
-
-/**
- * Send a slice to the next filter.
- *
- * Slices have to be provided in sequential order, either in
- * top-bottom or bottom-top order. If slices are provided in
- * non-sequential order the behavior of the function is undefined.
- *
- * @param link the output link over which the frame is being sent
- * @param y    offset in pixels from the top of the image for this slice
- * @param h    height of this slice in pixels
- * @param slice_dir the assumed direction for sending slices,
- *             from the top slice to the bottom slice if the value is 1,
- *             from the bottom slice to the top slice if the value is -1,
- *             for other values the behavior of the function is undefined.
- */
+attribute_deprecated
 void avfilter_draw_slice(AVFilterLink *link, int y, int h, int slice_dir);
+#endif
 
 #define AVFILTER_CMD_FLAG_ONE   1 ///< Stop once a filter understood the command (for target=all for example), fast filters are favored automatically
 #define AVFILTER_CMD_FLAG_FAST  2 ///< Only execute command when its fast (like a video out that supports contrast adjustment in hw)
@@ -966,37 +967,18 @@ void avfilter_free(AVFilterContext *filter);
 int avfilter_insert_filter(AVFilterLink *link, AVFilterContext *filt,
                            unsigned filt_srcpad_idx, unsigned filt_dstpad_idx);
 
-/**
- * Insert a new pad.
- *
- * @param idx Insertion point. Pad is inserted at the end if this point
- *            is beyond the end of the list of pads.
- * @param count Pointer to the number of pads in the list
- * @param padidx_off Offset within an AVFilterLink structure to the element
- *                   to increment when inserting a new pad causes link
- *                   numbering to change
- * @param pads Pointer to the pointer to the beginning of the list of pads
- * @param links Pointer to the pointer to the beginning of the list of links
- * @param newpad The new pad to add. A copy is made when adding.
- */
+#if FF_API_FILTERS_PUBLIC
+attribute_deprecated
 void avfilter_insert_pad(unsigned idx, unsigned *count, size_t padidx_off,
                          AVFilterPad **pads, AVFilterLink ***links,
                          AVFilterPad *newpad);
 
-/** Insert a new input pad for the filter. */
-static inline void avfilter_insert_inpad(AVFilterContext *f, unsigned index,
-                                         AVFilterPad *p)
-{
-    avfilter_insert_pad(index, &f->input_count, offsetof(AVFilterLink, dstpad),
-                        &f->input_pads, &f->inputs, p);
-}
-
-/** Insert a new output pad for the filter. */
-static inline void avfilter_insert_outpad(AVFilterContext *f, unsigned index,
-                                          AVFilterPad *p)
-{
-    avfilter_insert_pad(index, &f->output_count, offsetof(AVFilterLink, srcpad),
-                        &f->output_pads, &f->outputs, p);
-}
+attribute_deprecated
+void avfilter_insert_inpad(AVFilterContext *f, unsigned index,
+                           AVFilterPad *p);
+attribute_deprecated
+void avfilter_insert_outpad(AVFilterContext *f, unsigned index,
+                            AVFilterPad *p);
+#endif
 
 #endif /* AVFILTER_AVFILTER_H */

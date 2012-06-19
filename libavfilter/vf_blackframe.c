@@ -29,6 +29,8 @@
 
 #include "avfilter.h"
 #include "internal.h"
+#include "formats.h"
+#include "internal.h"
 #include "video.h"
 
 typedef struct {
@@ -47,7 +49,7 @@ static int query_formats(AVFilterContext *ctx)
         PIX_FMT_NONE
     };
 
-    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
+    ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
     return 0;
 }
 
@@ -89,7 +91,7 @@ static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
         p += picref->linesize[0];
     }
 
-    avfilter_draw_slice(ctx->outputs[0], y, h, slice_dir);
+    ff_draw_slice(ctx->outputs[0], y, h, slice_dir);
 }
 
 static void end_frame(AVFilterLink *inlink)
@@ -113,7 +115,7 @@ static void end_frame(AVFilterLink *inlink)
     blackframe->frame++;
     blackframe->nblack = 0;
     avfilter_unref_buffer(picref);
-    avfilter_end_frame(inlink->dst->outputs[0]);
+    ff_end_frame(inlink->dst->outputs[0]);
 }
 
 AVFilter avfilter_vf_blackframe = {

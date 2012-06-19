@@ -748,6 +748,7 @@ following image formats are supported:
     @tab encoding supported through external library libgsm
 @item GSM Microsoft variant  @tab  E  @tab  X
     @tab encoding supported through external library libgsm
+@item IAC (Indeo Audio Coder)  @tab     @tab  X
 @item IMC (Intel Music Coder)  @tab     @tab  X
 @item MACE (Macintosh Audio Compression/Expansion) 3:1  @tab     @tab  X
 @item MACE (Macintosh Audio Compression/Expansion) 6:1  @tab     @tab  X
@@ -851,18 +852,29 @@ performance on systems without hardware floating point support).
 
 @multitable @columnfractions .4 .1
 @item Name         @tab Support
-@item Apple HTTP Live Streaming @tab X
 @item file         @tab X
 @item Gopher       @tab X
+@item HLS          @tab X
 @item HTTP         @tab X
-@item MMS          @tab X
+@item HTTPS        @tab X
+@item MMSH         @tab X
+@item MMST         @tab X
 @item pipe         @tab X
+@item RTMP         @tab X
+@item RTMPE        @tab E
+@item RTMPS        @tab E
+@item RTMPT        @tab E
+@item RTMPTE       @tab E
 @item RTP          @tab X
+@item SCTP         @tab X
 @item TCP          @tab X
+@item TLS          @tab X
 @item UDP          @tab X
 @end multitable
 
 @code{X} means that the protocol is supported.
+
+@code{E} means that support is provided through an external library.
 
 
 @section Input/Output Devices
@@ -889,9 +901,10 @@ performance on systems without hardware floating point support).
 
 @multitable @columnfractions .4 .1 .1
 @item Codec/format      @tab Read   @tab Write
+@item AVI               @tab X      @tab X
 @item DV                @tab X      @tab X
 @item GXF               @tab X      @tab X
-@item MOV               @tab X      @tab
+@item MOV               @tab X      @tab X
 @item MPEG1/2           @tab X      @tab X
 @item MXF               @tab X      @tab X
 @end multitable

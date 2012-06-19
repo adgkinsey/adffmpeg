@@ -54,15 +54,12 @@ static const AVOption ass_options[] = {
     {NULL},
 };
 
-static const char *ass_get_name(void *ctx)
-{
-    return "ass";
-}
-
 static const AVClass ass_class = {
-    "AssContext",
-    ass_get_name,
-    ass_options
+    .class_name = "ass",
+    .item_name  = av_default_item_name,
+    .option     = ass_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_FILTER,
 };
 
 /* libass supports a log level ranging from 0 to 7 */

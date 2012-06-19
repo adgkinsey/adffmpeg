@@ -29,6 +29,8 @@
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "avfilter.h"
+#include "formats.h"
+#include "internal.h"
 #include "video.h"
 
 /**
@@ -149,15 +151,12 @@ static const AVOption delogo_options[]= {
     {NULL},
 };
 
-static const char *delogo_get_name(void *ctx)
-{
-    return "delogo";
-}
-
 static const AVClass delogo_class = {
-    .class_name = "DelogoContext",
-    .item_name  = delogo_get_name,
+    .class_name = "delogo",
+    .item_name  = av_default_item_name,
     .option     = delogo_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_FILTER,
 };
 
 static int query_formats(AVFilterContext *ctx)
@@ -169,7 +168,7 @@ static int query_formats(AVFilterContext *ctx)
         PIX_FMT_NONE
     };
 
-    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
+    ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
     return 0;
 }
 
@@ -222,8 +221,8 @@ static void start_frame(AVFilterLink *inlink, AVFilterBufferRef *inpicref)
     AVFilterBufferRef *outpicref;
 
     if (inpicref->perms & AV_PERM_PRESERVE) {
-        outpicref = avfilter_get_video_buffer(outlink, AV_PERM_WRITE,
-                                              outlink->w, outlink->h);
+        outpicref = ff_get_video_buffer(outlink, AV_PERM_WRITE,
+                                        outlink->w, outlink->h);
         avfilter_copy_buffer_ref_props(outpicref, inpicref);
         outpicref->video->w = outlink->w;
         outpicref->video->h = outlink->h;
@@ -231,7 +230,7 @@ static void start_frame(AVFilterLink *inlink, AVFilterBufferRef *inpicref)
         outpicref = inpicref;
 
     outlink->out_buf = outpicref;
-    avfilter_start_frame(outlink, avfilter_ref_buffer(outpicref, ~0));
+    ff_start_frame(outlink, avfilter_ref_buffer(outpicref, ~0));
 }
 
 static void null_draw_slice(AVFilterLink *link, int y, int h, int slice_dir) { }
@@ -260,8 +259,8 @@ static void end_frame(AVFilterLink *inlink)
                      delogo->show, direct);
     }
 
-    avfilter_draw_slice(outlink, 0, inlink->h, 1);
-    avfilter_end_frame(outlink);
+    ff_draw_slice(outlink, 0, inlink->h, 1);
+    ff_end_frame(outlink);
     avfilter_unref_buffer(inpicref);
     if (!direct)
         avfilter_unref_buffer(outpicref);

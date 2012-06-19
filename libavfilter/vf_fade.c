@@ -32,6 +32,8 @@
 #include "avfilter.h"
 #include "drawutils.h"
 #include "internal.h"
+#include "formats.h"
+#include "internal.h"
 #include "video.h"
 
 #define R 0
@@ -69,15 +71,12 @@ static const AVOption fade_options[] = {
     {NULL},
 };
 
-static const char *fade_get_name(void *ctx)
-{
-    return "fade";
-}
-
 static const AVClass fade_class = {
-    "FadeContext",
-    fade_get_name,
-    fade_options
+    .class_name = "fade",
+    .item_name  = av_default_item_name,
+    .option     = fade_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_FILTER,
 };
 
 static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
@@ -163,7 +162,7 @@ static int query_formats(AVFilterContext *ctx)
         PIX_FMT_NONE
     };
 
-    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
+    ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
     return 0;
 }
 
@@ -262,14 +261,14 @@ static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
         }
     }
 
-    avfilter_draw_slice(inlink->dst->outputs[0], y, h, slice_dir);
+    ff_draw_slice(inlink->dst->outputs[0], y, h, slice_dir);
 }
 
 static void end_frame(AVFilterLink *inlink)
 {
     FadeContext *fade = inlink->dst->priv;
 
-    avfilter_end_frame(inlink->dst->outputs[0]);
+    ff_end_frame(inlink->dst->outputs[0]);
 
     if (fade->frame_index >= fade->start_frame &&
         fade->frame_index <= fade->stop_frame)

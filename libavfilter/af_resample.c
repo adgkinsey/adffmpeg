@@ -55,18 +55,18 @@ static int query_formats(AVFilterContext *ctx)
     AVFilterLink *inlink  = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
 
-    AVFilterFormats        *in_formats      = avfilter_all_formats(AVMEDIA_TYPE_AUDIO);
-    AVFilterFormats        *out_formats     = avfilter_all_formats(AVMEDIA_TYPE_AUDIO);
+    AVFilterFormats        *in_formats      = ff_all_formats(AVMEDIA_TYPE_AUDIO);
+    AVFilterFormats        *out_formats     = ff_all_formats(AVMEDIA_TYPE_AUDIO);
     AVFilterFormats        *in_samplerates  = ff_all_samplerates();
     AVFilterFormats        *out_samplerates = ff_all_samplerates();
     AVFilterChannelLayouts *in_layouts      = ff_all_channel_layouts();
     AVFilterChannelLayouts *out_layouts     = ff_all_channel_layouts();
 
-    avfilter_formats_ref(in_formats,  &inlink->out_formats);
-    avfilter_formats_ref(out_formats, &outlink->in_formats);
+    ff_formats_ref(in_formats,  &inlink->out_formats);
+    ff_formats_ref(out_formats, &outlink->in_formats);
 
-    avfilter_formats_ref(in_samplerates,  &inlink->out_samplerates);
-    avfilter_formats_ref(out_samplerates, &outlink->in_samplerates);
+    ff_formats_ref(in_samplerates,  &inlink->out_samplerates);
+    ff_formats_ref(out_samplerates, &outlink->in_samplerates);
 
     ff_channel_layouts_ref(in_layouts,  &inlink->out_channel_layouts);
     ff_channel_layouts_ref(out_layouts, &outlink->in_channel_layouts);
@@ -119,7 +119,11 @@ static int config_output(AVFilterLink *outlink)
     av_get_channel_layout_string(buf2, sizeof(buf2),
                                  -1, outlink->channel_layout);
     av_log(ctx, AV_LOG_VERBOSE,
+#if FF_API_SAMPLERATE64
+           "fmt:%s srate:%"PRId64" cl:%s -> fmt:%s srate:%"PRId64" cl:%s\n",
+#else
            "fmt:%s srate:%d cl:%s -> fmt:%s srate:%d cl:%s\n",
+#endif /* FF_API_SAMPLERATE64 */
            av_get_sample_fmt_name(inlink ->format), inlink ->sample_rate, buf1,
            av_get_sample_fmt_name(outlink->format), outlink->sample_rate, buf2);
 
@@ -130,7 +134,7 @@ static int request_frame(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     ResampleContext   *s = ctx->priv;
-    int ret = avfilter_request_frame(ctx->inputs[0]);
+    int ret = ff_request_frame(ctx->inputs[0]);
 
     /* flush the lavr delay buffer */
     if (ret == AVERROR_EOF && s->avr) {

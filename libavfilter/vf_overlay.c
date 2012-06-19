@@ -28,6 +28,7 @@
 /* #define DEBUG */
 
 #include "avfilter.h"
+#include "formats.h"
 #include "libavutil/eval.h"
 #include "libavutil/avstring.h"
 #include "libavutil/opt.h"
@@ -38,6 +39,7 @@
 #include "internal.h"
 #include "bufferqueue.h"
 #include "drawutils.h"
+#include "video.h"
 
 static const char *const var_names[] = {
     "main_w",    "W", ///< width  of the main    video
@@ -101,15 +103,12 @@ static const AVOption overlay_options[] = {
     {NULL},
 };
 
-static const char *overlay_get_name(void *ctx)
-{
-    return "overlay";
-}
-
 static const AVClass overlay_class = {
-    "OverlayContext",
-    overlay_get_name,
-    overlay_options
+    .class_name = "overlay",
+    .item_name  = av_default_item_name,
+    .option     = overlay_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_FILTER,
 };
 
 static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
@@ -181,16 +180,16 @@ static int query_formats(AVFilterContext *ctx)
     AVFilterFormats *overlay_formats;
 
     if (over->allow_packed_rgb) {
-        main_formats    = avfilter_make_format_list(main_pix_fmts_rgb);
-        overlay_formats = avfilter_make_format_list(overlay_pix_fmts_rgb);
+        main_formats    = ff_make_format_list(main_pix_fmts_rgb);
+        overlay_formats = ff_make_format_list(overlay_pix_fmts_rgb);
     } else {
-        main_formats    = avfilter_make_format_list(main_pix_fmts_yuv);
-        overlay_formats = avfilter_make_format_list(overlay_pix_fmts_yuv);
+        main_formats    = ff_make_format_list(main_pix_fmts_yuv);
+        overlay_formats = ff_make_format_list(overlay_pix_fmts_yuv);
     }
 
-    avfilter_formats_ref(main_formats,    &ctx->inputs [MAIN   ]->out_formats);
-    avfilter_formats_ref(overlay_formats, &ctx->inputs [OVERLAY]->out_formats);
-    avfilter_formats_ref(main_formats,    &ctx->outputs[MAIN   ]->in_formats );
+    ff_formats_ref(main_formats,    &ctx->inputs [MAIN   ]->out_formats);
+    ff_formats_ref(overlay_formats, &ctx->inputs [OVERLAY]->out_formats);
+    ff_formats_ref(main_formats,    &ctx->outputs[MAIN   ]->in_formats );
 
     return 0;
 }
@@ -306,7 +305,7 @@ static int config_output(AVFilterLink *outlink)
 
 static AVFilterBufferRef *get_video_buffer(AVFilterLink *link, int perms, int w, int h)
 {
-    return avfilter_get_video_buffer(link->dst->outputs[0], perms, w, h);
+    return ff_get_video_buffer(link->dst->outputs[0], perms, w, h);
 }
 
 // divide by 255 and round to nearest
@@ -475,7 +474,7 @@ static int try_start_frame(AVFilterContext *ctx, AVFilterBufferRef *mainpic)
                 av_ts2str(over->overpicref->pts), av_ts2timestr(over->overpicref->pts, &outlink->time_base));
     av_dlog(ctx, "\n");
 
-    avfilter_start_frame(ctx->outputs[0], avfilter_ref_buffer(outpicref, ~0));
+    ff_start_frame(ctx->outputs[0], avfilter_ref_buffer(outpicref, ~0));
     over->frame_requested = 0;
     return 0;
 }
@@ -503,9 +502,9 @@ static int try_push_frame(AVFilterContext *ctx)
         blend_slice(ctx, outpicref, over->overpicref, over->x, over->y,
                     over->overpicref->video->w, over->overpicref->video->h,
                     0, outpicref->video->w, outpicref->video->h);
-    avfilter_draw_slice(outlink, 0, outpicref->video->h, +1);
+    ff_draw_slice(outlink, 0, outpicref->video->h, +1);
     avfilter_unref_bufferp(&outlink->out_buf);
-    avfilter_end_frame(outlink);
+    ff_end_frame(outlink);
     return 0;
 }
 
@@ -541,7 +540,7 @@ static void draw_slice_main(AVFilterLink *inlink, int y, int h, int slice_dir)
                     over->overpicref->video->w, over->overpicref->video->h,
                     y, outpicref->video->w, h);
     }
-    avfilter_draw_slice(outlink, y, h, slice_dir);
+    ff_draw_slice(outlink, y, h, slice_dir);
 }
 
 static void end_frame_main(AVFilterLink *inlink)
@@ -555,7 +554,7 @@ static void end_frame_main(AVFilterLink *inlink)
         return;
     avfilter_unref_bufferp(&inlink->cur_buf);
     avfilter_unref_bufferp(&outlink->out_buf);
-    avfilter_end_frame(ctx->outputs[0]);
+    ff_end_frame(ctx->outputs[0]);
 }
 
 static void start_frame_over(AVFilterLink *inlink, AVFilterBufferRef *inpicref)
@@ -589,7 +588,7 @@ static int request_frame(AVFilterLink *outlink)
         input = !over->overlay_eof && (over->queue_main.available ||
                                        over->queue_over.available < 2) ?
                 OVERLAY : MAIN;
-        ret = avfilter_request_frame(ctx->inputs[input]);
+        ret = ff_request_frame(ctx->inputs[input]);
         /* EOF on main is reported immediately */
         if (ret == AVERROR_EOF && input == OVERLAY) {
             over->overlay_eof = 1;

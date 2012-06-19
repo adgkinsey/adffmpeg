@@ -83,9 +83,23 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
 
     if (listen_socket) {
         int fd1;
+        int reuse = 1;
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
         ret = bind(fd, cur_ai->ai_addr, cur_ai->ai_addrlen);
-        listen(fd, 1);
+        if (ret) {
+            ret = ff_neterrno();
+            goto fail1;
+        }
+        ret = listen(fd, 1);
+        if (ret) {
+            ret = ff_neterrno();
+            goto fail1;
+        }
         fd1 = accept(fd, NULL, NULL);
+        if (fd1 < 0) {
+            ret = ff_neterrno();
+            goto fail1;
+        }
         closesocket(fd);
         fd = fd1;
         ff_socket_nonblock(fd, 1);

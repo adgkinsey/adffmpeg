@@ -24,6 +24,7 @@
 
 #include "audio.h"
 #include "avfilter.h"
+#include "internal.h"
 
 typedef struct ASyncContext {
     const AVClass *class;
@@ -49,10 +50,11 @@ static const AVOption options[] = {
 };
 
 static const AVClass async_class = {
-    .class_name = "asyncts filter",
+    .class_name = "asyncts",
     .item_name  = av_default_item_name,
     .option     = options,
     .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_FILTER,
 };
 
 static int init(AVFilterContext *ctx, const char *args, void *opaque)
@@ -116,7 +118,7 @@ static int request_frame(AVFilterLink *link)
 {
     AVFilterContext *ctx = link->src;
     ASyncContext      *s = ctx->priv;
-    int ret = avfilter_request_frame(ctx->inputs[0]);
+    int ret = ff_request_frame(ctx->inputs[0]);
     int nb_samples;
 
     /* flush the fifo */

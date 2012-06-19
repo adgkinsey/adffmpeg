@@ -210,7 +210,7 @@ static int h263_decode_gob_header(MpegEncContext *s)
  * @param end pointer to the end of the buffer
  * @return pointer to the next resync_marker, or end if none was found
  */
-const uint8_t *ff_h263_find_resync_marker(const uint8_t *restrict p, const uint8_t * restrict end)
+const uint8_t *ff_h263_find_resync_marker(const uint8_t *av_restrict p, const uint8_t *av_restrict end)
 {
     assert(p < end);
 
@@ -963,6 +963,8 @@ int ff_h263_decode_picture_header(MpegEncContext *s)
             s->h263_aic = get_bits1(&s->gb); /* Advanced Intra Coding (AIC) */
             s->loop_filter= get_bits1(&s->gb);
             s->unrestricted_mv = s->umvplus || s->obmc || s->loop_filter;
+            if(s->avctx->lowres)
+                s->loop_filter = 0;
 
             s->h263_slice_structured= get_bits1(&s->gb);
             if (get_bits1(&s->gb) != 0) {

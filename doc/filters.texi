@@ -168,9 +168,16 @@ aformat=sample_fmts\=u8\,s16:channel_layouts\=stereo
 
 @section amerge
 
-Merge two audio streams into a single multi-channel stream.
+Merge two or more audio streams into a single multi-channel stream.
 
-This filter does not need any argument.
+The filter accepts the following named options:
+
+@table @option
+
+@item inputs
+Set the number of inputs. Default is 2.
+
+@end table
 
 If the channel layouts of the inputs are disjoint, and therefore compatible,
 the channel layout of the output will be set accordingly and the channels
@@ -189,7 +196,7 @@ On the other hand, if both input are in stereo, the output channels will be
 in the default order: a1, a2, b1, b2, and the channel layout will be
 arbitrarily set to 4.0, which may or may not be the expected value.
 
-Both inputs must have the same sample rate, and format.
+All inputs must have the same sample rate, and format.
 
 If inputs do not have the same duration, the output will stop with the
 shortest.
@@ -199,8 +206,7 @@ Example: merge two mono files into a stereo stream:
 amovie=left.wav [l] ; amovie=right.mp3 [r] ; [l] [r] amerge
 @end example
 
-If you need to do multiple merges (for instance multiple mono audio streams in
-a single video media), you can do:
+Example: multiple merges:
 @example
 ffmpeg -f lavfi -i "
 amovie=input.mkv:si=0 [a0];
@@ -209,11 +215,7 @@ amovie=input.mkv:si=2 [a2];
 amovie=input.mkv:si=3 [a3];
 amovie=input.mkv:si=4 [a4];
 amovie=input.mkv:si=5 [a5];
-[a0][a1] amerge [x0];
-[x0][a2] amerge [x1];
-[x1][a3] amerge [x2];
-[x2][a4] amerge [x3];
-[x3][a5] amerge" -c:a pcm_s16le output.mkv
+[a0][a1][a2][a3][a4][a5] amerge=inputs=6" -c:a pcm_s16le output.mkv
 @end example
 
 @section amix
@@ -269,6 +271,36 @@ and output sample rates.
 For example, to resample the input audio to 44100Hz:
 @example
 aresample=44100
+@end example
+
+@section asetnsamples
+
+Set the number of samples per each output audio frame.
+
+The last output packet may contain a different number of samples, as
+the filter will flush all the remaining samples when the input audio
+signal its end.
+
+The filter accepts parameters as a list of @var{key}=@var{value} pairs,
+separated by ":".
+
+@table @option
+
+@item nb_out_samples, n
+Set the number of frames per each output audio frame. The number is
+intended as the number of samples @emph{per each channel}.
+Default value is 1024.
+
+@item pad, p
+If set to 1, the filter will pad the last audio frame with zeroes, so
+that the last frame will contain the same number of samples as the
+previous ones. Default value is 1.
+@end table
+
+For example, to set the number of per-frame samples to 1234 and
+disable padding for the last frame, use:
+@example
+asetnsamples=n=1234:p=0
 @end example
 
 @section ashowinfo
@@ -372,6 +404,24 @@ input, while avoiding too much of a desynchronization:
 amovie=file.ogg [a] ; amovie=file.mp3 [b] ;
 [a] [b] astreamsync=(2*random(1))-1+tanh(5*(t1-t2)) [a2] [b2] ;
 [a2] [b2] amerge
+@end example
+
+@section atempo
+
+Adjust audio tempo.
+
+The filter accepts exactly one parameter, the audio tempo. If not
+specified then the filter will assume nominal 1.0 tempo. Tempo must
+be in the [0.5, 2.0] range.
+
+For example, to slow down audio to 80% tempo:
+@example
+atempo=0.8
+@end example
+
+For example, to speed up audio to 125% tempo:
+@example
+atempo=1.25
 @end example
 
 @section earwax
@@ -573,6 +623,31 @@ adding/dropping samples.
 Maximum compensation in samples per second.
 
 @end table
+
+@section channelsplit
+Split each channel in input audio stream into a separate output stream.
+
+This filter accepts the following named parameters:
+@table @option
+@item channel_layout
+Channel layout of the input stream. Default is "stereo".
+@end table
+
+For example, assuming a stereo input MP3 file
+@example
+ffmpeg -i in.mp3 -filter_complex channelsplit out.mkv
+@end example
+will create an output Matroska file with two audio streams, one containing only
+the left channel and the other the right channel.
+
+To split a 5.1 WAV file into per-channel files
+@example
+ffmpeg -i in.wav -filter_complex
+'channelsplit=channel_layout=5.1[FL][FR][FC][LFE][SL][SR]'
+-map '[FL]' front_left.wav -map '[FR]' front_right.wav -map '[FC]'
+front_center.wav -map '[LFE]' lfe.wav -map '[SL]' side_left.wav -map '[SR]'
+side_right.wav
+@end example
 
 @section resample
 Convert the audio sample format, sample rate and channel layout. This filter is
@@ -1800,22 +1875,32 @@ The number and kind of parameters depend on the loaded effect. If an
 effect parameter is not specified the default value is set.
 
 Some examples follow:
-@example
-# apply the distort0r effect, set the first two double parameters
-frei0r=distort0r:0.5:0.01
 
-# apply the colordistance effect, takes a color as first parameter
+@itemize
+@item
+Apply the distort0r effect, set the first two double parameters:
+@example
+frei0r=distort0r:0.5:0.01
+@end example
+
+@item
+Apply the colordistance effect, takes a color as first parameter:
+@example
 frei0r=colordistance:0.2/0.3/0.4
 frei0r=colordistance:violet
 frei0r=colordistance:0x112233
-
-# apply the perspective effect, specify the top left and top right
-# image positions
-frei0r=perspective:0.2/0.2:0.8/0.2
 @end example
 
+@item
+Apply the perspective effect, specify the top left and top right image
+positions:
+@example
+frei0r=perspective:0.2/0.2:0.8/0.2
+@end example
+@end itemize
+
 For more information see:
-@url{http://piksel.org/frei0r}
+@url{http://frei0r.dyne.org}
 
 @section gradfun
 
@@ -2282,6 +2367,13 @@ ffmpeg -i input -i logo1 -i logo2 -filter_complex
 # add a transparent color layer on top of the main video,
 # WxH specifies the size of the main input to the overlay filter
 color=red@.3:WxH [over]; [in][over] overlay [out]
+
+# play an original video and a filtered version (here with the deshake filter)
+# side by side
+ffplay input.avi -vf 'split[a][b]; [a]pad=iw*2:ih[src]; [b]deshake[filt]; [src][filt]overlay=w'
+
+# the previous example is the same as:
+ffplay input.avi -vf 'split[b], pad=iw*2[src], [b]deshake, [src]overlay=w'
 @end example
 
 You can chain together more overlays but the efficiency of such
@@ -2603,6 +2695,12 @@ the frame is bottom-field-first
 @item pos
 the position in the file of the filtered frame, -1 if the information
 is not available (e.g. for synthetic video)
+
+@item scene
+value between 0 and 1 to indicate a new scene; a low value reflects a low
+probability for the current frame to introduce a new scene, while a higher
+value means the current frame is more likely to be one (see the example below)
+
 @end table
 
 The default value of the select expression is "1".
@@ -2634,6 +2732,15 @@ select='gte(t\,10)*lte(t\,20)*eq(pict_type\,I)'
 # select frames with a minimum distance of 10 seconds
 select='isnan(prev_selected_t)+gte(t-prev_selected_t\,10)'
 @end example
+
+Complete example to create a mosaic of the first scenes:
+
+@example
+ffmpeg -i video.avi -vf select='gt(scene\,0.4)',scale=160:120,tile -frames:v 1 preview.png
+@end example
+
+Comparing @var{scene} against a value between 0.3 and 0.5 is generally a sane
+choice.
 
 @section setdar, setsar
 
@@ -3145,33 +3252,29 @@ Buffer video frames, and make them available to the filter chain.
 This source is mainly intended for a programmatic use, in particular
 through the interface defined in @file{libavfilter/vsrc_buffer.h}.
 
-It accepts the following parameters:
-@var{width}:@var{height}:@var{pix_fmt_string}:@var{timebase_num}:@var{timebase_den}:@var{sample_aspect_ratio_num}:@var{sample_aspect_ratio.den}:@var{scale_params}
-
-All the parameters but @var{scale_params} need to be explicitly
-defined.
-
-Follows the list of the accepted parameters.
+It accepts a list of options in the form of @var{key}=@var{value} pairs
+separated by ":". A descroption of the accepted options follows.
 
 @table @option
 
-@item width, height
-Specify the width and height of the buffered video frames.
+@item video_size
+Specify the size (width and height) of the buffered video frames.
 
-@item pix_fmt_string
+@item pix_fmt
 A string representing the pixel format of the buffered video frames.
 It may be a number corresponding to a pixel format, or a pixel format
 name.
 
-@item timebase_num, timebase_den
-Specify numerator and denomitor of the timebase assumed by the
-timestamps of the buffered frames.
+@item time_base
+Specify the timebase assumed by the timestamps of the buffered frames.
 
-@item sample_aspect_ratio.num, sample_aspect_ratio.den
-Specify numerator and denominator of the sample aspect ratio assumed
-by the video frames.
+@item time_base
+Specify the frame rate expected for the video stream.
 
-@item scale_params
+@item pixel_aspect
+Specify the sample aspect ratio assumed by the video frames.
+
+@item sws_param
 Specify the optional parameters to be used for the scale filter which
 is automatically inserted when an input change is detected in the
 input size or format.
@@ -3179,7 +3282,7 @@ input size or format.
 
 For example:
 @example
-buffer=320:240:yuv410p:1:24:1:1
+buffer=size=320x240:pix_fmt=yuv410p:time_base=1/24:pixel_aspect=1/1
 @end example
 
 will instruct the source to accept video frames with size 320x240 and
@@ -3189,8 +3292,13 @@ Since the pixel format with name "yuv410p" corresponds to the number 6
 (check the enum PixelFormat definition in @file{libavutil/pixfmt.h}),
 this example corresponds to:
 @example
-buffer=320:240:6:1:24:1:1
+buffer=size=320x240:pixfmt=6:time_base=1/24:pixel_aspect=1/1
 @end example
+
+Alternatively, the options can be specified as a flat string, but this
+syntax is deprecated:
+
+@var{width}:@var{height}:@var{pix_fmt}:@var{time_base.num}:@var{time_base.den}:@var{pixel_aspect.num}:@var{pixel_aspect.den}[:@var{sws_param}]
 
 @section cellauto
 
@@ -3485,10 +3593,9 @@ the form @var{num}/@var{den} or a frame rate abbreviation.
 information regarding frei0r and how to set the parameters read the
 section @ref{frei0r} in the description of the video filters.
 
-Some examples follow:
+For example, to generate a frei0r partik0l source with size 200x200
+and frame rate 10 which is overlayed on the overlay filter main input:
 @example
-# generate a frei0r partik0l source with size 200x200 and frame rate 10
-# which is overlayed on the overlay filter main input
 frei0r_src=200x200:10:partik0l=1234 [overlay]; [in][overlay] overlay
 @end example
 

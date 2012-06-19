@@ -2471,12 +2471,6 @@ WRAPPER8_16_SQ(quant_psnr8x8_c, quant_psnr16_c)
 WRAPPER8_16_SQ(rd8x8_c, rd16_c)
 WRAPPER8_16_SQ(bit8x8_c, bit16_c)
 
-static void vector_fmul_c(float *dst, const float *src0, const float *src1, int len){
-    int i;
-    for(i=0; i<len; i++)
-        dst[i] = src0[i] * src1[i];
-}
-
 static void vector_fmul_reverse_c(float *dst, const float *src0, const float *src1, int len){
     int i;
     src1 += len-1;
@@ -2523,7 +2517,7 @@ static void vector_fmac_scalar_c(float *dst, const float *src, float mul,
         dst[i] += src[i] * mul;
 }
 
-static void butterflies_float_c(float *restrict v1, float *restrict v2,
+static void butterflies_float_c(float *av_restrict v1, float *av_restrict v2,
                                 int len)
 {
     int i;
@@ -3054,7 +3048,6 @@ av_cold void ff_dsputil_init(DSPContext* c, AVCodecContext *avctx)
 #if CONFIG_AC3_DECODER
     c->ac3_downmix = ff_ac3_downmix_c;
 #endif
-    c->vector_fmul = vector_fmul_c;
     c->vector_fmul_reverse = vector_fmul_reverse_c;
     c->vector_fmul_add = vector_fmul_add_c;
     c->vector_fmul_window = vector_fmul_window_c;

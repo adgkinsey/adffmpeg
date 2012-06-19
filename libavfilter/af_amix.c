@@ -185,10 +185,11 @@ static const AVOption options[] = {
 };
 
 static const AVClass amix_class = {
-    .class_name = "amix filter",
+    .class_name = "amix",
     .item_name  = av_default_item_name,
     .option     = options,
     .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_FILTER,
 };
 
 
@@ -349,7 +350,7 @@ static int request_samples(AVFilterContext *ctx, int min_samples)
         if (s->input_state[i] == INPUT_OFF)
             continue;
         while (!ret && av_audio_fifo_size(s->fifos[i]) < min_samples)
-            ret = avfilter_request_frame(ctx->inputs[i]);
+            ret = ff_request_frame(ctx->inputs[i]);
         if (ret == AVERROR_EOF) {
             if (av_audio_fifo_size(s->fifos[i]) == 0) {
                 s->input_state[i] = INPUT_OFF;
@@ -410,7 +411,7 @@ static int request_frame(AVFilterLink *outlink)
     }
 
     if (s->frame_list->nb_frames == 0) {
-        ret = avfilter_request_frame(ctx->inputs[0]);
+        ret = ff_request_frame(ctx->inputs[0]);
         if (ret == AVERROR_EOF) {
             s->input_state[0] = INPUT_OFF;
             if (s->nb_inputs == 1)
@@ -454,10 +455,10 @@ static void filter_samples(AVFilterLink *inlink, AVFilterBufferRef *buf)
     AVFilterLink *outlink = ctx->outputs[0];
     int i;
 
-    for (i = 0; i < ctx->input_count; i++)
+    for (i = 0; i < ctx->nb_inputs; i++)
         if (ctx->inputs[i] == inlink)
             break;
-    if (i >= ctx->input_count) {
+    if (i >= ctx->nb_inputs) {
         av_log(ctx, AV_LOG_ERROR, "unknown input link\n");
         return;
     }
@@ -497,7 +498,7 @@ static int init(AVFilterContext *ctx, const char *args, void *opaque)
         pad.name           = av_strdup(name);
         pad.filter_samples = filter_samples;
 
-        avfilter_insert_inpad(ctx, i, &pad);
+        ff_insert_inpad(ctx, i, &pad);
     }
 
     return 0;
@@ -518,15 +519,15 @@ static void uninit(AVFilterContext *ctx)
     av_freep(&s->input_state);
     av_freep(&s->input_scale);
 
-    for (i = 0; i < ctx->input_count; i++)
+    for (i = 0; i < ctx->nb_inputs; i++)
         av_freep(&ctx->input_pads[i].name);
 }
 
 static int query_formats(AVFilterContext *ctx)
 {
     AVFilterFormats *formats = NULL;
-    avfilter_add_format(&formats, AV_SAMPLE_FMT_FLT);
-    avfilter_set_common_formats(ctx, formats);
+    ff_add_format(&formats, AV_SAMPLE_FMT_FLT);
+    ff_set_common_formats(ctx, formats);
     ff_set_common_channel_layouts(ctx, ff_all_channel_layouts());
     ff_set_common_samplerates(ctx, ff_all_samplerates());
     return 0;

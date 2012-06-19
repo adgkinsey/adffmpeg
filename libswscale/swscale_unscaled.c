@@ -23,7 +23,6 @@
 #include <math.h>
 #include <stdio.h>
 #include "config.h"
-#include <assert.h>
 #include "swscale.h"
 #include "swscale_internal.h"
 #include "rgb2rgb.h"
@@ -33,6 +32,7 @@
 #include "libavutil/mathematics.h"
 #include "libavutil/bswap.h"
 #include "libavutil/pixdesc.h"
+#include "libavutil/avassert.h"
 
 #define RGB2YUV_SHIFT 15
 #define BY ( (int) (0.114 * 219 / 255 * (1 << RGB2YUV_SHIFT) + 0.5))
@@ -521,6 +521,13 @@ static int planarRgbToRgbWrapper(SwsContext *c, const uint8_t *src[],
         || (x) == PIX_FMT_ABGR   \
         )
 
+#define isRGB48(x) (                \
+           (x) == PIX_FMT_RGB48LE   \
+        || (x) == PIX_FMT_RGB48BE   \
+        || (x) == PIX_FMT_BGR48LE   \
+        || (x) == PIX_FMT_BGR48BE   \
+        )
+
 /* {RGB,BGR}{15,16,24,32,32_1} -> {RGB,BGR}{15,16,24,32} */
 typedef void (* rgbConvFn) (const uint8_t *, uint8_t *, int);
 static rgbConvFn findRgbConvFn(SwsContext *c)
@@ -554,6 +561,15 @@ static rgbConvFn findRgbConvFn(SwsContext *c)
               || CONV_IS(RGBA, BGRA)) conv = shuffle_bytes_2103;
         else if (CONV_IS(BGRA, ABGR)
               || CONV_IS(RGBA, ARGB)) conv = shuffle_bytes_3012;
+    } else if (isRGB48(srcFormat) && isRGB48(dstFormat)) {
+        if      (CONV_IS(RGB48LE, BGR48LE)
+              || CONV_IS(BGR48LE, RGB48LE)
+              || CONV_IS(RGB48BE, BGR48BE)
+              || CONV_IS(BGR48BE, RGB48BE)) conv = rgb48tobgr48_LL;
+        else if (CONV_IS(RGB48LE, BGR48BE)
+              || CONV_IS(BGR48LE, RGB48BE)
+              || CONV_IS(RGB48BE, BGR48LE)
+              || CONV_IS(BGR48BE, RGB48LE)) conv = rgb48tobgr48_LB;
     } else
     /* BGR -> BGR */
     if ((isBGRinInt(srcFormat) && isBGRinInt(dstFormat)) ||
@@ -691,7 +707,7 @@ static int packedCopyWrapper(SwsContext *c, const uint8_t *src[],
         while (length + c->srcW <= FFABS(dstStride[0]) &&
                length + c->srcW <= FFABS(srcStride[0]))
             length += c->srcW;
-        assert(length != 0);
+        av_assert1(length != 0);
 
         for (i = 0; i < srcSliceH; i++) {
             memcpy(dstPtr, srcPtr, length);
@@ -918,11 +934,13 @@ void ff_get_unscaled_swscale(SwsContext *c)
     /* bswap 16 bits per pixel/component packed formats */
     if (IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_BGR444) ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_BGR48)  ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_BGRA64) ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_BGR555) ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_BGR565) ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_GRAY16) ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_RGB444) ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_RGB48)  ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_RGBA64) ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_RGB555) ||
         IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_RGB565))
         c->swScale = packed_16bpc_bswap;
@@ -1071,7 +1089,7 @@ int attribute_align_arg sws_scale(struct SwsContext *c,
             } else if (c->srcFormat == PIX_FMT_GRAY8 || c->srcFormat == PIX_FMT_GRAY8A) {
                 r = g = b = i;
             } else {
-                assert(c->srcFormat == PIX_FMT_BGR4_BYTE);
+                av_assert1(c->srcFormat == PIX_FMT_BGR4_BYTE);
                 b = ( i >> 3     ) * 255;
                 g = ((i >> 1) & 3) * 85;
                 r = ( i       & 1) * 255;

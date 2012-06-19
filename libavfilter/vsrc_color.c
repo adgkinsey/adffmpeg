@@ -24,6 +24,9 @@
  */
 
 #include "avfilter.h"
+#include "formats.h"
+#include "internal.h"
+#include "video.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/colorspace.h"
 #include "libavutil/imgutils.h"
@@ -73,7 +76,7 @@ static av_cold int color_init(AVFilterContext *ctx, const char *args, void *opaq
 
 static int query_formats(AVFilterContext *ctx)
 {
-    avfilter_set_common_pixel_formats(ctx, ff_draw_supported_pixel_formats(0));
+    ff_set_common_formats(ctx, ff_draw_supported_pixel_formats(0));
     return 0;
 }
 
@@ -103,16 +106,16 @@ static int color_config_props(AVFilterLink *inlink)
 static int color_request_frame(AVFilterLink *link)
 {
     ColorContext *color = link->src->priv;
-    AVFilterBufferRef *picref = avfilter_get_video_buffer(link, AV_PERM_WRITE, color->w, color->h);
+    AVFilterBufferRef *picref = ff_get_video_buffer(link, AV_PERM_WRITE, color->w, color->h);
     picref->video->sample_aspect_ratio = (AVRational) {1, 1};
     picref->pts = color->pts++;
     picref->pos = -1;
 
-    avfilter_start_frame(link, avfilter_ref_buffer(picref, ~0));
+    ff_start_frame(link, avfilter_ref_buffer(picref, ~0));
     ff_fill_rectangle(&color->draw, &color->color, picref->data, picref->linesize,
                       0, 0, color->w, color->h);
-    avfilter_draw_slice(link, 0, color->h, 1);
-    avfilter_end_frame(link);
+    ff_draw_slice(link, 0, color->h, 1);
+    ff_end_frame(link);
     avfilter_unref_buffer(picref);
 
     return 0;

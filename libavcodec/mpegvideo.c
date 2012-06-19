@@ -140,9 +140,9 @@ const enum PixelFormat ff_hwaccel_pixfmt_list_420[] = {
     PIX_FMT_NONE
 };
 
-const uint8_t *avpriv_mpv_find_start_code(const uint8_t *restrict p,
+const uint8_t *avpriv_mpv_find_start_code(const uint8_t *av_restrict p,
                                           const uint8_t *end,
-                                          uint32_t * restrict state)
+                                          uint32_t *av_restrict state)
 {
     int i;
 
@@ -1436,7 +1436,7 @@ static void draw_line(uint8_t *buf, int sx, int sy, int ex, int ey,
             y  = (x * f) >> 16;
             fr = (x * f) & 0xFFFF;
             buf[y * stride + x]       += (color * (0x10000 - fr)) >> 16;
-            buf[(y + 1) * stride + x] += (color *            fr ) >> 16;
+            if(fr) buf[(y + 1) * stride + x] += (color *            fr ) >> 16;
         }
     } else {
         if (sy > ey) {
@@ -1453,7 +1453,7 @@ static void draw_line(uint8_t *buf, int sx, int sy, int ex, int ey,
             x  = (y*f) >> 16;
             fr = (y*f) & 0xFFFF;
             buf[y * stride + x]     += (color * (0x10000 - fr)) >> 16;
-            buf[y * stride + x + 1] += (color *            fr ) >> 16;
+            if(fr) buf[y * stride + x + 1] += (color *            fr ) >> 16;
         }
     }
 }

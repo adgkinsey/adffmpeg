@@ -25,6 +25,8 @@
 
 #include "libavutil/pixdesc.h"
 #include "avfilter.h"
+#include "internal.h"
+#include "video.h"
 
 typedef struct {
     const AVPixFmtDescriptor *pix_desc;
@@ -56,8 +58,8 @@ static void start_frame(AVFilterLink *inlink, AVFilterBufferRef *picref)
     AVFilterBufferRef *outpicref;
     int i;
 
-    outlink->out_buf = avfilter_get_video_buffer(outlink, AV_PERM_WRITE,
-                                                outlink->w, outlink->h);
+    outlink->out_buf = ff_get_video_buffer(outlink, AV_PERM_WRITE,
+                                           outlink->w, outlink->h);
     outpicref = outlink->out_buf;
     avfilter_copy_buffer_ref_props(outpicref, picref);
 
@@ -76,7 +78,7 @@ static void start_frame(AVFilterLink *inlink, AVFilterBufferRef *picref)
         priv->pix_desc->flags & PIX_FMT_PSEUDOPAL)
         memcpy(outpicref->data[1], picref->data[1], AVPALETTE_SIZE);
 
-    avfilter_start_frame(outlink, avfilter_ref_buffer(outpicref, ~0));
+    ff_start_frame(outlink, avfilter_ref_buffer(outpicref, ~0));
 }
 
 static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
@@ -106,7 +108,7 @@ static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
         }
     }
 
-    avfilter_draw_slice(inlink->dst->outputs[0], y, h, slice_dir);
+    ff_draw_slice(inlink->dst->outputs[0], y, h, slice_dir);
 }
 
 AVFilter avfilter_vf_pixdesctest = {

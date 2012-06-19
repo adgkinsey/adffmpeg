@@ -1,7 +1,5 @@
 /*
- * ADTS muxer.
- * Copyright (c) 2006 Baptiste Coudurier <baptiste.coudurier@smartjog.com>
- *                    Mans Rullgard <mans@mansr.com>
+ * Copyright (c) 2006 Luca Barbato <lu_zero@gentoo.org>
  *
  * This file is part of FFmpeg.
  *
@@ -20,26 +18,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVFORMAT_ADTS_H
-#define AVFORMAT_ADTS_H
+#ifndef AVUTIL_PPC_FLOAT_DSP_ALTIVEC_H
+#define AVUTIL_PPC_FLOAT_DSP_ALTIVEC_H
 
-#include "avformat.h"
-#include "libavcodec/mpeg4audio.h"
+extern void ff_vector_fmul_altivec(float *dst, const float *src0,
+                                   const float *src1, int len);
 
-#define ADTS_HEADER_SIZE 7
-
-typedef struct {
-    int write_adts;
-    int objecttype;
-    int sample_rate_index;
-    int channel_conf;
-    int pce_size;
-    uint8_t pce_data[MAX_PCE_SIZE];
-} ADTSContext;
-
-int ff_adts_write_frame_header(ADTSContext *ctx, uint8_t *buf,
-                               int size, int pce_size);
-int ff_adts_decode_extradata(AVFormatContext *s, ADTSContext *adts,
-                             uint8_t *buf, int size);
-
-#endif /* AVFORMAT_ADTS_H */
+#endif /* AVUTIL_PPC_FLOAT_DSP_ALTIVEC_H */

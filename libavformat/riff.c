@@ -25,6 +25,7 @@
 #include "avio_internal.h"
 #include "riff.h"
 #include "libavcodec/bytestream.h"
+#include "libavutil/avassert.h"
 
 /* Note: when encoding, the first matching tag is used, so order is
    important if multiple tags possible for a given codec. */
@@ -345,6 +346,7 @@ const AVCodecTag ff_codec_wav_tags[] = {
     { CODEC_ID_ATRAC3,          0x0270 },
     { CODEC_ID_ADPCM_G722,      0x028F },
     { CODEC_ID_IMC,             0x0401 },
+    { CODEC_ID_IAC,             0x0402 },
     { CODEC_ID_GSM_MS,          0x1500 },
     { CODEC_ID_TRUESPEECH,      0x1501 },
     { CODEC_ID_AAC,             0x1600 }, /* ADTS AAC */
@@ -388,6 +390,7 @@ const AVMetadataConv ff_riff_info_conv[] = {
     { "IPRD", "album"     },
     { "IPRT", "track"     },
     { "ISFT", "encoder"   },
+    { "ISMP", "timecode"  },
     { "ITCH", "encoded_by"},
     { 0 },
 };
@@ -395,7 +398,7 @@ const AVMetadataConv ff_riff_info_conv[] = {
 const char ff_riff_tags[][5] = {
     "IARL", "IART", "ICMS", "ICMT", "ICOP", "ICRD", "ICRP", "IDIM", "IDPI",
     "IENG", "IGNR", "IKEY", "ILGT", "ILNG", "IMED", "INAM", "IPLT", "IPRD",
-    "IPRT", "ISBJ", "ISFT", "ISHP", "ISRC", "ISRF", "ITCH",
+    "IPRT", "ISBJ", "ISFT", "ISHP", "ISMP", "ISRC", "ISRF", "ITCH",
     {0}
 };
 
@@ -704,7 +707,7 @@ void ff_parse_specific_params(AVCodecContext *stream, int *au_rate, int *au_ssiz
 
 void ff_get_guid(AVIOContext *s, ff_asf_guid *g)
 {
-    assert(sizeof(*g) == 16);
+    av_assert0(sizeof(*g) == 16); //compiler will optimize this out
     if (avio_read(s, *g, sizeof(*g)) < (int)sizeof(*g))
         memset(*g, 0, sizeof(*g));
 }

@@ -174,9 +174,6 @@ External library support:
   --enable-libass          enable libass subtitles rendering [no]
   --enable-libbluray       enable BluRay reading using libbluray [no]
   --enable-libcelt         enable CELT decoding via libcelt [no]
-  --enable-libopencore-amrnb enable AMR-NB de/encoding via libopencore-amrnb [no]
-  --enable-libopencore-amrwb enable AMR-WB decoding via libopencore-amrwb [no]
-  --enable-libopencv       enable video filtering via libopencv [no]
   --enable-libcdio         enable audio CD grabbing with libcdio
   --enable-libdc1394       enable IIDC-1394 grabbing using libdc1394
                            and libraw1394 [no]
@@ -187,6 +184,9 @@ External library support:
   --enable-libmp3lame      enable MP3 encoding via libmp3lame [no]
   --enable-libnut          enable NUT (de)muxing via libnut,
                            native (de)muxer exists [no]
+  --enable-libopencore-amrnb enable AMR-NB de/encoding via libopencore-amrnb [no]
+  --enable-libopencore-amrwb enable AMR-WB decoding via libopencore-amrwb [no]
+  --enable-libopencv       enable video filtering via libopencv [no]
   --enable-libopenjpeg     enable JPEG 2000 encoding/decoding via OpenJPEG [no]
   --enable-libpulse        enable Pulseaudio input via libpulse [no]
   --enable-librtmp         enable RTMP[E] support via librtmp [no]
@@ -269,6 +269,10 @@ Optimization options (experts only):
   --disable-neon           disable NEON optimizations
   --disable-vis            disable VIS optimizations
   --disable-yasm           disable use of yasm assembler
+  --disable-mips32r2       disable MIPS32R2 optimizations
+  --disable-mipsdspr1      disable MIPS DSP ASE R1 optimizations
+  --disable-mipsdspr2      disable MIPS DSP ASE R2 optimizations
+  --disable-mipsfpu        disable floating point MIPS optimizations
   --postproc-version=V     build libpostproc version V.
                            Where V can be '$ALT_PP_VER_MAJOR.$ALT_PP_VER_MINOR.$ALT_PP_VER_MICRO' or 'current'. [$postproc_version_default]
 
@@ -288,6 +292,14 @@ Developer options (useful when working on FFmpeg itself):
                            \$FATE_SAMPLES at make invocation time.
   --enable-xmm-clobber-test check XMM registers for clobbering (Win64-only;
                            should be used only for debugging purposes)
+  --enable-random          randomly enable/disable components
+  --disable-random
+  --enable-random=LIST     randomly enable/disable specific components or
+  --disable-random=LIST    component groups. LIST is a comma-separated list
+                           of NAME[:PROB] entries where NAME is a component
+                           (group) and PROB the probability associated with
+                           NAME (default 0.5).
+  --random-seed=VALUE      seed value for --enable/disable-random
 
 NOTE: Object files are built at the place where configure is launched.
 EOF
@@ -1143,6 +1155,10 @@ ARCH_EXT_LIST='
     ssse3
     vfpv3
     vis
+    mipsfpu
+    mips32r2
+    mipsdspr1
+    mipsdspr2
 '
 
 HAVE_LIST_PUB='
@@ -1196,6 +1212,7 @@ HAVE_LIST="
     inet_aton
     inline_asm
     isatty
+    jack_port_get_latency_range
     kbhit
     ldbrx
     libdc1394_1
@@ -1334,6 +1351,7 @@ CMDLINE_SET="
     pkg_config
     postproc_version
     progs_suffix
+    random_seed
     samples
     strip
     sysinclude
@@ -1361,6 +1379,10 @@ armvfp_deps="arm"
 neon_deps="arm"
 vfpv3_deps="armvfp"
 
+mipsfpu_deps="mips"
+mips32r2_deps="mips"
+mipsdspr1_deps="mips"
+mipsdspr2_deps="mips"
 mmi_deps="mips"
 
 altivec_deps="ppc"
@@ -1403,6 +1425,7 @@ ac3_fixed_encoder_select="mdct ac3dsp"
 alac_encoder_select="lpc"
 amrnb_decoder_select="lsp"
 amrwb_decoder_select="lsp"
+amv_encoder_select="aandct"
 atrac1_decoder_select="mdct sinewin"
 atrac3_decoder_select="mdct"
 binkaudio_dct_decoder_select="mdct rdft dct sinewin"
@@ -1411,6 +1434,7 @@ cavs_decoder_select="golomb"
 cook_decoder_select="mdct sinewin"
 cscd_decoder_suggest="zlib"
 dca_decoder_select="mdct"
+dirac_decoder_select="dwt golomb"
 dnxhd_encoder_select="aandct"
 dxa_decoder_select="zlib"
 eac3_decoder_select="ac3_decoder"
@@ -1442,6 +1466,7 @@ h264_vaapi_hwaccel_select="vaapi h264_decoder"
 h264_vda_hwaccel_deps="VideoDecodeAcceleration_VDADecoder_h pthreads"
 h264_vda_hwaccel_select="vda h264_decoder"
 h264_vdpau_decoder_select="vdpau h264_decoder"
+iac_decoder_select="fft mdct sinewin"
 imc_decoder_select="fft mdct sinewin"
 jpegls_decoder_select="golomb"
 jpegls_encoder_select="golomb"
@@ -1512,7 +1537,6 @@ svq3_decoder_suggest="zlib"
 theora_decoder_select="vp3_decoder"
 tiff_decoder_suggest="zlib"
 tiff_encoder_suggest="zlib"
-truehd_decoder_select="mlp_decoder"
 tscc_decoder_select="zlib"
 twinvq_decoder_select="mdct lsp sinewin"
 vc1_crystalhd_decoder_select="crystalhd"
@@ -1609,6 +1633,7 @@ matroska_demuxer_suggest="zlib bzlib"
 mov_demuxer_suggest="zlib"
 mp3_demuxer_select="mpegaudio_parser"
 mp4_muxer_select="mov_muxer"
+mpegts_muxer_select="adts_muxer latm_muxer"
 mpegtsraw_demuxer_select="mpegts_demuxer"
 mxf_d10_muxer_select="mxf_muxer"
 ogg_demuxer_select="golomb"
@@ -1668,6 +1693,10 @@ mmsh_protocol_select="http_protocol"
 mmst_protocol_deps="network"
 rtmp_protocol_deps="!librtmp_protocol"
 rtmp_protocol_select="tcp_protocol"
+rtmphttp_protocol_deps="!librtmp_protocol"
+rtmphttp_protocol_select="http_protocol"
+rtmpt_protocol_deps="!librtmp_protocol"
+rtmpt_protocol_select="rtmphttp_protocol"
 rtp_protocol_select="udp_protocol"
 sctp_protocol_deps="network netinet_sctp_h"
 tcp_protocol_deps="network"
@@ -1685,6 +1714,7 @@ amovie_filter_deps="avcodec avformat"
 aresample_filter_deps="swresample"
 ass_filter_deps="libass"
 asyncts_filter_deps="avresample"
+atempo_filter_deps="avcodec rdft"
 blackframe_filter_deps="gpl"
 boxblur_filter_deps="gpl"
 colormatrix_filter_deps="gpl"
@@ -1706,20 +1736,20 @@ ocv_filter_deps="libopencv"
 pan_filter_deps="swresample"
 removelogo_filter_deps="avcodec avformat swscale"
 scale_filter_deps="swscale"
+select_filter_deps="avcodec"
 super2xsai_filter_deps="gpl"
 tinterlace_filter_deps="gpl"
 yadif_filter_deps="gpl"
 
 # libraries
 avdevice_deps="avcodec avformat"
-avfilter_deps="swscale"
 avformat_deps="avcodec"
 postproc_deps="gpl"
 
 # programs
 ffmpeg_deps="avcodec avfilter avformat swscale swresample"
 ffmpeg_select="buffersink_filter format_filter aformat_filter
-               setpts_filter"
+               setpts_filter null_filter anull_filter"
 ffplay_deps="avcodec avformat swscale swresample sdl"
 ffplay_select="buffersink_filter rdft"
 ffprobe_deps="avcodec avformat"
@@ -1967,6 +1997,27 @@ show_list() {
     exit 0
 }
 
+rand_list(){
+    IFS=', '
+    set -- $*
+    unset IFS
+    for thing; do
+        comp=${thing%:*}
+        prob=${thing#$comp}
+        prob=${prob#:}
+        is_in ${comp} $COMPONENT_LIST && eval comp=\$$(toupper ${comp%s})_LIST
+        echo "prob ${prob:-0.5}"
+        printf '%s\n' $comp
+    done
+}
+
+do_random(){
+    action=$1
+    shift
+    random_seed=$(awk "BEGIN { srand($random_seed); print srand() }")
+    $action $(rand_list "$@" | awk "BEGIN { srand($random_seed) } \$1 == \"prob\" { prob = \$2; next } rand() < prob { print }")
+}
+
 for opt do
     optval="${opt#*=}"
     case "$opt" in
@@ -1980,6 +2031,14 @@ for opt do
     ;;
     --disable-everything)
     map 'eval unset \${$(toupper ${v%s})_LIST}' $COMPONENT_LIST
+    ;;
+    --enable-random|--disable-random)
+    action=${opt%%-random}
+    do_random ${action#--} $COMPONENT_LIST
+    ;;
+    --enable-random=*|--disable-random=*)
+    action=${opt%%-random=*}
+    do_random ${action#--} $optval
     ;;
     --enable-*=*|--disable-*=*)
     eval $(echo "${opt%%=*}" | sed 's/--/action=/;s/-/ thing=/')
@@ -2532,6 +2591,28 @@ elif enabled mips; then
 
     cpuflags="-march=$cpu"
 
+    case $cpu in
+        24kc)
+            disable mipsfpu
+            disable mipsdspr1
+            disable mipsdspr2
+        ;;
+        24kf*)
+            disable mipsdspr1
+            disable mipsdspr2
+        ;;
+        24kec|34kc|1004kc)
+            disable mipsfpu
+            disable mipsdspr2
+        ;;
+        24kef*|34kf*|1004kf*)
+            disable mipsdspr2
+        ;;
+        74kc)
+            disable mipsfpu
+        ;;
+    esac
+
 elif enabled avr32; then
 
     case $cpu in
@@ -2633,7 +2714,7 @@ case $target_os in
         oss_indev_extralibs="-lossaudio"
         oss_outdev_extralibs="-lossaudio"
         ;;
-    openbsd)
+    openbsd|bitrig)
         # On OpenBSD 4.5. the compiler does not use PIC unless
         # explicitly using -fPIC. FFmpeg builds fine without PIC,
         # however the generated executable will not do anything
@@ -2642,6 +2723,7 @@ case $target_os in
         enable pic
         disable symver
         SHFLAGS='-shared'
+        SLIBNAME_WITH_MAJOR='$(SLIBNAME).$(LIBVERSION)'
         oss_indev_extralibs="-lossaudio"
         oss_outdev_extralibs="-lossaudio"
         ;;
@@ -2907,6 +2989,15 @@ elif enabled mips; then
 
     check_asm loongson '"dmult.g $1, $2, $3"'
     enabled mmi     && check_asm mmi     '"lq $2, 0($2)"'
+    enabled mips32r2  && add_cflags "-mips32r2" &&
+     check_asm mips32r2  '"rotr $t0, $t1, 1"'
+    enabled mipsdspr1 && add_cflags "-mdsp" && add_asflags "-mdsp" &&
+     check_asm mipsdspr1 '"addu.qb $t0, $t1, $t2"'
+    enabled mipsdspr2 && add_cflags "-mdspr2" && add_asflags "-mdspr2" &&
+     check_asm mipsdspr2 '"absq_s.qb $t0, $t1"'
+    enabled mipsfpu   && add_cflags "-mhard-float" &&
+     check_asm mipsfpu   '"madd.d $f0, $f2, $f4, $f6"'
+
 
 elif enabled ppc; then
 
@@ -3194,8 +3285,8 @@ enabled libvorbis  && require  libvorbis vorbis/vorbisenc.h vorbis_info_init -lv
 enabled libvpx     && {
     enabled libvpx_decoder && { check_lib2 "vpx/vpx_decoder.h vpx/vp8dx.h" vpx_codec_dec_init_ver -lvpx ||
                                 die "ERROR: libvpx decoder version must be >=0.9.1"; }
-    enabled libvpx_encoder && { check_lib2 "vpx/vpx_encoder.h vpx/vp8cx.h" "vpx_codec_enc_init_ver VPX_CQ" -lvpx ||
-                                die "ERROR: libvpx encoder version must be >=0.9.6"; } }
+    enabled libvpx_encoder && { check_lib2 "vpx/vpx_encoder.h vpx/vp8cx.h" "vpx_codec_enc_init_ver VP8E_SET_MAX_INTRA_BITRATE_PCT" -lvpx ||
+                                die "ERROR: libvpx encoder version must be >=0.9.7"; } }
 enabled libx264    && require  libx264 x264.h x264_encoder_encode -lx264 &&
                       { check_cpp_condition x264.h "X264_BUILD >= 118" ||
                         die "ERROR: libx264 version must be >= 0.118."; }
@@ -3277,7 +3368,8 @@ check_header soundcard.h
 
 enabled_any alsa_indev alsa_outdev && check_lib2 alsa/asoundlib.h snd_pcm_htimestamp -lasound
 
-enabled jack_indev && check_lib2 jack/jack.h jack_client_open -ljack && check_func sem_timedwait
+enabled jack_indev && check_lib2 jack/jack.h jack_client_open -ljack && check_func sem_timedwait &&
+    check_func jack_port_get_latency_range -ljack
 
 enabled_any sndio_indev sndio_outdev && check_lib2 sndio.h sio_open -lsndio
 
@@ -3507,6 +3599,10 @@ if enabled arm; then
 fi
 if enabled mips; then
     echo "MMI enabled               ${mmi-no}"
+    echo "MIPS FPU enabled          ${mipsfpu-no}"
+    echo "MIPS32R2 enabled          ${mips32r2-no}"
+    echo "MIPS DSP R1 enabled       ${mipsdspr1-no}"
+    echo "MIPS DSP R2 enabled       ${mipsdspr2-no}"
 fi
 if enabled ppc; then
     echo "AltiVec enabled           ${altivec-no}"
@@ -3568,6 +3664,8 @@ echo "openssl enabled           ${openssl-no}"
 echo "zlib enabled              ${zlib-no}"
 echo "bzlib enabled             ${bzlib-no}"
 echo "libparreader enabled      ${libparreader-no}"
+test -n "$random_seed" &&
+    echo "random seed               ${random_seed}"
 echo
 
 for type in decoder encoder hwaccel parser demuxer muxer protocol filter bsf indev outdev; do
@@ -3714,7 +3812,7 @@ cat > $TMPH <<EOF
 #define AVCONV_DATADIR "$(eval c_escape $datadir)"
 #define CC_TYPE "$cc_type"
 #define CC_VERSION $cc_version
-#define restrict $_restrict
+#define av_restrict $_restrict
 #define EXTERN_PREFIX "${extern_prefix}"
 #define EXTERN_ASM ${extern_prefix}
 #define SLIBSUF "$SLIBSUF"

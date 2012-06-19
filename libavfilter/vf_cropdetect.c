@@ -25,6 +25,8 @@
 
 #include "libavutil/imgutils.h"
 #include "avfilter.h"
+#include "formats.h"
+#include "internal.h"
 #include "video.h"
 
 typedef struct {
@@ -47,7 +49,7 @@ static int query_formats(AVFilterContext *ctx)
         PIX_FMT_NONE
     };
 
-    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
+    ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
     return 0;
 }
 
@@ -189,7 +191,7 @@ static void end_frame(AVFilterLink *inlink)
                w, h, x, y);
     }
 
-    avfilter_end_frame(inlink->dst->outputs[0]);
+    ff_end_frame(inlink->dst->outputs[0]);
 }
 
 AVFilter avfilter_vf_cropdetect = {
