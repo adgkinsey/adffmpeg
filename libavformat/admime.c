@@ -252,15 +252,16 @@ static int process_line(char *line, int *line_count, int *dataType,
 static int parse_mime_header(AVIOContext *pb, uint8_t *buffer, int *bufSize,
                              int *dataType, int *size, long *extra)
 {
-    unsigned char *             q = NULL;
-    int                         ch, err, lineCount = 0;
-    const int                   maxBufSize = *bufSize;
+    unsigned char ch, *q = NULL;
+    int           err, lineCount = 0;
+    const int     maxBufSize = *bufSize;
 
     *bufSize = 0;
 
     // Check for JPEG header first
     do {
-        ch = avio_r8(pb);
+        if (avio_read(pb, &ch, 1) < 0)
+            break;
         if (buffer && (ch == rawJfifHeader[*bufSize]))  {
             buffer[*bufSize] = ch;
             ++(*bufSize);
@@ -271,12 +272,9 @@ static int parse_mime_header(AVIOContext *pb, uint8_t *buffer, int *bufSize,
             break;
     } while( (*bufSize) < sizeof(rawJfifHeader));
 
-    q = buffer;
+    q = buffer + *bufSize;
     // Try and parse the header
     for(;;) {
-        if (ch < 0)
-            return ADFFMPEG_AD_ERROR_PARSE_MIME_HEADER;
-
         if (ch == '\n') {
             // process line
             if (q > buffer && q[-1] == '\r')
@@ -303,7 +301,13 @@ static int parse_mime_header(AVIOContext *pb, uint8_t *buffer, int *bufSize,
                 return ADFFMPEG_AD_ERROR_PARSE_MIME_HEADER;
         }
 
-        ch = avio_r8(pb);
+        err = avio_read(pb, &ch, 1);
+        if (err < 0)  {
+            if (pb->eof_reached)
+                return err;
+            else
+                return ADFFMPEG_AD_ERROR_PARSE_MIME_HEADER;
+        }
     }
 
     return ADFFMPEG_AD_ERROR_PARSE_MIME_HEADER;
@@ -597,7 +601,7 @@ static int handleInvalidMime(AVFormatContext *s,
 {
     AVIOContext *pb = s->pb;
     int errorVal = 0;
-    int chkByte;
+    unsigned char chkByte;
     int status, read, found = FALSE;
     uint8_t imageData[MAX_IMAGE_SIZE];
 
@@ -613,8 +617,7 @@ static int handleInvalidMime(AVFormatContext *s,
         if (read >= MAX_IMAGE_SIZE)
             return ADFFMPEG_AD_ERROR_PARSE_MIME_HEADER;
 
-        chkByte = avio_r8(pb);
-        if (chkByte < 0)
+        if (avio_read(pb, &chkByte, 1) < 0)
             break;
         imageData[read] = chkByte;
         if(imageData[read - 1] == 0xFF && imageData[read] == 0xD9)
