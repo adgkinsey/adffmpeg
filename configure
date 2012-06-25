@@ -180,6 +180,7 @@ External library support:
   --enable-libfaac         enable FAAC support via libfaac [no]
   --enable-libfreetype     enable libfreetype [no]
   --enable-libgsm          enable GSM support via libgsm [no]
+  --enable-libilbc         enable iLBC de/encoding via libilbc [no]
   --enable-libmodplug      enable ModPlug via libmodplug [no]
   --enable-libmp3lame      enable MP3 encoding via libmp3lame [no]
   --enable-libnut          enable NUT (de)muxing via libnut,
@@ -1052,6 +1053,7 @@ CONFIG_LIST="
     libfaac
     libfreetype
     libgsm
+    libilbc
     libmodplug
     libmp3lame
     libnut
@@ -1170,6 +1172,7 @@ HAVE_LIST="
     $ARCH_EXT_LIST
     $HAVE_LIST_PUB
     $THREADS_LIST
+    aligned_malloc
     aligned_stack
     alsa_asoundlib_h
     altivec_h
@@ -1205,7 +1208,9 @@ HAVE_LIST="
     GetProcessAffinityMask
     GetProcessMemoryInfo
     GetProcessTimes
+    GetSystemTimeAsFileTime
     getrusage
+    gettimeofday
     glob
     gnu_as
     ibm_asm
@@ -1236,6 +1241,7 @@ HAVE_LIST="
     memalign
     mkstemp
     mmap
+    nanosleep
     netinet_sctp_h
     PeekNamedPipe
     poll_h
@@ -1248,6 +1254,7 @@ HAVE_LIST="
     sdl_video_size
     setmode
     setrlimit
+    Sleep
     sndio_h
     socklen_t
     soundcard_h
@@ -1275,8 +1282,11 @@ HAVE_LIST="
     threads
     trunc
     truncf
+    unistd_h
+    usleep
     vfp_args
     VirtualAlloc
+    windows_h
     winsock2_h
     xform_asm
     xmm_clobbers
@@ -1590,6 +1600,8 @@ libgsm_decoder_deps="libgsm"
 libgsm_encoder_deps="libgsm"
 libgsm_ms_decoder_deps="libgsm"
 libgsm_ms_encoder_deps="libgsm"
+libilbc_decoder_deps="libilbc"
+libilbc_encoder_deps="libilbc"
 libmodplug_demuxer_deps="libmodplug"
 libmp3lame_encoder_deps="libmp3lame"
 libopencore_amrnb_decoder_deps="libopencore_amrnb"
@@ -1904,7 +1916,7 @@ AS_O='-o $@'
 CC_O='-o $@'
 CXX_O='-o $@'
 
-host_cflags='-D_ISOC99_SOURCE -O3 -g'
+host_cflags='-D_ISOC99_SOURCE -D_XOPEN_SOURCE=600 -O3 -g'
 host_libs='-lm'
 
 target_path='$(CURDIR)'
@@ -3145,6 +3157,7 @@ check_func  getaddrinfo $network_extralibs
 check_func  gethrtime
 check_func  getrusage
 check_struct "sys/time.h sys/resource.h" "struct rusage" ru_maxrss
+check_func  gettimeofday
 check_func  inet_aton $network_extralibs
 check_func  isatty
 check_func  localtime_r
@@ -3152,12 +3165,14 @@ check_func  ${malloc_prefix}memalign            && enable memalign
 check_func  mkstemp
 check_func  mmap
 check_func  ${malloc_prefix}posix_memalign      && enable posix_memalign
+check_func_headers malloc.h _aligned_malloc     && enable aligned_malloc
 check_func  setrlimit
 check_func  strerror_r
 check_func  strptime
 check_func  sched_getaffinity
 check_func  sysconf
 check_func  sysctl
+check_func  usleep
 check_func_headers conio.h kbhit
 check_func_headers windows.h PeekNamedPipe
 check_func_headers io.h setmode
@@ -3165,7 +3180,9 @@ check_func_headers lzo/lzo1x.h lzo1x_999_compress
 check_lib2 "windows.h psapi.h" GetProcessMemoryInfo -lpsapi
 check_func_headers windows.h GetProcessAffinityMask
 check_func_headers windows.h GetProcessTimes
+check_func_headers windows.h GetSystemTimeAsFileTime
 check_func_headers windows.h MapViewOfFile
+check_func_headers windows.h Sleep
 check_func_headers windows.h VirtualAlloc
 check_func_headers glob.h glob
 
@@ -3179,8 +3196,10 @@ check_header sys/param.h
 check_header sys/resource.h
 check_header sys/select.h
 check_header termios.h
+check_header unistd.h
 check_header vdpau/vdpau.h
 check_header vdpau/vdpau_x11.h
+check_header windows.h
 check_header X11/extensions/XvMClib.h
 check_header asm/types.h
 
@@ -3262,6 +3281,7 @@ enabled libcelt    && require libcelt celt/celt.h celt_decode -lcelt0 &&
 enabled libfaac    && require2 libfaac "stdint.h faac.h" faacEncGetVersion -lfaac
 enabled libfreetype && require_pkg_config freetype2 "ft2build.h freetype/freetype.h" FT_Init_FreeType
 enabled libgsm     && require  libgsm gsm/gsm.h gsm_create -lgsm
+enabled libilbc    && require  libilbc ilbc.h WebRtcIlbcfix_InitDecode -lilbc
 enabled libmodplug && require  libmodplug libmodplug/modplug.h ModPlug_Load -lmodplug
 enabled libmp3lame && require  "libmp3lame >= 3.98.3" lame/lame.h lame_set_VBR_quality -lmp3lame
 enabled libnut     && require  libnut libnut.h nut_demuxer_init -lnut
@@ -3531,7 +3551,7 @@ if test $target_os = "haiku"; then
     disable posix_memalign
 fi
 
-! enabled_any memalign posix_memalign &&
+! enabled_any memalign posix_memalign aligned_malloc &&
     enabled_any $need_memalign && enable memalign_hack
 
 # add_dep lib dep
@@ -3637,6 +3657,7 @@ echo "libcelt enabled           ${libcelt-no}"
 echo "libdc1394 support         ${libdc1394-no}"
 echo "libfaac enabled           ${libfaac-no}"
 echo "libgsm enabled            ${libgsm-no}"
+echo "libilbc enabled           ${libilbc-no}"
 echo "libmodplug enabled        ${libmodplug-no}"
 echo "libmp3lame enabled        ${libmp3lame-no}"
 echo "libnut enabled            ${libnut-no}"
@@ -3797,7 +3818,7 @@ get_version LIBAVDEVICE libavdevice/avdevice.h
 get_version LIBAVFILTER libavfilter/version.h
 get_version LIBAVFORMAT libavformat/version.h
 get_version LIBAVRESAMPLE libavresample/version.h
-get_version LIBAVUTIL   libavutil/avutil.h
+get_version LIBAVUTIL   libavutil/version.h
 get_version LIBPOSTPROC libpostproc/postprocess.h
 get_version LIBSWRESAMPLE libswresample/swresample.h
 get_version LIBSWSCALE  libswscale/swscale.h

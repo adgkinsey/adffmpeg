@@ -201,6 +201,10 @@
 #include "avio.h"
 #include "libavformat/version.h"
 
+#if FF_API_AV_GETTIME
+#include "libavutil/time.h"
+#endif
+
 struct AVFormatContext;
 
 
@@ -726,7 +730,7 @@ typedef struct AVStream {
     /**
      * Stream information used internally by av_find_stream_info()
      */
-#define MAX_STD_TIMEBASES (60*12+5)
+#define MAX_STD_TIMEBASES (60*12+6)
     struct {
         int64_t last_dts;
         int64_t duration_gcd;
@@ -1853,11 +1857,6 @@ void av_dump_format(AVFormatContext *ic,
                     int index,
                     const char *url,
                     int is_output);
-
-/**
- * Get the current time in microseconds.
- */
-int64_t av_gettime(void);
 
 /**
  * Return in 'buf' the path with '%d' replaced by a number.

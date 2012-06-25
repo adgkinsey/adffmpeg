@@ -37,6 +37,7 @@
 #include "libavutil/parseutils.h"
 #include "libavutil/samplefmt.h"
 #include "libavutil/avassert.h"
+#include "libavutil/time.h"
 #include "libavformat/avformat.h"
 #include "libavdevice/avdevice.h"
 #include "libswscale/swscale.h"
@@ -57,7 +58,6 @@
 
 #include "cmdutils.h"
 
-#include <unistd.h>
 #include <assert.h>
 
 const char program_name[] = "ffplay";
@@ -1015,7 +1015,7 @@ static int refresh_thread(void *opaque)
             SDL_PushEvent(&event);
         }
         //FIXME ideally we should wait the correct time but SDLs event passing is so slow it would be silly
-        usleep(is->audio_st && is->show_mode != SHOW_MODE_VIDEO ? rdftspeed*1000 : 5000);
+        av_usleep(is->audio_st && is->show_mode != SHOW_MODE_VIDEO ? rdftspeed*1000 : 5000);
     }
     return 0;
 }
@@ -1575,12 +1575,12 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
 #if FF_API_OLD_VSINK_API
     ret = avfilter_graph_create_filter(&filt_out,
                                        avfilter_get_by_name("buffersink"),
-                                       "out", NULL, pix_fmts, graph);
+                                       "ffplay_buffersink", NULL, (void *)pix_fmts, graph);
 #else
     buffersink_params->pixel_fmts = pix_fmts;
     ret = avfilter_graph_create_filter(&filt_out,
                                        avfilter_get_by_name("buffersink"),
-                                       "out", NULL, buffersink_params, graph);
+                                       "ffplay_buffersink", NULL, buffersink_params, graph);
 #endif
     av_freep(&buffersink_params);
     if (ret < 0)
@@ -1732,7 +1732,7 @@ static int video_thread(void *arg)
             if (fabs(is->frame_last_filter_delay) > AV_NOSYNC_THRESHOLD / 10.0)
                 is->frame_last_filter_delay = 0;
 
-            avfilter_fill_frame_from_video_buffer_ref(frame, picref);
+            avfilter_copy_buf_props(frame, picref);
 
             pts_int = picref->pts;
             tb      = filt_out->inputs[0]->time_base;

@@ -23,6 +23,7 @@
  * Audio merging filter
  */
 
+#include "libavutil/audioconvert.h"
 #include "libavutil/bprint.h"
 #include "libavutil/opt.h"
 #include "libswresample/swresample.h" // only for SWR_CH_MAX
@@ -52,13 +53,7 @@ static const AVOption amerge_options[] = {
     {0}
 };
 
-static const AVClass amerge_class = {
-    .class_name = "amerge",
-    .item_name  = av_default_item_name,
-    .option     = amerge_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-    .category   = AV_CLASS_CATEGORY_FILTER,
-};
+AVFILTER_DEFINE_CLASS(amerge);
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
@@ -175,7 +170,7 @@ static int request_frame(AVFilterLink *outlink)
 
     for (i = 0; i < am->nb_inputs; i++)
         if (!am->in[i].nb_samples)
-            if ((ret = avfilter_request_frame(ctx->inputs[i])) < 0)
+            if ((ret = ff_request_frame(ctx->inputs[i])) < 0)
                 return ret;
     return 0;
 }

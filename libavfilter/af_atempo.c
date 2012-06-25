@@ -40,6 +40,7 @@
 
 #include <float.h>
 #include "libavcodec/avfft.h"
+#include "libavutil/audioconvert.h"
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/eval.h"
@@ -654,7 +655,7 @@ static int yae_align(AudioFragment *frag,
 
         // normalize:
         FFTSample drifti = (FFTSample)(drift + i);
-        metric *= drifti;
+        metric *= drifti * (FFTSample)(i - i0) * (FFTSample)(i1 - i);
 
         if (metric > best_metric) {
             best_metric = metric;
@@ -1083,7 +1084,7 @@ static int request_frame(AVFilterLink *outlink)
 
     atempo->request_fulfilled = 0;
     do {
-        ret = avfilter_request_frame(ctx->inputs[0]);
+        ret = ff_request_frame(ctx->inputs[0]);
     }
     while (!atempo->request_fulfilled && ret >= 0);
 

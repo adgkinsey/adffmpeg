@@ -28,6 +28,7 @@
 #include "libavutil/parseutils.h"
 #include "libavutil/pixdesc.h"
 #include "avfilter.h"
+#include "internal.h"
 #include "formats.h"
 #include "video.h"
 
@@ -84,13 +85,7 @@ static const AVOption mptestsrc_options[]= {
     { NULL },
 };
 
-static const AVClass mptestsrc_class = {
-    .class_name = "mptestsrc",
-    .item_name  = av_default_item_name,
-    .option     = mptestsrc_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-    .category   = AV_CLASS_CATEGORY_FILTER,
-};
+AVFILTER_DEFINE_CLASS(mptestsrc);
 
 static double c[64];
 
@@ -276,8 +271,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
         return ret;
     }
 
-    if ((ret = av_parse_video_rate(&frame_rate_q, test->rate)) < 0 ||
-        frame_rate_q.den <= 0 || frame_rate_q.num <= 0) {
+    if ((ret = av_parse_video_rate(&frame_rate_q, test->rate)) < 0) {
         av_log(ctx, AV_LOG_ERROR, "Invalid frame rate: '%s'\n", test->rate);
         return ret;
     }

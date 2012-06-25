@@ -327,6 +327,7 @@ OBJS-$(CONFIG_MSMPEG4V3_ENCODER)       += msmpeg4.o msmpeg4enc.o msmpeg4data.o \
                                           h263dec.o h263.o ituh263dec.o        \
                                           mpeg4videodec.o
 OBJS-$(CONFIG_MSRLE_DECODER)           += msrle.o msrledec.o
+OBJS-$(CONFIG_MSS1_DECODER)            += mss1.o
 OBJS-$(CONFIG_MSVIDEO1_DECODER)        += msvideo1.o
 OBJS-$(CONFIG_MSVIDEO1_ENCODER)        += msvideo1enc.o elbg.o
 OBJS-$(CONFIG_MSZH_DECODER)            += lcldec.o
@@ -393,6 +394,7 @@ OBJS-$(CONFIG_RV30_DECODER)            += rv30.o rv34.o rv30dsp.o rv34dsp.o \
 OBJS-$(CONFIG_RV40_DECODER)            += rv40.o rv34.o rv34dsp.o rv40dsp.o \
                                           mpegvideo.o error_resilience.o
 OBJS-$(CONFIG_S302M_DECODER)           += s302m.o
+OBJS-$(CONFIG_SANM_DECODER)            += sanm.o
 OBJS-$(CONFIG_SGI_DECODER)             += sgidec.o
 OBJS-$(CONFIG_SGI_ENCODER)             += sgienc.o rle.o
 OBJS-$(CONFIG_SHORTEN_DECODER)         += shorten.o
@@ -611,6 +613,7 @@ OBJS-$(CONFIG_ADPCM_THP_DECODER)          += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_XA_DECODER)           += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_YAMAHA_DECODER)       += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_YAMAHA_ENCODER)       += adpcmenc.o adpcm_data.o
+OBJS-$(CONFIG_VIMA_DECODER)               += vima.o adpcm_data.o
 
 # libavformat dependencies
 OBJS-$(CONFIG_ADTS_MUXER)              += mpeg4audio.o
@@ -659,6 +662,8 @@ OBJS-$(CONFIG_LIBGSM_DECODER)             += libgsm.o
 OBJS-$(CONFIG_LIBGSM_ENCODER)             += libgsm.o
 OBJS-$(CONFIG_LIBGSM_MS_DECODER)          += libgsm.o
 OBJS-$(CONFIG_LIBGSM_MS_ENCODER)          += libgsm.o
+OBJS-$(CONFIG_LIBILBC_DECODER)            += libilbc.o
+OBJS-$(CONFIG_LIBILBC_ENCODER)            += libilbc.o
 OBJS-$(CONFIG_LIBMP3LAME_ENCODER)         += libmp3lame.o mpegaudiodecheader.o \
                                              audio_frame_queue.o
 OBJS-$(CONFIG_LIBOPENCORE_AMRNB_DECODER)  += libopencore-amr.o \
@@ -755,9 +760,9 @@ OBJS-$(CONFIG_REMOVE_EXTRADATA_BSF)       += remove_extradata_bsf.o
 OBJS-$(CONFIG_TEXT2MOVSUB_BSF)            += movsub_bsf.o
 
 # thread libraries
-OBJS-$(HAVE_PTHREADS)                  += pthread.o
-OBJS-$(HAVE_W32THREADS)                += pthread.o
-OBJS-$(HAVE_OS2THREADS)                += pthread.o
+OBJS-$(HAVE_PTHREADS)                  += pthread.o frame_thread_encoder.o
+OBJS-$(HAVE_W32THREADS)                += pthread.o frame_thread_encoder.o
+OBJS-$(HAVE_OS2THREADS)                += pthread.o frame_thread_encoder.o
 
 # inverse.o contains the ff_inverse table definition, which is used by
 # the FASTDIV macro (from libavutil); since referencing the external

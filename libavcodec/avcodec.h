@@ -260,6 +260,7 @@ enum CodecID {
     CODEC_ID_CDXL,
     CODEC_ID_XBM,
     CODEC_ID_ZEROCODEC,
+    CODEC_ID_MSS1,
     CODEC_ID_Y41P       = MKBETAG('Y','4','1','P'),
     CODEC_ID_ESCAPE130  = MKBETAG('E','1','3','0'),
     CODEC_ID_EXR        = MKBETAG('0','E','X','R'),
@@ -271,6 +272,7 @@ enum CodecID {
     CODEC_ID_V308       = MKBETAG('V','3','0','8'),
     CODEC_ID_V408       = MKBETAG('V','4','0','8'),
     CODEC_ID_YUV4       = MKBETAG('Y','U','V','4'),
+    CODEC_ID_SANM       = MKBETAG('S','A','N','M'),
 
     /* various PCM "codecs" */
     CODEC_ID_FIRST_AUDIO = 0x10000,     ///< A dummy id pointing at the start of audio codecs
@@ -334,6 +336,7 @@ enum CodecID {
     CODEC_ID_ADPCM_IMA_ISS,
     CODEC_ID_ADPCM_G722,
     CODEC_ID_ADPCM_IMA_APC,
+    CODEC_ID_VIMA       = MKBETAG('V','I','M','A'),
 
     /* AMR */
     CODEC_ID_AMR_NB = 0x12000,
@@ -410,6 +413,7 @@ enum CodecID {
     CODEC_ID_BMV_AUDIO,
     CODEC_ID_RALF,
     CODEC_ID_IAC,
+    CODEC_ID_ILBC,
     CODEC_ID_FFWAVESYNTH = MKBETAG('F','F','W','S'),
     CODEC_ID_8SVX_RAW    = MKBETAG('8','S','V','X'),
     CODEC_ID_SONIC       = MKBETAG('S','O','N','C'),
@@ -724,6 +728,10 @@ typedef struct RcOverride{
  * Audio encoder supports receiving a different number of samples in each call.
  */
 #define CODEC_CAP_VARIABLE_FRAME_SIZE 0x10000
+/**
+ * Codec is intra only.
+ */
+#define CODEC_CAP_INTRA_ONLY       0x40000000
 /**
  * Codec is lossless.
  */
@@ -3477,6 +3485,9 @@ void av_destruct_packet(AVPacket *pkt);
 
 /**
  * Initialize optional fields of a packet with default values.
+ *
+ * Note, this does not touch the data and size members, which have to be
+ * initialized separately.
  *
  * @param pkt packet
  */

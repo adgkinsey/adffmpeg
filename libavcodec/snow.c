@@ -31,9 +31,6 @@
 #include "mathops.h"
 #include "h263.h"
 
-#undef NDEBUG
-#include <assert.h>
-
 
 void ff_snow_inner_add_yblock(const uint8_t *obmc, const int obmc_stride, uint8_t * * block, int b_w, int b_h,
                               int src_x, int src_y, int src_stride, slice_buffer * sb, int add, uint8_t * dst8){
@@ -147,7 +144,7 @@ static void mc_block(Plane *p, uint8_t *dst, const uint8_t *src, int stride, int
     int16_t *tmpI= tmpIt;
     uint8_t *tmp2= tmp2t[0];
     const uint8_t *hpel[11];
-    assert(dx<16 && dy<16);
+    av_assert2(dx<16 && dy<16);
     r= brane[dx + 16*dy]&15;
     l= brane[dx + 16*dy]>>4;
 
@@ -328,7 +325,7 @@ void ff_snow_pred_block(SnowContext *s, uint8_t *dst, uint8_t *tmp, int stride, 
         }
     }else{
         uint8_t *src= s->last_picture[block->ref].data[plane_index];
-        const int scale= plane_index ?  s->mv_scale : 2*s->mv_scale;
+        const int scale= plane_index ?  (2*s->mv_scale)>>s->chroma_h_shift : 2*s->mv_scale;
         int mx= block->mx*scale;
         int my= block->my*scale;
         const int dx= mx&15;
@@ -342,10 +339,13 @@ void ff_snow_pred_block(SnowContext *s, uint8_t *dst, uint8_t *tmp, int stride, 
             s->dsp.emulated_edge_mc(tmp + MB_SIZE, src, stride, b_w+HTAPS_MAX-1, b_h+HTAPS_MAX-1, sx, sy, w, h);
             src= tmp + MB_SIZE;
         }
+
+        av_assert2(s->chroma_h_shift == s->chroma_v_shift); // only one mv_scale
+
 //        assert(b_w == b_h || 2*b_w == b_h || b_w == 2*b_h);
 //        assert(!(b_w&(b_w-1)));
-        assert(b_w>1 && b_h>1);
-        assert((tab_index>=0 && tab_index<4) || b_w==32);
+        av_assert2(b_w>1 && b_h>1);
+        av_assert2((tab_index>=0 && tab_index<4) || b_w==32);
         if((dx&3) || (dy&3) || !(b_w == b_h || 2*b_w == b_h || b_w == 2*b_h) || (b_w&(b_w-1)) || !s->plane[plane_index].fast_mc )
             mc_block(&s->plane[plane_index], dst, src, stride, b_w, b_h, dx, dy);
         else if(b_w==32){
@@ -360,7 +360,7 @@ void ff_snow_pred_block(SnowContext *s, uint8_t *dst, uint8_t *tmp, int stride, 
             s->dsp.put_h264_qpel_pixels_tab[tab_index+1][dy+(dx>>2)](dst    ,src + 3       + 3*stride,stride);
             s->dsp.put_h264_qpel_pixels_tab[tab_index+1][dy+(dx>>2)](dst+b_h,src + 3 + b_h + 3*stride,stride);
         }else{
-            assert(2*b_w==b_h);
+            av_assert2(2*b_w==b_h);
             s->dsp.put_h264_qpel_pixels_tab[tab_index  ][dy+(dx>>2)](dst           ,src + 3 + 3*stride           ,stride);
             s->dsp.put_h264_qpel_pixels_tab[tab_index  ][dy+(dx>>2)](dst+b_w*stride,src + 3 + 3*stride+b_w*stride,stride);
         }
@@ -369,7 +369,7 @@ void ff_snow_pred_block(SnowContext *s, uint8_t *dst, uint8_t *tmp, int stride, 
 
 #define mca(dx,dy,b_w)\
 static void mc_block_hpel ## dx ## dy ## b_w(uint8_t *dst, const uint8_t *src, int stride, int h){\
-    assert(h==b_w);\
+    av_assert2(h==b_w);\
     mc_block(NULL, dst, src-(HTAPS_MAX/2-1)-(HTAPS_MAX/2-1)*stride, stride, b_w, b_w, dx, dy);\
 }
 
@@ -513,8 +513,8 @@ static void halfpel_interpol(SnowContext *s, uint8_t *halfpel[4][4], AVFrame *fr
 
     for(p=0; p<3; p++){
         int is_chroma= !!p;
-        int w= s->avctx->width  >>is_chroma;
-        int h= s->avctx->height >>is_chroma;
+        int w= is_chroma ? s->avctx->width >>s->chroma_h_shift : s->avctx->width;
+        int h= is_chroma ? s->avctx->height>>s->chroma_v_shift : s->avctx->height;
         int ls= frame->linesize[p];
         uint8_t *src= frame->data[p];
 
@@ -573,11 +573,11 @@ int ff_snow_frame_start(SnowContext *s){
                           s->current_picture.linesize[0], w   , h   ,
                           EDGE_WIDTH  , EDGE_WIDTH  , EDGE_TOP | EDGE_BOTTOM);
         s->dsp.draw_edges(s->current_picture.data[1],
-                          s->current_picture.linesize[1], w>>1, h>>1,
-                          EDGE_WIDTH/2, EDGE_WIDTH/2, EDGE_TOP | EDGE_BOTTOM);
+                          s->current_picture.linesize[1], w>>s->chroma_h_shift, h>>s->chroma_v_shift,
+                          EDGE_WIDTH>>s->chroma_h_shift, EDGE_WIDTH>>s->chroma_v_shift, EDGE_TOP | EDGE_BOTTOM);
         s->dsp.draw_edges(s->current_picture.data[2],
-                          s->current_picture.linesize[2], w>>1, h>>1,
-                          EDGE_WIDTH/2, EDGE_WIDTH/2, EDGE_TOP | EDGE_BOTTOM);
+                          s->current_picture.linesize[2], w>>s->chroma_h_shift, h>>s->chroma_v_shift,
+                          EDGE_WIDTH>>s->chroma_h_shift, EDGE_WIDTH>>s->chroma_v_shift, EDGE_TOP | EDGE_BOTTOM);
     }
 
     ff_snow_release_buffer(s->avctx);
@@ -636,8 +636,10 @@ av_cold void ff_snow_common_end(SnowContext *s)
     for(i=0; i<MAX_REF_FRAMES; i++){
         av_freep(&s->ref_mvs[i]);
         av_freep(&s->ref_scores[i]);
-        if(s->last_picture[i].data[0])
+        if(s->last_picture[i].data[0]) {
+            av_assert0(s->last_picture[i].data[0] != s->current_picture.data[0]);
             s->avctx->release_buffer(s->avctx, &s->last_picture[i]);
+        }
     }
 
     for(plane_index=0; plane_index<3; plane_index++){
