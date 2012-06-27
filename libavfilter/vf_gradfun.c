@@ -118,7 +118,7 @@ static void filter(GradFunContext *ctx, uint8_t *dst, const uint8_t *src, int wi
     }
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     GradFunContext *gf = ctx->priv;
     float thresh = 1.2;
@@ -142,7 +142,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
     if (HAVE_SSE && cpu_flags & AV_CPU_FLAG_SSE2)
         gf->blur_line = ff_gradfun_blur_line_sse2;
 
-    av_log(ctx, AV_LOG_INFO, "threshold:%.2f radius:%d\n", thresh, gf->radius);
+    av_log(ctx, AV_LOG_VERBOSE, "threshold:%.2f radius:%d\n", thresh, gf->radius);
 
     return 0;
 }

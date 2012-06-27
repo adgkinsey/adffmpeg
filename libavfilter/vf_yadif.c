@@ -397,7 +397,7 @@ static int query_formats(AVFilterContext *ctx)
     return 0;
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     YADIFContext *yadif = ctx->priv;
     int cpu_flags = av_get_cpu_flags();
@@ -417,7 +417,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
     else if (HAVE_MMX && cpu_flags & AV_CPU_FLAG_MMX)
         yadif->filter_line = ff_yadif_filter_line_mmx;
 
-    av_log(ctx, AV_LOG_INFO, "mode:%d parity:%d auto_enable:%d\n", yadif->mode, yadif->parity, yadif->auto_enable);
+    av_log(ctx, AV_LOG_VERBOSE, "mode:%d parity:%d auto_enable:%d\n", yadif->mode, yadif->parity, yadif->auto_enable);
 
     return 0;
 }

@@ -46,9 +46,6 @@ AVBufferSinkParams *av_buffersink_params_alloc(void);
 typedef struct {
     const enum AVSampleFormat *sample_fmts; ///< list of allowed sample formats, terminated by AV_SAMPLE_FMT_NONE
     const int64_t *channel_layouts;         ///< list of allowed channel layouts, terminated by -1
-#if FF_API_PACKING
-    const int *packing_fmts;                ///< list of allowed packing formats
-#endif
 } AVABufferSinkParams;
 
 /**
@@ -91,14 +88,15 @@ int av_buffersink_get_buffer_ref(AVFilterContext *buffer_sink,
  */
 int av_buffersink_poll_frame(AVFilterContext *ctx);
 
-#if FF_API_OLD_VSINK_API
 /**
- * @deprecated Use av_buffersink_get_buffer_ref() instead.
+ * Get the frame rate of the input.
  */
-attribute_deprecated
-int av_vsink_buffer_get_video_buffer_ref(AVFilterContext *buffer_sink,
-                                         AVFilterBufferRef **picref, int flags);
-#endif
+AVRational av_buffersink_get_frame_rate(AVFilterContext *ctx);
+
+/**
+ * @defgroup libav_api Libav API
+ * @{
+ */
 
 /**
  * Get a buffer with filtered data from sink and put it in buf.
@@ -134,8 +132,7 @@ int av_buffersink_read_samples(AVFilterContext *ctx, AVFilterBufferRef **buf,
                                int nb_samples);
 
 /**
- * Get the frame rate of the input.
+ * @}
  */
-AVRational av_buffersink_get_frame_rate(AVFilterContext *ctx);
 
 #endif /* AVFILTER_BUFFERSINK_H */

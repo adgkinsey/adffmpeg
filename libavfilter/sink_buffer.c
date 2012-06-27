@@ -161,32 +161,23 @@ int av_buffersink_poll_frame(AVFilterContext *ctx)
     return av_fifo_size(buf->fifo)/sizeof(AVFilterBufferRef *) + ff_poll_frame(inlink);
 }
 
-#if FF_API_OLD_VSINK_API
-int av_vsink_buffer_get_video_buffer_ref(AVFilterContext *ctx,
-                                         AVFilterBufferRef **picref, int flags)
-{
-    return av_buffersink_get_buffer_ref(ctx, picref, flags);
-}
-#endif
-
 #if CONFIG_BUFFERSINK_FILTER
 
-static av_cold int vsink_init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int vsink_init(AVFilterContext *ctx, const char *args)
 {
     BufferSinkContext *buf = ctx->priv;
-    av_unused AVBufferSinkParams *params;
+    AVBufferSinkParams *params = NULL;
 
-    if (!opaque) {
+//     if(args && !strcmp(args, "opaque"))
+//         params = (AVBufferSinkParams *)(args+7);
+
+    if (!params) {
         av_log(ctx, AV_LOG_WARNING,
                "No opaque field provided\n");
         buf->pixel_fmts = NULL;
     } else {
-#if FF_API_OLD_VSINK_API
-        const int *pixel_fmts = (const enum PixelFormat *)opaque;
-#else
-        params = (AVBufferSinkParams *)opaque;
         const int *pixel_fmts = params->pixel_fmts;
-#endif
+
         buf->pixel_fmts = ff_copy_int_list(pixel_fmts);
         if (!buf->pixel_fmts)
             return AVERROR(ENOMEM);
@@ -240,27 +231,31 @@ static void filter_samples(AVFilterLink *link, AVFilterBufferRef *samplesref)
     end_frame(link);
 }
 
-static av_cold int asink_init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int asink_init(AVFilterContext *ctx, const char *args)
 {
     BufferSinkContext *buf = ctx->priv;
-    AVABufferSinkParams *params;
+    AVABufferSinkParams *params = NULL;
 
-    if (!opaque) {
-        av_log(ctx, AV_LOG_ERROR,
-               "No opaque field provided, an AVABufferSinkParams struct is required\n");
-        return AVERROR(EINVAL);
-    } else
-        params = (AVABufferSinkParams *)opaque;
+//     if(args && !strcmp(args, "opaque"))
+//         params = (AVABufferSinkParams *)(args+7);
 
-    buf->sample_fmts     = ff_copy_int_list  (params->sample_fmts);
-    buf->channel_layouts = ff_copy_int64_list(params->channel_layouts);
-    if (!buf->sample_fmts || !buf->channel_layouts) {
-        av_freep(&buf->sample_fmts);
-        av_freep(&buf->channel_layouts);
-        return AVERROR(ENOMEM);
+    if (params && params->sample_fmts) {
+        buf->sample_fmts     = ff_copy_int_list  (params->sample_fmts);
+        if (!buf->sample_fmts)
+            goto fail_enomem;
     }
+    if (params && params->channel_layouts) {
+        buf->channel_layouts = ff_copy_int64_list(params->channel_layouts);
+        if (!buf->channel_layouts)
+            goto fail_enomem;
+    }
+    if (!common_init(ctx))
+        return 0;
 
-    return common_init(ctx);
+fail_enomem:
+    av_freep(&buf->sample_fmts);
+    av_freep(&buf->channel_layouts);
+    return AVERROR(ENOMEM);
 }
 
 static av_cold void asink_uninit(AVFilterContext *ctx)
@@ -278,14 +273,17 @@ static int asink_query_formats(AVFilterContext *ctx)
     AVFilterFormats *formats = NULL;
     AVFilterChannelLayouts *layouts = NULL;
 
+    if (buf->sample_fmts) {
     if (!(formats = ff_make_format_list(buf->sample_fmts)))
         return AVERROR(ENOMEM);
     ff_set_common_formats(ctx, formats);
+    }
 
+    if (buf->channel_layouts) {
     if (!(layouts = avfilter_make_format64_list(buf->channel_layouts)))
         return AVERROR(ENOMEM);
     ff_set_common_channel_layouts(ctx, layouts);
-    ff_set_common_samplerates          (ctx, ff_all_samplerates());
+    }
 
     return 0;
 }

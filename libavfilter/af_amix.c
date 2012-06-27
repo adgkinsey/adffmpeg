@@ -255,7 +255,7 @@ static int config_output(AVFilterLink *outlink)
     av_get_channel_layout_string(buf, sizeof(buf), -1, outlink->channel_layout);
 
     av_log(ctx, AV_LOG_VERBOSE,
-           "inputs:%d fmt:%s srate:%"PRId64" cl:%s\n", s->nb_inputs,
+           "inputs:%d fmt:%s srate:%d cl:%s\n", s->nb_inputs,
            av_get_sample_fmt_name(outlink->format), outlink->sample_rate, buf);
 
     return 0;
@@ -473,7 +473,7 @@ static void filter_samples(AVFilterLink *inlink, AVFilterBufferRef *buf)
     avfilter_unref_buffer(buf);
 }
 
-static int init(AVFilterContext *ctx, const char *args, void *opaque)
+static int init(AVFilterContext *ctx, const char *args)
 {
     MixContext *s = ctx->priv;
     int i, ret;

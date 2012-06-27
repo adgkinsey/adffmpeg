@@ -33,6 +33,7 @@
 #include "internal.h"
 
 #include "libavutil/audioconvert.h"
+#include "libavutil/avassert.h"
 #include "libavutil/log.h"
 
 static const AVClass filtergraph_class = {
@@ -47,9 +48,7 @@ AVFilterGraph *avfilter_graph_alloc(void)
     AVFilterGraph *ret = av_mallocz(sizeof(AVFilterGraph));
     if (!ret)
         return NULL;
-#if FF_API_GRAPH_AVCLASS
     ret->av_class = &filtergraph_class;
-#endif
     return ret;
 }
 
@@ -650,7 +649,7 @@ static void swap_sample_fmts_on_filter(AVFilterContext *filter)
 
     for (i = 0; i < filter->nb_outputs; i++) {
         AVFilterLink *outlink = filter->outputs[i];
-        int best_idx, best_score = INT_MIN;
+        int best_idx = -1, best_score = INT_MIN;
 
         if (outlink->type != AVMEDIA_TYPE_AUDIO ||
             outlink->in_formats->format_count < 2)
@@ -683,6 +682,7 @@ static void swap_sample_fmts_on_filter(AVFilterContext *filter)
                 best_idx   = j;
             }
         }
+        av_assert0(best_idx >= 0);
         FFSWAP(int, outlink->in_formats->formats[0],
                outlink->in_formats->formats[best_idx]);
     }
