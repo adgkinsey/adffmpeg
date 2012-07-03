@@ -176,6 +176,8 @@ static int print_stats = 1;
 static int debug_ts = 0;
 static int current_time;
 
+static uint8_t *subtitle_out;
+
 #if HAVE_PTHREADS
 /* signal to input threads that they should exit; set by the main thread */
 static int transcoding_finished;
@@ -531,8 +533,14 @@ static void reset_options(OptionsContext *o, int is_input)
 
     memset(o, 0, sizeof(*o));
 
-    if(is_input) o->recording_time = bak.recording_time;
-    else         o->recording_time = INT64_MAX;
+    if (is_input) {
+        o->recording_time = bak.recording_time;
+        if (o->recording_time != INT64_MAX)
+            av_log(NULL, AV_LOG_WARNING,
+                   "-t is not an input option, keeping it for the next output;"
+                   " consider fixing your command line.\n");
+    } else
+        o->recording_time = INT64_MAX;
     o->mux_max_delay  = 0.7;
     o->limit_filesize = UINT64_MAX;
     o->chapters_input_file = INT_MAX;
@@ -874,7 +882,7 @@ static int configure_output_audio_filter(FilterGraph *fg, OutputFilter *ofilter,
 
     snprintf(name, sizeof(name), "output stream %d:%d", ost->file_index, ost->index);
     ret = avfilter_graph_create_filter(&ofilter->filter,
-                                       avfilter_get_by_name("abuffersink_old"),
+                                       avfilter_get_by_name("abuffersink"),
                                        name, NULL, NULL, fg->graph);
     if (ret < 0)
         return ret;
@@ -1368,6 +1376,8 @@ void av_noreturn exit_program(int ret)
     }
     av_freep(&filtergraphs);
 
+    av_freep(&subtitle_out);
+
     /* close files */
     for (i = 0; i < nb_output_files; i++) {
         AVFormatContext *s = output_files[i]->ctx;
@@ -1643,7 +1653,6 @@ static void do_subtitle_out(AVFormatContext *s,
                             AVSubtitle *sub,
                             int64_t pts)
 {
-    static uint8_t *subtitle_out = NULL;
     int subtitle_out_max_size = 1024 * 1024;
     int subtitle_out_size, nb, i;
     AVCodecContext *enc;
@@ -1930,15 +1939,8 @@ static int poll_filters(void)
             filtered_frame = ost->filtered_frame;
 
             while (!ost->is_past_recording_time) {
-                if (ost->enc->type == AVMEDIA_TYPE_AUDIO &&
-                    !(ost->enc->capabilities & CODEC_CAP_VARIABLE_FRAME_SIZE))
-                    ret = av_buffersink_read_samples(ost->filter->filter, &picref,
-                                                    ost->st->codec->frame_size);
-                else if(ost->enc->type == AVMEDIA_TYPE_AUDIO)
-                    ret = av_buffersink_read(ost->filter->filter, &picref);
-                else
-                    ret = av_buffersink_get_buffer_ref(ost->filter->filter, &picref,
-                                                       AV_BUFFERSINK_FLAG_NO_REQUEST);
+                ret = av_buffersink_get_buffer_ref(ost->filter->filter, &picref,
+                                                   AV_BUFFERSINK_FLAG_NO_REQUEST);
                 if (ret < 0) {
                     if (ret != AVERROR(EAGAIN) && ret != AVERROR_EOF) {
                         char buf[256];
@@ -2423,10 +2425,20 @@ static int decode_audio(InputStream *ist, AVPacket *pkt, int *got_output)
         ist->resample_channels       = avctx->channels;
 
         for (i = 0; i < nb_filtergraphs; i++)
-            if (ist_in_filtergraph(filtergraphs[i], ist) &&
-                configure_filtergraph(filtergraphs[i]) < 0) {
-                av_log(NULL, AV_LOG_FATAL, "Error reinitializing filters!\n");
-                exit_program(1);
+            if (ist_in_filtergraph(filtergraphs[i], ist)) {
+                FilterGraph *fg = filtergraphs[i];
+                int j;
+                if (configure_filtergraph(fg) < 0) {
+                    av_log(NULL, AV_LOG_FATAL, "Error reinitializing filters!\n");
+                    exit_program(1);
+                }
+                for (j = 0; j < fg->nb_outputs; j++) {
+                    OutputStream *ost = fg->outputs[j]->ost;
+                    if (ost->enc->type == AVMEDIA_TYPE_AUDIO &&
+                        !(ost->enc->capabilities & CODEC_CAP_VARIABLE_FRAME_SIZE))
+                        av_buffersink_set_frame_size(ost->filter->filter,
+                                                     ost->st->codec->frame_size);
+                }
             }
     }
 
@@ -2783,10 +2795,13 @@ static void parse_forced_key_frames(char *kf, OutputStream *ost,
         av_log(NULL, AV_LOG_FATAL, "Could not allocate forced key frames array.\n");
         exit_program(1);
     }
+    p = kf;
     for (i = 0; i < n; i++) {
-        p = i ? strchr(p, ',') + 1 : kf;
+        char *next = strchr(p, ',');
+        if (next) *next++ = 0;
         t = parse_time_or_die("force_key_frames", p, 1);
         ost->forced_kf_pts[i] = av_rescale_q(t, AV_TIME_BASE_Q, avctx->time_base);
+        p = next;
     }
 }
 
@@ -3096,6 +3111,10 @@ static int transcode_init(void)
                 ret = AVERROR(EINVAL);
                 goto dump_format;
             }
+            if (ost->enc->type == AVMEDIA_TYPE_AUDIO &&
+                !(ost->enc->capabilities & CODEC_CAP_VARIABLE_FRAME_SIZE))
+                av_buffersink_set_frame_size(ost->filter->filter,
+                                             ost->st->codec->frame_size);
             assert_codec_experimental(ost->st->codec, 1);
             assert_avoptions(ost->opts);
             if (ost->st->codec->bit_rate && ost->st->codec->bit_rate < 1000)
@@ -4130,7 +4149,7 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
         ist->file_index = nb_input_files;
         ist->discard = 1;
         st->discard  = AVDISCARD_ALL;
-        ist->opts = filter_codec_opts(codec_opts, choose_decoder(o, ic, st), ic, st);
+        ist->opts = filter_codec_opts(codec_opts, ist->st->codec->codec_id, ic, st, choose_decoder(o, ic, st));
 
         ist->ts_scale = 1.0;
         MATCH_PER_STREAM_OPT(ts_scale, dbl, ist->ts_scale, ic, st);
@@ -4486,7 +4505,7 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
     st->codec->codec_type = type;
     choose_encoder(o, oc, ost);
     if (ost->enc) {
-        ost->opts  = filter_codec_opts(codec_opts, ost->enc, oc, st);
+        ost->opts  = filter_codec_opts(codec_opts, ost->enc->id, oc, st, ost->enc);
     }
 
     avcodec_get_context_defaults3(st->codec, ost->enc);
@@ -4937,6 +4956,9 @@ static void init_output_filter(OutputFilter *ofilter, OptionsContext *o,
                "cannot be used together.\n", ost->file_index, ost->index);
         exit_program(1);
     }
+    if (o->recording_time != INT64_MAX)
+        av_log(NULL, AV_LOG_WARNING,
+               "-t does not work with -filter_complex (yet).\n");
 
     if (configure_output_filter(ofilter->graph, ofilter, ofilter->out_tmp) < 0) {
         av_log(NULL, AV_LOG_FATAL, "Error configuring filter.\n");
@@ -5242,6 +5264,7 @@ loop_end:
                      AV_DICT_DONT_OVERWRITE);
         if(o->recording_time != INT64_MAX)
             av_dict_set(&oc->metadata, "duration", NULL, 0);
+        av_dict_set(&oc->metadata, "creation_time", NULL, 0);
     }
     if (!o->metadata_streams_manual)
         for (i = output_files[nb_output_files - 1]->ost_index; i < nb_output_streams; i++) {

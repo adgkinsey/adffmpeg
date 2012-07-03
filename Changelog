@@ -16,6 +16,8 @@ version next:
 - audio channel mapping filter
 - showwaves filter
 - LucasArts SMUSH playback support
+- SAMI demuxer and decoder
+- RealText demuxer and decoder
 
 
 version 0.11:

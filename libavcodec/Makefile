@@ -379,6 +379,7 @@ OBJS-$(CONFIG_RA_288_DECODER)          += ra288.o celp_math.o celp_filters.o
 OBJS-$(CONFIG_RALF_DECODER)            += ralf.o
 OBJS-$(CONFIG_RAWVIDEO_DECODER)        += rawdec.o
 OBJS-$(CONFIG_RAWVIDEO_ENCODER)        += rawenc.o
+OBJS-$(CONFIG_REALTEXT_DECODER)        += realtextdec.o ass.o
 OBJS-$(CONFIG_RL2_DECODER)             += rl2.o
 OBJS-$(CONFIG_ROQ_DECODER)             += roqvideodec.o roqvideo.o
 OBJS-$(CONFIG_ROQ_ENCODER)             += roqvideoenc.o roqvideo.o elbg.o
@@ -393,6 +394,7 @@ OBJS-$(CONFIG_RV30_DECODER)            += rv30.o rv34.o rv30dsp.o rv34dsp.o \
                                           mpegvideo.o error_resilience.o
 OBJS-$(CONFIG_RV40_DECODER)            += rv40.o rv34.o rv34dsp.o rv40dsp.o \
                                           mpegvideo.o error_resilience.o
+OBJS-$(CONFIG_SAMI_DECODER)            += samidec.o ass.o
 OBJS-$(CONFIG_S302M_DECODER)           += s302m.o
 OBJS-$(CONFIG_SANM_DECODER)            += sanm.o
 OBJS-$(CONFIG_SGI_DECODER)             += sgidec.o

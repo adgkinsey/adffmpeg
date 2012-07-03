@@ -56,6 +56,7 @@ AVABufferSinkParams *av_abuffersink_params_alloc(void)
 
 typedef struct {
     AVFifoBuffer *fifo;                      ///< FIFO buffer of video frame references
+    unsigned warning_limit;
 
     /* only used for video */
     enum PixelFormat *pixel_fmts;           ///< list of accepted pixel formats, must be terminated with -1
@@ -76,6 +77,7 @@ static av_cold int common_init(AVFilterContext *ctx)
         av_log(ctx, AV_LOG_ERROR, "Failed to allocate fifo\n");
         return AVERROR(ENOMEM);
     }
+    buf->warning_limit = 100;
     return 0;
 }
 
@@ -113,6 +115,22 @@ static void end_frame(AVFilterLink *inlink)
     /* cache frame */
     av_fifo_generic_write(buf->fifo,
                           &inlink->cur_buf, sizeof(AVFilterBufferRef *), NULL);
+    if (buf->warning_limit &&
+        av_fifo_size(buf->fifo) / sizeof(AVFilterBufferRef *) >= buf->warning_limit) {
+        av_log(ctx, AV_LOG_WARNING,
+               "%d buffers queued in %s, something may be wrong.\n",
+               buf->warning_limit,
+               (char *)av_x_if_null(ctx->name, ctx->filter->name));
+        buf->warning_limit *= 10;
+    }
+}
+
+void av_buffersink_set_frame_size(AVFilterContext *ctx, unsigned frame_size)
+{
+    AVFilterLink *inlink = ctx->inputs[0];
+
+    inlink->min_samples = inlink->max_samples =
+    inlink->partial_buf_size = frame_size;
 }
 
 int av_buffersink_get_buffer_ref(AVFilterContext *ctx,
