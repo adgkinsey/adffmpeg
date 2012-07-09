@@ -1096,6 +1096,7 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
                 int64_t old_diff= FFABS(st->cur_dts - duration - pkt->pts);
                 int64_t new_diff= FFABS(st->cur_dts - pkt->pts);
                 if(   old_diff < new_diff && old_diff < (duration>>3)
+                   && st->codec->codec_type == AVMEDIA_TYPE_VIDEO
                    && (!strcmp(s->iformat->name, "mpeg") ||
                        !strcmp(s->iformat->name, "mpegts"))){
                     pkt->pts += duration;
@@ -2284,8 +2285,18 @@ static int has_codec_parameters(AVStream *st)
 
 static int has_decode_delay_been_guessed(AVStream *st)
 {
-    return st->codec->codec_id != CODEC_ID_H264 ||
-        st->info->nb_decoded_frames >= 6;
+    if(st->codec->codec_id != CODEC_ID_H264) return 1;
+#if CONFIG_H264_DECODER
+    if(st->codec->has_b_frames &&
+       avpriv_h264_has_num_reorder_frames(st->codec) == st->codec->has_b_frames)
+        return 1;
+#endif
+    if(st->codec->has_b_frames<3)
+        return st->info->nb_decoded_frames >= 6;
+    else if(st->codec->has_b_frames<4)
+        return st->info->nb_decoded_frames >= 18;
+    else
+        return st->info->nb_decoded_frames >= 20;
 }
 
 /* returns 1 or 0 if or if not decoded data was returned, or a negative error */

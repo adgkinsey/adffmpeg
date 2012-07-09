@@ -180,6 +180,7 @@ External library support:
   --enable-libfaac         enable FAAC support via libfaac [no]
   --enable-libfreetype     enable libfreetype [no]
   --enable-libgsm          enable GSM support via libgsm [no]
+  --enable-libiec61883     enable iec61883 via libiec61883 [no]
   --enable-libilbc         enable iLBC de/encoding via libilbc [no]
   --enable-libmodplug      enable ModPlug via libmodplug [no]
   --enable-libmp3lame      enable MP3 encoding via libmp3lame [no]
@@ -287,6 +288,7 @@ Developer options (useful when working on FFmpeg itself):
   --disable-stripping      disable stripping of executables and shared libraries
   --assert-level=level     0(default), 1 or 2, amount of assertion testing,
                            2 causes a slowdown at runtime.
+  --enable-memory-poisoning fill heap uninitialized allocated space with arbitrary data
   --valgrind=VALGRIND      run "make fate" tests through valgrind to detect memory
                            leaks and errors, using the specified valgrind binary.
                            Cannot be combined with --target-exec
@@ -715,6 +717,20 @@ check_ld(){
     check_cmd $ld $LDFLAGS $flags -o $TMPE $TMPO $libs $extralibs
 }
 
+check_code(){
+    log check_code "$@"
+    check=$1
+    headers=$2
+    code=$3
+    shift 3
+    {
+        for hdr in $headers; do
+            echo "#include <$hdr>"
+        done
+        echo "int main(void) { $code; return 0; }"
+    } | check_$check "$@"
+}
+
 check_cppflags(){
     log check_cppflags "$@"
     set -- $($filter_cppflags "$@")
@@ -911,15 +927,7 @@ check_type(){
     type=$2
     shift 2
     disable_safe "$type"
-    incs=""
-    for hdr in $headers; do
-        incs="$incs
-#include <$hdr>"
-    done
-    check_cc "$@" <<EOF && enable_safe "$type"
-$incs
-$type v;
-EOF
+    check_code cc "$headers" "$type v" "$@" && enable_safe "$type"
 }
 
 check_struct(){
@@ -929,15 +937,8 @@ check_struct(){
     member=$3
     shift 3
     disable_safe "${struct}_${member}"
-    incs=""
-    for hdr in $headers; do
-        incs="$incs
-#include <$hdr>"
-    done
-    check_cc "$@" <<EOF && enable_safe "${struct}_${member}"
-$incs
-const void *p = &(($struct *)0)->$member;
-EOF
+    check_code cc "$headers" "const void *p = &(($struct *)0)->$member" "$@" &&
+        enable_safe "${struct}_${member}"
 }
 
 require(){
@@ -1055,6 +1056,7 @@ CONFIG_LIST="
     libfaac
     libfreetype
     libgsm
+    libiec61883
     libilbc
     libmodplug
     libmp3lame
@@ -1082,6 +1084,7 @@ CONFIG_LIST="
     lsp
     mdct
     memalign_hack
+    memory_poisoning
     mpegaudiodsp
     network
     nonfree
@@ -1252,6 +1255,7 @@ HAVE_LIST="
     poll_h
     posix_memalign
     pthread_cancel
+    rdtsc
     round
     roundf
     sched_getaffinity
@@ -1679,6 +1683,7 @@ dshow_indev_deps="IBaseFilter"
 dshow_indev_extralibs="-lpsapi -lole32 -lstrmiids -luuid"
 dv1394_indev_deps="dv1394 dv_demuxer"
 fbdev_indev_deps="linux_fb_h"
+iec61883_indev_deps="libiec61883"
 jack_indev_deps="jack_jack_h sem_timedwait"
 lavfi_indev_deps="avfilter"
 libcdio_indev_deps="libcdio"
@@ -1770,7 +1775,7 @@ postproc_deps="gpl"
 # programs
 ffmpeg_deps="avcodec avfilter avformat swscale swresample"
 ffmpeg_select="buffersink_filter format_filter aformat_filter
-               setpts_filter null_filter anull_filter"
+               setpts_filter null_filter anull_filter abuffersink_filter"
 ffplay_deps="avcodec avformat swscale swresample sdl"
 ffplay_select="buffersink_filter rdft"
 ffprobe_deps="avcodec avformat"
@@ -2692,9 +2697,7 @@ case "$arch" in
     ;;
     x86)
         subarch="x86_32"
-        check_cc <<EOF && subarch="x86_64"
-        int test[(int)sizeof(char*) - 7];
-EOF
+        check_code cc "" "int test[(int)sizeof(char*) - 7]" && subarch="x86_64"
         if test "$subarch" = "x86_64"; then
             spic=$shared
         fi
@@ -2952,6 +2955,8 @@ extern_prefix=${sym%%ff_extern*}
 check_cc <<EOF && enable inline_asm
 void foo(void) { __asm__ volatile ("" ::); }
 EOF
+
+check_code cc intrin.h "__rdtsc()" && enable rdtsc
 
 _restrict=
 for restrict_keyword in restrict __restrict__ __restrict; do
@@ -3291,6 +3296,7 @@ enabled avisynth   && require2 vfw32 "windows.h vfw.h" AVIFileInit -lavifil32
 enabled fontconfig && require_pkg_config fontconfig "fontconfig/fontconfig.h" FcInit
 enabled frei0r     && { check_header frei0r.h || die "ERROR: frei0r.h header not found"; }
 enabled gnutls     && require_pkg_config gnutls gnutls/gnutls.h gnutls_global_init
+enabled libiec61883 && require libiec61883 libiec61883/iec61883.h iec61883_cmp_connect -lraw1394 -lavc1394 -lrom1394 -liec61883
 enabled libaacplus && require  "libaacplus >= 2.0.0" aacplus.h aacplusEncOpen -laacplus
 enabled libass     && require_pkg_config libass ass/ass.h ass_library_init
 enabled libbluray  && require libbluray libbluray/bluray.h bd_open -lbluray
@@ -3676,6 +3682,7 @@ echo "libcelt enabled           ${libcelt-no}"
 echo "libdc1394 support         ${libdc1394-no}"
 echo "libfaac enabled           ${libfaac-no}"
 echo "libgsm enabled            ${libgsm-no}"
+echo "libiec61883 support       ${libiec61883-no}"
 echo "libilbc enabled           ${libilbc-no}"
 echo "libmodplug enabled        ${libmodplug-no}"
 echo "libmp3lame enabled        ${libmp3lame-no}"
@@ -3820,6 +3827,16 @@ NOREDZONE_FLAGS=$noredzone_flags
 EOF
 
 get_version(){
+    lcname=$1
+    name=$(toupper $lcname)
+    file=$source_path/$lcname/version.h
+    eval $(grep "#define ${name}_VERSION_M" "$file" | awk '{ print $2"="$3 }')
+    eval ${name}_VERSION=\$${name}_VERSION_MAJOR.\$${name}_VERSION_MINOR.\$${name}_VERSION_MICRO
+    eval echo "${lcname}_VERSION=\$${name}_VERSION" >> config.mak
+    eval echo "${lcname}_VERSION_MAJOR=\$${name}_VERSION_MAJOR" >> config.mak
+}
+
+get_version_old(){
     name=$1
     file=$source_path/$2
 # This condition will be removed when we stop supporting old libpostproc versions
@@ -3832,15 +3849,16 @@ fi
     eval echo "${lcname}_VERSION_MAJOR=\$${name}_VERSION_MAJOR" >> config.mak
 }
 
-get_version LIBAVCODEC  libavcodec/version.h
-get_version LIBAVDEVICE libavdevice/avdevice.h
-get_version LIBAVFILTER libavfilter/version.h
-get_version LIBAVFORMAT libavformat/version.h
-get_version LIBAVRESAMPLE libavresample/version.h
-get_version LIBAVUTIL   libavutil/version.h
-get_version LIBPOSTPROC libpostproc/postprocess.h
-get_version LIBSWRESAMPLE libswresample/swresample.h
-get_version LIBSWSCALE  libswscale/swscale.h
+get_version_old LIBPOSTPROC libpostproc/postprocess.h
+get_version_old LIBSWRESAMPLE libswresample/swresample.h
+
+get_version libavcodec
+get_version libavdevice
+get_version libavfilter
+get_version libavformat
+get_version libavresample
+get_version libavutil
+get_version libswscale
 
 cat > $TMPH <<EOF
 /* Automatically generated by configure - do not modify! */
@@ -3863,15 +3881,6 @@ test -n "$assert_level" &&
 
 test -n "$malloc_prefix" &&
     echo "#define MALLOC_PREFIX $malloc_prefix" >>$TMPH
-
-if enabled small || disabled optimizations; then
-    echo "#undef  av_always_inline"  >> $TMPH
-    if enabled small; then
-        echo "#define av_always_inline inline"  >> $TMPH
-    else
-        echo "#define av_always_inline av_unused"  >> $TMPH
-    fi
-fi
 
 if enabled yasm; then
     append config_files $TMPASM

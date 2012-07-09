@@ -54,6 +54,7 @@ OBJS-$(CONFIG_AMIX_FILTER)                   += af_amix.o
 OBJS-$(CONFIG_ANULL_FILTER)                  += af_anull.o
 OBJS-$(CONFIG_ARESAMPLE_FILTER)              += af_aresample.o
 OBJS-$(CONFIG_ASETNSAMPLES_FILTER)           += af_asetnsamples.o
+OBJS-$(CONFIG_ASETTB_FILTER)                 += f_settb.o
 OBJS-$(CONFIG_ASHOWINFO_FILTER)              += af_ashowinfo.o
 OBJS-$(CONFIG_ASPLIT_FILTER)                 += split.o
 OBJS-$(CONFIG_ASTREAMSYNC_FILTER)            += af_astreamsync.o
@@ -117,7 +118,7 @@ OBJS-$(CONFIG_SETDAR_FILTER)                 += vf_aspect.o
 OBJS-$(CONFIG_SETFIELD_FILTER)               += vf_setfield.o
 OBJS-$(CONFIG_SETPTS_FILTER)                 += vf_setpts.o
 OBJS-$(CONFIG_SETSAR_FILTER)                 += vf_aspect.o
-OBJS-$(CONFIG_SETTB_FILTER)                  += vf_settb.o
+OBJS-$(CONFIG_SETTB_FILTER)                  += f_settb.o
 OBJS-$(CONFIG_SHOWINFO_FILTER)               += vf_showinfo.o
 OBJS-$(CONFIG_SLICIFY_FILTER)                += vf_slicify.o
 OBJS-$(CONFIG_SPLIT_FILTER)                  += split.o
@@ -200,7 +201,5 @@ OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/pullup.o
 # transmedia filters
 OBJS-$(CONFIG_SHOWWAVES_FILTER)              += avf_showwaves.o
 
-TESTPROGS = drawutils formats
-
-TOOLS = graph2dot                                                       \
-        lavfi-showfiltfmts                                              \
+TOOLS     = graph2dot
+TESTPROGS = drawutils filtfmts formats

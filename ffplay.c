@@ -281,6 +281,7 @@ static int exit_on_keydown;
 static int exit_on_mousedown;
 static int loop = 1;
 static int framedrop = -1;
+static int infinite_buffer = 0;
 static enum ShowMode show_mode = SHOW_MODE_NONE;
 static const char *audio_codec_name;
 static const char *subtitle_codec_name;
@@ -1632,6 +1633,7 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
 
 static int video_thread(void *arg)
 {
+    AVPacket pkt = { 0 };
     VideoState *is = arg;
     AVFrame *frame = avcodec_alloc_frame();
     int64_t pts_int = AV_NOPTS_VALUE, pos = -1;
@@ -1655,7 +1657,6 @@ static int video_thread(void *arg)
 #endif
 
     for (;;) {
-        AVPacket pkt;
 #if CONFIG_AVFILTER
         AVFilterBufferRef *picref;
         AVRational tb;
@@ -1664,14 +1665,14 @@ static int video_thread(void *arg)
             SDL_Delay(10);
 
         avcodec_get_frame_defaults(frame);
+        av_free_packet(&pkt);
+
         ret = get_video_frame(is, frame, &pts_int, &pkt);
         if (ret < 0)
             goto the_end;
 
-        if (!ret) {
-            av_free_packet(&pkt);
+        if (!ret)
             continue;
-        }
 
 #if CONFIG_AVFILTER
         if (   last_w != is->video_st->codec->width
@@ -1766,6 +1767,7 @@ static int video_thread(void *arg)
     av_freep(&vfilters);
     avfilter_graph_free(&graph);
 #endif
+    av_free_packet(&pkt);
     av_free(frame);
     return 0;
 }
@@ -2503,10 +2505,11 @@ static int read_thread(void *arg)
         }
 
         /* if the queue are full, no need to read more */
-        if (   is->audioq.size + is->videoq.size + is->subtitleq.size > MAX_QUEUE_SIZE
+        if (!infinite_buffer &&
+              (is->audioq.size + is->videoq.size + is->subtitleq.size > MAX_QUEUE_SIZE
             || (   (is->audioq   .nb_packets > MIN_FRAMES || is->audio_stream < 0 || is->audioq.abort_request)
                 && (is->videoq   .nb_packets > MIN_FRAMES || is->video_stream < 0 || is->videoq.abort_request)
-                && (is->subtitleq.nb_packets > MIN_FRAMES || is->subtitle_stream < 0 || is->subtitleq.abort_request))) {
+                && (is->subtitleq.nb_packets > MIN_FRAMES || is->subtitle_stream < 0 || is->subtitleq.abort_request)))) {
             /* wait 10 ms */
             SDL_Delay(10);
             continue;
@@ -2993,6 +2996,7 @@ static const OptionDef options[] = {
     { "exitonmousedown", OPT_BOOL | OPT_EXPERT, { (void*)&exit_on_mousedown }, "exit on mouse down", "" },
     { "loop", OPT_INT | HAS_ARG | OPT_EXPERT, { (void*)&loop }, "set number of times the playback shall be looped", "loop count" },
     { "framedrop", OPT_BOOL | OPT_EXPERT, { (void*)&framedrop }, "drop frames when cpu is too slow", "" },
+    { "infbuf", OPT_BOOL | OPT_EXPERT, { (void*)&infinite_buffer }, "don't limit the input buffer size (useful with realtime streams)", "" },
     { "window_title", OPT_STRING | HAS_ARG, { (void*)&window_title }, "set window title", "window title" },
 #if CONFIG_AVFILTER
     { "vf", OPT_STRING | HAS_ARG, { (void*)&vfilters }, "video filters", "filter list" },

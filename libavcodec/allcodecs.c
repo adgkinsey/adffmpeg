@@ -165,6 +165,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (MPEG_VDPAU, mpeg_vdpau);
     REGISTER_DECODER (MPEG1_VDPAU, mpeg1_vdpau);
     REGISTER_DECODER (MPEG2_CRYSTALHD, mpeg2_crystalhd);
+    REGISTER_DECODER (MSA1, msa1);
     REGISTER_DECODER (MSMPEG4_CRYSTALHD, msmpeg4_crystalhd);
     REGISTER_DECODER (MSMPEG4V1, msmpeg4v1);
     REGISTER_ENCDEC  (MSMPEG4V2, msmpeg4v2);
@@ -175,6 +176,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (MSZH, mszh);
     REGISTER_DECODER (MXPEG, mxpeg);
     REGISTER_DECODER (NUV, nuv);
+    REGISTER_DECODER (PAF_VIDEO, paf_video);
     REGISTER_ENCDEC  (PAM, pam);
     REGISTER_ENCDEC  (PBM, pbm);
     REGISTER_ENCDEC  (PCX, pcx);
@@ -306,6 +308,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (MPC7, mpc7);
     REGISTER_DECODER (MPC8, mpc8);
     REGISTER_ENCDEC  (NELLYMOSER, nellymoser);
+    REGISTER_DECODER (PAF_AUDIO, paf_audio);
     REGISTER_DECODER (QCELP, qcelp);
     REGISTER_DECODER (QDM2, qdm2);
     REGISTER_ENCDEC  (RA_144, ra_144);

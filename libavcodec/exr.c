@@ -300,6 +300,17 @@ static int decode_frame(AVCodecContext *avctx,
             continue;
         }
 
+        // Process the pixelAspectRatio variable
+        if (check_header_variable(avctx, &buf, buf_end, "pixelAspectRatio", "float", 31, &variable_buffer_data_size) >= 0) {
+            if (!variable_buffer_data_size)
+                return -1;
+
+            avctx->sample_aspect_ratio = av_d2q(av_int2float(AV_RL32(buf)), 255);
+
+            buf += variable_buffer_data_size;
+            continue;
+        }
+
         // Process the compression variable
         if (check_header_variable(avctx, &buf, buf_end, "compression", "compression", 29, &variable_buffer_data_size) >= 0) {
             if (!variable_buffer_data_size)
@@ -491,5 +502,6 @@ AVCodec ff_exr_decoder = {
     .init               = decode_init,
     .close              = decode_end,
     .decode             = decode_frame,
+    .capabilities       = CODEC_CAP_DR1,
     .long_name          = NULL_IF_CONFIG_SMALL("OpenEXR image"),
 };

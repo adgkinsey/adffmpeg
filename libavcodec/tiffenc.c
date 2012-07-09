@@ -25,6 +25,7 @@
  * @author Bartlomiej Wolowiec
  */
 
+#include "libavutil/imgutils.h"
 #include "libavutil/log.h"
 #include "libavutil/opt.h"
 
@@ -227,7 +228,7 @@ static int encode_frame(AVCodecContext * avctx, AVPacket *pkt,
     uint32_t *strip_offsets = NULL;
     int bytes_per_row;
     uint32_t res[2] = { s->dpi, 1 };        // image resolution (72/1)
-    uint16_t bpp_tab[] = { 8, 8, 8, 8 };
+    uint16_t bpp_tab[4];
     int ret = -1;
     int is_yuv = 0;
     uint8_t *yuv_line = NULL;
@@ -245,62 +246,40 @@ static int encode_frame(AVCodecContext * avctx, AVPacket *pkt,
     s->subsampling[0] = 1;
     s->subsampling[1] = 1;
 
+    avctx->bits_per_coded_sample =
+    s->bpp = av_get_bits_per_pixel(&av_pix_fmt_descriptors[avctx->pix_fmt]);
+
     switch (avctx->pix_fmt) {
     case PIX_FMT_RGBA64LE:
-        s->bpp = 64;
-        s->photometric_interpretation = 2;
-        bpp_tab[0] = 16;
-        bpp_tab[1] = 16;
-        bpp_tab[2] = 16;
-        bpp_tab[3] = 16;
-        break;
     case PIX_FMT_RGB48LE:
-        s->bpp = 48;
-        s->photometric_interpretation = 2;
-        bpp_tab[0] = 16;
-        bpp_tab[1] = 16;
-        bpp_tab[2] = 16;
-        bpp_tab[3] = 16;
-        break;
     case PIX_FMT_RGBA:
-        avctx->bits_per_coded_sample =
-        s->bpp = 32;
-        s->photometric_interpretation = 2;
-        break;
     case PIX_FMT_RGB24:
-        avctx->bits_per_coded_sample =
-        s->bpp = 24;
         s->photometric_interpretation = 2;
         break;
     case PIX_FMT_GRAY8:
         avctx->bits_per_coded_sample = 0x28;
-        s->bpp = 8;
+    case PIX_FMT_GRAY8A:
+    case PIX_FMT_GRAY16LE:
         s->photometric_interpretation = 1;
         break;
     case PIX_FMT_PAL8:
-        avctx->bits_per_coded_sample =
-        s->bpp = 8;
         s->photometric_interpretation = 3;
         break;
     case PIX_FMT_MONOBLACK:
     case PIX_FMT_MONOWHITE:
-        avctx->bits_per_coded_sample =
-        s->bpp = 1;
         s->photometric_interpretation = avctx->pix_fmt == PIX_FMT_MONOBLACK;
-        bpp_tab[0] = 1;
         break;
     case PIX_FMT_YUV420P:
     case PIX_FMT_YUV422P:
+    case PIX_FMT_YUV440P:
     case PIX_FMT_YUV444P:
     case PIX_FMT_YUV410P:
     case PIX_FMT_YUV411P:
         s->photometric_interpretation = 6;
         avcodec_get_chroma_sub_sample(avctx->pix_fmt,
                 &shift_h, &shift_v);
-        s->bpp = 8 + (16 >> (shift_h + shift_v));
         s->subsampling[0] = 1 << shift_h;
         s->subsampling[1] = 1 << shift_v;
-        s->bpp_tab_size = 3;
         is_yuv = 1;
         break;
     default:
@@ -308,8 +287,10 @@ static int encode_frame(AVCodecContext * avctx, AVPacket *pkt,
                "This colors format is not supported\n");
         return -1;
     }
-    if (!is_yuv)
-        s->bpp_tab_size = (s->bpp >= 48) ? ((s->bpp + 7) >> 4):((s->bpp + 7) >> 3);
+
+    s->bpp_tab_size = av_pix_fmt_descriptors[avctx->pix_fmt].nb_components;
+    for (i = 0; i < s->bpp_tab_size; i++)
+        bpp_tab[i] = av_pix_fmt_descriptors[avctx->pix_fmt].comp[i].depth_minus1 + 1;
 
     if (s->compr == TIFF_DEFLATE || s->compr == TIFF_ADOBE_DEFLATE || s->compr == TIFF_LZW)
         //best choose for DEFLATE
@@ -508,9 +489,9 @@ AVCodec ff_tiff_encoder = {
     .priv_data_size = sizeof(TiffEncoderContext),
     .encode2        = encode_frame,
     .pix_fmts       = (const enum PixelFormat[]) {
-        PIX_FMT_RGB24, PIX_FMT_PAL8, PIX_FMT_GRAY8,
+        PIX_FMT_RGB24, PIX_FMT_PAL8, PIX_FMT_GRAY8, PIX_FMT_GRAY8A, PIX_FMT_GRAY16LE,
         PIX_FMT_MONOBLACK, PIX_FMT_MONOWHITE,
-        PIX_FMT_YUV420P, PIX_FMT_YUV422P, PIX_FMT_YUV444P,
+        PIX_FMT_YUV420P, PIX_FMT_YUV422P, PIX_FMT_YUV440P, PIX_FMT_YUV444P,
         PIX_FMT_YUV410P, PIX_FMT_YUV411P, PIX_FMT_RGB48LE,
         PIX_FMT_RGBA, PIX_FMT_RGBA64LE,
         PIX_FMT_NONE

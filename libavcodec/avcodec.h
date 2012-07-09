@@ -261,6 +261,7 @@ enum CodecID {
     CODEC_ID_XBM,
     CODEC_ID_ZEROCODEC,
     CODEC_ID_MSS1,
+    CODEC_ID_MSA1,
     CODEC_ID_Y41P       = MKBETAG('Y','4','1','P'),
     CODEC_ID_ESCAPE130  = MKBETAG('E','1','3','0'),
     CODEC_ID_EXR        = MKBETAG('0','E','X','R'),
@@ -273,6 +274,7 @@ enum CodecID {
     CODEC_ID_V408       = MKBETAG('V','4','0','8'),
     CODEC_ID_YUV4       = MKBETAG('Y','U','V','4'),
     CODEC_ID_SANM       = MKBETAG('S','A','N','M'),
+    CODEC_ID_PAF_VIDEO  = MKBETAG('P','A','F','V'),
 
     /* various PCM "codecs" */
     CODEC_ID_FIRST_AUDIO = 0x10000,     ///< A dummy id pointing at the start of audio codecs
@@ -418,6 +420,7 @@ enum CodecID {
     CODEC_ID_8SVX_RAW    = MKBETAG('8','S','V','X'),
     CODEC_ID_SONIC       = MKBETAG('S','O','N','C'),
     CODEC_ID_SONIC_LS    = MKBETAG('S','O','N','L'),
+    CODEC_ID_PAF_AUDIO   = MKBETAG('P','A','F','A'),
 
     /* subtitle codecs */
     CODEC_ID_FIRST_SUBTITLE = 0x17000,          ///< A dummy ID pointing at the start of subtitle codecs.
@@ -854,6 +857,18 @@ enum AVPacketSideDataType {
      * @endcode
      */
     AV_PKT_DATA_H263_MB_INFO,
+
+    /**
+     * Recommmends skipping the specified number of samples
+     * @code
+     * u32le number of samples to skip from start of this packet
+     * u32le number of samples to skip from end of this packet
+     * u8    reason for start skip
+     * u8    reason for end   skip (0=padding silence, 1=convergence)
+     * @endcode
+     */
+    AV_PKT_DATA_SKIP_SAMPLES=70,
+    
 #ifdef AD_SIDEDATA
     AV_PKT_DATA_AD_FRAME,
     AV_PKT_DATA_AD_TEXT,
