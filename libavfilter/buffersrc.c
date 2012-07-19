@@ -268,7 +268,7 @@ static av_cold int init_video(AVFilterContext *ctx, const char *args)
         goto fail;
     }
 
-    av_log(ctx, AV_LOG_INFO, "w:%d h:%d pixfmt:%s tb:%d/%d fr:%d/%d sar:%d/%d sws_param:%s\n",
+    av_log(ctx, AV_LOG_VERBOSE, "w:%d h:%d pixfmt:%s tb:%d/%d fr:%d/%d sar:%d/%d sws_param:%s\n",
            c->w, c->h, av_pix_fmt_descriptors[c->pix_fmt].name,
            c->time_base.num, c->time_base.den, c->frame_rate.num, c->frame_rate.den,
            c->pixel_aspect.num, c->pixel_aspect.den, (char *)av_x_if_null(c->sws_param, ""));
@@ -328,7 +328,7 @@ static av_cold int init_audio(AVFilterContext *ctx, const char *args)
     if (!s->time_base.num)
         s->time_base = (AVRational){1, s->sample_rate};
 
-    av_log(ctx, AV_LOG_INFO,
+    av_log(ctx, AV_LOG_VERBOSE,
            "tb:%d/%d samplefmt:%s samplerate:%d chlayout:%s\n",
            s->time_base.num, s->time_base.den, s->sample_fmt_str,
            s->sample_rate, s->channel_layout_str);
@@ -408,6 +408,7 @@ static int request_frame(AVFilterLink *link)
 {
     BufferSourceContext *c = link->src->priv;
     AVFilterBufferRef *buf;
+    int ret = 0;
 
     if (!av_fifo_size(c->fifo)) {
         if (c->eof)
@@ -424,7 +425,7 @@ static int request_frame(AVFilterLink *link)
         ff_end_frame(link);
         break;
     case AVMEDIA_TYPE_AUDIO:
-        ff_filter_samples(link, avfilter_ref_buffer(buf, ~0));
+        ret = ff_filter_samples(link, avfilter_ref_buffer(buf, ~0));
         break;
     default:
         return AVERROR(EINVAL);
@@ -432,7 +433,7 @@ static int request_frame(AVFilterLink *link)
 
     avfilter_unref_buffer(buf);
 
-    return 0;
+    return ret;
 }
 
 static int poll_frame(AVFilterLink *link)

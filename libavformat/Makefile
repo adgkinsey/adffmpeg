@@ -41,7 +41,7 @@ OBJS-$(CONFIG_AMR_DEMUXER)               += amr.o
 OBJS-$(CONFIG_AMR_MUXER)                 += amr.o
 OBJS-$(CONFIG_ANM_DEMUXER)               += anm.o
 OBJS-$(CONFIG_APC_DEMUXER)               += apc.o
-OBJS-$(CONFIG_APE_DEMUXER)               += ape.o apetag.o
+OBJS-$(CONFIG_APE_DEMUXER)               += ape.o apetag.o img2.o
 OBJS-$(CONFIG_ASF_DEMUXER)               += asfdec.o asf.o asfcrypt.o \
                                             avlanguage.o
 OBJS-$(CONFIG_ASF_MUXER)                 += asfenc.o asf.o
@@ -132,6 +132,9 @@ OBJS-$(CONFIG_IMAGE2PIPE_DEMUXER)        += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE2PIPE_MUXER)          += img2enc.o img2.o
 OBJS-$(CONFIG_INGENIENT_DEMUXER)         += ingenientdec.o rawdec.o
 OBJS-$(CONFIG_IPMOVIE_DEMUXER)           += ipmovie.o
+OBJS-$(CONFIG_ISMV_MUXER)                += movenc.o isom.o avc.o       \
+                                            movenchint.o rtpenc_chain.o \
+                                            mov_chan.o
 OBJS-$(CONFIG_ISS_DEMUXER)               += iss.o
 OBJS-$(CONFIG_IV8_DEMUXER)               += iv8.o
 OBJS-$(CONFIG_IVF_DEMUXER)               += ivfdec.o
@@ -169,8 +172,8 @@ OBJS-$(CONFIG_MOV_MUXER)                 += movenc.o isom.o avc.o \
 OBJS-$(CONFIG_MP2_MUXER)                 += mp3enc.o rawenc.o id3v2enc.o
 OBJS-$(CONFIG_MP3_DEMUXER)               += mp3dec.o
 OBJS-$(CONFIG_MP3_MUXER)                 += mp3enc.o rawenc.o id3v2enc.o
-OBJS-$(CONFIG_MPC_DEMUXER)               += mpc.o apetag.o
-OBJS-$(CONFIG_MPC8_DEMUXER)              += mpc8.o apetag.o
+OBJS-$(CONFIG_MPC_DEMUXER)               += mpc.o apetag.o img2.o
+OBJS-$(CONFIG_MPC8_DEMUXER)              += mpc8.o apetag.o img2.o
 OBJS-$(CONFIG_MPEG1SYSTEM_MUXER)         += mpegenc.o
 OBJS-$(CONFIG_MPEG1VCD_MUXER)            += mpegenc.o
 OBJS-$(CONFIG_MPEG2DVD_MUXER)            += mpegenc.o
@@ -350,7 +353,7 @@ OBJS-$(CONFIG_WSVQA_DEMUXER)             += westwood_vqa.o
 OBJS-$(CONFIG_WTV_DEMUXER)               += wtvdec.o wtv.o asfdec.o asf.o asfcrypt.o \
                                             avlanguage.o mpegts.o isom.o
 OBJS-$(CONFIG_WTV_MUXER)                 += wtvenc.o wtv.o asf.o asfenc.o
-OBJS-$(CONFIG_WV_DEMUXER)                += wv.o apetag.o
+OBJS-$(CONFIG_WV_DEMUXER)                += wv.o apetag.o img2.o
 OBJS-$(CONFIG_XA_DEMUXER)                += xa.o
 OBJS-$(CONFIG_XBIN_DEMUXER)              += bintext.o sauce.o
 OBJS-$(CONFIG_XMV_DEMUXER)               += xmv.o

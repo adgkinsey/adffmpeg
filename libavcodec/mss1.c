@@ -499,7 +499,7 @@ static int decode_region_masked(MSS1Context *ctx, ArithCoder *acoder,
     dst  += x + y * stride;
     mask += x + y * mask_stride;
 
-    if (mask[0] != 0xFF)
+    if (mask[0] == 0xFF)
         dst[0] = decode_top_left_pixel(acoder, pctx);
     for (j = 0; j < height; j++) {
         for (i = 0; i < width; i++) {
@@ -575,7 +575,7 @@ static int decode_pivot(MSS1Context *ctx, ArithCoder *acoder, int base)
         val = arith_get_number(acoder, (base + 1) / 2 - 2) + 3;
     }
 
-    if (val == base) {
+    if ((unsigned)val >= base) {
         ctx->corrupted = 1;
         return 0;
     }
