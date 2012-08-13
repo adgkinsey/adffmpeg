@@ -97,7 +97,7 @@ static av_always_inline av_const int FASTDIV(int a, int b)
 
 #endif /* HAVE_ARMV6 */
 
-#if AV_GCC_VERSION_AT_LEAST(4,3)
+#if HAVE_ASM_MOD_Q
 
 #define av_clipl_int32 av_clipl_int32_arm
 static av_always_inline av_const int32_t av_clipl_int32_arm(int64_t a)
@@ -110,11 +110,11 @@ static av_always_inline av_const int32_t av_clipl_int32_arm(int64_t a)
              "mvnne  %1, #1<<31             \n\t"
              "moveq  %0, %Q2                \n\t"
              "eorne  %0, %1,  %R2, asr #31  \n\t"
-             : "=r"(x), "=&r"(y) : "r"(a):"cc");
+             : "=r"(x), "=&r"(y) : "r"(a) : "cc");
     return x;
 }
 
-#endif /* AV_GCC_VERSION_AT_LEAST(4,3) */
+#endif /* HAVE_ASM_MOD_Q */
 
 #endif /* HAVE_INLINE_ASM */
 

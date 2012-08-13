@@ -138,10 +138,8 @@ static av_cold int channelmap_init(AVFilterContext *ctx, const char *args)
     s->class = &channelmap_class;
     av_opt_set_defaults(s);
 
-    if ((ret = av_set_options_string(s, args, "=", ":")) < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Error parsing options string '%s'.\n", args);
+    if ((ret = av_set_options_string(s, args, "=", ":")) < 0)
         return ret;
-    }
 
     mapping = s->mapping_str;
 
@@ -392,12 +390,12 @@ AVFilter avfilter_af_channelmap = {
     .query_formats = channelmap_query_formats,
     .priv_size     = sizeof(ChannelMapContext),
 
-    .inputs        = (AVFilterPad[]) {{ .name            = "default",
-                                        .type            = AVMEDIA_TYPE_AUDIO,
-                                        .filter_samples  = channelmap_filter_samples,
-                                        .config_props    = channelmap_config_input },
-                                      { .name = NULL }},
-    .outputs       = (AVFilterPad[]) {{ .name            = "default",
-                                        .type            = AVMEDIA_TYPE_AUDIO },
-                                      { .name = NULL }},
+    .inputs        = (const AVFilterPad[]) {{ .name            = "default",
+                                              .type            = AVMEDIA_TYPE_AUDIO,
+                                              .filter_samples  = channelmap_filter_samples,
+                                              .config_props    = channelmap_config_input },
+                                            { .name = NULL }},
+    .outputs       = (const AVFilterPad[]) {{ .name            = "default",
+                                              .type            = AVMEDIA_TYPE_AUDIO },
+                                            { .name = NULL }},
 };

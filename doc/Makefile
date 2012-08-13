@@ -28,8 +28,6 @@ doc/%.txt: doc/%.texi
 	$(Q)$(TEXIDEP)
 	$(M)makeinfo --force --no-headers -o $@ $< 2>/dev/null
 
-doc/print_options.o: libavformat/options_table.h libavcodec/options_table.h
-
 GENTEXI  = format codec
 GENTEXI := $(GENTEXI:%=doc/avoptions_%.texi)
 
@@ -45,7 +43,7 @@ doc/%.html: doc/%.texi $(SRC_PATH)/doc/t2h.init $(GENTEXI)
 doc/%.pod: TAG = POD
 doc/%.pod: doc/%.texi $(GENTEXI)
 	$(Q)$(TEXIDEP)
-	$(M)$(SRC_PATH)/doc/texi2pod.pl -Idoc $< $@
+	$(M)perl $(SRC_PATH)/doc/texi2pod.pl -Idoc $< $@
 
 doc/%.1: TAG = MAN
 doc/%.1: doc/%.pod $(GENTEXI)

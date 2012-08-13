@@ -30,6 +30,7 @@
 
 #include "avcodec.h"
 #include "internal.h"
+#include "libavutil/avassert.h"
 #include "libavutil/base64.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/opt.h"
@@ -447,7 +448,7 @@ static int queue_frames(AVCodecContext *avctx, AVPacket *pkt_out,
 
                 /* avoid storing the frame when the list is empty and we haven't yet
                    provided a frame for output */
-                assert(!ctx->coded_frame_list);
+                av_assert0(!ctx->coded_frame_list);
                 cx_pktcpy(&cx_frame, pkt);
                 size = storeframe(avctx, &cx_frame, pkt_out, coded_frame);
                 if (size < 0)
@@ -601,7 +602,7 @@ static const AVCodecDefault defaults[] = {
 AVCodec ff_libvpx_encoder = {
     .name           = "libvpx",
     .type           = AVMEDIA_TYPE_VIDEO,
-    .id             = CODEC_ID_VP8,
+    .id             = AV_CODEC_ID_VP8,
     .priv_data_size = sizeof(VP8Context),
     .init           = vp8_init,
     .encode2        = vp8_encode,

@@ -20,7 +20,7 @@
 
 /**
  * @file
- * audio to video transmedia filter
+ * audio to video multimedia filter
  */
 
 #include "libavutil/audioconvert.h"
@@ -66,10 +66,8 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
     av_opt_set_defaults(showwaves);
     showwaves->buf_idx = 0;
 
-    if ((err = av_set_options_string(showwaves, args, "=", ":")) < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Error parsing options string: '%s'\n", args);
+    if ((err = av_set_options_string(showwaves, args, "=", ":")) < 0)
         return err;
-    }
 
     return 0;
 }
@@ -206,7 +204,6 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
                              av_rescale_q((p - (int16_t *)insamples->data[0]) / nb_channels,
                                           (AVRational){ 1, inlink->sample_rate },
                                           outlink->time_base);
-            outlink->out_buf = outpicref;
             linesize = outpicref->linesize[0];
             memset(outpicref->data[0], 0, showwaves->h*linesize);
         }

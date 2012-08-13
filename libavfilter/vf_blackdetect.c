@@ -88,10 +88,8 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
     blackdetect->class = &blackdetect_class;
     av_opt_set_defaults(blackdetect);
 
-    if ((ret = av_set_options_string(blackdetect, args, "=", ":")) < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Error parsing options string: '%s'\n", args);
+    if ((ret = av_set_options_string(blackdetect, args, "=", ":")) < 0)
         return ret;
-    }
 
     return 0;
 }
@@ -146,7 +144,7 @@ static int request_frame(AVFilterLink *outlink)
     return ret;
 }
 
-static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
+static int draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
 {
     AVFilterContext *ctx = inlink->dst;
     BlackDetectContext *blackdetect = ctx->priv;
@@ -160,10 +158,10 @@ static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
         p += picref->linesize[0];
     }
 
-    ff_draw_slice(ctx->outputs[0], y, h, slice_dir);
+    return ff_draw_slice(ctx->outputs[0], y, h, slice_dir);
 }
 
-static void end_frame(AVFilterLink *inlink)
+static int end_frame(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     BlackDetectContext *blackdetect = ctx->priv;
@@ -194,8 +192,7 @@ static void end_frame(AVFilterLink *inlink)
     blackdetect->last_picref_pts = picref->pts;
     blackdetect->frame_count++;
     blackdetect->nb_black_pixels = 0;
-    avfilter_unref_buffer(picref);
-    ff_end_frame(inlink->dst->outputs[0]);
+    return ff_end_frame(inlink->dst->outputs[0]);
 }
 
 AVFilter avfilter_vf_blackdetect = {
@@ -211,7 +208,7 @@ AVFilter avfilter_vf_blackdetect = {
           .config_props     = config_input,
           .draw_slice       = draw_slice,
           .get_video_buffer = ff_null_get_video_buffer,
-          .start_frame      = ff_null_start_frame_keep_ref,
+          .start_frame      = ff_null_start_frame,
           .end_frame        = end_frame, },
         { .name = NULL }
     },

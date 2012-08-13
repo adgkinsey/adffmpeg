@@ -34,6 +34,7 @@
 #include <limits.h>
 
 #include "libavutil/audioconvert.h"
+#include "libavutil/avassert.h"
 #include "libavutil/crc.h"
 #include "avcodec.h"
 #include "internal.h"
@@ -43,9 +44,6 @@
 #include "flac.h"
 #include "flacdata.h"
 #include "flacdsp.h"
-
-#undef NDEBUG
-#include <assert.h>
 
 typedef struct FLACContext {
     FLACSTREAMINFO
@@ -141,7 +139,7 @@ static void allocate_buffers(FLACContext *s)
 {
     int i;
 
-    assert(s->max_blocksize);
+    av_assert0(s->max_blocksize);
 
     for (i = 0; i < s->channels; i++) {
         s->decoded[i] = av_malloc(sizeof(int32_t)*s->max_blocksize);
@@ -561,7 +559,7 @@ static av_cold int flac_decode_close(AVCodecContext *avctx)
 AVCodec ff_flac_decoder = {
     .name           = "flac",
     .type           = AVMEDIA_TYPE_AUDIO,
-    .id             = CODEC_ID_FLAC,
+    .id             = AV_CODEC_ID_FLAC,
     .priv_data_size = sizeof(FLACContext),
     .init           = flac_decode_init,
     .close          = flac_decode_close,

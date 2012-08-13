@@ -41,6 +41,10 @@
 #include <pthread.h>
 #endif
 
+#ifndef HAVE_PTHREAD_CANCEL
+#define HAVE_PTHREAD_CANCEL 0
+#endif
+
 #ifndef IPV6_ADD_MEMBERSHIP
 #define IPV6_ADD_MEMBERSHIP IPV6_JOIN_GROUP
 #define IPV6_DROP_MEMBERSHIP IPV6_LEAVE_GROUP
@@ -782,10 +786,9 @@ static int udp_close(URLContext *h)
         ret = pthread_join(s->circular_buffer_thread, NULL);
         if (ret != 0)
             av_log(h, AV_LOG_ERROR, "pthread_join(): %s\n", strerror(ret));
+        pthread_mutex_destroy(&s->mutex);
+        pthread_cond_destroy(&s->cond);
     }
-
-    pthread_mutex_destroy(&s->mutex);
-    pthread_cond_destroy(&s->cond);
 #endif
     av_fifo_free(s->fifo);
     return 0;

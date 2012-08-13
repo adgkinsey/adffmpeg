@@ -36,7 +36,7 @@
 static const AVClass eac3enc_class = {
     .class_name = "E-AC-3 Encoder",
     .item_name  = av_default_item_name,
-    .option     = eac3_options,
+    .option     = ac3_options,
     .version    = LIBAVUTIL_VERSION_INT,
 };
 
@@ -253,7 +253,7 @@ void ff_eac3_output_frame_header(AC3EncodeContext *s)
 AVCodec ff_eac3_encoder = {
     .name            = "eac3",
     .type            = AVMEDIA_TYPE_AUDIO,
-    .id              = CODEC_ID_EAC3,
+    .id              = AV_CODEC_ID_EAC3,
     .priv_data_size  = sizeof(AC3EncodeContext),
     .init            = ff_ac3_encode_init,
     .encode2         = ff_ac3_float_encode_frame,

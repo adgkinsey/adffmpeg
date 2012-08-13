@@ -247,11 +247,8 @@ static int paf_vid_decode(AVCodecContext *avctx, void *data,
     uint8_t code, *dst, *src, *end;
     int i, frame, ret;
 
-    if (c->pic.data[0])
-        avctx->release_buffer(avctx, &c->pic);
-
-    c->pic.reference = 0;
-    if ((ret = avctx->get_buffer(avctx, &c->pic)) < 0)
+    c->pic.reference = 3;
+    if ((ret = avctx->reget_buffer(avctx, &c->pic)) < 0)
         return ret;
 
     bytestream2_init(&c->gb, pkt->data, pkt->size);
@@ -434,7 +431,7 @@ static int paf_aud_decode(AVCodecContext *avctx, void *data,
 AVCodec ff_paf_video_decoder = {
     .name           = "paf_video",
     .type           = AVMEDIA_TYPE_VIDEO,
-    .id             = CODEC_ID_PAF_VIDEO,
+    .id             = AV_CODEC_ID_PAF_VIDEO,
     .priv_data_size = sizeof(PAFVideoDecContext),
     .init           = paf_vid_init,
     .close          = paf_vid_close,
@@ -446,7 +443,7 @@ AVCodec ff_paf_video_decoder = {
 AVCodec ff_paf_audio_decoder = {
     .name           = "paf_audio",
     .type           = AVMEDIA_TYPE_AUDIO,
-    .id             = CODEC_ID_PAF_AUDIO,
+    .id             = AV_CODEC_ID_PAF_AUDIO,
     .priv_data_size = sizeof(PAFAudioDecContext),
     .init           = paf_aud_init,
     .decode         = paf_aud_decode,

@@ -2047,7 +2047,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
         if(i){
             ff_init_range_decoder(&fs->c, buf_p, v);
         }else
-            fs->c.bytestream_end = buf_p + v;
+            fs->c.bytestream_end = (uint8_t *)(buf_p + v);
     }
 
     avctx->execute(avctx, decode_slice, &f->slice_context[0], NULL, f->slice_count, sizeof(void*));
@@ -2065,7 +2065,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
                 src[j] = f->last_picture.data[j] + f->last_picture.linesize[j]*
                          (fs->slice_y>>sv) + (fs->slice_x>>sh);
             }
-            av_image_copy(dst, f->picture.linesize, src, f->last_picture.linesize,
+            av_image_copy(dst, f->picture.linesize, (const uint8_t **)src, f->last_picture.linesize,
                           avctx->pix_fmt, fs->slice_width, fs->slice_height);
         }
     }
@@ -2083,7 +2083,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
 AVCodec ff_ffv1_decoder = {
     .name           = "ffv1",
     .type           = AVMEDIA_TYPE_VIDEO,
-    .id             = CODEC_ID_FFV1,
+    .id             = AV_CODEC_ID_FFV1,
     .priv_data_size = sizeof(FFV1Context),
     .init           = decode_init,
     .close          = common_end,
@@ -2117,7 +2117,7 @@ static const AVCodecDefault ffv1_defaults[] = {
 AVCodec ff_ffv1_encoder = {
     .name           = "ffv1",
     .type           = AVMEDIA_TYPE_VIDEO,
-    .id             = CODEC_ID_FFV1,
+    .id             = AV_CODEC_ID_FFV1,
     .priv_data_size = sizeof(FFV1Context),
     .init           = encode_init,
     .encode2        = encode_frame,

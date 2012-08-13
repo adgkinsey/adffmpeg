@@ -94,10 +94,8 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
     s->class = &aformat_class;
     av_opt_set_defaults(s);
 
-    if ((ret = av_set_options_string(s, args, "=", ":")) < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Error parsing options string '%s'.\n", args);
+    if ((ret = av_set_options_string(s, args, "=", ":")) < 0)
         return ret;
-    }
 
     PARSE_FORMATS(s->formats_str, enum AVSampleFormat, s->formats,
                   ff_add_format, av_get_sample_fmt, AV_SAMPLE_FMT_NONE, "sample format");
@@ -133,10 +131,10 @@ AVFilter avfilter_af_aformat = {
     .query_formats = query_formats,
     .priv_size     = sizeof(AFormatContext),
 
-    .inputs        = (AVFilterPad[]) {{ .name            = "default",
-                                        .type            = AVMEDIA_TYPE_AUDIO, },
-                                      { .name = NULL}},
-    .outputs       = (AVFilterPad[]) {{ .name            = "default",
-                                        .type            = AVMEDIA_TYPE_AUDIO},
-                                      { .name = NULL}},
+    .inputs        = (const AVFilterPad[]) {{ .name            = "default",
+                                              .type            = AVMEDIA_TYPE_AUDIO, },
+                                            { .name = NULL}},
+    .outputs       = (const AVFilterPad[]) {{ .name            = "default",
+                                              .type            = AVMEDIA_TYPE_AUDIO},
+                                            { .name = NULL}},
 };
