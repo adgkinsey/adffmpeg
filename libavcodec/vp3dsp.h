@@ -1,7 +1,4 @@
 /*
- * RTMP definitions
- * Copyright (c) 2009 Kostya Shishkov
- *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -19,25 +16,25 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVFORMAT_RTMP_H
-#define AVFORMAT_RTMP_H
+#ifndef AVCODEC_VP3DSP_H
+#define AVCODEC_VP3DSP_H
 
-#include "avformat.h"
+#include <stdint.h>
+#include "dsputil.h"
 
-#define RTMP_DEFAULT_PORT 1935
-#define RTMPS_DEFAULT_PORT 443
+typedef struct VP3DSPContext {
+    void (*idct_put)(uint8_t *dest, int line_size, DCTELEM *block);
+    void (*idct_add)(uint8_t *dest, int line_size, DCTELEM *block);
+    void (*idct_dc_add)(uint8_t *dest, int line_size, const DCTELEM *block);
+    void (*v_loop_filter)(uint8_t *src, int stride, int *bounding_values);
+    void (*h_loop_filter)(uint8_t *src, int stride, int *bounding_values);
 
-#define RTMP_HANDSHAKE_PACKET_SIZE 1536
+    int idct_perm;
+} VP3DSPContext;
 
-/**
- * emulated Flash client version - 9.0.124.2 on Linux
- * @{
- */
-#define RTMP_CLIENT_PLATFORM "LNX"
-#define RTMP_CLIENT_VER1    9
-#define RTMP_CLIENT_VER2    0
-#define RTMP_CLIENT_VER3  124
-#define RTMP_CLIENT_VER4    2
-/** @} */ //version defines
+void ff_vp3dsp_init(VP3DSPContext *c, int flags);
+void ff_vp3dsp_init_arm(VP3DSPContext *c, int flags);
+void ff_vp3dsp_init_ppc(VP3DSPContext *c, int flags);
+void ff_vp3dsp_init_x86(VP3DSPContext *c, int flags);
 
-#endif /* AVFORMAT_RTMP_H */
+#endif /* AVCODEC_VP3DSP_H */

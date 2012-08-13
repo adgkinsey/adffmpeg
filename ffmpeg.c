@@ -158,7 +158,7 @@ static FILE *vstats_file;
 static int audio_volume = 256;
 
 static int exit_on_error = 0;
-static int using_stdin = 0;
+static int stdin_interaction = 1;
 static int run_as_daemon  = 0;
 static volatile int received_nb_signals = 0;
 static int64_t video_size = 0;
@@ -1723,7 +1723,7 @@ static void do_video_out(AVFormatContext *s,
     int ret, format_video_sync;
     AVPacket pkt;
     AVCodecContext *enc = ost->st->codec;
-    int nb_frames;
+    int nb_frames, i;
     double sync_ipts, delta;
     double duration = 0;
     int frame_size = 0;
@@ -1782,8 +1782,8 @@ static void do_video_out(AVFormatContext *s,
         av_log(NULL, AV_LOG_VERBOSE, "*** %d dup!\n", nb_frames - 1);
     }
 
-
-duplicate_frame:
+  /* duplicates frame if needed */
+  for (i = 0; i < nb_frames; i++) {
     av_init_packet(&pkt);
     pkt.data = NULL;
     pkt.size = 0;
@@ -1874,9 +1874,7 @@ duplicate_frame:
      * flush, we need to limit them here, before they go into encoder.
      */
     ost->frame_number++;
-
-    if(--nb_frames)
-        goto duplicate_frame;
+  }
 
     if (vstats_filename && frame_size)
         do_video_stats(output_files[ost->file_index]->ctx, ost, frame_size);
@@ -2394,7 +2392,6 @@ static int decode_audio(InputStream *ist, AVPacket *pkt, int *got_output)
     else
         avcodec_get_frame_defaults(ist->decoded_frame);
     decoded_frame = ist->decoded_frame;
-    av_codec_set_pkt_timebase(avctx, ist->st->time_base);
 
     update_benchmark(NULL);
     ret = avcodec_decode_audio4(avctx, decoded_frame, got_output, pkt);
@@ -2517,7 +2514,6 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output)
         avcodec_get_frame_defaults(ist->decoded_frame);
     decoded_frame = ist->decoded_frame;
     pkt->dts  = av_rescale_q(ist->dts, AV_TIME_BASE_Q, ist->st->time_base);
-    av_codec_set_pkt_timebase(ist->st->codec, ist->st->time_base);
 
     update_benchmark(NULL);
     ret = avcodec_decode_video2(ist->st->codec,
@@ -3595,7 +3591,7 @@ static int transcode(void)
     if (ret < 0)
         goto fail;
 
-    if (!using_stdin) {
+    if (stdin_interaction) {
         av_log(NULL, AV_LOG_INFO, "Press [q] to stop, [?] for help\n");
     }
 
@@ -3612,7 +3608,7 @@ static int transcode(void)
         int64_t cur_time= av_gettime();
 
         /* if 'q' pressed, exits */
-        if (!using_stdin)
+        if (stdin_interaction)
             if (check_keyboard_interaction(cur_time) < 0)
                 break;
 
@@ -3645,6 +3641,11 @@ static int transcode(void)
             continue;
         }
         if (ret < 0) {
+            if (ret != AVERROR_EOF) {
+                print_error(is->filename, ret);
+                if (exit_on_error)
+                    exit_program(1);
+            }
             input_files[file_index]->eof_reached = 1;
 
             for (i = 0; i < input_files[file_index]->nb_streams; i++) {
@@ -4287,7 +4288,7 @@ static void assert_file_overwrite(const char *filename)
         (strchr(filename, ':') == NULL || filename[1] == ':' ||
          av_strstart(filename, "file:", NULL))) {
         if (avio_check(filename, 0) == 0) {
-            if (!using_stdin && (!no_file_overwrite || file_overwrite)) {
+            if (stdin_interaction && (!no_file_overwrite || file_overwrite)) {
                 fprintf(stderr,"File '%s' already exists. Overwrite ? [y/N] ", filename);
                 fflush(stderr);
                 term_exit();
@@ -4358,8 +4359,8 @@ static int opt_input_file(OptionsContext *o, const char *opt, const char *filena
     if (!strcmp(filename, "-"))
         filename = "pipe:";
 
-    using_stdin |= !strncmp(filename, "pipe:", 5) ||
-                    !strcmp(filename, "/dev/stdin");
+    stdin_interaction &= strncmp(filename, "pipe:", 5) &&
+                         strcmp(filename, "/dev/stdin");
 
     /* get default parameters from command line */
     ic = avformat_alloc_context();
@@ -5875,6 +5876,8 @@ static const OptionDef options[] = {
       "add timings for each task" },
     { "progress", HAS_ARG | OPT_EXPERT, {(void*)opt_progress},
       "write program-readable progress information", "url" },
+    { "stdin", OPT_BOOL | OPT_EXPERT, {(void*)&stdin_interaction},
+      "enable or disable interaction on standard input" },
     { "timelimit", HAS_ARG, {(void*)opt_timelimit}, "set max runtime in seconds", "limit" },
     { "dump", OPT_BOOL | OPT_EXPERT, {(void*)&do_pkt_dump},
       "dump each input packet" },

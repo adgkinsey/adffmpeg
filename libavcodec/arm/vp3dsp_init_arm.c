@@ -1,6 +1,4 @@
 /*
- * Copyright (c) 2009 Mans Rullgard <mans@mansr.com>
- *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -18,29 +16,30 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <stdint.h>
+
+#include "libavutil/attributes.h"
+#include "libavutil/cpu.h"
 #include "libavutil/arm/cpu.h"
+#include "libavcodec/vp3dsp.h"
 
-#define CONFIG_FFT_FLOAT 0
-#include "libavcodec/fft.h"
+void ff_vp3_idct_put_neon(uint8_t *dest, int line_size, DCTELEM *data);
+void ff_vp3_idct_add_neon(uint8_t *dest, int line_size, DCTELEM *data);
+void ff_vp3_idct_dc_add_neon(uint8_t *dest, int line_size, const DCTELEM *data);
 
-void ff_fft_fixed_calc_neon(FFTContext *s, FFTComplex *z);
-void ff_mdct_fixed_calc_neon(FFTContext *s, FFTSample *o, const FFTSample *i);
-void ff_mdct_fixed_calcw_neon(FFTContext *s, FFTDouble *o, const FFTSample *i);
+void ff_vp3_v_loop_filter_neon(uint8_t *, int, int *);
+void ff_vp3_h_loop_filter_neon(uint8_t *, int, int *);
 
-av_cold void ff_fft_fixed_init_arm(FFTContext *s)
+av_cold void ff_vp3dsp_init_arm(VP3DSPContext *c, int flags)
 {
     int cpu_flags = av_get_cpu_flags();
 
     if (have_neon(cpu_flags)) {
-        s->fft_permutation = FF_FFT_PERM_SWAP_LSBS;
-        s->fft_calc        = ff_fft_fixed_calc_neon;
-
-#if CONFIG_MDCT
-        if (!s->inverse && s->mdct_bits >= 5) {
-            s->mdct_permutation = FF_MDCT_PERM_INTERLEAVE;
-            s->mdct_calc        = ff_mdct_fixed_calc_neon;
-            s->mdct_calcw       = ff_mdct_fixed_calcw_neon;
-        }
-#endif
+        c->idct_put      = ff_vp3_idct_put_neon;
+        c->idct_add      = ff_vp3_idct_add_neon;
+        c->idct_dc_add   = ff_vp3_idct_dc_add_neon;
+        c->v_loop_filter = ff_vp3_v_loop_filter_neon;
+        c->h_loop_filter = ff_vp3_h_loop_filter_neon;
+        c->idct_perm     = FF_TRANSPOSE_IDCT_PERM;
     }
 }

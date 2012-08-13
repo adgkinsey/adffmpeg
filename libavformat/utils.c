@@ -942,6 +942,10 @@ static void update_initial_durations(AVFormatContext *s, AVStream *st,
     AVPacketList *pktl= s->parse_queue ? s->parse_queue : s->packet_buffer;
     int64_t cur_dts= RELATIVE_TS_BASE;
 
+    if (st->skip_samples && st->codec->sample_rate && st->time_base.num)
+        cur_dts -= av_rescale_q(st->skip_samples,
+                                (AVRational){ 1, st->codec->sample_rate },
+                                st->time_base);
     if(st->first_dts != AV_NOPTS_VALUE){
         cur_dts= st->first_dts;
         for(; pktl; pktl= get_next_pkt(s, st, pktl)){
@@ -2265,30 +2269,40 @@ static void estimate_timings(AVFormatContext *ic, int64_t old_offset)
     }
 }
 
-static int has_codec_parameters(AVStream *st)
+static int has_codec_parameters(AVStream *st, const char **errmsg_ptr)
 {
     AVCodecContext *avctx = st->codec;
-    int val;
+
+#define FAIL(errmsg) do {                                         \
+        if (errmsg_ptr)                                           \
+            *errmsg_ptr = errmsg;                                 \
+        return 0;                                                 \
+    } while (0)
+
     switch (avctx->codec_type) {
     case AVMEDIA_TYPE_AUDIO:
-        val = avctx->sample_rate && avctx->channels;
         if (!avctx->frame_size && determinable_frame_size(avctx))
-            return 0;
+            FAIL("unspecified sample size");
         if (st->info->found_decoder >= 0 && avctx->sample_fmt == AV_SAMPLE_FMT_NONE)
-            return 0;
+            FAIL("unspecified sample format");
+        if (!avctx->sample_rate)
+            FAIL("unspecified sample rate");
+        if (!avctx->channels)
+            FAIL("unspecified number of channels");
         break;
     case AVMEDIA_TYPE_VIDEO:
-        val = avctx->width;
+        if (!avctx->width)
+            FAIL("unspecified size");
         if (st->info->found_decoder >= 0 && avctx->pix_fmt == PIX_FMT_NONE)
-            return 0;
+            FAIL("unspecified pixel format");
         break;
     case AVMEDIA_TYPE_DATA:
         if(avctx->codec_id == CODEC_ID_NONE) return 1;
-    default:
-        val = 1;
-        break;
     }
-    return avctx->codec_id != CODEC_ID_NONE && val != 0;
+
+    if (avctx->codec_id == CODEC_ID_NONE)
+        FAIL("unknown codec");
+    return 1;
 }
 
 static int has_decode_delay_been_guessed(AVStream *st)
@@ -2345,7 +2359,7 @@ static int try_decode_frame(AVStream *st, AVPacket *avpkt, AVDictionary **option
 
     while ((pkt.size > 0 || (!pkt.data && got_picture)) &&
            ret >= 0 &&
-           (!has_codec_parameters(st)         ||
+           (!has_codec_parameters(st, NULL)   ||
            !has_decode_delay_been_guessed(st) ||
            (!st->codec_info_nb_frames && st->codec->codec->capabilities & CODEC_CAP_CHANNEL_CONF))) {
         got_picture = 0;
@@ -2524,7 +2538,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
                               : &thread_opt);
 
         //try to just open decoders, in case this is enough to get parameters
-        if (!has_codec_parameters(st)) {
+        if (!has_codec_parameters(st, NULL)) {
             if (codec && !st->codec->codec)
                 avcodec_open2(st->codec, codec, options ? &options[i]
                               : &thread_opt);
@@ -2551,7 +2565,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
             int fps_analyze_framecount = 20;
 
             st = ic->streams[i];
-            if (!has_codec_parameters(st))
+            if (!has_codec_parameters(st, NULL))
                 break;
             /* if the timebase is coarse (like the usual millisecond precision
                of mkv), we need to analyze more frames to reliably arrive at
@@ -2689,6 +2703,8 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
 
         ret = -1; /* we could not have all the codec parameters before EOF */
         for(i=0;i<ic->nb_streams;i++) {
+            const char *errmsg;
+
             st = ic->streams[i];
 
             /* flush the decoders */
@@ -2697,7 +2713,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
                     err = try_decode_frame(st, &empty_pkt,
                                             (options && i < orig_nb_streams) ?
                                             &options[i] : NULL);
-                } while (err > 0 && !has_codec_parameters(st));
+                } while (err > 0 && !has_codec_parameters(st, NULL));
 
                 if (err < 0) {
                     av_log(ic, AV_LOG_INFO,
@@ -2705,11 +2721,13 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
                 }
             }
 
-            if (!has_codec_parameters(st)){
+            if (!has_codec_parameters(st, &errmsg)) {
                 char buf[256];
                 avcodec_string(buf, sizeof(buf), st->codec, 0);
                 av_log(ic, AV_LOG_WARNING,
-                       "Could not find codec parameters (%s)\n", buf);
+                       "Could not find codec parameters for stream %d (%s): %s\n"
+                       "Consider increasing the value for the 'analyzeduration' and 'probesize' options\n",
+                       i, buf, errmsg);
             } else {
                 ret = 0;
             }
@@ -4184,6 +4202,7 @@ void avpriv_set_pts_info(AVStream *s, int pts_wrap_bits,
         return;
     }
     s->time_base = new_tb;
+    av_codec_set_pkt_timebase(s->codec, new_tb);
     s->pts_wrap_bits = pts_wrap_bits;
 }
 
