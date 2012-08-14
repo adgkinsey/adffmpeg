@@ -61,8 +61,7 @@ static av_always_inline void AV_WN32(void *p, uint32_t v)
     __asm__ ("str  %1, %0" : "=m"(*(uint32_t *)p) : "r"(v));
 }
 
-
-#if AV_GCC_VERSION_AT_LEAST(4,4)
+#if HAVE_ASM_MOD_Q
 
 #define AV_RN64 AV_RN64
 static av_always_inline uint64_t AV_RN64(const void *p)
@@ -85,7 +84,7 @@ static av_always_inline void AV_WN64(void *p, uint64_t v)
              : "r"(v));
 }
 
-#endif /* AV_GCC_VERSION_AT_LEAST(4,4) */
+#endif /* HAVE_ASM_MOD_Q */
 
 #endif /* HAVE_INLINE_ASM */
 
