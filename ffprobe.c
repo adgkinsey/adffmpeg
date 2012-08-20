@@ -33,6 +33,7 @@
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/dict.h"
+#include "libavutil/libm.h"
 #include "libavutil/timecode.h"
 #include "libavdevice/avdevice.h"
 #include "libswscale/swscale.h"
@@ -121,7 +122,7 @@ static char *value_string(char *buf, int buf_size, struct unit_value uv)
             long long int index;
 
             if (uv.unit == unit_byte_str && use_byte_value_binary_prefix) {
-                index = (long long int) (log(vald)/log(2)) / 10;
+                index = (long long int) (log2(vald)) / 10;
                 index = av_clip(index, 0, FF_ARRAY_ELEMS(binary_unit_prefixes) - 1);
                 vald /= pow(2, index * 10);
                 prefix_string = binary_unit_prefixes[index];
@@ -1721,7 +1722,7 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
 {
     AVStream *stream = fmt_ctx->streams[stream_idx];
     AVCodecContext *dec_ctx;
-    AVCodec *dec;
+    const AVCodec *dec;
     char val_str[128];
     const char *s;
     AVRational sar, dar;
@@ -2071,7 +2072,7 @@ static void opt_input_file(void *optctx, const char *arg)
     input_filename = arg;
 }
 
-static int opt_help(const char *opt, const char *arg)
+static int show_help(const char *opt, const char *arg)
 {
     av_log_set_callback(log_callback_help);
     show_usage();
@@ -2079,7 +2080,6 @@ static int opt_help(const char *opt, const char *arg)
     printf("\n");
 
     show_help_children(avformat_get_class(), AV_OPT_FLAG_DECODING_PARAM);
-
     return 0;
 }
 

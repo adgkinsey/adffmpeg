@@ -277,56 +277,68 @@ void show_banner(int argc, char **argv, const OptionDef *options);
  * libraries.
  * This option processing function does not utilize the arguments.
  */
-int opt_version(const char *opt, const char *arg);
+int show_version(const char *opt, const char *arg);
 
 /**
  * Print the license of the program to stdout. The license depends on
  * the license of the libraries compiled into the program.
  * This option processing function does not utilize the arguments.
  */
-int opt_license(const char *opt, const char *arg);
+int show_license(const char *opt, const char *arg);
 
 /**
  * Print a listing containing all the formats supported by the
  * program.
  * This option processing function does not utilize the arguments.
  */
-int opt_formats(const char *opt, const char *arg);
+int show_formats(const char *opt, const char *arg);
 
 /**
  * Print a listing containing all the codecs supported by the
  * program.
  * This option processing function does not utilize the arguments.
  */
-int opt_codecs(const char *opt, const char *arg);
+int show_codecs(const char *opt, const char *arg);
+
+/**
+ * Print a listing containing all the decoders supported by the
+ * program.
+ */
+int show_decoders(const char *opt, const char *arg);
+
+/**
+ * Print a listing containing all the encoders supported by the
+ * program.
+ */
+int show_encoders(const char *opt, const char *arg);
 
 /**
  * Print a listing containing all the filters supported by the
  * program.
  * This option processing function does not utilize the arguments.
  */
-int opt_filters(const char *opt, const char *arg);
+int show_filters(const char *opt, const char *arg);
 
 /**
  * Print a listing containing all the bit stream filters supported by the
  * program.
  * This option processing function does not utilize the arguments.
  */
-int opt_bsfs(const char *opt, const char *arg);
+int show_bsfs(const char *opt, const char *arg);
 
 /**
  * Print a listing containing all the protocols supported by the
  * program.
  * This option processing function does not utilize the arguments.
  */
-int opt_protocols(const char *opt, const char *arg);
+int show_protocols(const char *opt, const char *arg);
 
 /**
  * Print a listing containing all the pixel formats supported by the
  * program.
  * This option processing function does not utilize the arguments.
  */
-int opt_pix_fmts(const char *opt, const char *arg);
+int show_pix_fmts(const char *opt, const char *arg);
 
 /**
  * Print a listing containing all the sample formats supported by the
