@@ -9,13 +9,12 @@ MMX-OBJS                               += x86/dsputil_mmx.o             \
                                           x86/idct_mmx_xvid.o           \
                                           x86/idct_sse2_xvid.o          \
                                           x86/motion_est_mmx.o          \
-                                          x86/mpegvideo_mmx.o           \
                                           x86/simple_idct_mmx.o         \
 
 MMX-OBJS-$(CONFIG_AAC_DECODER)         += x86/sbrdsp_init.o
 MMX-OBJS-$(CONFIG_AC3DSP)              += x86/ac3dsp_init.o
 MMX-OBJS-$(CONFIG_CAVS_DECODER)        += x86/cavsdsp_mmx.o
-MMX-OBJS-$(CONFIG_DNXHD_ENCODER)       += x86/dnxhd_mmx.o
+MMX-OBJS-$(CONFIG_DNXHD_ENCODER)       += x86/dnxhdenc.o
 MMX-OBJS-$(CONFIG_DWT)                 += x86/snowdsp_mmx.o \
                                           x86/dwt.o
 MMX-OBJS-$(CONFIG_ENCODERS)            += x86/dsputilenc_mmx.o
@@ -25,6 +24,8 @@ MMX-OBJS-$(CONFIG_H264DSP)             += x86/h264dsp_init.o
 MMX-OBJS-$(CONFIG_H264PRED)            += x86/h264_intrapred_init.o
 MMX-OBJS-$(CONFIG_LPC)                 += x86/lpc_mmx.o
 MMX-OBJS-$(CONFIG_MPEGAUDIODSP)        += x86/mpegaudiodec_mmx.o
+MMX-OBJS-$(CONFIG_MPEGVIDEO)           += x86/mpegvideo.o
+MMX-OBJS-$(CONFIG_MPEGVIDEOENC)        += x86/mpegvideoenc.o
 MMX-OBJS-$(CONFIG_PNG_DECODER)         += x86/pngdsp_init.o
 MMX-OBJS-$(CONFIG_PRORES_DECODER)      += x86/proresdsp_init.o
 MMX-OBJS-$(CONFIG_PRORES_LGPL_DECODER) += x86/proresdsp_init.o
@@ -41,11 +42,9 @@ YASM-OBJS-$(CONFIG_AAC_DECODER)        += x86/sbrdsp.o
 YASM-OBJS-$(CONFIG_AC3DSP)             += x86/ac3dsp.o
 YASM-OBJS-$(CONFIG_DCT)                += x86/dct32_sse.o
 YASM-OBJS-$(CONFIG_DIRAC_DECODER)      += x86/diracdsp_mmx.o x86/diracdsp_yasm.o
-YASM-OBJS-$(CONFIG_ENCODERS)           += x86/dsputilenc.o
-YASM-OBJS-$(CONFIG_FFT)                += x86/fft_mmx.o                 \
-                                          $(YASM-OBJS-FFT-yes)
-
 YASM-OBJS-$(CONFIG_DWT)                += x86/dwt_yasm.o
+YASM-OBJS-$(CONFIG_ENCODERS)           += x86/dsputilenc.o
+YASM-OBJS-$(CONFIG_FFT)                += x86/fft_mmx.o
 YASM-OBJS-$(CONFIG_H264CHROMA)         += x86/h264_chromamc.o           \
                                           x86/h264_chromamc_10bit.o
 YASM-OBJS-$(CONFIG_H264DSP)            += x86/h264_deblock.o            \

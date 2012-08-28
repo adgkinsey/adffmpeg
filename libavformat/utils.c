@@ -877,7 +877,7 @@ static void compute_frame_duration(int *pnum, int *pden, AVStream *st,
 }
 
 static int is_intra_only(AVCodecContext *enc){
-    AVCodecDescriptor *desc;
+    const AVCodecDescriptor *desc;
 
     if(enc->codec_type != AVMEDIA_TYPE_VIDEO)
         return 1;
@@ -1021,7 +1021,10 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
         presentation_delayed = 1;
 
     if(pkt->pts != AV_NOPTS_VALUE && pkt->dts != AV_NOPTS_VALUE && pkt->dts - (1LL<<(st->pts_wrap_bits-1)) > pkt->pts && st->pts_wrap_bits<63){
-        pkt->dts -= 1LL<<st->pts_wrap_bits;
+        if(is_relative(st->cur_dts) || pkt->dts - (1LL<<(st->pts_wrap_bits-1)) > st->cur_dts) {
+            pkt->dts -= 1LL<<st->pts_wrap_bits;
+        } else
+            pkt->pts += 1LL<<st->pts_wrap_bits;
     }
 
     // some mpeg2 in mpeg-ps lack dts (issue171 / input_file.mpg)
@@ -1138,12 +1141,12 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
             FFSWAP(int64_t, st->pts_buffer[i], st->pts_buffer[i+1]);
         if(pkt->dts == AV_NOPTS_VALUE)
             pkt->dts= st->pts_buffer[0];
-        if(st->codec->codec_id == AV_CODEC_ID_H264){ // we skipped it above so we try here
-            update_initial_timestamps(s, pkt->stream_index, pkt->dts, pkt->pts); // this should happen on the first packet
-        }
-        if(pkt->dts > st->cur_dts)
-            st->cur_dts = pkt->dts;
     }
+    if(st->codec->codec_id == AV_CODEC_ID_H264){ // we skipped it above so we try here
+        update_initial_timestamps(s, pkt->stream_index, pkt->dts, pkt->pts); // this should happen on the first packet
+    }
+    if(pkt->dts > st->cur_dts)
+        st->cur_dts = pkt->dts;
 
 //    av_log(NULL, AV_LOG_ERROR, "OUTdelayed:%d/%d pts:%s, dts:%s cur_dts:%s\n",
 //           presentation_delayed, delay, av_ts2str(pkt->pts), av_ts2str(pkt->dts), av_ts2str(st->cur_dts));
@@ -2996,31 +2999,35 @@ int av_read_pause(AVFormatContext *s)
     return AVERROR(ENOSYS);
 }
 
+void ff_free_stream(AVFormatContext *s, AVStream *st){
+    av_assert0(s->nb_streams>0);
+    av_assert0(s->streams[ s->nb_streams-1 ] == st);
+
+    if (st->parser) {
+        av_parser_close(st->parser);
+    }
+    if (st->attached_pic.data)
+        av_free_packet(&st->attached_pic);
+    av_dict_free(&st->metadata);
+    av_freep(&st->index_entries);
+    av_freep(&st->codec->extradata);
+    av_freep(&st->codec->subtitle_header);
+    av_freep(&st->codec);
+    av_freep(&st->priv_data);
+    av_freep(&st->info);
+    av_freep(&s->streams[ --s->nb_streams ]);
+}
+
 void avformat_free_context(AVFormatContext *s)
 {
     int i;
-    AVStream *st;
 
     av_opt_free(s);
     if (s->iformat && s->iformat->priv_class && s->priv_data)
         av_opt_free(s->priv_data);
 
-    for(i=0;i<s->nb_streams;i++) {
-        /* free all data in a stream component */
-        st = s->streams[i];
-        if (st->parser) {
-            av_parser_close(st->parser);
-        }
-        if (st->attached_pic.data)
-            av_free_packet(&st->attached_pic);
-        av_dict_free(&st->metadata);
-        av_freep(&st->index_entries);
-        av_freep(&st->codec->extradata);
-        av_freep(&st->codec->subtitle_header);
-        av_freep(&st->codec);
-        av_freep(&st->priv_data);
-        av_freep(&st->info);
-        av_freep(&st);
+    for(i=s->nb_streams-1; i>=0; i--) {
+        ff_free_stream(s, s->streams[i]);
     }
     for(i=s->nb_programs-1; i>=0; i--) {
         av_dict_free(&s->programs[i]->metadata);

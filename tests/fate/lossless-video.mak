@@ -1,3 +1,12 @@
+FATE_CLLC += fate-cllc-rgb
+fate-cllc-rgb: CMD = framecrc -i $(SAMPLES)/cllc/sample-cllc-rgb.avi
+
+FATE_CLLC += fate-cllc-argb
+fate-cllc-argb: CMD = framecrc -i $(SAMPLES)/cllc/sample-cllc-argb.avi
+
+FATE_LOSSLESS_VIDEO += $(FATE_CLLC)
+fate-cllc: $(FATE_CLLC)
+
 FATE_LAGARITH += fate-lagarith-rgb24
 fate-lagarith-rgb24: CMD = framecrc -i $(SAMPLES)/lagarith/lag-rgb24.avi
 
@@ -39,4 +48,3 @@ fate-zerocodec: CMD = framecrc -i $(SAMPLES)/zerocodec/sample-zeco.avi
 
 FATE_SAMPLES_FFMPEG += $(FATE_LOSSLESS_VIDEO)
 fate-lossless-video: $(FATE_LOSSLESS_VIDEO)
-

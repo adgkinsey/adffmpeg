@@ -244,8 +244,6 @@ typedef struct AllocEventProps {
     AVFrame *frame;
 } AllocEventProps;
 
-static int show_help(const char *opt, const char *arg);
-
 /* options specified by the user */
 static AVInputFormat *file_iformat;
 static const char *input_filename;
@@ -1588,7 +1586,7 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
     char buffersrc_args[256];
     int ret;
     AVBufferSinkParams *buffersink_params = av_buffersink_params_alloc();
-    AVFilterContext *filt_src = NULL, *filt_out = NULL, *filt_format;
+    AVFilterContext *filt_src = NULL, *filt_out = NULL, *filt_format, *filt_crop;
     AVCodecContext *codec = is->video_st->codec;
 
     snprintf(sws_flags_str, sizeof(sws_flags_str), "flags=%d", sws_flags);
@@ -1614,14 +1612,22 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
     if (ret < 0)
         return ret;
 
+    /* SDL YUV code is not handling odd width/height for some driver
+     * combinations, therefore we crop the picture to an even width/height. */
+    if ((ret = avfilter_graph_create_filter(&filt_crop,
+                                            avfilter_get_by_name("crop"),
+                                            "ffplay_crop", "floor(in_w/2)*2:floor(in_h/2)*2", NULL, graph)) < 0)
+        return ret;
     if ((ret = avfilter_graph_create_filter(&filt_format,
                                             avfilter_get_by_name("format"),
                                             "format", "yuv420p", NULL, graph)) < 0)
         return ret;
+    if ((ret = avfilter_link(filt_crop, 0, filt_format, 0)) < 0)
+        return ret;
     if ((ret = avfilter_link(filt_format, 0, filt_out, 0)) < 0)
         return ret;
 
-    if ((ret = configure_filtergraph(graph, vfilters, filt_src, filt_format)) < 0)
+    if ((ret = configure_filtergraph(graph, vfilters, filt_src, filt_crop)) < 0)
         return ret;
 
     is->in_video_filter  = filt_src;
@@ -3023,14 +3029,12 @@ static void show_usage(void)
     av_log(NULL, AV_LOG_INFO, "\n");
 }
 
-static int show_help(const char *opt, const char *arg)
+void show_help_default(const char *opt, const char *arg)
 {
     av_log_set_callback(log_callback_help);
     show_usage();
-    show_help_options(options, "Main options:\n",
-                      OPT_EXPERT, 0);
-    show_help_options(options, "\nAdvanced options:\n",
-                      OPT_EXPERT, OPT_EXPERT);
+    show_help_options(options, "Main options:", 0, OPT_EXPERT, 0);
+    show_help_options(options, "Advanced options:", OPT_EXPERT, 0, 0);
     printf("\n");
     show_help_children(avcodec_get_class(), AV_OPT_FLAG_DECODING_PARAM);
     show_help_children(avformat_get_class(), AV_OPT_FLAG_DECODING_PARAM);
@@ -3053,7 +3057,6 @@ static int show_help(const char *opt, const char *arg)
            "page down/page up   seek backward/forward 10 minutes\n"
            "mouse click         seek to percentage in file corresponding to fraction of width\n"
            );
-    return 0;
 }
 
 static int lockmgr(void **mtx, enum AVLockOp op)

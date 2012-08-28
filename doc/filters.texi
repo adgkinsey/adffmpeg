@@ -1107,7 +1107,7 @@ Set the voice to use for the speech synthesis. Default value is
 @code{kal}. See also the @var{list_voices} option.
 @end table
 
-@section Examples
+@subsection Examples
 
 @itemize
 @item
@@ -2795,36 +2795,59 @@ The default value of @var{color} is "black".
 
 @end table
 
-Some examples follow:
+@section Examples
 
+@itemize
+@item
+Add paddings with color "violet" to the input video. Output video
+size is 640x480, the top-left corner of the input video is placed at
+column 0, row 40:
 @example
-# Add paddings with color "violet" to the input video. Output video
-# size is 640x480, the top-left corner of the input video is placed at
-# column 0, row 40.
 pad=640:480:0:40:violet
+@end example
 
-# pad the input to get an output with dimensions increased bt 3/2,
-# and put the input video at the center of the padded area
+@item
+Pad the input to get an output with dimensions increased by 3/2,
+and put the input video at the center of the padded area:
+@example
 pad="3/2*iw:3/2*ih:(ow-iw)/2:(oh-ih)/2"
+@end example
 
-# pad the input to get a squared output with size equal to the maximum
-# value between the input width and height, and put the input video at
-# the center of the padded area
+@item
+Pad the input to get a squared output with size equal to the maximum
+value between the input width and height, and put the input video at
+the center of the padded area:
+@example
 pad="max(iw\,ih):ow:(ow-iw)/2:(oh-ih)/2"
+@end example
 
-# pad the input to get a final w/h ratio of 16:9
+@item
+Pad the input to get a final w/h ratio of 16:9:
+@example
 pad="ih*16/9:ih:(ow-iw)/2:(oh-ih)/2"
+@end example
 
-# for anamorphic video, in order to set the output display aspect ratio,
-# it is necessary to use sar in the expression, according to the relation:
-# (ih * X / ih) * sar = output_dar
-# X = output_dar / sar
+@item
+In case of anamorphic video, in order to set the output display aspect
+correctly, it is necessary to use @var{sar} in the expression,
+according to the relation:
+@example
+(ih * X / ih) * sar = output_dar
+X = output_dar / sar
+@end example
+
+Thus the previous example needs to be modified to:
+@example
 pad="ih*16/9/sar:ih:(ow-iw)/2:(oh-ih)/2"
+@end example
 
-# double output size and put the input video in the bottom-right
-# corner of the output padded area
+@item
+Double output size and put the input video in the bottom-right
+corner of the output padded area:
+@example
 pad="2*iw:2*ih:ow-iw:oh-ih"
 @end example
+@end itemize
 
 @section pixdesctest
 
@@ -3155,106 +3178,6 @@ Mark the frame as top-field-first.
 @item prog
 Mark the frame as progressive.
 @end table
-
-@section asetpts, setpts
-
-Change the PTS (presentation timestamp) of the input frames.
-
-@code{asetpts} works on audio frames, @code{setpts} on video frames.
-
-Accept in input an expression evaluated through the eval API, which
-can contain the following constants:
-
-@table @option
-@item PTS
-the presentation timestamp in input
-
-@item N
-the count of the input frame, starting from 0.
-
-@item NB_CONSUMED_SAMPLES
-the number of consumed samples, not including the current frame (only
-audio)
-
-@item NB_SAMPLES
-the number of samples in the current frame (only audio)
-
-@item SAMPLE_RATE
-audio sample rate
-
-@item STARTPTS
-the PTS of the first video frame
-
-@item INTERLACED
-tell if the current frame is interlaced
-
-@item TB
-the time base
-
-@item POS
-original position in the file of the frame, or undefined if undefined
-for the current frame
-
-@item PREV_INPTS
-previous input PTS
-
-@item PREV_OUTPTS
-previous output PTS
-
-@end table
-
-Some examples follow:
-
-@example
-# start counting PTS from zero
-setpts=PTS-STARTPTS
-
-# fast motion
-setpts=0.5*PTS
-
-# slow motion
-setpts=2.0*PTS
-
-# fixed rate 25 fps
-setpts=N/(25*TB)
-
-# fixed rate 25 fps with some jitter
-setpts='1/(25*TB) * (N + 0.05 * sin(N*2*PI/25))'
-
-# apply an offset of 10 seconds to the input PTS
-setpts=PTS+10/TB
-@end example
-
-@section settb, asettb
-
-Set the timebase to use for the output frames timestamps.
-It is mainly useful for testing timebase configuration.
-
-It accepts in input an arithmetic expression representing a rational.
-The expression can contain the constants "AVTB" (the
-default timebase), "intb" (the input timebase) and "sr" (the sample rate,
-audio only).
-
-The default value for the input is "intb".
-
-Follow some examples.
-
-@example
-# set the timebase to 1/25
-settb=1/25
-
-# set the timebase to 1/10
-settb=0.1
-
-#set the timebase to 1001/1000
-settb=1+0.001
-
-#set the timebase to 2*intb
-settb=2*intb
-
-#set the default timebase value
-settb=AVTB
-@end example
 
 @section showinfo
 
@@ -4177,6 +4100,150 @@ tools.
 
 Below is a description of the currently available multimedia filters.
 
+@section asetpts, setpts
+
+Change the PTS (presentation timestamp) of the input frames.
+
+@code{asetpts} works on audio frames, @code{setpts} on video frames.
+
+Accept in input an expression evaluated through the eval API, which
+can contain the following constants:
+
+@table @option
+@item PTS
+the presentation timestamp in input
+
+@item N
+the count of the input frame, starting from 0.
+
+@item NB_CONSUMED_SAMPLES
+the number of consumed samples, not including the current frame (only
+audio)
+
+@item NB_SAMPLES
+the number of samples in the current frame (only audio)
+
+@item SAMPLE_RATE
+audio sample rate
+
+@item STARTPTS
+the PTS of the first frame
+
+@item STARTT
+the time in seconds of the first frame
+
+@item INTERLACED
+tell if the current frame is interlaced
+
+@item T
+the time in seconds of the current frame
+
+@item TB
+the time base
+
+@item POS
+original position in the file of the frame, or undefined if undefined
+for the current frame
+
+@item PREV_INPTS
+previous input PTS
+
+@item PREV_INT
+previous input time in seconds
+
+@item PREV_OUTPTS
+previous output PTS
+
+@item PREV_OUTT
+previous output time in seconds
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Start counting PTS from zero
+@example
+setpts=PTS-STARTPTS
+@end example
+
+@item
+Apply fast motion effect:
+@example
+setpts=0.5*PTS
+@end example
+
+@item
+Apply slow motion effect:
+@example
+setpts=2.0*PTS
+@end example
+
+@item
+Set fixed rate of 25 frames per second:
+@example
+setpts=N/(25*TB)
+@end example
+
+@item
+Set fixed rate 25 fps with some jitter:
+@example
+setpts='1/(25*TB) * (N + 0.05 * sin(N*2*PI/25))'
+@end example
+
+@item
+Apply an offset of 10 seconds to the input PTS:
+@example
+setpts=PTS+10/TB
+@end example
+@end itemize
+
+@section settb, asettb
+
+Set the timebase to use for the output frames timestamps.
+It is mainly useful for testing timebase configuration.
+
+It accepts in input an arithmetic expression representing a rational.
+The expression can contain the constants "AVTB" (the
+default timebase), "intb" (the input timebase) and "sr" (the sample rate,
+audio only).
+
+The default value for the input is "intb".
+
+@subsection Examples
+
+@itemize
+@item
+Set the timebase to 1/25:
+@example
+settb=1/25
+@end example
+
+@item
+Set the timebase to 1/10:
+@example
+settb=0.1
+@end example
+
+@item
+Set the timebase to 1001/1000:
+@example
+settb=1+0.001
+@end example
+
+@item
+Set the timebase to 2*intb:
+@example
+settb=2*intb
+@end example
+
+@item
+Set the default timebase value:
+@example
+settb=AVTB
+@end example
+@end itemize
+
 @section concat
 
 Concatenate audio and video streams, joining them together one after the
@@ -4251,6 +4318,20 @@ Note that a desync will happen at the stitch if the audio and video streams
 do not have exactly the same duration in the first file.
 
 @end itemize
+
+@section showspectrum
+
+Convert input audio to a video output, representing the audio frequency
+spectrum.
+
+The filter accepts the following named parameters:
+@table @option
+@item size, s
+Specify the video size for the output. Default value is @code{640x480}.
+@end table
+
+The usage is very similar to the showwaves filter; see the examples in that
+section.
 
 @section showwaves
 

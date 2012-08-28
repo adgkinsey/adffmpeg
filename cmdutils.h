@@ -148,7 +148,6 @@ typedef struct {
 #define OPT_STRING 0x0008
 #define OPT_VIDEO  0x0010
 #define OPT_AUDIO  0x0020
-#define OPT_GRAB   0x0040
 #define OPT_INT    0x0080
 #define OPT_FLOAT  0x0100
 #define OPT_SUBTITLE 0x0200
@@ -172,14 +171,34 @@ typedef struct {
     const char *argname;
 } OptionDef;
 
-void show_help_options(const OptionDef *options, const char *msg, int mask,
-                       int value);
+/**
+ * Print help for all options matching specified flags.
+ *
+ * @param options a list of options
+ * @param msg title of this group. Only printed if at least one option matches.
+ * @param req_flags print only options which have all those flags set.
+ * @param rej_flags don't print options which have any of those flags set.
+ * @param alt_flags print only options that have at least one of those flags set
+ */
+void show_help_options(const OptionDef *options, const char *msg, int req_flags,
+                       int rej_flags, int alt_flags);
 
 /**
  * Show help for all options with given flags in class and all its
  * children.
  */
 void show_help_children(const AVClass *class, int flags);
+
+/**
+ * Per-avtool specific help handler. Implemented in each
+ * avtool, called by show_help().
+ */
+void show_help_default(const char *opt, const char *arg);
+
+/**
+ * Generic -h handler common to all avtools.
+ */
+int show_help(const char *opt, const char *arg);
 
 /**
  * Parse the command line arguments.
@@ -341,6 +360,13 @@ int show_protocols(const char *opt, const char *arg);
 int show_pix_fmts(const char *opt, const char *arg);
 
 /**
+ * Print a listing containing all the standard channel layouts supported by
+ * the program.
+ * This option processing function does not utilize the arguments.
+ */
+int show_layouts(const char *opt, const char *arg);
+
+/**
  * Print a listing containing all the sample formats supported by the
  * program.
  */
@@ -442,4 +468,23 @@ void filter_release_buffer(AVFilterBuffer *fb);
  * buffers have been released.
  */
 void free_buffer_pool(FrameBuffer **pool);
+
+#define GET_PIX_FMT_NAME(pix_fmt)\
+    const char *name = av_get_pix_fmt_name(pix_fmt);
+
+#define GET_SAMPLE_FMT_NAME(sample_fmt)\
+    const char *name = av_get_sample_fmt_name(sample_fmt)
+
+#define GET_SAMPLE_RATE_NAME(rate)\
+    char name[16];\
+    snprintf(name, sizeof(name), "%d", rate);
+
+#define GET_CH_LAYOUT_NAME(ch_layout)\
+    char name[16];\
+    snprintf(name, sizeof(name), "0x%"PRIx64, ch_layout);
+
+#define GET_CH_LAYOUT_DESC(ch_layout)\
+    char name[128];\
+    av_get_channel_layout_string(name, sizeof(name), 0, ch_layout);
+
 #endif /* CMDUTILS_H */

@@ -53,7 +53,7 @@ OBJS-$(CONFIG_AMIX_FILTER)                   += af_amix.o
 OBJS-$(CONFIG_ANULL_FILTER)                  += af_anull.o
 OBJS-$(CONFIG_ARESAMPLE_FILTER)              += af_aresample.o
 OBJS-$(CONFIG_ASETNSAMPLES_FILTER)           += af_asetnsamples.o
-OBJS-$(CONFIG_ASETPTS_FILTER)                += vf_setpts.o
+OBJS-$(CONFIG_ASETPTS_FILTER)                += f_setpts.o
 OBJS-$(CONFIG_ASETTB_FILTER)                 += f_settb.o
 OBJS-$(CONFIG_ASHOWINFO_FILTER)              += af_ashowinfo.o
 OBJS-$(CONFIG_ASPLIT_FILTER)                 += split.o
@@ -122,7 +122,7 @@ OBJS-$(CONFIG_SCALE_FILTER)                  += vf_scale.o
 OBJS-$(CONFIG_SELECT_FILTER)                 += vf_select.o
 OBJS-$(CONFIG_SETDAR_FILTER)                 += vf_aspect.o
 OBJS-$(CONFIG_SETFIELD_FILTER)               += vf_setfield.o
-OBJS-$(CONFIG_SETPTS_FILTER)                 += vf_setpts.o
+OBJS-$(CONFIG_SETPTS_FILTER)                 += f_setpts.o
 OBJS-$(CONFIG_SETSAR_FILTER)                 += vf_aspect.o
 OBJS-$(CONFIG_SETTB_FILTER)                  += f_settb.o
 OBJS-$(CONFIG_SHOWINFO_FILTER)               += vf_showinfo.o
@@ -204,6 +204,7 @@ OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/pullup.o
 
 # multimedia filters
 OBJS-$(CONFIG_CONCAT_FILTER)                 += avf_concat.o
+OBJS-$(CONFIG_SHOWSPECTRUM_FILTER)           += avf_showspectrum.o
 OBJS-$(CONFIG_SHOWWAVES_FILTER)              += avf_showwaves.o
 
 # multimedia sources

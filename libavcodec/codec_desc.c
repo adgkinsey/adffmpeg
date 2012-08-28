@@ -836,6 +836,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_TMV,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "tmv",
+        .long_name = NULL_IF_CONFIG_SMALL("8088flex TMV"),
         .props     = AV_CODEC_PROP_INTRA_ONLY,
     },
     {
@@ -1056,6 +1057,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_XBM,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "xbm",
+        .long_name = NULL_IF_CONFIG_SMALL("XBM (X BitMap) image"),
         .props     = AV_CODEC_PROP_INTRA_ONLY,
     },
     {
@@ -1178,8 +1180,8 @@ static const AVCodecDescriptor codec_descriptors[] = {
     {
         .id        = AV_CODEC_ID_AVRN,
         .type      = AVMEDIA_TYPE_VIDEO,
-        .name      = "AVRn",
-        .long_name = NULL_IF_CONFIG_SMALL("AVRn"),
+        .name      = "avrn",
+        .long_name = NULL_IF_CONFIG_SMALL("Avid AVI Codec"),
     },
 
     /* various PCM "codecs" */
