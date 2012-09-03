@@ -1539,6 +1539,43 @@ indicates never reset and return the largest area encountered during
 playback.
 @end table
 
+@section decimate
+
+This filter drops frames that do not differ greatly from the previous
+frame in order to reduce framerate.  The main use of this filter is
+for very-low-bitrate encoding (e.g. streaming over dialup modem), but
+it could in theory be used for fixing movies that were
+inverse-telecined incorrectly.
+
+It accepts the following parameters:
+@var{max}:@var{hi}:@var{lo}:@var{frac}.
+
+@table @option
+
+@item max
+Set the maximum number of consecutive frames which can be dropped (if
+positive), or the minimum interval between dropped frames (if
+negative). If the value is 0, the frame is dropped unregarding the
+number of previous sequentially dropped frames.
+
+Default value is 0.
+
+@item hi, lo, frac
+Set the dropping threshold values.
+
+Values for @var{hi} and @var{lo} are for 8x8 pixel blocks and
+represent actual pixel value differences, so a threshold of 64
+corresponds to 1 unit of difference for each pixel, or the same spread
+out differently over the block.
+
+A frame is a candidate for dropping if no 8x8 blocks differ by more
+than a threshold of @var{hi}, and if no more than @var{frac} blocks (1
+meaning the whole image) differ by more than a threshold of @var{lo}.
+
+Default value for @var{hi} is 64*12, default value for @var{lo} is
+64*5, and default value for @var{frac} is 0.33.
+@end table
+
 @section delogo
 
 Suppress a TV station logo by a simple interpolation of the surrounding
@@ -2313,6 +2350,18 @@ hue=PI/2:1
 @end example
 @end itemize
 
+@subsection Commands
+
+This filter supports the following command:
+@table @option
+@item reinit
+Modify the hue and/or the saturation of the input video.
+The command accepts the same named options and syntax than when calling the
+filter from the command-line.
+
+If a parameter is omitted, it is kept at its current value.
+@end table
+
 @section idet
 
 Interlaceing detect filter. This filter tries to detect if the input is
@@ -2459,7 +2508,6 @@ the named filter.
 
 The list of the currently supported filters follows:
 @table @var
-@item decimate
 @item denoise3d
 @item detc
 @item dint
@@ -2491,7 +2539,6 @@ The list of the currently supported filters follows:
 @item rectangle
 @item rotate
 @item sab
-@item smartblur
 @item softpulldown
 @item softskip
 @item spp
@@ -3252,6 +3299,35 @@ not specified it will use the default value of 16.
 
 Adding this in the beginning of filter chains should make filtering
 faster due to better use of the memory cache.
+
+@section smartblur
+
+Blur the input video without impacting the outlines.
+
+The filter accepts the following parameters:
+@var{luma_radius}:@var{luma_strength}:@var{luma_threshold}[:@var{chroma_radius}:@var{chroma_strength}:@var{chroma_threshold}]
+
+Parameters prefixed by @var{luma} indicate that they work on the
+luminance of the pixels whereas parameters prefixed by @var{chroma}
+refer to the chrominance of the pixels.
+
+If the chroma parameters are not set, the luma parameters are used for
+either the luminance and the chrominance of the pixels.
+
+@var{luma_radius} or @var{chroma_radius} must be a float number in the
+range [0.1,5.0] that specifies the variance of the gaussian filter
+used to blur the image (slower if larger).
+
+@var{luma_strength} or @var{chroma_strength} must be a float number in
+the range [-1.0,1.0] that configures the blurring. A value included in
+[0.0,1.0] will blur the image whereas a value included in [-1.0,0.0]
+will sharpen the image.
+
+@var{luma_threshold} or @var{chroma_threshold} must be an integer in
+the range [-30,30] that is used as a coefficient to determine whether
+a pixel should be blurred or not. A value of 0 will filter all the
+image, a value included in [0,30] will filter flat areas and a value
+included in [-30,0] will filter edges.
 
 @section split
 

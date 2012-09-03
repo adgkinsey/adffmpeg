@@ -248,7 +248,7 @@ static int encode_frame(AVCodecContext * avctx, AVPacket *pkt,
     uint32_t res[2] = { s->dpi, 1 };        // image resolution (72/1)
     uint16_t bpp_tab[4];
     int ret = -1;
-    int is_yuv = 0;
+    int is_yuv = 0, alpha = 0;
     int shift_h, shift_v;
 
     *p = *pict;
@@ -263,23 +263,25 @@ static int encode_frame(AVCodecContext * avctx, AVPacket *pkt,
 
     switch (avctx->pix_fmt) {
     case PIX_FMT_RGBA64LE:
-    case PIX_FMT_RGB48LE:
     case PIX_FMT_RGBA:
+        alpha = 1;
+    case PIX_FMT_RGB48LE:
     case PIX_FMT_RGB24:
         s->photometric_interpretation = 2;
         break;
     case PIX_FMT_GRAY8:
         avctx->bits_per_coded_sample = 0x28;
     case PIX_FMT_GRAY8A:
+        alpha = avctx->pix_fmt == PIX_FMT_GRAY8A;
     case PIX_FMT_GRAY16LE:
+    case PIX_FMT_MONOBLACK:
         s->photometric_interpretation = 1;
         break;
     case PIX_FMT_PAL8:
         s->photometric_interpretation = 3;
         break;
-    case PIX_FMT_MONOBLACK:
     case PIX_FMT_MONOWHITE:
-        s->photometric_interpretation = avctx->pix_fmt == PIX_FMT_MONOBLACK;
+        s->photometric_interpretation = 0;
         break;
     case PIX_FMT_YUV420P:
     case PIX_FMT_YUV422P:
@@ -451,6 +453,8 @@ static int encode_frame(AVCodecContext * avctx, AVPacket *pkt,
         }
         add_entry(s, TIFF_PAL, TIFF_SHORT, 256 * 3, pal);
     }
+    if (alpha)
+        add_entry1(s,TIFF_EXTRASAMPLES,      TIFF_SHORT,            2);
     if (is_yuv){
         /** according to CCIR Recommendation 601.1 */
         uint32_t refbw[12] = {15, 1, 235, 1, 128, 1, 240, 1, 128, 1, 240, 1};

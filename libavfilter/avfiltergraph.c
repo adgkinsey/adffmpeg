@@ -26,7 +26,7 @@
 #include "libavutil/audioconvert.h"
 #include "libavutil/avassert.h"
 #include "libavutil/pixdesc.h"
-#include "libavcodec/avcodec.h" // avcodec_find_best_pix_fmt2()
+#include "libavcodec/avcodec.h" // avcodec_find_best_pix_fmt_of_2()
 #include "avfilter.h"
 #include "avfiltergraph.h"
 #include "formats.h"
@@ -429,7 +429,7 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
             int i;
             for (i=0; i<link->in_formats->format_count; i++) {
                 enum PixelFormat p = link->in_formats->formats[i];
-                best= avcodec_find_best_pix_fmt2(best, p, ref->format, has_alpha, NULL);
+                best= avcodec_find_best_pix_fmt_of_2(best, p, ref->format, has_alpha, NULL);
             }
             av_log(link->src,AV_LOG_DEBUG, "picking %s out of %d ref:%s alpha:%d\n",
                    av_get_pix_fmt_name(best), link->in_formats->format_count,
@@ -630,7 +630,7 @@ static void swap_channel_layouts_on_filter(AVFilterContext *filter)
 
     for (i = 0; i < filter->nb_outputs; i++) {
         AVFilterLink *outlink = filter->outputs[i];
-        int best_idx, best_score = INT_MIN, best_count_diff = INT_MAX;
+        int best_idx = -1, best_score = INT_MIN, best_count_diff = INT_MAX;
 
         if (outlink->type != AVMEDIA_TYPE_AUDIO ||
             outlink->in_channel_layouts->nb_channel_layouts < 2)
@@ -679,6 +679,7 @@ static void swap_channel_layouts_on_filter(AVFilterContext *filter)
                 best_count_diff = count_diff;
             }
         }
+        av_assert1(best_idx>=0);
         FFSWAP(uint64_t, outlink->in_channel_layouts->channel_layouts[0],
                outlink->in_channel_layouts->channel_layouts[best_idx]);
     }
