@@ -2537,7 +2537,6 @@ The list of the currently supported filters follows:
 @item pullup
 @item qp
 @item rectangle
-@item rotate
 @item sab
 @item softpulldown
 @item softskip
@@ -2556,13 +2555,19 @@ of the corresponding MPlayer filters. For detailed instructions check
 the "VIDEO FILTERS" section in the MPlayer manual.
 
 Some examples follow:
+@itemize
+@item
+Adjust gamma, brightness, contrast:
 @example
-# adjust gamma, brightness, contrast
 mp=eq2=1.0:2:0.5
-
-# tweak hue and saturation
-mp=hue=100:-10
 @end example
+
+@item
+Add temporal noise to input video:
+@example
+mp=noise=20t
+@end example
+@end itemize
 
 See also mplayer(1), @url{http://www.mplayerhq.hu/}.
 
@@ -3454,7 +3459,7 @@ It accepts a parameter representing an integer, which can assume the
 values:
 
 @table @samp
-@item 0
+@item 0, 4
 Rotate by 90 degrees counterclockwise and vertically flip (default), that is:
 @example
 L.R     L.l
@@ -3462,7 +3467,7 @@ L.R     L.l
 l.r     R.r
 @end example
 
-@item 1
+@item 1, 5
 Rotate by 90 degrees clockwise, that is:
 @example
 L.R     l.L
@@ -3470,7 +3475,7 @@ L.R     l.L
 l.r     r.R
 @end example
 
-@item 2
+@item 2, 6
 Rotate by 90 degrees counterclockwise, that is:
 @example
 L.R     R.r
@@ -3478,7 +3483,7 @@ L.R     R.r
 l.r     L.l
 @end example
 
-@item 3
+@item 3, 7
 Rotate by 90 degrees clockwise and vertically flip, that is:
 @example
 L.R     r.R
@@ -3486,6 +3491,9 @@ L.R     r.R
 l.r     l.L
 @end example
 @end table
+
+For values between 4-7 transposition is only done if the input video
+geometry is portrait and not landscape.
 
 @section unsharp
 

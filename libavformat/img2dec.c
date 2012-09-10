@@ -330,7 +330,7 @@ static int read_packet(AVFormatContext *s1, AVPacket *pkt)
     char *filename = filename_bytes;
     int i;
     int size[3]={0}, ret[3]={0};
-    AVIOContext *f[3];
+    AVIOContext *f[3] = {NULL};
     AVCodecContext *codec= s1->streams[0]->codec;
 
     if (!s->is_pipe) {
@@ -352,7 +352,7 @@ static int read_packet(AVFormatContext *s1, AVPacket *pkt)
         for(i=0; i<3; i++){
             if (avio_open2(&f[i], filename, AVIO_FLAG_READ,
                            &s1->interrupt_callback, NULL) < 0) {
-                if(i==1)
+                if(i>=1)
                     break;
                 av_log(s1, AV_LOG_ERROR, "Could not open file : %s\n",filename);
                 return AVERROR(EIO);
@@ -379,7 +379,7 @@ static int read_packet(AVFormatContext *s1, AVPacket *pkt)
 
     pkt->size= 0;
     for(i=0; i<3; i++){
-        if(size[i]){
+        if(f[i]){
             ret[i]= avio_read(f[i], pkt->data + pkt->size, size[i]);
             if (!s->is_pipe)
                 avio_close(f[i]);
@@ -413,16 +413,16 @@ static int read_close(struct AVFormatContext* s1)
 #define DEC AV_OPT_FLAG_DECODING_PARAM
 static const AVOption options[] = {
     { "framerate",    "set the video framerate",             OFFSET(framerate),    AV_OPT_TYPE_STRING, {.str = "25"}, 0, 0, DEC },
-    { "loop",         "force loop over input file sequence", OFFSET(loop),         AV_OPT_TYPE_INT,    {.dbl = 0},    0, 1, DEC },
+    { "loop",         "force loop over input file sequence", OFFSET(loop),         AV_OPT_TYPE_INT,    {.i64 = 0},    0, 1, DEC },
 
-    { "pattern_type", "set pattern type",                    OFFSET(pattern_type), AV_OPT_TYPE_INT, {.dbl=PT_GLOB_SEQUENCE}, 0, INT_MAX, DEC, "pattern_type"},
-    { "glob_sequence","glob/sequence pattern type",          0, AV_OPT_TYPE_CONST, {.dbl=PT_GLOB_SEQUENCE}, INT_MIN, INT_MAX, DEC, "pattern_type" },
-    { "glob",         "glob pattern type",                   0, AV_OPT_TYPE_CONST, {.dbl=PT_GLOB},          INT_MIN, INT_MAX, DEC, "pattern_type" },
-    { "sequence",     "glob pattern type",                   0, AV_OPT_TYPE_CONST, {.dbl=PT_SEQUENCE},      INT_MIN, INT_MAX, DEC, "pattern_type" },
+    { "pattern_type", "set pattern type",                    OFFSET(pattern_type), AV_OPT_TYPE_INT, {.i64=PT_GLOB_SEQUENCE}, 0, INT_MAX, DEC, "pattern_type"},
+    { "glob_sequence","glob/sequence pattern type",          0, AV_OPT_TYPE_CONST, {.i64=PT_GLOB_SEQUENCE}, INT_MIN, INT_MAX, DEC, "pattern_type" },
+    { "glob",         "glob pattern type",                   0, AV_OPT_TYPE_CONST, {.i64=PT_GLOB},          INT_MIN, INT_MAX, DEC, "pattern_type" },
+    { "sequence",     "glob pattern type",                   0, AV_OPT_TYPE_CONST, {.i64=PT_SEQUENCE},      INT_MIN, INT_MAX, DEC, "pattern_type" },
 
     { "pixel_format", "set video pixel format",              OFFSET(pixel_format), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
-    { "start_number", "set first number in the sequence",    OFFSET(start_number), AV_OPT_TYPE_INT,    {.dbl = 0},    0, INT_MAX, DEC },
-    { "start_number_range", "set range for looking at the first sequence number", OFFSET(start_number_range), AV_OPT_TYPE_INT, {.dbl = 5}, 1, INT_MAX, DEC },
+    { "start_number", "set first number in the sequence",    OFFSET(start_number), AV_OPT_TYPE_INT,    {.i64 = 0},    0, INT_MAX, DEC },
+    { "start_number_range", "set range for looking at the first sequence number", OFFSET(start_number_range), AV_OPT_TYPE_INT, {.i64 = 5}, 1, INT_MAX, DEC },
     { "video_size",   "set video size",                      OFFSET(video_size),   AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { NULL },
 };

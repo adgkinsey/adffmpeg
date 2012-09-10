@@ -116,7 +116,6 @@ static char *value_string(char *buf, int buf_size, struct unit_value uv)
         snprintf(buf, buf_size, "%d:%02d:%09.6f", hours, mins, secs);
     } else {
         const char *prefix_string = "";
-        int l;
 
         if (use_value_prefix && vald > 1) {
             long long int index;
@@ -124,7 +123,7 @@ static char *value_string(char *buf, int buf_size, struct unit_value uv)
             if (uv.unit == unit_byte_str && use_byte_value_binary_prefix) {
                 index = (long long int) (log2(vald)) / 10;
                 index = av_clip(index, 0, FF_ARRAY_ELEMS(binary_unit_prefixes) - 1);
-                vald /= pow(2, index * 10);
+                vald /= exp2(index * 10);
                 prefix_string = binary_unit_prefixes[index];
             } else {
                 index = (long long int) (log10(vald)) / 3;
@@ -135,10 +134,10 @@ static char *value_string(char *buf, int buf_size, struct unit_value uv)
         }
 
         if (show_float || (use_value_prefix && vald != (long long int)vald))
-            l = snprintf(buf, buf_size, "%f", vald);
+            snprintf(buf, buf_size, "%f", vald);
         else
-            l = snprintf(buf, buf_size, "%lld", (long long int)vald);
-        snprintf(buf+l, buf_size-l, "%s%s%s", *prefix_string || show_value_unit ? " " : "",
+            snprintf(buf, buf_size, "%lld", (long long int)vald);
+        av_strlcatf(buf, buf_size, "%s%s%s", *prefix_string || show_value_unit ? " " : "",
                  prefix_string, show_value_unit ? uv.unit : "");
     }
 
@@ -431,10 +430,10 @@ typedef struct DefaultContext {
 #define OFFSET(x) offsetof(DefaultContext, x)
 
 static const AVOption default_options[] = {
-    { "noprint_wrappers", "do not print headers and footers", OFFSET(noprint_wrappers), AV_OPT_TYPE_INT, {.dbl=0}, 0, 1 },
-    { "nw",               "do not print headers and footers", OFFSET(noprint_wrappers), AV_OPT_TYPE_INT, {.dbl=0}, 0, 1 },
-    { "nokey",          "force no key printing",     OFFSET(nokey),          AV_OPT_TYPE_INT, {.dbl=0}, 0, 1 },
-    { "nk",             "force no key printing",     OFFSET(nokey),          AV_OPT_TYPE_INT, {.dbl=0}, 0, 1 },
+    { "noprint_wrappers", "do not print headers and footers", OFFSET(noprint_wrappers), AV_OPT_TYPE_INT, {.i64=0}, 0, 1 },
+    { "nw",               "do not print headers and footers", OFFSET(noprint_wrappers), AV_OPT_TYPE_INT, {.i64=0}, 0, 1 },
+    { "nokey",          "force no key printing",     OFFSET(nokey),          AV_OPT_TYPE_INT, {.i64=0}, 0, 1 },
+    { "nk",             "force no key printing",     OFFSET(nokey),          AV_OPT_TYPE_INT, {.i64=0}, 0, 1 },
     {NULL},
 };
 
@@ -464,22 +463,6 @@ static av_cold int default_init(WriterContext *wctx, const char *args, void *opa
     return 0;
 }
 
-static void default_print_footer(WriterContext *wctx)
-{
-    DefaultContext *def = wctx->priv;
-
-    if (!def->noprint_wrappers)
-        printf("\n");
-}
-
-static void default_print_chapter_header(WriterContext *wctx, const char *chapter)
-{
-    DefaultContext *def = wctx->priv;
-
-    if (!def->noprint_wrappers && wctx->nb_chapter)
-        printf("\n");
-}
-
 /* lame uppercasing routine, assumes the string is lower case ASCII */
 static inline char *upcase_string(char *dst, size_t dst_size, const char *src)
 {
@@ -495,8 +478,6 @@ static void default_print_section_header(WriterContext *wctx, const char *sectio
     DefaultContext *def = wctx->priv;
     char buf[32];
 
-    if (wctx->nb_section)
-        printf("\n");
     if (!def->noprint_wrappers)
         printf("[%s]\n", upcase_string(buf, sizeof(buf), section));
 }
@@ -507,7 +488,7 @@ static void default_print_section_footer(WriterContext *wctx, const char *sectio
     char buf[32];
 
     if (!def->noprint_wrappers)
-        printf("[/%s]", upcase_string(buf, sizeof(buf), section));
+        printf("[/%s]\n", upcase_string(buf, sizeof(buf), section));
 }
 
 static void default_print_str(WriterContext *wctx, const char *key, const char *value)
@@ -541,8 +522,6 @@ static const Writer default_writer = {
     .name                  = "default",
     .priv_size             = sizeof(DefaultContext),
     .init                  = default_init,
-    .print_footer          = default_print_footer,
-    .print_chapter_header  = default_print_chapter_header,
     .print_section_header  = default_print_section_header,
     .print_section_footer  = default_print_section_footer,
     .print_integer         = default_print_int,
@@ -622,8 +601,8 @@ typedef struct CompactContext {
 static const AVOption compact_options[]= {
     {"item_sep", "set item separator",    OFFSET(item_sep_str),    AV_OPT_TYPE_STRING, {.str="|"},  CHAR_MIN, CHAR_MAX },
     {"s",        "set item separator",    OFFSET(item_sep_str),    AV_OPT_TYPE_STRING, {.str="|"},  CHAR_MIN, CHAR_MAX },
-    {"nokey",    "force no key printing", OFFSET(nokey),           AV_OPT_TYPE_INT,    {.dbl=0},    0,        1        },
-    {"nk",       "force no key printing", OFFSET(nokey),           AV_OPT_TYPE_INT,    {.dbl=0},    0,        1        },
+    {"nokey",    "force no key printing", OFFSET(nokey),           AV_OPT_TYPE_INT,    {.i64=0},    0,        1        },
+    {"nk",       "force no key printing", OFFSET(nokey),           AV_OPT_TYPE_INT,    {.i64=0},    0,        1        },
     {"escape",   "set escape mode",       OFFSET(escape_mode_str), AV_OPT_TYPE_STRING, {.str="c"},  CHAR_MIN, CHAR_MAX },
     {"e",        "set escape mode",       OFFSET(escape_mode_str), AV_OPT_TYPE_STRING, {.str="c"},  CHAR_MIN, CHAR_MAX },
     {NULL},
@@ -780,8 +759,8 @@ typedef struct FlatContext {
 static const AVOption flat_options[]= {
     {"sep_char", "set separator",    OFFSET(sep_str),    AV_OPT_TYPE_STRING, {.str="."},  CHAR_MIN, CHAR_MAX },
     {"s",        "set separator",    OFFSET(sep_str),    AV_OPT_TYPE_STRING, {.str="."},  CHAR_MIN, CHAR_MAX },
-    {"hierarchical", "specify if the section specification should be hierarchical", OFFSET(hierarchical), AV_OPT_TYPE_INT, {.dbl=1}, 0, 1 },
-    {"h",           "specify if the section specification should be hierarchical", OFFSET(hierarchical), AV_OPT_TYPE_INT, {.dbl=1}, 0, 1 },
+    {"hierarchical", "specify if the section specification should be hierarchical", OFFSET(hierarchical), AV_OPT_TYPE_INT, {.i64=1}, 0, 1 },
+    {"h",           "specify if the section specification should be hierarchical", OFFSET(hierarchical), AV_OPT_TYPE_INT, {.i64=1}, 0, 1 },
     {NULL},
 };
 
@@ -934,8 +913,8 @@ typedef struct {
 #define OFFSET(x) offsetof(INIContext, x)
 
 static const AVOption ini_options[] = {
-    {"hierarchical", "specify if the section specification should be hierarchical", OFFSET(hierarchical), AV_OPT_TYPE_INT, {.dbl=1}, 0, 1 },
-    {"h",           "specify if the section specification should be hierarchical", OFFSET(hierarchical), AV_OPT_TYPE_INT, {.dbl=1}, 0, 1 },
+    {"hierarchical", "specify if the section specification should be hierarchical", OFFSET(hierarchical), AV_OPT_TYPE_INT, {.i64=1}, 0, 1 },
+    {"h",           "specify if the section specification should be hierarchical", OFFSET(hierarchical), AV_OPT_TYPE_INT, {.i64=1}, 0, 1 },
     {NULL},
 };
 
@@ -1093,8 +1072,8 @@ typedef struct {
 #define OFFSET(x) offsetof(JSONContext, x)
 
 static const AVOption json_options[]= {
-    { "compact", "enable compact output", OFFSET(compact), AV_OPT_TYPE_INT, {.dbl=0}, 0, 1 },
-    { "c",       "enable compact output", OFFSET(compact), AV_OPT_TYPE_INT, {.dbl=0}, 0, 1 },
+    { "compact", "enable compact output", OFFSET(compact), AV_OPT_TYPE_INT, {.i64=0}, 0, 1 },
+    { "c",       "enable compact output", OFFSET(compact), AV_OPT_TYPE_INT, {.i64=0}, 0, 1 },
     { NULL }
 };
 
@@ -1314,10 +1293,10 @@ typedef struct {
 #define OFFSET(x) offsetof(XMLContext, x)
 
 static const AVOption xml_options[] = {
-    {"fully_qualified", "specify if the output should be fully qualified", OFFSET(fully_qualified), AV_OPT_TYPE_INT, {.dbl=0},  0, 1 },
-    {"q",               "specify if the output should be fully qualified", OFFSET(fully_qualified), AV_OPT_TYPE_INT, {.dbl=0},  0, 1 },
-    {"xsd_strict",      "ensure that the output is XSD compliant",         OFFSET(xsd_strict),      AV_OPT_TYPE_INT, {.dbl=0},  0, 1 },
-    {"x",               "ensure that the output is XSD compliant",         OFFSET(xsd_strict),      AV_OPT_TYPE_INT, {.dbl=0},  0, 1 },
+    {"fully_qualified", "specify if the output should be fully qualified", OFFSET(fully_qualified), AV_OPT_TYPE_INT, {.i64=0},  0, 1 },
+    {"q",               "specify if the output should be fully qualified", OFFSET(fully_qualified), AV_OPT_TYPE_INT, {.i64=0},  0, 1 },
+    {"xsd_strict",      "ensure that the output is XSD compliant",         OFFSET(xsd_strict),      AV_OPT_TYPE_INT, {.i64=0},  0, 1 },
+    {"x",               "ensure that the output is XSD compliant",         OFFSET(xsd_strict),      AV_OPT_TYPE_INT, {.i64=0},  0, 1 },
     {NULL},
 };
 

@@ -84,7 +84,7 @@ static int sdl_write_header(AVFormatContext *s)
 
     if (SDL_WasInit(SDL_INIT_VIDEO)) {
         av_log(s, AV_LOG_ERROR,
-               "SDL video subsystem was already inited, aborting.\n");
+               "SDL video subsystem was already inited, aborting\n");
         sdl->sdl_was_already_inited = 1;
         ret = AVERROR(EINVAL);
         goto fail;
@@ -113,7 +113,7 @@ static int sdl_write_header(AVFormatContext *s)
 
     if (!sdl->overlay_fmt) {
         av_log(s, AV_LOG_ERROR,
-               "Unsupported pixel format '%s', choose one of yuv420p, yuyv422, or uyvy422.\n",
+               "Unsupported pixel format '%s', choose one of yuv420p, yuyv422, or uyvy422\n",
                av_get_pix_fmt_name(encctx->pix_fmt));
         ret = AVERROR(EINVAL);
         goto fail;
@@ -162,13 +162,13 @@ static int sdl_write_header(AVFormatContext *s)
                                         sdl->overlay_fmt, sdl->surface);
     if (!sdl->overlay || sdl->overlay->pitches[0] < encctx->width) {
         av_log(s, AV_LOG_ERROR,
-               "SDL does not support an overlay with size of %dx%d pixels.\n",
+               "SDL does not support an overlay with size of %dx%d pixels\n",
                encctx->width, encctx->height);
         ret = AVERROR(EINVAL);
         goto fail;
     }
 
-    av_log(s, AV_LOG_INFO, "w:%d h:%d fmt:%s sar:%d/%d -> w:%d h:%d\n",
+    av_log(s, AV_LOG_VERBOSE, "w:%d h:%d fmt:%s sar:%d/%d -> w:%d h:%d\n",
            encctx->width, encctx->height, av_get_pix_fmt_name(encctx->pix_fmt), sar.num, sar.den,
            sdl->overlay_width, sdl->overlay_height);
     return 0;

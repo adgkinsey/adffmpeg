@@ -22,15 +22,25 @@
 #include "libavutil/avstring.h"
 #include "avformat.h"
 #include <fcntl.h>
-#if HAVE_SETMODE
+#if HAVE_IO_H
 #include <io.h>
 #endif
+#if HAVE_UNISTD_H
 #include <unistd.h>
+#endif
 #include <sys/stat.h>
 #include <stdlib.h>
 #include "os_support.h"
 #include "url.h"
 
+/* Some systems may not have S_ISFIFO */
+#ifndef S_ISFIFO
+#  ifdef S_IFIFO
+#    define S_ISFIFO(m) (((m) & S_IFMT) == S_IFIFO)
+#  else
+#    define S_ISFIFO(m) 0
+#  endif
+#endif
 
 /* standard file protocol */
 

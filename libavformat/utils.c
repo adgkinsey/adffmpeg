@@ -287,7 +287,7 @@ int ffio_limit(AVIOContext *s, int size)
         }
 
         if(s->maxsize>=0 && remaining+1 < size){
-            av_log(0, AV_LOG_ERROR, "Truncating packet of size %d to %"PRId64"\n", size, remaining+1);
+            av_log(0, remaining ? AV_LOG_ERROR : AV_LOG_DEBUG, "Truncating packet of size %d to %"PRId64"\n", size, remaining+1);
             size= remaining+1;
         }
     }
@@ -712,6 +712,21 @@ no_packet:
     }
 }
 
+static void force_codec_ids(AVFormatContext *s, AVStream *st)
+{
+    switch(st->codec->codec_type){
+    case AVMEDIA_TYPE_VIDEO:
+        if(s->video_codec_id)   st->codec->codec_id= s->video_codec_id;
+        break;
+    case AVMEDIA_TYPE_AUDIO:
+        if(s->audio_codec_id)   st->codec->codec_id= s->audio_codec_id;
+        break;
+    case AVMEDIA_TYPE_SUBTITLE:
+        if(s->subtitle_codec_id)st->codec->codec_id= s->subtitle_codec_id;
+        break;
+    }
+}
+
 int ff_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     int ret, i;
@@ -765,17 +780,8 @@ int ff_read_packet(AVFormatContext *s, AVPacket *pkt)
 
         st= s->streams[pkt->stream_index];
 
-        switch(st->codec->codec_type){
-        case AVMEDIA_TYPE_VIDEO:
-            if(s->video_codec_id)   st->codec->codec_id= s->video_codec_id;
-            break;
-        case AVMEDIA_TYPE_AUDIO:
-            if(s->audio_codec_id)   st->codec->codec_id= s->audio_codec_id;
-            break;
-        case AVMEDIA_TYPE_SUBTITLE:
-            if(s->subtitle_codec_id)st->codec->codec_id= s->subtitle_codec_id;
-            break;
-        }
+        force_codec_ids(s, st);
+
         /* TODO: audio: time filter; video: frame reordering (pts != dts) */
         if (s->use_wallclock_as_timestamps)
             pkt->dts = pkt->pts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, st->time_base);
@@ -1926,12 +1932,10 @@ static int seek_frame_generic(AVFormatContext *s,
         return -1;
 
     ff_read_frame_flush(s);
-    AV_NOWARN_DEPRECATED(
     if (s->iformat->read_seek){
         if(s->iformat->read_seek(s, stream_index, timestamp, flags) >= 0)
             return 0;
     }
-    )
     ie = &st->index_entries[index];
     if ((ret = avio_seek(s->pb, ie->pos, SEEK_SET)) < 0)
         return ret;
@@ -1964,13 +1968,11 @@ static int seek_frame_internal(AVFormatContext *s, int stream_index,
     }
 
     /* first, we try the format specific seek */
-    AV_NOWARN_DEPRECATED(
     if (s->iformat->read_seek) {
         ff_read_frame_flush(s);
         ret = s->iformat->read_seek(s, stream_index, timestamp, flags);
     } else
         ret = -1;
-    )
     if (ret >= 0) {
         return 0;
     }
@@ -2016,8 +2018,7 @@ int avformat_seek_file(AVFormatContext *s, int stream_index, int64_t min_ts, int
     }
 
     //Fallback to old API if new is not implemented but old is
-    //Note the old has somewat different sematics
-    AV_NOWARN_DEPRECATED(
+    //Note the old has somewhat different semantics
     if (s->iformat->read_seek || 1) {
         int dir = (ts - min_ts > (uint64_t)(max_ts - ts) ? AVSEEK_FLAG_BACKWARD : 0);
         int ret = av_seek_frame(s, stream_index, ts, flags | dir);
@@ -2028,7 +2029,6 @@ int avformat_seek_file(AVFormatContext *s, int stream_index, int64_t min_ts, int
         }
         return ret;
     }
-    )
 
     // try some generic seek like seek_frame_generic() but with new ts semantics
 }
@@ -2301,7 +2301,7 @@ static int has_codec_parameters(AVStream *st, const char **errmsg_ptr)
     switch (avctx->codec_type) {
     case AVMEDIA_TYPE_AUDIO:
         if (!avctx->frame_size && determinable_frame_size(avctx))
-            FAIL("unspecified sample size");
+            FAIL("unspecified frame size");
         if (st->info->found_decoder >= 0 && avctx->sample_fmt == AV_SAMPLE_FMT_NONE)
             FAIL("unspecified sample format");
         if (!avctx->sample_rate)
@@ -3552,7 +3552,7 @@ int ff_interleave_add_packet(AVFormatContext *s, AVPacket *pkt,
         return AVERROR(ENOMEM);
     this_pktl->pkt= *pkt;
     pkt->destruct= NULL;             // do not free original but only the copy
-    av_dup_packet(&this_pktl->pkt);  // duplicate the packet if it uses non-alloced memory
+    av_dup_packet(&this_pktl->pkt);  // duplicate the packet if it uses non-allocated memory
 
     if(s->streams[pkt->stream_index]->last_in_packet_buffer){
         next_point = &(st->last_in_packet_buffer->next);
@@ -4484,20 +4484,14 @@ void ff_make_absolute_url(char *buf, int size, const char *base,
 
 int64_t ff_iso8601_to_unix_time(const char *datestr)
 {
-#if HAVE_STRPTIME
     struct tm time1 = {0}, time2 = {0};
     char *ret1, *ret2;
-    ret1 = strptime(datestr, "%Y - %m - %d %T", &time1);
-    ret2 = strptime(datestr, "%Y - %m - %dT%T", &time2);
+    ret1 = av_small_strptime(datestr, "%Y - %m - %d %H:%M:%S", &time1);
+    ret2 = av_small_strptime(datestr, "%Y - %m - %dT%H:%M:%S", &time2);
     if (ret2 && !ret1)
         return av_timegm(&time2);
     else
         return av_timegm(&time1);
-#else
-    av_log(NULL, AV_LOG_WARNING, "strptime() unavailable on this system, cannot convert "
-                                 "the date string.\n");
-    return 0;
-#endif
 }
 
 int avformat_query_codec(AVOutputFormat *ofmt, enum AVCodecID codec_id, int std_compliance)

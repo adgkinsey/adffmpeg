@@ -130,7 +130,7 @@ struct MpegTSContext {
 
 static const AVOption options[] = {
     {"compute_pcr", "Compute exact PCR for each transport stream packet.", offsetof(MpegTSContext, mpeg2ts_compute_pcr), AV_OPT_TYPE_INT,
-     {.dbl = 0}, 0, 1, AV_OPT_FLAG_DECODING_PARAM },
+     {.i64 = 0}, 0, 1, AV_OPT_FLAG_DECODING_PARAM },
     { NULL },
 };
 
@@ -2066,6 +2066,7 @@ static int mpegts_read_packet(AVFormatContext *s,
     ts->pkt = pkt;
     ret = handle_packets(ts, 0);
     if (ret < 0) {
+        av_free_packet(ts->pkt);
         /* flush pes data left */
         for (i = 0; i < NB_PID_MAX; i++) {
             if (ts->pids[i] && ts->pids[i]->type == MPEGTS_PES) {

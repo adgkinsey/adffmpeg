@@ -55,6 +55,7 @@ AVFilterBufferRef *ff_default_get_video_buffer(AVFilterLink *link, int perms, in
                 AVFilterBuffer *pic = picref->buf;
                 pool->pic[i] = NULL;
                 pool->count--;
+                av_assert0(!picref->video->qp_table);
                 picref->video->w = w;
                 picref->video->h = h;
                 picref->perms = full_perms;
@@ -405,9 +406,3 @@ int ff_draw_slice(AVFilterLink *link, int y, int h, int slice_dir)
         av_assert1(link->cur_buf_copy->buf->refcount > 0);
     return ret;
 }
-
-int avfilter_default_end_frame(AVFilterLink *inlink)
-{
-    return default_end_frame(inlink);
-}
-
