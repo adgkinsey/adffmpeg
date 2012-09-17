@@ -614,7 +614,7 @@ static int mkv_write_tracks(AVFormatContext *s)
                     uint64_t st_mode = MATROSKA_VIDEO_STEREO_MODE_COUNT;
 
                     for (j=0; j<MATROSKA_VIDEO_STEREO_MODE_COUNT; j++)
-                        if (!strcmp(tag->value, matroska_video_stereo_mode[j])){
+                        if (!strcmp(tag->value, ff_matroska_video_stereo_mode[j])){
                             st_mode = j;
                             break;
                         }
@@ -1289,7 +1289,7 @@ static int mkv_write_trailer(AVFormatContext *s)
     av_freep(&mkv->cues->entries);
     av_freep(&mkv->cues);
     av_destruct_packet(&mkv->cur_audio_pkt);
-    avio_flush(pb);
+
     return 0;
 }
 

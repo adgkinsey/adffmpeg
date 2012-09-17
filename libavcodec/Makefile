@@ -628,6 +628,7 @@ OBJS-$(CONFIG_OGG_DEMUXER)             += xiph.o flac.o flacdata.o     \
 OBJS-$(CONFIG_OGG_MUXER)               += xiph.o flac.o flacdata.o \
                                           vorbis_data.o
 OBJS-$(CONFIG_RTP_MUXER)               += mpeg4audio.o xiph.o
+OBJS-$(CONFIG_RTPDEC)                  += mjpeg.o
 OBJS-$(CONFIG_SPDIF_DEMUXER)           += aacadtsdec.o mpeg4audio.o
 OBJS-$(CONFIG_SPDIF_MUXER)             += dca.o
 OBJS-$(CONFIG_WEBM_MUXER)              += mpeg4audio.o mpegaudiodata.o  \
@@ -777,11 +778,12 @@ TESTPROGS = cabac                                                       \
             golomb                                                      \
             iirfilter                                                   \
             rangecoder                                                  \
-            raw                                                         \
             snowenc                                                     \
 
 TESTPROGS-$(HAVE_MMX) += motion
 TESTOBJS = dctref.o
+
+TOOLS = fourcc2pixfmt
 
 HOSTPROGS = aac_tablegen                                                \
             aacps_tablegen                                              \

@@ -31,7 +31,12 @@
 #include <errno.h>
 #include <limits.h>
 #if HAVE_ISATTY
+#if HAVE_IO_H
+#include <io.h>
+#endif
+#if HAVE_UNISTD_H
 #include <unistd.h>
+#endif
 #endif
 #include "libavformat/avformat.h"
 #include "libavdevice/avdevice.h"
@@ -197,13 +202,14 @@ static void sub2video_push_ref(InputStream *ist, int64_t pts)
                              AV_BUFFERSRC_FLAG_PUSH);
 }
 
-static void sub2video_update(InputStream *ist, AVSubtitle *sub, int64_t pts)
+static void sub2video_update(InputStream *ist, AVSubtitle *sub)
 {
     int w = ist->sub2video.w, h = ist->sub2video.h;
     AVFilterBufferRef *ref = ist->sub2video.ref;
     int8_t *dst;
     int     dst_linesize;
     int i;
+    int64_t pts = av_rescale_q(sub->pts, AV_TIME_BASE_Q, ist->st->time_base);
 
     if (!ref)
         return;
@@ -639,9 +645,9 @@ static void do_audio_out(AVFormatContext *s, OutputStream *ost,
                    av_ts2str(pkt.dts), av_ts2timestr(pkt.dts, &ost->st->time_base));
         }
 
+        audio_size += pkt.size;
         write_frame(s, &pkt, ost);
 
-        audio_size += pkt.size;
         av_free_packet(&pkt);
     }
 }
@@ -688,15 +694,15 @@ static void pre_process_video_frame(InputStream *ist, AVPicture *picture, void *
 static void do_subtitle_out(AVFormatContext *s,
                             OutputStream *ost,
                             InputStream *ist,
-                            AVSubtitle *sub,
-                            int64_t pts)
+                            AVSubtitle *sub)
 {
     int subtitle_out_max_size = 1024 * 1024;
     int subtitle_out_size, nb, i;
     AVCodecContext *enc;
     AVPacket pkt;
+    int64_t pts;
 
-    if (pts == AV_NOPTS_VALUE) {
+    if (sub->pts == AV_NOPTS_VALUE) {
         av_log(NULL, AV_LOG_ERROR, "Subtitle packets must have a pts\n");
         if (exit_on_error)
             exit_program(1);
@@ -718,8 +724,7 @@ static void do_subtitle_out(AVFormatContext *s,
         nb = 1;
 
     /* shift timestamp to honor -ss and make check_recording_time() work with -t */
-    pts = av_rescale_q(pts, ist->st->time_base, AV_TIME_BASE_Q)
-        - output_files[ost->file_index]->start_time;
+    pts = sub->pts - output_files[ost->file_index]->start_time;
     for (i = 0; i < nb; i++) {
         ost->sync_opts = av_rescale_q(pts, AV_TIME_BASE_Q, enc->time_base);
         if (!check_recording_time(ost))
@@ -752,8 +757,8 @@ static void do_subtitle_out(AVFormatContext *s,
             else
                 pkt.pts += 90 * sub->end_display_time;
         }
-        write_frame(s, &pkt, ost);
         subtitle_size += pkt.size;
+        write_frame(s, &pkt, ost);
     }
 }
 
@@ -847,8 +852,8 @@ static void do_video_out(AVFormatContext *s,
         pkt.pts    = av_rescale_q(in_picture->pts, enc->time_base, ost->st->time_base);
         pkt.flags |= AV_PKT_FLAG_KEY;
 
-        write_frame(s, &pkt, ost);
         video_size += pkt.size;
+        write_frame(s, &pkt, ost);
     } else {
         int got_packet;
         AVFrame big_picture;
@@ -898,9 +903,9 @@ static void do_video_out(AVFormatContext *s,
                     av_ts2str(pkt.dts), av_ts2timestr(pkt.dts, &ost->st->time_base));
             }
 
-            write_frame(s, &pkt, ost);
             frame_size = pkt.size;
             video_size += pkt.size;
+            write_frame(s, &pkt, ost);
             av_free_packet(&pkt);
 
             /* if two pass, output log */
@@ -1652,7 +1657,6 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output)
 static int transcode_subtitles(InputStream *ist, AVPacket *pkt, int *got_output)
 {
     AVSubtitle subtitle;
-    int64_t pts = pkt->pts;
     int i, ret = avcodec_decode_subtitle2(ist->st->codec,
                                           &subtitle, got_output, pkt);
     if (ret < 0 || !*got_output) {
@@ -1663,8 +1667,8 @@ static int transcode_subtitles(InputStream *ist, AVPacket *pkt, int *got_output)
 
     if (ist->fix_sub_duration) {
         if (ist->prev_sub.got_output) {
-            int end = av_rescale_q(pts - ist->prev_sub.pts, ist->st->time_base,
-                                   (AVRational){ 1, 1000 });
+            int end = av_rescale(subtitle.pts - ist->prev_sub.subtitle.pts,
+                                 1000, AV_TIME_BASE);
             if (end < ist->prev_sub.subtitle.end_display_time) {
                 av_log(ist->st->codec, AV_LOG_DEBUG,
                        "Subtitle duration reduced from %d to %d\n",
@@ -1672,18 +1676,17 @@ static int transcode_subtitles(InputStream *ist, AVPacket *pkt, int *got_output)
                 ist->prev_sub.subtitle.end_display_time = end;
             }
         }
-        FFSWAP(int64_t,    pts,         ist->prev_sub.pts);
         FFSWAP(int,        *got_output, ist->prev_sub.got_output);
         FFSWAP(int,        ret,         ist->prev_sub.ret);
         FFSWAP(AVSubtitle, subtitle,    ist->prev_sub.subtitle);
     }
 
+    sub2video_update(ist, &subtitle);
+
     if (!*got_output || !subtitle.num_rects)
         return ret;
 
     rate_emu_sleep(ist);
-
-    sub2video_update(ist, &subtitle, pkt->pts);
 
     for (i = 0; i < nb_output_streams; i++) {
         OutputStream *ost = output_streams[i];
@@ -1691,7 +1694,7 @@ static int transcode_subtitles(InputStream *ist, AVPacket *pkt, int *got_output)
         if (!check_output_constraints(ist, ost) || !ost->encoding_needed)
             continue;
 
-        do_subtitle_out(output_files[ost->file_index]->ctx, ost, ist, &subtitle, pts);
+        do_subtitle_out(output_files[ost->file_index]->ctx, ost, ist, &subtitle);
     }
 
     avsubtitle_free(&subtitle);
@@ -2055,7 +2058,8 @@ static int transcode_init(void)
                       && strcmp(oc->oformat->name, "mov") && strcmp(oc->oformat->name, "mp4") && strcmp(oc->oformat->name, "3gp")
                       && strcmp(oc->oformat->name, "3g2") && strcmp(oc->oformat->name, "psp") && strcmp(oc->oformat->name, "ipod")
             ) {
-                if(   copy_tb<0 && av_q2d(icodec->time_base)*icodec->ticks_per_frame > av_q2d(ist->st->time_base)
+                if(   copy_tb<0 && icodec->time_base.den
+                                && av_q2d(icodec->time_base)*icodec->ticks_per_frame > av_q2d(ist->st->time_base)
                                 && av_q2d(ist->st->time_base) < 1.0/500
                    || copy_tb==0){
                     codec->time_base = icodec->time_base;

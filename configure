@@ -55,7 +55,7 @@ if test "$E1" != 0 || test "$E2" = 0; then
 fi
 
 show_help(){
-cat <<EOF
+    cat <<EOF
 Usage: configure [options]
 Options: [defaults in brackets after descriptions]
 
@@ -291,6 +291,7 @@ Optimization options (experts only):
   --disable-mmi            disable MMI optimizations
   --disable-neon           disable NEON optimizations
   --disable-vis            disable VIS optimizations
+  --disable-inline-asm     disable use of inline assembler
   --disable-yasm           disable use of yasm assembler
   --disable-mips32r2       disable MIPS32R2 optimizations
   --disable-mipsdspr1      disable MIPS DSP ASE R1 optimizations
@@ -367,7 +368,7 @@ Rerun configure with logging enabled (do not use --disable-logging), and
 include the log this produces with your report.
 EOF
     else
-cat <<EOF
+        cat <<EOF
 Include the log file "$logfile" produced by configure as this will help
 solving the problem.
 EOF
@@ -1277,6 +1278,7 @@ HAVE_LIST="
     dev_ic_bt8xx_h
     dev_video_bktr_ioctl_bt848_h
     dev_video_meteor_ioctl_meteor_h
+    direct_h
     dlfcn_h
     dlopen
     dos_paths
@@ -1431,6 +1433,7 @@ CMDLINE_SELECT="
     cross_compile
     debug
     extra_warnings
+    inline_asm
     logging
     optimizations
     stripping
@@ -1550,6 +1553,8 @@ inline_asm_deps="!tms470"
 need_memalign="altivec neon sse"
 
 symver_if_any="symver_asm_label symver_gnu_asm"
+
+log2_deps="!msvcrt"
 
 # subsystems
 dct_select="rdft"
@@ -1691,6 +1696,7 @@ svq3_decoder_suggest="zlib"
 theora_decoder_select="vp3_decoder"
 tiff_decoder_suggest="zlib"
 tiff_encoder_suggest="zlib"
+truehd_decoder_select="mlp_parser"
 tscc_decoder_select="zlib"
 twinvq_decoder_select="mdct lsp sinewin"
 utvideo_encoder_select="huffman"
@@ -1930,7 +1936,7 @@ ffmpeg_deps="avcodec avfilter avformat swscale swresample"
 ffmpeg_select="ffbuffersink_filter format_filter aformat_filter
                setpts_filter null_filter anull_filter ffabuffersink_filter"
 ffplay_deps="avcodec avformat swscale swresample sdl"
-ffplay_select="ffbuffersink_filter rdft"
+ffplay_select="ffbuffersink_filter rdft crop_filter"
 ffprobe_deps="avcodec avformat"
 ffserver_deps="avformat ffm_muxer fork rtp_protocol rtsp_demuxer"
 ffserver_extralibs='$ldl'
@@ -2608,7 +2614,7 @@ probe_cc(){
         if [ $pfx = hostcc ]; then
             append _cflags -Dsnprintf=_snprintf
         fi
-        disable aligned_stack
+        disable stripping
     fi
 
     eval ${pfx}_type=\$_type
@@ -2996,6 +3002,7 @@ case $target_os in
         disable symver
         oss_indev_extralibs="-lossaudio"
         oss_outdev_extralibs="-lossaudio"
+        enabled gcc || check_ldflags -Wl,-zmuldefs
         ;;
     openbsd|bitrig)
         # On OpenBSD 4.5. the compiler does not use PIC unless
@@ -3117,13 +3124,13 @@ case $target_os in
         SLIBNAME_WITH_VERSION='$(SLIBPREF)$(NAME)-$(LIBVERSION)$(SLIBSUF)'
         SLIBNAME_WITH_MAJOR='$(SLIBPREF)$(shell echo $(NAME) | cut -c1-6)$(LIBMAJOR)$(SLIBSUF)'
         SLIB_CREATE_DEF_CMD='echo LIBRARY $(SLIBNAME_WITH_MAJOR) INITINSTANCE TERMINSTANCE > $(SUBDIR)$(NAME).def; \
-          echo PROTMODE >> $(SUBDIR)$(NAME).def; \
-          echo CODE PRELOAD MOVEABLE DISCARDABLE >> $(SUBDIR)$(NAME).def; \
-          echo DATA PRELOAD MOVEABLE MULTIPLE NONSHARED >> $(SUBDIR)$(NAME).def; \
-          echo EXPORTS >> $(SUBDIR)$(NAME).def; \
-          emxexp -o $(OBJS) >> $(SUBDIR)$(NAME).def'
+            echo PROTMODE >> $(SUBDIR)$(NAME).def; \
+            echo CODE PRELOAD MOVEABLE DISCARDABLE >> $(SUBDIR)$(NAME).def; \
+            echo DATA PRELOAD MOVEABLE MULTIPLE NONSHARED >> $(SUBDIR)$(NAME).def; \
+            echo EXPORTS >> $(SUBDIR)$(NAME).def; \
+            emxexp -o $(OBJS) >> $(SUBDIR)$(NAME).def'
         SLIB_EXTRA_CMD='emximp -o $(SUBDIR)$(LIBPREF)$(NAME)_dll.a $(SUBDIR)$(NAME).def; \
-          emximp -o $(SUBDIR)$(LIBPREF)$(NAME)_dll.lib $(SUBDIR)$(NAME).def;'
+            emximp -o $(SUBDIR)$(LIBPREF)$(NAME)_dll.lib $(SUBDIR)$(NAME).def;'
         SLIB_INSTALL_EXTRA_LIB='$(LIBPREF)$(NAME)_dll.a $(LIBPREF)$(NAME)_dll.lib'
         enable dos_paths
         enable_weak os2threads
@@ -3248,7 +3255,7 @@ EOF
 sym=$($nm $nm_opts $TMPO | awk '/ff_extern/{ print substr($0, match($0, /[^ \t]*ff_extern/)) }')
 extern_prefix=${sym%%ff_extern*}
 
-check_cc <<EOF && enable inline_asm
+check_cc <<EOF && enable_weak inline_asm
 void foo(void) { __asm__ volatile ("" ::); }
 EOF
 
@@ -3353,11 +3360,11 @@ elif enabled sparc; then
 
     enabled vis &&
         check_inline_asm vis '"pdist %f0, %f0, %f0"' -mcpu=ultrasparc &&
-        add_cflags -mcpu=ultrasparc -mtune=ultrasparc
+            add_cflags -mcpu=ultrasparc -mtune=ultrasparc
 
 elif enabled x86; then
 
-    check_code ld immintrin.h "__xgetbv(0)" "cc" && enable xgetbv
+    check_code ld immintrin.h "return __xgetbv(0)" "cc" && enable xgetbv
     check_code ld intrin.h "int info[4]; __cpuid(info, 0)" "cc" && enable cpuid
     check_code ld intrin.h "__rdtsc()" "cc" && enable rdtsc
     check_code ld intrin.h "unsigned int x = __readeflags()" "cc" && enable rweflags
@@ -3371,11 +3378,9 @@ elif enabled x86; then
     # if the base pointer is used to access it because the
     # base pointer is cleared in the inline assembly code.
     check_exec_crash <<EOF && enable ebp_available
-    volatile int i=0;
-    __asm__ volatile (
-        "xorl %%ebp, %%ebp"
-    ::: "%ebp");
-    return i;
+volatile int i=0;
+__asm__ volatile ("xorl %%ebp, %%ebp" ::: "%ebp");
+return i;
 EOF
 
     # check whether EBX is available on x86
@@ -3509,6 +3514,7 @@ check_func_headers windows.h Sleep
 check_func_headers windows.h VirtualAlloc
 check_func_headers glob.h glob
 
+check_header direct.h
 check_header dlfcn.h
 check_header dxva.h
 check_header dxva2api.h -D_WIN32_WINNT=0x0600
@@ -3754,10 +3760,8 @@ if ! disabled vaapi; then
 fi
 
 if ! disabled vdpau && enabled vdpau_vdpau_h; then
-check_cpp_condition \
-    vdpau/vdpau.h "defined VDP_DECODER_PROFILE_MPEG4_PART2_ASP" ||
-    { echolog "Please upgrade to libvdpau >= 0.2 if you would like vdpau support." &&
-      disable vdpau; }
+    check_cpp_condition vdpau/vdpau.h "defined VDP_DECODER_PROFILE_MPEG4_PART2_ASP" ||
+        { echolog "Please upgrade to libvdpau >= 0.2 if you would like vdpau support." && disable vdpau; }
 fi
 
 enabled debug && add_cflags -g"$debuglevel" && add_asflags -g"$debuglevel"
@@ -3880,6 +3884,8 @@ elif enabled tms470; then
     add_cflags -pds=824 -pds=837
 elif enabled pathscale; then
     add_cflags -fstrict-overflow -OPT:wrap_around_unsafe_opt=OFF
+elif enabled msvc; then
+    enabled x86_32 && disable aligned_stack
 fi
 
 enabled_any $THREADS_LIST      && enable threads
@@ -4284,15 +4290,15 @@ test -n "$WARNINGS" && printf "\n$WARNINGS"
 # build pkg-config files
 
 pkgconfig_generate(){
-name=$1
-shortname=${name#lib}${build_suffix}
-comment=$2
-version=$3
-libs=$4
-requires=$5
-enabled ${name#lib} || return 0
-mkdir -p $name
-cat <<EOF > $name/$name.pc
+    name=$1
+    shortname=${name#lib}${build_suffix}
+    comment=$2
+    version=$3
+    libs=$4
+    requires=$5
+    enabled ${name#lib} || return 0
+    mkdir -p $name
+    cat <<EOF > $name/$name.pc
 prefix=$prefix
 exec_prefix=\${prefix}
 libdir=$libdir
@@ -4312,7 +4318,7 @@ EOF
 mkdir -p doc/examples/pc-uninstalled
 includedir=${source_path}
 [ "$includedir" = . ] && includedir="\${pcfiledir}/../../.."
-cat <<EOF > doc/examples/pc-uninstalled/$name.pc
+    cat <<EOF > doc/examples/pc-uninstalled/$name.pc
 prefix=
 exec_prefix=
 libdir=\${pcfiledir}/../../../$name

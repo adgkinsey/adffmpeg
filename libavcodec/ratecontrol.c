@@ -110,6 +110,13 @@ int ff_rate_control_init(MpegEncContext *s)
     };
     emms_c();
 
+    if (!s->avctx->rc_max_available_vbv_use && s->avctx->rc_buffer_size) {
+        if (s->avctx->rc_max_rate) {
+            s->avctx->rc_max_available_vbv_use = av_clipf(s->avctx->rc_max_rate/(s->avctx->rc_buffer_size*get_fps(s->avctx)), 1.0/0.3, 1.0);
+        } else
+            s->avctx->rc_max_available_vbv_use = 1.0;
+    }
+
     res = av_expr_parse(&rcc->rc_eq_eval, s->avctx->rc_eq ? s->avctx->rc_eq : "tex^qComp", const_names, func1_names, func1, NULL, NULL, 0, s->avctx);
     if (res < 0) {
         av_log(s->avctx, AV_LOG_ERROR, "Error parsing rc_eq \"%s\"\n", s->avctx->rc_eq);
@@ -246,7 +253,7 @@ int ff_rate_control_init(MpegEncContext *s)
                 rcc->frame_count[rce.pict_type] ++;
 
                 get_qscale(s, &rce, rcc->pass1_wanted_bits/rcc->pass1_rc_eq_output_sum, i);
-                rcc->pass1_wanted_bits+= s->bit_rate/get_fps(s); //FIXME misbehaves a little for variable fps
+                rcc->pass1_wanted_bits+= s->bit_rate/get_fps(s->avctx); //FIXME misbehaves a little for variable fps
             }
         }
 
@@ -276,7 +283,7 @@ int ff_vbv_update(MpegEncContext *s, int frame_size){
     const double min_rate= s->avctx->rc_min_rate/fps;
     const double max_rate= s->avctx->rc_max_rate/fps;
 
-//printf("%d %f %d %f %f\n", buffer_size, rcc->buffer_index, frame_size, min_rate, max_rate);
+//av_log(0,0, "%d %f %d %f %f\n", buffer_size, rcc->buffer_index, frame_size, min_rate, max_rate);
     if(buffer_size){
         int left;
 
@@ -679,7 +686,8 @@ float ff_rate_estimate_qscale(MpegEncContext *s, int dry_run)
         /* update predictors */
     if(picture_number>2 && !dry_run){
         const int last_var= s->last_pict_type == AV_PICTURE_TYPE_I ? rcc->last_mb_var_sum : rcc->last_mc_mb_var_sum;
-        update_predictor(&rcc->pred[s->last_pict_type], rcc->last_qscale, sqrt(last_var), s->frame_bits);
+        av_assert1(s->frame_bits >= s->stuffing_bits);
+        update_predictor(&rcc->pred[s->last_pict_type], rcc->last_qscale, sqrt(last_var), s->frame_bits - s->stuffing_bits);
     }
 
     if(s->flags&CODEC_FLAG_PASS2){

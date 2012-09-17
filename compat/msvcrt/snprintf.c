@@ -24,6 +24,7 @@
 #include <limits.h>
 #include <string.h>
 
+#include "compat/va_copy.h"
 #include "libavutil/error.h"
 
 int avpriv_snprintf(char *s, size_t n, const char *fmt, ...)
@@ -42,9 +43,10 @@ int avpriv_vsnprintf(char *s, size_t n, const char *fmt,
                      va_list ap)
 {
     int ret;
+    va_list ap_copy;
 
     if (n == 0)
-        return 0;
+        return _vscprintf(fmt, ap);
     else if (n > INT_MAX)
         return AVERROR(EOVERFLOW);
 
@@ -55,9 +57,11 @@ int avpriv_vsnprintf(char *s, size_t n, const char *fmt,
      * _snprintf/_vsnprintf() to workaround this problem.
      * See http://msdn.microsoft.com/en-us/library/1kt27hek(v=vs.80).aspx */
     memset(s, 0, n);
-    ret = _vsnprintf(s, n - 1, fmt, ap);
+    va_copy(ap_copy, ap);
+    ret = _vsnprintf(s, n - 1, fmt, ap_copy);
+    va_end(ap_copy);
     if (ret == -1)
-        ret = n;
+        ret = _vscprintf(fmt, ap);
 
     return ret;
 }

@@ -749,7 +749,7 @@ static void decode_mb_p(AVSContext *h, enum cavs_mb mb_type) {
     h->col_type_base[h->mbidx] = mb_type;
 }
 
-static void decode_mb_b(AVSContext *h, enum cavs_mb mb_type) {
+static int decode_mb_b(AVSContext *h, enum cavs_mb mb_type) {
     int block;
     enum cavs_sub_mb sub_type[4];
     int flags;
@@ -820,7 +820,11 @@ static void decode_mb_b(AVSContext *h, enum cavs_mb mb_type) {
         }
         break;
     default:
-        av_assert2((mb_type > B_SYM_16X16) && (mb_type < B_8X8));
+        if (mb_type <= B_SYM_16X16) {
+            av_log(h->s.avctx, AV_LOG_ERROR, "Invalid mb_type %d in B frame\n", mb_type);
+            return AVERROR_INVALIDDATA;
+        }
+        av_assert2(mb_type < B_8X8);
         flags = ff_cavs_partition_flags[mb_type];
         if(mb_type & 1) { /* 16x8 macroblock types */
             if(flags & FWD0)
@@ -855,6 +859,8 @@ static void decode_mb_b(AVSContext *h, enum cavs_mb mb_type) {
     if(mb_type != B_SKIP)
         decode_residual_inter(h);
     ff_cavs_filter(h,mb_type);
+
+    return 0;
 }
 
 /*****************************************************************************

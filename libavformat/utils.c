@@ -1026,7 +1026,7 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
         pc && pc->pict_type != AV_PICTURE_TYPE_B)
         presentation_delayed = 1;
 
-    if(pkt->pts != AV_NOPTS_VALUE && pkt->dts != AV_NOPTS_VALUE && pkt->dts - (1LL<<(st->pts_wrap_bits-1)) > pkt->pts && st->pts_wrap_bits<63){
+    if(pkt->pts != AV_NOPTS_VALUE && pkt->dts != AV_NOPTS_VALUE && st->pts_wrap_bits<63 && pkt->dts - (1LL<<(st->pts_wrap_bits-1)) > pkt->pts){
         if(is_relative(st->cur_dts) || pkt->dts - (1LL<<(st->pts_wrap_bits-1)) > st->cur_dts) {
             pkt->dts -= 1LL<<st->pts_wrap_bits;
         } else
@@ -1114,7 +1114,7 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
                    pkt->duration                ) {
             int duration = pkt->duration;
 
-            if(pkt->pts != AV_NOPTS_VALUE && duration){
+            if(st->cur_dts != AV_NOPTS_VALUE && pkt->pts != AV_NOPTS_VALUE && duration){
                 int64_t old_diff= FFABS(st->cur_dts - duration - pkt->pts);
                 int64_t new_diff= FFABS(st->cur_dts - pkt->pts);
                 if(   old_diff < new_diff && old_diff < (duration>>3)
@@ -2020,7 +2020,7 @@ int avformat_seek_file(AVFormatContext *s, int stream_index, int64_t min_ts, int
     //Fallback to old API if new is not implemented but old is
     //Note the old has somewhat different semantics
     if (s->iformat->read_seek || 1) {
-        int dir = (ts - min_ts > (uint64_t)(max_ts - ts) ? AVSEEK_FLAG_BACKWARD : 0);
+        int dir = (ts - (uint64_t)min_ts > (uint64_t)max_ts - ts ? AVSEEK_FLAG_BACKWARD : 0);
         int ret = av_seek_frame(s, stream_index, ts, flags | dir);
         if (ret<0 && ts != min_ts && max_ts != ts) {
             ret = av_seek_frame(s, stream_index, dir ? max_ts : min_ts, flags | dir);
@@ -2101,7 +2101,7 @@ static void update_stream_timings(AVFormatContext *ic)
         if (end_time != INT64_MIN)
             duration = FFMAX(duration, end_time - start_time);
     }
-    if (duration != INT64_MIN && ic->duration == AV_NOPTS_VALUE) {
+    if (duration != INT64_MIN && duration > 0 && ic->duration == AV_NOPTS_VALUE) {
         ic->duration = duration;
     }
         if (ic->pb && (filesize = avio_size(ic->pb)) > 0 && ic->duration != AV_NOPTS_VALUE) {
@@ -3056,15 +3056,24 @@ void av_close_input_file(AVFormatContext *s)
 void avformat_close_input(AVFormatContext **ps)
 {
     AVFormatContext *s = *ps;
-    AVIOContext *pb = (s->iformat && (s->iformat->flags & AVFMT_NOFILE)) || (s->flags & AVFMT_FLAG_CUSTOM_IO) ?
-                       NULL : s->pb;
+    AVIOContext *pb = s->pb;
+
+    if ((s->iformat && s->iformat->flags & AVFMT_NOFILE) ||
+        (s->flags & AVFMT_FLAG_CUSTOM_IO))
+        pb = NULL;
+
     flush_packet_queue(s);
-    if (s->iformat && (s->iformat->read_close))
-        s->iformat->read_close(s);
+
+    if (s->iformat) {
+        if (s->iformat->read_close)
+            s->iformat->read_close(s);
+    }
+
     avformat_free_context(s);
+
     *ps = NULL;
-    if (pb)
-        avio_close(pb);
+
+    avio_close(pb);
 }
 
 #if FF_API_NEW_STREAM
@@ -3431,7 +3440,7 @@ fail:
 
 //FIXME merge with compute_pkt_fields
 static int compute_pkt_fields2(AVFormatContext *s, AVStream *st, AVPacket *pkt){
-    int delay = FFMAX(st->codec->has_b_frames, !!st->codec->max_b_frames);
+    int delay = FFMAX(st->codec->has_b_frames, st->codec->max_b_frames > 0);
     int num, den, frame_size, i;
 
     av_dlog(s, "compute_pkt_fields2: pts:%s dts:%s cur_dts:%s b:%d size:%d st:%d\n",
@@ -3755,34 +3764,38 @@ int av_write_trailer(AVFormatContext *s)
 {
     int ret, i;
 
-    for(;;){
+    for (;;) {
         AVPacket pkt;
-        ret= interleave_packet(s, &pkt, NULL, 1);
-        if(ret<0) //FIXME cleanup needed for ret<0 ?
+        ret = interleave_packet(s, &pkt, NULL, 1);
+        if (ret < 0) //FIXME cleanup needed for ret<0 ?
             goto fail;
-        if(!ret)
+        if (!ret)
             break;
 
-        ret= s->oformat->write_packet(s, &pkt);
+        ret = s->oformat->write_packet(s, &pkt);
         if (ret >= 0)
             s->streams[pkt.stream_index]->nb_frames++;
 
         av_free_packet(&pkt);
 
-        if(ret<0)
+        if (ret < 0)
             goto fail;
         if(s->pb && s->pb->error)
             goto fail;
     }
 
-    if(s->oformat->write_trailer)
+    if (s->oformat->write_trailer)
         ret = s->oformat->write_trailer(s);
+
+    if (!(s->oformat->flags & AVFMT_NOFILE))
+        avio_flush(s->pb);
+
 fail:
     if (s->pb)
        avio_flush(s->pb);
-    if(ret == 0)
+    if (ret == 0)
        ret = s->pb ? s->pb->error : 0;
-    for(i=0;i<s->nb_streams;i++) {
+    for (i = 0; i < s->nb_streams; i++) {
         av_freep(&s->streams[i]->priv_data);
         av_freep(&s->streams[i]->index_entries);
     }

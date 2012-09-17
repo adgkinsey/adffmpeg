@@ -526,6 +526,9 @@ static float calc_reduction_3gpp(float a, float desired_pe, float pe,
 {
     float thr_avg, reduction;
 
+    if(active_lines == 0.0)
+        return 0;
+
     thr_avg   = exp2f((a - pe) / (4.0f * active_lines));
     reduction = exp2f((a - desired_pe) / (4.0f * active_lines)) - thr_avg;
 
@@ -585,7 +588,7 @@ static void psy_3gpp_analyze_channel(FFPsyContext *ctx, int channel,
                 form_factor  += sqrtf(fabs(coefs[start+i]));
             }
             band->thr      = band->energy * 0.001258925f;
-            band->nz_lines = form_factor / powf(band->energy / band_sizes[g], 0.25f);
+            band->nz_lines = band->energy>0 ? form_factor / powf(band->energy / band_sizes[g], 0.25f) : 0;
 
             start += band_sizes[g];
         }
