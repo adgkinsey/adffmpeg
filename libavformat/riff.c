@@ -468,7 +468,9 @@ int ff_put_wav_header(AVIOContext *pb, AVCodecContext *enc)
         blkalign = frame_size;
         //blkalign = 144 * enc->bit_rate/enc->sample_rate;
     } else if (enc->codec_id == CODEC_ID_AC3) {
-            blkalign = 3840; //maximum bytes per frame
+        blkalign = 3840; //maximum bytes per frame
+    } else if (enc->codec_id == CODEC_ID_ADPCM_IMA_WAV) {
+        blkalign = 0;
     } else if (enc->block_align != 0) { /* specified by the codec */
         blkalign = enc->block_align;
     } else
