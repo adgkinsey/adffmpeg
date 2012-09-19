@@ -787,11 +787,11 @@ static int par_read_header(AVFormatContext * avf)
             realStart = start;
             av_log(avf, AV_LOG_DEBUG, "par_read_header:  %s (%d)\n", filelist[0], seqLen - 1);
             res = parReader_loadParFile(NULL, filelist[0], seqLen - 1, &p->frameInfo, 0);
-            if (parReader_getIndexData(&p->frameInfo, &frameNumber, &frameCount, &start, &end))  {
+            if (res && parReader_getIndexData(&p->frameInfo, &frameNumber, &frameCount, &start, &end))  {
                 realEnd = end;
                 seconds = realEnd - realStart;
             }
-            av_log(avf, AV_LOG_DEBUG, "par_read_header:  %s (%d)\n", filelist[0], -1);
+            av_log(avf, AV_LOG_DEBUG, "par_read_header:  %s (%d)\n", filelist[0], res);
             res = parReader_loadParFile(NULL, filelist[0], -1, &p->frameInfo, 0);
         }
     }
