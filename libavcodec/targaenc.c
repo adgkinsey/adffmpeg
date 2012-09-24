@@ -119,7 +119,7 @@ static int targa_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
         pkt->data[16] = 8;          /* bpp */
         break;
     case PIX_FMT_RGB555LE:
-        pkt->data[2]  = TGA_RGB;    /* uncompresses true-color image */
+        pkt->data[2]  = TGA_RGB;    /* uncompressed true-color image */
         avctx->bits_per_coded_sample =
         pkt->data[16] = 16;         /* bpp */
         break;
@@ -144,7 +144,7 @@ static int targa_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
 
     /* if that worked well, mark the picture as RLE compressed */
     if(datasize >= 0)
-        pkt->data[2] |= 8;
+        pkt->data[2] |= TGA_RLE;
 
     /* if RLE didn't make it smaller, go back to no compression */
     else datasize = targa_encode_normal(out, p, bpp, avctx->width, avctx->height);

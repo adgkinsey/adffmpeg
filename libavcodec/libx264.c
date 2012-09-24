@@ -443,10 +443,44 @@ static av_cold int X264_init(AVCodecContext *avctx)
 
     if (x4->slice_max_size >= 0)
         x4->params.i_slice_max_size =  x4->slice_max_size;
+    else {
+        /*
+         * Allow x264 to be instructed through AVCodecContext about the maximum
+         * size of the RTP payload. For example, this enables the production of
+         * payload suitable for the H.264 RTP packetization-mode 0 i.e. single
+         * NAL unit per RTP packet.
+         */
+        if (avctx->rtp_payload_size)
+            x4->params.i_slice_max_size = avctx->rtp_payload_size;
+    }
 
     if (x4->fastfirstpass)
         x264_param_apply_fastfirstpass(&x4->params);
 
+    /* Allow specifying the x264 profile through AVCodecContext. */
+    if (!x4->profile)
+        switch (avctx->profile) {
+        case FF_PROFILE_H264_BASELINE:
+            x4->profile = av_strdup("baseline");
+            break;
+        case FF_PROFILE_H264_HIGH:
+            x4->profile = av_strdup("high");
+            break;
+        case FF_PROFILE_H264_HIGH_10:
+            x4->profile = av_strdup("high10");
+            break;
+        case FF_PROFILE_H264_HIGH_422:
+            x4->profile = av_strdup("high422");
+            break;
+        case FF_PROFILE_H264_HIGH_444:
+            x4->profile = av_strdup("high444");
+            break;
+        case FF_PROFILE_H264_MAIN:
+            x4->profile = av_strdup("main");
+            break;
+        default:
+            break;
+        }
     if (x4->profile)
         if (x264_param_apply_profile(&x4->params, x4->profile) < 0) {
             int i;

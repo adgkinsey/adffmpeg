@@ -233,6 +233,7 @@ Advanced options (experts only):
   --target-os=OS           compiler targets OS [$target_os]
   --target-exec=CMD        command to run executables on target
   --target-path=DIR        path to view of build directory on target
+  --toolchain=NAME         set tool defaults according to NAME
   --nm=NM                  use nm tool NM [$nm_default]
   --ar=AR                  use archive tool AR [$ar_default]
   --as=AS                  use assembler AS [$as_default]
@@ -1487,6 +1488,7 @@ CMDLINE_SET="
     target_exec
     target_os
     target_path
+    toolchain
     valgrind
     yasmexe
 "
@@ -1817,6 +1819,7 @@ rtsp_muxer_select="rtp_muxer http_protocol rtp_protocol"
 sap_demuxer_select="sdp_demuxer"
 sap_muxer_select="rtp_muxer rtp_protocol"
 sdp_demuxer_select="rtpdec"
+smoothstreaming_muxer_select="ismv_muxer"
 spdif_muxer_select="aac_parser"
 tg2_muxer_select="mov_muxer"
 tgp_muxer_select="mov_muxer"
@@ -2023,14 +2026,13 @@ cxx_default="g++"
 host_cc_default="gcc"
 install="install"
 ln_s="ln -sf"
-nm_default="nm"
+nm_default="nm -g"
 objformat="elf"
 pkg_config_default=pkg-config
 ranlib="ranlib"
 strip_default="strip"
 yasmexe_default="yasm"
 
-nm_opts='-g'
 nogas=":"
 
 # machine
@@ -2317,7 +2319,19 @@ strip_default="${cross_prefix}${strip_default}"
 
 sysinclude_default="${sysroot}/usr/include"
 
-set_default cc cxx nm pkg_config strip sysinclude yasmexe
+case "$toolchain" in
+    msvc)
+        cc_default="c99wrap cl"
+        ld_default="c99wrap link"
+        nm_default="dumpbin -symbols"
+        ar_default="lib"
+    ;;
+    ?*)
+        die "Unknown toolchain $toolchain"
+    ;;
+esac
+
+set_default cc cxx pkg_config strip sysinclude yasmexe
 enabled cross_compile || host_cc_default=$cc
 set_default host_cc
 
@@ -2393,7 +2407,7 @@ msvc_flags(){
             -Wall)                echo -W4 -wd4244 -wd4127 -wd4018 -wd4389 \
                                        -wd4146 -wd4057 -wd4204 -wd4706 -wd4305 \
                                        -wd4152 -wd4324 -we4013 -wd4100 -wd4214 \
-                                       -wd4996 ;;
+                                       -wd4996 -wd4554 ;;
             -std=c99)             ;;
             -fno-math-errno)      ;;
             -fno-common)          ;;
@@ -2681,6 +2695,17 @@ if [ -z "$CC_DEPFLAGS" ] && [ "$dep_cc" != "$cc" ]; then
     CCDEP=${_DEPCMD:-$DEPCMD}
     CCDEP_FLAGS=${_DEPFLAGS:=$DEPFLAGS}
     DEPCCFLAGS=$_flags
+fi
+
+if $ar 2>&1 | grep -q Microsoft; then
+    arflags="-nologo"
+    ar_o='-out:$@'
+elif $ar 2>&1 | grep -q 'Texas Instruments'; then
+    arflags="rq"
+    ar_o='$@'
+else
+    arflags="rc"
+    ar_o='$@'
 fi
 
 add_cflags $extra_cflags
@@ -2996,7 +3021,7 @@ case $target_os in
         # guards for processor-specific code, instead suppress
         # generation of the HWCAPS ELF section on Solaris x86 only.
         enabled_all suncc x86 && echo "hwcap_1 = OVERRIDE;" > mapfile && add_ldflags -Wl,-M,mapfile
-        nm_opts='-P -g'
+        nm_default='nm -P -g'
         ;;
     netbsd)
         disable symver
@@ -3199,6 +3224,7 @@ echo "config:$arch:$subarch:$cpu:$target_os:$(esc $cc_ident):$(esc $FFMPEG_CONFI
 check_cpp_condition stdlib.h "defined(__PIC__) || defined(__pic__) || defined(PIC)" && enable pic
 
 set_default $PATHS_LIST
+set_default nm
 
 # we need to build at least one lib type
 if ! enabled_any static shared; then
@@ -3252,7 +3278,7 @@ enabled pic && enable_pic
 check_cc <<EOF || die "Symbol mangling check failed."
 int ff_extern;
 EOF
-sym=$($nm $nm_opts $TMPO | awk '/ff_extern/{ print substr($0, match($0, /[^ \t]*ff_extern/)) }')
+sym=$($nm $TMPO | awk '/ff_extern/{ print substr($0, match($0, /[^ \t]*ff_extern/)) }')
 extern_prefix=${sym%%ff_extern*}
 
 check_cc <<EOF && enable_weak inline_asm
@@ -4109,6 +4135,8 @@ DEPASFLAGS=$DEPASFLAGS \$(CPPFLAGS)
 YASM=$yasmexe
 DEPYASM=$yasmexe
 AR=$ar
+ARFLAGS=$arflags
+AR_O=$ar_o
 RANLIB=$ranlib
 CP=cp -p
 LN_S=$ln_s
@@ -4354,3 +4382,26 @@ pkgconfig_generate libpostproc "FFmpeg postprocessing library" "$LIBPOSTPROC_VER
 pkgconfig_generate libavresample "Libav audio resampling library" "$LIBAVRESAMPLE_VERSION" "$extralibs"
 pkgconfig_generate libswscale "FFmpeg image rescaling library" "$LIBSWSCALE_VERSION" "$LIBM" "libavutil = $LIBAVUTIL_VERSION"
 pkgconfig_generate libswresample "FFmpeg audio rescaling library" "$LIBSWRESAMPLE_VERSION" "$LIBM" "libavutil = $LIBAVUTIL_VERSION"
+
+fix_ffmpeg_remote(){
+    git_remote_from=$1
+    git_remote_to=$2
+    fixme_remote=$(git remote -v | grep $git_remote_from | cut -f 1 | sort | uniq)
+    if [ "$fixme_remote" != "" ]; then
+        echolog "
+Outdated domain in git config, the official domain for ffmpeg git is since
+November 2011, source.ffmpeg.org, both the old and the new point to the same
+repository and server. To update it enter the following commands:
+"
+        for remote in $fixme_remote; do
+            echolog "git remote set-url $remote $git_remote_to"
+        done
+    fi
+}
+
+if test -f "$source_path/.git/config"; then
+    remote_from=git.videolan.org
+    remote_to=source.ffmpeg.org
+    fix_ffmpeg_remote git@$remote_from:ffmpeg   git@$remote_to:ffmpeg
+    fix_ffmpeg_remote git://$remote_from/ffmpeg git://$remote_to/ffmpeg
+fi

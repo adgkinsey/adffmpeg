@@ -709,22 +709,34 @@ static const Writer compact_writer = {
 
 /* CSV output */
 
-static av_cold int csv_init(WriterContext *wctx, const char *args, void *opaque)
-{
-    return compact_init(wctx, "item_sep=,:nokey=1:escape=csv", opaque);
-}
+#undef OFFSET
+#define OFFSET(x) offsetof(CompactContext, x)
+
+static const AVOption csv_options[] = {
+    {"item_sep", "set item separator",    OFFSET(item_sep_str),    AV_OPT_TYPE_STRING, {.str=","},  CHAR_MIN, CHAR_MAX },
+    {"s",        "set item separator",    OFFSET(item_sep_str),    AV_OPT_TYPE_STRING, {.str=","},  CHAR_MIN, CHAR_MAX },
+    {"nokey",    "force no key printing", OFFSET(nokey),           AV_OPT_TYPE_INT,    {.i64=1},    0,        1        },
+    {"nk",       "force no key printing", OFFSET(nokey),           AV_OPT_TYPE_INT,    {.i64=1},    0,        1        },
+    {"escape",   "set escape mode",       OFFSET(escape_mode_str), AV_OPT_TYPE_STRING, {.str="csv"}, CHAR_MIN, CHAR_MAX },
+    {"e",        "set escape mode",       OFFSET(escape_mode_str), AV_OPT_TYPE_STRING, {.str="csv"}, CHAR_MIN, CHAR_MAX },
+    {"print_section", "print section name", OFFSET(print_section), AV_OPT_TYPE_INT,    {.i64=1},    0,        1        },
+    {"p",             "print section name", OFFSET(print_section), AV_OPT_TYPE_INT,    {.i64=1},    0,        1        },
+    {NULL},
+};
+
+DEFINE_WRITER_CLASS(csv);
 
 static const Writer csv_writer = {
     .name                 = "csv",
     .priv_size            = sizeof(CompactContext),
-    .init                 = csv_init,
+    .init                 = compact_init,
     .print_section_header = compact_print_section_header,
     .print_section_footer = compact_print_section_footer,
     .print_integer        = compact_print_int,
     .print_string         = compact_print_str,
     .show_tags            = compact_show_tags,
     .flags = WRITER_FLAG_DISPLAY_OPTIONAL_FIELDS,
-    .priv_class           = &compact_class,
+    .priv_class           = &csv_class,
 };
 
 /* Flat output */
@@ -1665,6 +1677,10 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
         print_str("codec_tag_string",    val_str);
         print_fmt("codec_tag", "0x%04x", dec_ctx->codec_tag);
 
+        /* Print useful disposition */
+        print_int("default", !!(stream->disposition & AV_DISPOSITION_DEFAULT));
+        print_int("forced", !!(stream->disposition & AV_DISPOSITION_FORCED));
+
         switch (dec_ctx->codec_type) {
         case AVMEDIA_TYPE_VIDEO:
             print_int("width",        dec_ctx->width);
@@ -1693,6 +1709,8 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
             } else {
                 print_str_opt("timecode", "N/A");
             }
+            print_int("attached_pic",
+                      !!(stream->disposition & AV_DISPOSITION_ATTACHED_PIC));
             break;
 
         case AVMEDIA_TYPE_AUDIO:
