@@ -107,8 +107,8 @@ static inline void compute_sin_and_cos(HueContext *hue)
     hue->hue_cos = rint(cos(hue->hue) * (1 << 16) * hue->saturation);
 }
 
-#define PARSE_EXPRESSION(attr, name)                                              \
-    do {                                                                          \
+#define SET_EXPRESSION(attr, name) do {                                           \
+    if (hue->attr##_expr) {                                                       \
         if ((ret = av_expr_parse(&hue->attr##_pexpr, hue->attr##_expr, var_names, \
                                  NULL, NULL, NULL, NULL, 0, ctx)) < 0) {          \
             av_log(ctx, AV_LOG_ERROR,                                             \
@@ -118,10 +118,14 @@ static inline void compute_sin_and_cos(HueContext *hue)
             hue->attr##_pexpr = old_##attr##_pexpr;                               \
             return AVERROR(EINVAL);                                               \
         } else if (old_##attr##_pexpr) {                                          \
-            av_free(old_##attr##_expr);                                           \
+            av_freep(&old_##attr##_expr);                                         \
             av_expr_free(old_##attr##_pexpr);                                     \
+            old_##attr##_pexpr = NULL;                                            \
         }                                                                         \
-    } while (0)
+    } else {                                                                      \
+        hue->attr##_expr = old_##attr##_expr;                                     \
+    }                                                                             \
+} while (0)
 
 static inline int set_options(AVFilterContext *ctx, const char *args)
 {
@@ -144,6 +148,7 @@ static inline int set_options(AVFilterContext *ctx, const char *args)
 
             hue->hue_expr     = NULL;
             hue->hue_deg_expr = NULL;
+            hue->saturation_expr = NULL;
 
             if ((ret = av_set_options_string(hue, args, "=", ":")) < 0)
                 return ret;
@@ -157,21 +162,9 @@ static inline int set_options(AVFilterContext *ctx, const char *args)
                 return AVERROR(EINVAL);
             }
 
-            /*
-             * if both 'H' and 'h' options have not been specified, restore the
-             * old values
-             */
-            if (!hue->hue_expr && !hue->hue_deg_expr) {
-                hue->hue_expr     = old_hue_expr;
-                hue->hue_deg_expr = old_hue_deg_expr;
-            }
-
-            if (hue->hue_deg_expr)
-                PARSE_EXPRESSION(hue_deg, h);
-            if (hue->hue_expr)
-                PARSE_EXPRESSION(hue, H);
-            if (hue->saturation_expr)
-                PARSE_EXPRESSION(saturation, s);
+            SET_EXPRESSION(hue_deg, h);
+            SET_EXPRESSION(hue, H);
+            SET_EXPRESSION(saturation, s);
 
             hue->flat_syntax = 0;
 

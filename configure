@@ -1795,6 +1795,7 @@ asf_stream_muxer_select="asf_muxer"
 avisynth_demuxer_deps="avisynth"
 dirac_demuxer_select="dirac_parser"
 eac3_demuxer_select="ac3_parser"
+f4v_muxer_select="mov_muxer"
 flac_demuxer_select="flac_parser"
 ipod_muxer_select="mov_muxer"
 libnut_demuxer_deps="libnut"
@@ -1923,7 +1924,6 @@ pan_filter_deps="swresample"
 removelogo_filter_deps="avcodec avformat swscale"
 scale_filter_deps="swscale"
 smartblur_filter_deps="gpl swscale"
-select_filter_deps="avcodec"
 showspectrum_filter_deps="avcodec"
 super2xsai_filter_deps="gpl"
 tinterlace_filter_deps="gpl"
@@ -2555,7 +2555,7 @@ probe_cc(){
         _depflags='-MMD'
         _cflags_speed='-O3'
         _cflags_size='-Os'
-    elif $_cc -version 2>/dev/null | grep -q TMS470; then
+    elif $_cc -version 2>/dev/null | grep -Eq 'TMS470|TI ARM'; then
         _type=tms470
         _ident=$($_cc -version | head -n1 | tr -s ' ')
         _flags='--gcc --abi=eabi -me'
@@ -3565,7 +3565,7 @@ disabled  zlib || check_lib   zlib.h      zlibVersion -lz   || disable  zlib
 disabled bzlib || check_lib2 bzlib.h BZ2_bzlibVersion -lbz2 || disable bzlib
 
 # check for VDA header
-if ! disabled vda; then
+if ! disabled vda && ! enabled ppc; then
     if check_header VideoDecodeAcceleration/VDADecoder.h; then
         enable vda
         add_extralibs -framework CoreFoundation -framework VideoDecodeAcceleration -framework QuartzCore
@@ -4386,7 +4386,7 @@ pkgconfig_generate libswresample "FFmpeg audio rescaling library" "$LIBSWRESAMPL
 fix_ffmpeg_remote(){
     git_remote_from=$1
     git_remote_to=$2
-    fixme_remote=$(git remote -v | grep $git_remote_from | cut -f 1 | sort | uniq)
+    fixme_remote=$(git --git-dir=$source_path/.git --work-tree=$source_path remote -v | grep $git_remote_from | cut -f 1 | sort | uniq)
     if [ "$fixme_remote" != "" ]; then
         echolog "
 Outdated domain in git config, the official domain for ffmpeg git is since

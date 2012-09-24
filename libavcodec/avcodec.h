@@ -451,6 +451,7 @@ enum AVCodecID {
     AV_CODEC_ID_REALTEXT   = MKBETAG('R','T','X','T'),
     AV_CODEC_ID_SUBVIEWER  = MKBETAG('S','u','b','V'),
     AV_CODEC_ID_SUBRIP     = MKBETAG('S','R','i','p'),
+    AV_CODEC_ID_WEBVTT     = MKBETAG('W','V','T','T'),
 
     /* other specific kind of codecs (generally used for attachments) */
     AV_CODEC_ID_FIRST_UNKNOWN = 0x18000,           ///< A dummy ID pointing at the start of various fake codecs.
@@ -3676,6 +3677,13 @@ int av_grow_packet(AVPacket *pkt, int grow_by);
  * packet is allocated if it was not really allocated.
  */
 int av_dup_packet(AVPacket *pkt);
+
+/**
+ * Copy packet, including contents
+ *
+ * @return 0 on success, negative AVERROR on fail
+ */
+int av_copy_packet(AVPacket *dst, AVPacket *src);
 
 /**
  * Free a packet.

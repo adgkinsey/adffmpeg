@@ -415,7 +415,7 @@ static int set_codec_from_probe_data(AVFormatContext *s, AVStream *st, AVProbeDa
     int score;
     AVInputFormat *fmt = av_probe_input_format3(pd, 1, &score);
 
-    if (fmt) {
+    if (fmt && st->request_probe <= score) {
         int i;
         av_log(s, AV_LOG_DEBUG, "Probe with size=%d, packets=%d detected %s with score=%d\n",
                pd->buf_size, MAX_PROBE_PACKETS - st->probe_packets, fmt->name, score);
@@ -691,6 +691,10 @@ static void probe_codec(AVFormatContext *s, AVStream *st, const AVPacket *pkt)
         } else {
 no_packet:
             st->probe_packets = 0;
+            if (!pd->buf_size) {
+                av_log(s, AV_LOG_WARNING, "nothing to probe for stream %d\n",
+                       st->index);
+            }
         }
 
         end=    s->raw_packet_buffer_remaining_size <= 0
@@ -746,6 +750,8 @@ int ff_read_packet(AVFormatContext *s, AVPacket *pkt)
             }
         }
 
+        pkt->data = NULL;
+        pkt->size = 0;
         av_init_packet(pkt);
         ret= s->iformat->read_packet(s, pkt);
         if (ret < 0) {
@@ -1403,11 +1409,18 @@ int av_read_frame(AVFormatContext *s, AVPacket *pkt)
     AVStream *st;
 
     if (!genpts) {
-        ret = s->packet_buffer ? read_from_packet_buffer(&s->packet_buffer,
-                                                          &s->packet_buffer_end,
-                                                          pkt) :
-                                  read_frame_internal(s, pkt);
-        goto return_packet;
+        while (1) {
+            ret = s->packet_buffer ?
+                read_from_packet_buffer(&s->packet_buffer, &s->packet_buffer_end, pkt) :
+                read_frame_internal(s, pkt);
+            if (ret < 0) {
+                if (ret == AVERROR(EAGAIN))
+                    continue;
+                else
+                    return ret;
+            }
+            goto return_packet;
+        }
     }
 
     for (;;) {
@@ -2308,6 +2321,8 @@ static int has_codec_parameters(AVStream *st, const char **errmsg_ptr)
             FAIL("unspecified sample rate");
         if (!avctx->channels)
             FAIL("unspecified number of channels");
+        if (st->info->found_decoder >= 0 && !st->nb_decoded_frames && avctx->codec_id == AV_CODEC_ID_DTS)
+            FAIL("no decodable DTS frames");
         break;
     case AVMEDIA_TYPE_VIDEO:
         if (!avctx->width)
@@ -2551,7 +2566,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
                               : &thread_opt);
 
         //try to just open decoders, in case this is enough to get parameters
-        if (!has_codec_parameters(st, NULL)) {
+        if (!has_codec_parameters(st, NULL) && st->request_probe <= 0) {
             if (codec && !st->codec->codec)
                 avcodec_open2(st->codec, codec, options ? &options[i]
                               : &thread_opt);

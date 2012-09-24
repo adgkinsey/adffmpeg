@@ -54,6 +54,15 @@
     }\
 }
 
+#define MATCH_PER_TYPE_OPT(name, type, outvar, fmtctx, mediatype)\
+{\
+    int i;\
+    for (i = 0; i < o->nb_ ## name; i++) {\
+        char *spec = o->name[i].specifier;\
+        if (!strcmp(spec, mediatype))\
+            outvar = o->name[i].u.type;\
+    }\
+}
 char *vstats_filename;
 
 float audio_drift_threshold = 0.1;
@@ -80,9 +89,6 @@ int frame_bits_per_raw_sample = 0;
 
 
 static int intra_only         = 0;
-static const char *video_codec_name    = NULL;
-static const char *audio_codec_name    = NULL;
-static const char *subtitle_codec_name = NULL;
 static int file_overwrite     = 0;
 static int no_file_overwrite  = 0;
 static int video_discard      = 0;
@@ -167,21 +173,18 @@ static int opt_video_standard(void *optctx, const char *opt, const char *arg)
 static int opt_audio_codec(void *optctx, const char *opt, const char *arg)
 {
     OptionsContext *o = optctx;
-    audio_codec_name = arg;
     return parse_option(o, "codec:a", arg, options);
 }
 
 static int opt_video_codec(void *optctx, const char *opt, const char *arg)
 {
     OptionsContext *o = optctx;
-    video_codec_name = arg;
     return parse_option(o, "codec:v", arg, options);
 }
 
 static int opt_subtitle_codec(void *optctx, const char *opt, const char *arg)
 {
     OptionsContext *o = optctx;
-    subtitle_codec_name = arg;
     return parse_option(o, "codec:s", arg, options);
 }
 
@@ -688,6 +691,9 @@ static int opt_input_file(void *optctx, const char *opt, const char *filename)
     uint8_t buf[128];
     AVDictionary **opts;
     int orig_nb_streams;                     // number of streams before avformat_find_stream_info
+    char *   video_codec_name = NULL;
+    char *   audio_codec_name = NULL;
+    char *subtitle_codec_name = NULL;
 
     if (o->format) {
         if (!(file_iformat = av_find_input_format(o->format))) {
@@ -739,6 +745,10 @@ static int opt_input_file(void *optctx, const char *opt, const char *filename)
     }
     if (o->nb_frame_pix_fmts)
         av_dict_set(&format_opts, "pixel_format", o->frame_pix_fmts[o->nb_frame_pix_fmts - 1].u.str, 0);
+
+    MATCH_PER_TYPE_OPT(codec_names, str,    video_codec_name, ic, "v");
+    MATCH_PER_TYPE_OPT(codec_names, str,    audio_codec_name, ic, "a");
+    MATCH_PER_TYPE_OPT(codec_names, str, subtitle_codec_name, ic, "s");
 
     ic->video_codec_id   = video_codec_name ?
         find_codec_or_die(video_codec_name   , AVMEDIA_TYPE_VIDEO   , 0)->id : AV_CODEC_ID_NONE;
@@ -1478,6 +1488,7 @@ void opt_output_file(void *optctx, const char *filename)
             }
         }
     } else if (!o->nb_stream_maps) {
+        char *subtitle_codec_name = NULL;
         /* pick the "best" stream of each type */
 
         /* video: highest resolution */
@@ -1514,6 +1525,7 @@ void opt_output_file(void *optctx, const char *filename)
         }
 
         /* subtitles: pick first */
+        MATCH_PER_TYPE_OPT(codec_names, str, subtitle_codec_name, oc, "s");
         if (!o->subtitle_disable && (oc->oformat->subtitle_codec != AV_CODEC_ID_NONE || subtitle_codec_name)) {
             for (i = 0; i < nb_input_streams; i++)
                 if (input_streams[i]->st->codec->codec_type == AVMEDIA_TYPE_SUBTITLE) {
@@ -1942,9 +1954,11 @@ static int opt_preset(void *optctx, const char *opt, const char *arg)
     OptionsContext *o = optctx;
     FILE *f=NULL;
     char filename[1000], line[1000], tmp_line[1000];
-    const char *codec_name = *opt == 'v' ? video_codec_name :
-                             *opt == 'a' ? audio_codec_name :
-                                           subtitle_codec_name;
+    const char *codec_name = NULL;
+
+    tmp_line[0] = *opt;
+    tmp_line[1] = 0;
+    MATCH_PER_TYPE_OPT(codec_names, str, codec_name, NULL, tmp_line);
 
     if (!(f = get_preset_file(filename, sizeof(filename), arg, *opt == 'f', codec_name))) {
         if(!strncmp(arg, "libx264-lossless", strlen("libx264-lossless"))){
