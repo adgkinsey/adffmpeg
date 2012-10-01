@@ -67,7 +67,7 @@ static const AVClass copyplane_class = {
 };
 
 
-static int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     CopyPlaneContext *copyplane = ctx->priv;
     int ret;
@@ -159,7 +159,7 @@ static int config_props(AVFilterLink *inlink)
     return 0;
 }
 
-static void start_frame(AVFilterLink *inlink, AVFilterBufferRef *picref)
+static int start_frame(AVFilterLink *inlink, AVFilterBufferRef *picref)
 {
     CopyPlaneContext *priv = inlink->dst->priv;
     AVFilterLink *outlink  = inlink->dst->outputs[0];
@@ -185,10 +185,10 @@ static void start_frame(AVFilterLink *inlink, AVFilterBufferRef *picref)
     if (priv->pix_desc->flags & PIX_FMT_PAL)
         memcpy(outpicref->data[1], outpicref->data[1], 256*4);
 
-    ff_start_frame(outlink, avfilter_ref_buffer(outpicref, ~0));
+    return ff_start_frame(outlink, avfilter_ref_buffer(outpicref, ~0));
 }
 
-static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
+static int draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
 {
     CopyPlaneContext *cp      = inlink->dst->priv;
     AVFilterBufferRef *inpic  = inlink->cur_buf;
@@ -197,7 +197,7 @@ static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
     uint16_t *line = NULL;
     
     if (!(line = av_malloc(sizeof(uint16_t) * w)))
-        return;
+        return AVERROR(ENOMEM);
 
     for (c = 0; c < cp->pix_desc->nb_components; c++) {
         int w1 = c == 1 || c == 2 ? w>>cp->pix_desc->log2_chroma_w : w;
@@ -233,7 +233,7 @@ static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
     }
     av_free(line);
 
-    ff_draw_slice(inlink->dst->outputs[0], y, h, slice_dir);
+    return ff_draw_slice(inlink->dst->outputs[0], y, h, slice_dir);
 }
 
 AVFilter avfilter_vf_copyplane = {
