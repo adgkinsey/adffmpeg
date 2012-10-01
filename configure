@@ -95,7 +95,7 @@ Configuration options:
   --disable-static         do not build static libraries [no]
   --enable-shared          build shared libraries [no]
   --enable-small           optimize for size instead of speed
-  --enable-runtime-cpudetect detect cpu capabilities at runtime (bigger binary)
+  --disable-runtime-cpudetect disable detecting cpu capabilities at runtime (smaller binary)
   --enable-gray            enable full grayscale support (slower color)
   --disable-swscale-alpha  disable alpha channel support in swscale
 
@@ -1267,6 +1267,7 @@ HAVE_LIST="
     asm_types_h
     attribute_may_alias
     attribute_packed
+    broken_snprintf
     cbrtf
     clock_gettime
     closesocket
@@ -2068,6 +2069,7 @@ enable debug
 enable doc
 enable network
 enable optimizations
+enable runtime_cpudetect
 enable safe_bitstream_reader
 enable static
 enable swscale_alpha
@@ -3201,10 +3203,16 @@ elif check_header _mingw.h; then
         "defined (__MINGW64_VERSION_MAJOR) || (__MINGW32_MAJOR_VERSION > 3) || \
             (__MINGW32_MAJOR_VERSION == 3 && __MINGW32_MINOR_VERSION >= 15)" ||
         die "ERROR: MinGW runtime version must be >= 3.15."
+    if check_cpp_condition _mingw.h "defined(__MINGW64_VERSION_MAJOR) && \
+            __MINGW64_VERSION_MAJOR < 3"; then
+        enable broken_snprintf
+        add_cflags "-include $source_path/compat/msvcrt/snprintf.h"
+    fi
 elif check_cpp_condition newlib.h "defined _NEWLIB_VERSION"; then
     libc_type=newlib
 elif check_func_headers stdlib.h _get_doserrno; then
     libc_type=msvcrt
+    enable broken_snprintf
     add_cflags -Dstrtod=avpriv_strtod
     add_cflags -Dsnprintf=avpriv_snprintf   \
                -D_snprintf=avpriv_snprintf  \

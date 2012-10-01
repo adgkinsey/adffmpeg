@@ -697,9 +697,10 @@ static int nut_write_header(AVFormatContext *s){
     if ((ret = write_headers(s, bc)) < 0)
         return ret;
 
-    avio_flush(bc);
+    if (s->avoid_negative_ts < 0)
+        s->avoid_negative_ts = 1;
 
-    //FIXME index
+    avio_flush(bc);
 
     return 0;
 }

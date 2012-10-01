@@ -2,6 +2,9 @@ Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
 version next:
+
+
+version 1.0:
 - INI and flat output in ffprobe
 - Scene detection in libavfilter
 - Indeo Audio decoder
@@ -64,6 +67,8 @@ version next:
 - F4V muxer
 - sendcmd and asendcmd filters
 - WebVTT demuxer and decoder (simple tags supported)
+- RTP packetization of JPEG
+- faststart option in the MOV/MP4 muxer
 
 
 version 0.11.2:

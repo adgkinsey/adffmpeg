@@ -1,7 +1,7 @@
 /*
  * FFV1 codec for libavcodec
  *
- * Copyright (c) 2003 Michael Niedermayer <michaelni@gmx.at>
+ * Copyright (c) 2003-2012 Michael Niedermayer <michaelni@gmx.at>
  *
  * This file is part of FFmpeg.
  *
@@ -815,8 +815,11 @@ static int write_extra_header(FFV1Context *f){
     ff_build_rac_states(c, 0.05*(1LL<<32), 256-8);
 
     put_symbol(c, state, f->version, 0);
-    if(f->version > 2)
+    if(f->version > 2) {
+        if(f->version == 3)
+            f->minor_version = 2;
         put_symbol(c, state, f->minor_version, 0);
+    }
     put_symbol(c, state, f->ac, 0);
     if(f->ac>1){
         for(i=1; i<256; i++){
@@ -1238,6 +1241,8 @@ static int encode_slice(AVCodecContext *c, void *arg){
         encode_slice_header(f, fs);
     }
     if(!fs->ac){
+        if(f->version > 2)
+            put_rac(&fs->c, (int[]){129}, 0);
         fs->ac_byte_count = f->version > 2 || (!x&&!y) ? ff_rac_terminate(&fs->c) : 0;
         init_put_bits(&fs->pb, fs->c.bytestream_start + fs->ac_byte_count, fs->c.bytestream_end - fs->c.bytestream_start - fs->ac_byte_count);
     }
@@ -1321,7 +1326,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
         int bytes;
 
         if(fs->ac){
-            uint8_t state=128;
+            uint8_t state=129;
             put_rac(&fs->c, &state, 0);
             bytes= ff_rac_terminate(&fs->c);
         }else{
@@ -1672,6 +1677,8 @@ static int decode_slice(AVCodecContext *c, void *arg){
     y= fs->slice_y;
 
     if(!fs->ac){
+        if (f->version == 3 && f->minor_version > 1 || f->version > 3)
+            get_rac(&fs->c, (int[]){129});
         fs->ac_byte_count = f->version > 2 || (!x&&!y) ? fs->c.bytestream - fs->c.bytestream_start - 1 : 0;
         init_get_bits(&fs->gb,
                       fs->c.bytestream_start + fs->ac_byte_count,
@@ -1699,8 +1706,10 @@ static int decode_slice(AVCodecContext *c, void *arg){
         decode_rgb_frame(fs, planes, width, height, p->linesize);
     }
     if(fs->ac && f->version > 2) {
-        int v = fs->c.bytestream_end - fs->c.bytestream - 3 - 5*f->ec;
-        if(v != -1 && v!= 0) {
+        int v;
+        get_rac(&fs->c, (int[]){129});
+        v = fs->c.bytestream_end - fs->c.bytestream - 2 - 5*f->ec;
+        if(v) {
             av_log(f->avctx, AV_LOG_ERROR, "bytestream end mismatching by %d\n", v);
             fs->slice_damaged = 1;
         }
