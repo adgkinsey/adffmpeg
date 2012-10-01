@@ -95,7 +95,7 @@ Configuration options:
   --disable-static         do not build static libraries [no]
   --enable-shared          build shared libraries [no]
   --enable-small           optimize for size instead of speed
-  --enable-runtime-cpudetect detect cpu capabilities at runtime (bigger binary)
+  --disable-runtime-cpudetect disable detecting cpu capabilities at runtime (smaller binary)
   --enable-gray            enable full grayscale support (slower color)
   --disable-swscale-alpha  disable alpha channel support in swscale
 
@@ -1267,6 +1267,7 @@ HAVE_LIST="
     asm_types_h
     attribute_may_alias
     attribute_packed
+    broken_snprintf
     cbrtf
     clock_gettime
     closesocket
@@ -1928,6 +1929,9 @@ showspectrum_filter_deps="avcodec"
 super2xsai_filter_deps="gpl"
 tinterlace_filter_deps="gpl"
 yadif_filter_deps="gpl"
+pixfmts_super2xsai_test_deps="super2xsai_filter"
+tinterlace_merge_test_deps="tinterlace_filter"
+tinterlace_pad_test_deps="tinterlace_filter"
 
 # libraries
 avdevice_deps="avcodec avformat"
@@ -1954,18 +1958,16 @@ doc_deps_any="manpages htmlpages podpages txtpages"
 # tests
 colormatrix1_test_deps="colormatrix_filter"
 colormatrix2_test_deps="colormatrix_filter"
-flashsv2_test_deps="zlib"
 mpg_test_deps="mpeg1system_muxer mpegps_demuxer"
-mpng_test_deps="zlib"
+png_test_deps="zlib"
 pp_test_deps="mp_filter"
 pp2_test_deps="mp_filter"
 pp3_test_deps="mp_filter"
 pp4_test_deps="mp_filter"
 pp5_test_deps="mp_filter"
 pp6_test_deps="mp_filter"
+seek_flashsv_flv_test_deps="zlib"
 seek_lavf_mxf_d10_test_deps="mxf_d10_test"
-zlib_test_deps="zlib"
-zmbv_test_deps="zlib"
 
 test_deps(){
     suf1=$1
@@ -2068,6 +2070,7 @@ enable debug
 enable doc
 enable network
 enable optimizations
+enable runtime_cpudetect
 enable safe_bitstream_reader
 enable static
 enable swscale_alpha
@@ -3201,10 +3204,16 @@ elif check_header _mingw.h; then
         "defined (__MINGW64_VERSION_MAJOR) || (__MINGW32_MAJOR_VERSION > 3) || \
             (__MINGW32_MAJOR_VERSION == 3 && __MINGW32_MINOR_VERSION >= 15)" ||
         die "ERROR: MinGW runtime version must be >= 3.15."
+    if check_cpp_condition _mingw.h "defined(__MINGW64_VERSION_MAJOR) && \
+            __MINGW64_VERSION_MAJOR < 3"; then
+        enable broken_snprintf
+        add_cflags "-include $source_path/compat/msvcrt/snprintf.h"
+    fi
 elif check_cpp_condition newlib.h "defined _NEWLIB_VERSION"; then
     libc_type=newlib
 elif check_func_headers stdlib.h _get_doserrno; then
     libc_type=msvcrt
+    enable broken_snprintf
     add_cflags -Dstrtod=avpriv_strtod
     add_cflags -Dsnprintf=avpriv_snprintf   \
                -D_snprintf=avpriv_snprintf  \
@@ -4235,8 +4244,7 @@ fi
     eval echo "${lcname}_VERSION_MAJOR=\$${name}_VERSION_MAJOR" >> config.mak
 }
 
-get_version_old LIBPOSTPROC libpostproc/postprocess.h
-get_version_old LIBSWRESAMPLE libswresample/swresample.h
+get_version_old LIBPOSTPROC libpostproc/version.h
 
 get_version libavcodec
 get_version libavdevice
@@ -4244,6 +4252,7 @@ get_version libavfilter
 get_version libavformat
 get_version libavresample
 get_version libavutil
+get_version libswresample
 get_version libswscale
 
 cat > $TMPH <<EOF

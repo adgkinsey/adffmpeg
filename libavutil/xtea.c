@@ -36,7 +36,7 @@ void av_xtea_init(AVXTEA *ctx, const uint8_t key[16])
 }
 
 static void xtea_crypt_ecb(AVXTEA *ctx, uint8_t *dst, const uint8_t *src,
-                           int decrypt)
+                           int decrypt, uint8_t *iv)
 {
     uint32_t v0, v1;
     uint32_t k0 = ctx->key[0];
@@ -95,6 +95,11 @@ static void xtea_crypt_ecb(AVXTEA *ctx, uint8_t *dst, const uint8_t *src,
         DSTEP(0x3C6EF372U, k2, k1);
         DSTEP(0x9E3779B9U, k3, k0);
 #endif
+        if (iv) {
+            v0 ^= AV_RB32(iv  );
+            v1 ^= AV_RB32(iv+4);
+            memcpy(iv, src, 8);
+        }
     } else {
 #if CONFIG_SMALL
         int i;
@@ -155,13 +160,7 @@ void av_xtea_crypt(AVXTEA *ctx, uint8_t *dst, const uint8_t *src, int count,
 
     if (decrypt) {
         while (count--) {
-            xtea_crypt_ecb(ctx, dst, src, decrypt);
-
-            if (iv) {
-                for (i = 0; i < 8; i++)
-                    dst[i] = dst[i] ^ iv[i];
-                memcpy(iv, src, 8);
-            }
+            xtea_crypt_ecb(ctx, dst, src, decrypt, iv);
 
             src   += 8;
             dst   += 8;
@@ -171,10 +170,10 @@ void av_xtea_crypt(AVXTEA *ctx, uint8_t *dst, const uint8_t *src, int count,
             if (iv) {
                 for (i = 0; i < 8; i++)
                     dst[i] = src[i] ^ iv[i];
-                xtea_crypt_ecb(ctx, dst, dst, decrypt);
+                xtea_crypt_ecb(ctx, dst, dst, decrypt, NULL);
                 memcpy(iv, dst, 8);
             } else {
-                xtea_crypt_ecb(ctx, dst, src, decrypt);
+                xtea_crypt_ecb(ctx, dst, src, decrypt, NULL);
             }
             src   += 8;
             dst   += 8;
@@ -224,24 +223,37 @@ static const uint8_t xtea_test_ct[XTEA_NUM_TESTS][8] = {
 int main(void)
 {
     AVXTEA ctx;
-    uint8_t buf[8];
+    uint8_t buf[8], iv[8];
     int i;
+    const uint8_t src[32] = "HelloWorldHelloWorldHelloWorld";
+    uint8_t  ct[32];
+    uint8_t  pl[32];
+
+#define CHECK(dst, src, ref, len, iv, dir, error) \
+        av_xtea_crypt(&ctx, dst, src, len, iv, dir);\
+        if (memcmp(dst, ref, 8*len)) {\
+            printf(error);\
+            return 1;\
+        }
 
     for (i = 0; i < XTEA_NUM_TESTS; i++) {
         av_xtea_init(&ctx, xtea_test_key[i]);
 
-        av_xtea_crypt(&ctx, buf, xtea_test_pt[i], 1, NULL, 0);
-        if (memcmp(buf, xtea_test_ct[i], 8)) {
-            printf("Test encryption failed.\n");
-            return 1;
-        }
+        CHECK(buf, xtea_test_pt[i], xtea_test_ct[i], 1, NULL, 0, "Test encryption failed.\n");
+        CHECK(buf, xtea_test_ct[i], xtea_test_pt[i], 1, NULL, 1, "Test decryption failed.\n");
 
-        av_xtea_crypt(&ctx, buf, xtea_test_ct[i], 1, NULL, 1);
-        if (memcmp(buf, xtea_test_pt[i], 8)) {
-            printf("Test decryption failed.\n");
-            return 1;
-        }
+        /* encrypt */
+        memcpy(iv, "HALLO123", 8);
+        av_xtea_crypt(&ctx, ct, src, 4, iv, 0);
+
+        /* decrypt into pl */
+        memcpy(iv, "HALLO123", 8);
+        CHECK(pl, ct, src, 4, iv, 1, "Test IV decryption failed.\n");
+
+        memcpy(iv, "HALLO123", 8);
+        CHECK(ct, ct, src, 4, iv, 1, "Test IV inplace decryption failed.\n");
     }
+
     printf("Test encryption/decryption success.\n");
 
     return 0;

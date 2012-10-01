@@ -417,11 +417,11 @@ void av_noreturn exit_program(int ret)
             bsfc = next;
         }
         output_streams[i]->bitstream_filters = NULL;
+        avcodec_free_frame(&output_streams[i]->filtered_frame);
 
         av_freep(&output_streams[i]->forced_keyframes);
         av_freep(&output_streams[i]->avfilter);
         av_freep(&output_streams[i]->logfile_prefix);
-        av_freep(&output_streams[i]->filtered_frame);
         av_freep(&output_streams[i]);
     }
     for (i = 0; i < nb_input_files; i++) {
@@ -429,7 +429,7 @@ void av_noreturn exit_program(int ret)
         av_freep(&input_files[i]);
     }
     for (i = 0; i < nb_input_streams; i++) {
-        av_freep(&input_streams[i]->decoded_frame);
+        avcodec_free_frame(&input_streams[i]->decoded_frame);
         av_dict_free(&input_streams[i]->opts);
         free_buffer_pool(&input_streams[i]->buffer_pool);
         avfilter_unref_bufferp(&input_streams[i]->sub2video.ref);
@@ -572,6 +572,16 @@ static void write_frame(AVFormatContext *s, AVPacket *pkt, OutputStream *ost)
     }
 
     pkt->stream_index = ost->index;
+
+    if (debug_ts) {
+        av_log(NULL, AV_LOG_INFO, "muxer <- type:%s "
+                "pkt_pts:%s pkt_pts_time:%s pkt_dts:%s pkt_dts_time:%s\n",
+                av_get_media_type_string(ost->st->codec->codec_type),
+                av_ts2str(pkt->pts), av_ts2timestr(pkt->pts, &ost->st->time_base),
+                av_ts2str(pkt->dts), av_ts2timestr(pkt->dts, &ost->st->time_base)
+              );
+    }
+
     ret = av_interleaved_write_frame(s, pkt);
     if (ret < 0) {
         print_error("av_interleaved_write_frame()", ret);
@@ -821,7 +831,7 @@ static void do_video_out(AVFormatContext *s,
         return;
     } else if (nb_frames > 1) {
         if (nb_frames > dts_error_threshold * 30) {
-            av_log(NULL, AV_LOG_ERROR, "%d frame duplication too large, skiping\n", nb_frames - 1);
+            av_log(NULL, AV_LOG_ERROR, "%d frame duplication too large, skipping\n", nb_frames - 1);
             nb_frames_drop++;
             return;
         }
@@ -1328,6 +1338,10 @@ static void do_streamcopy(InputStream *ist, OutputStream *ost, const AVPacket *p
 
     if ((!ost->frame_number && !(pkt->flags & AV_PKT_FLAG_KEY)) &&
         !ost->copy_initial_nonkeyframes)
+        return;
+
+    if (!ost->frame_number && ist->pts < of->start_time &&
+        !ost->copy_prior_start)
         return;
 
     if (of->recording_time != INT64_MAX &&
@@ -3105,6 +3119,8 @@ int main(int argc, char **argv)
     int64_t ti;
 
     reset_options(&o, 0);
+
+    setvbuf(stderr,NULL,_IONBF,0); /* win32 runtime needs this */
 
     av_log_set_flags(AV_LOG_SKIP_REPEATED);
     parse_loglevel(argc, argv, options);

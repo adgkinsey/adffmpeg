@@ -2624,6 +2624,7 @@ static int mov_read_elst(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
     MOVStreamContext *sc;
     int i, edit_count, version, edit_start_index = 0;
+    int unsupported = 0;
 
     if (c->fc->nb_streams < 1)
         return 0;
@@ -2636,9 +2637,11 @@ static int mov_read_elst(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     if ((uint64_t)edit_count*12+8 > atom.size)
         return AVERROR_INVALIDDATA;
 
+    av_dlog(c->fc, "track[%i].edit_count = %i\n", c->fc->nb_streams-1, edit_count);
     for (i=0; i<edit_count; i++){
         int64_t time;
         int64_t duration;
+        int rate;
         if (version == 1) {
             duration = avio_rb64(pb);
             time     = avio_rb64(pb);
@@ -2646,19 +2649,23 @@ static int mov_read_elst(MOVContext *c, AVIOContext *pb, MOVAtom atom)
             duration = avio_rb32(pb); /* segment duration */
             time     = (int32_t)avio_rb32(pb); /* media time */
         }
-        avio_rb32(pb); /* Media rate */
+        rate = avio_rb32(pb);
         if (i == 0 && time == -1) {
             sc->empty_duration = duration;
             edit_start_index = 1;
         } else if (i == edit_start_index && time >= 0)
             sc->start_time = time;
+        else
+            unsupported = 1;
+
+        av_dlog(c->fc, "duration=%"PRId64" time=%"PRId64" rate=%f\n",
+                duration, time, rate / 65536.0);
     }
 
-    if (edit_count > 1)
+    if (unsupported)
         av_log(c->fc, AV_LOG_WARNING, "multiple edit list entries, "
                "a/v desync might occur, patch welcome\n");
 
-    av_dlog(c->fc, "track[%i].edit_count = %i\n", c->fc->nb_streams-1, edit_count);
     return 0;
 }
 
@@ -3135,8 +3142,6 @@ static int mov_read_header(AVFormatContext *s)
         AVStream *st = s->streams[i];
         MOVStreamContext *sc = st->priv_data;
         if(st->codec->codec_type == AVMEDIA_TYPE_AUDIO && st->codec->codec_id == AV_CODEC_ID_AAC) {
-            if(!sc->start_pad)
-                sc->start_pad = 1024;
             st->skip_samples = sc->start_pad;
         }
     }

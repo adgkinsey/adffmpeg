@@ -1,6 +1,6 @@
 /*
- * RTP SPEEX Depacketizer, RFC 5574
- * Copyright (c) 2012 Dmitry Samonenko
+ * C99-compatible snprintf() and vsnprintf() implementations
+ * Copyright (c) 2012 Ronald S. Bultje <rsbultje@gmail.com>
  *
  * This file is part of FFmpeg.
  *
@@ -19,21 +19,20 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "avformat.h"
-#include "rtpdec_formats.h"
-#include "libavutil/avstring.h"
+#ifndef COMPAT_SNPRINTF_H
+#define COMPAT_SNPRINTF_H
 
-static int speex_parse_sdp_line(AVFormatContext *s, int st_index,
-                               PayloadContext *data, const char *line)
-{
-    av_log(s, AV_LOG_WARNING, "fmtp line parsing is not implemented yet\n");
+#include <stdarg.h>
+#include <stdio.h>
 
-    return 0;
-}
+int avpriv_snprintf(char *s, size_t n, const char *fmt, ...);
+int avpriv_vsnprintf(char *s, size_t n, const char *fmt, va_list ap);
 
-RTPDynamicProtocolHandler ff_speex_dynamic_handler = {
-    .enc_name         = "speex",
-    .codec_type       = AVMEDIA_TYPE_AUDIO,
-    .codec_id         = AV_CODEC_ID_SPEEX,
-    .parse_sdp_a_line = speex_parse_sdp_line,
-};
+#undef snprintf
+#undef _snprintf
+#undef vsnprintf
+#define snprintf avpriv_snprintf
+#define _snprintf avpriv_snprintf
+#define vsnprintf avpriv_vsnprintf
+
+#endif /* COMPAT_SNPRINTF_H */

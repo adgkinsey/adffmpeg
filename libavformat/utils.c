@@ -641,9 +641,13 @@ int avformat_open_input(AVFormatContext **ps, const char *filename, AVInputForma
         if ((ret = s->iformat->read_header(s)) < 0)
             goto fail;
 
-    if (id3v2_extra_meta &&
-        (ret = ff_id3v2_parse_apic(s, &id3v2_extra_meta)) < 0)
-        goto fail;
+    if (id3v2_extra_meta) {
+        if (!strcmp(s->iformat->name, "mp3")) {
+            if((ret = ff_id3v2_parse_apic(s, &id3v2_extra_meta)) < 0)
+                goto fail;
+        } else
+            av_log(s, AV_LOG_DEBUG, "demuxer does not support additional id3 data, skipping\n");
+    }
     ff_id3v2_free_extra_meta(&id3v2_extra_meta);
 
     avformat_queue_attached_pictures(s);
@@ -907,6 +911,8 @@ static int is_intra_only(AVCodecContext *enc){
 static int has_decode_delay_been_guessed(AVStream *st)
 {
     if(st->codec->codec_id != AV_CODEC_ID_H264) return 1;
+    if(!st->info) // if we have left find_stream_info then nb_decoded_frames wont increase anymore for stream copy
+        return 1;
 #if CONFIG_H264_DECODER
     if(st->codec->has_b_frames &&
        avpriv_h264_has_num_reorder_frames(st->codec) == st->codec->has_b_frames)
@@ -934,27 +940,43 @@ static void update_initial_timestamps(AVFormatContext *s, int stream_index,
 {
     AVStream *st= s->streams[stream_index];
     AVPacketList *pktl= s->parse_queue ? s->parse_queue : s->packet_buffer;
+    int64_t pts_buffer[MAX_REORDER_DELAY];
+    int64_t shift;
+    int i, delay;
 
     if(st->first_dts != AV_NOPTS_VALUE || dts == AV_NOPTS_VALUE || st->cur_dts == AV_NOPTS_VALUE || is_relative(dts))
         return;
 
+    delay = st->codec->has_b_frames;
     st->first_dts= dts - (st->cur_dts - RELATIVE_TS_BASE);
     st->cur_dts= dts;
+    shift = st->first_dts - RELATIVE_TS_BASE;
+
+    for (i=0; i<MAX_REORDER_DELAY; i++)
+        pts_buffer[i] = AV_NOPTS_VALUE;
 
     if (is_relative(pts))
-        pts += st->first_dts - RELATIVE_TS_BASE;
+        pts += shift;
 
     for(; pktl; pktl= get_next_pkt(s, st, pktl)){
         if(pktl->pkt.stream_index != stream_index)
             continue;
         if(is_relative(pktl->pkt.pts))
-            pktl->pkt.pts += st->first_dts - RELATIVE_TS_BASE;
+            pktl->pkt.pts += shift;
 
         if(is_relative(pktl->pkt.dts))
-            pktl->pkt.dts += st->first_dts - RELATIVE_TS_BASE;
+            pktl->pkt.dts += shift;
 
         if(st->start_time == AV_NOPTS_VALUE && pktl->pkt.pts != AV_NOPTS_VALUE)
             st->start_time= pktl->pkt.pts;
+
+        if(pktl->pkt.pts != AV_NOPTS_VALUE && delay <= MAX_REORDER_DELAY && has_decode_delay_been_guessed(st)){
+            pts_buffer[0]= pktl->pkt.pts;
+            for(i=0; i<delay && pts_buffer[i] > pts_buffer[i+1]; i++)
+                FFSWAP(int64_t, pts_buffer[i], pts_buffer[i+1]);
+            if(pktl->pkt.dts == AV_NOPTS_VALUE)
+                pktl->pkt.dts= pts_buffer[0];
+        }
     }
     if (st->start_time == AV_NOPTS_VALUE)
         st->start_time = pts;
@@ -1409,18 +1431,12 @@ int av_read_frame(AVFormatContext *s, AVPacket *pkt)
     AVStream *st;
 
     if (!genpts) {
-        while (1) {
-            ret = s->packet_buffer ?
-                read_from_packet_buffer(&s->packet_buffer, &s->packet_buffer_end, pkt) :
-                read_frame_internal(s, pkt);
-            if (ret < 0) {
-                if (ret == AVERROR(EAGAIN))
-                    continue;
-                else
-                    return ret;
-            }
-            goto return_packet;
-        }
+        ret = s->packet_buffer ?
+            read_from_packet_buffer(&s->packet_buffer, &s->packet_buffer_end, pkt) :
+            read_frame_internal(s, pkt);
+        if (ret < 0)
+            return ret;
+        goto return_packet;
     }
 
     for (;;) {
@@ -2348,9 +2364,12 @@ static int try_decode_frame(AVStream *st, AVPacket *avpkt, AVDictionary **option
 {
     const AVCodec *codec;
     int got_picture = 1, ret = 0;
-    AVFrame picture;
+    AVFrame *frame = avcodec_alloc_frame();
     AVSubtitle subtitle;
     AVPacket pkt = *avpkt;
+
+    if (!frame)
+        return AVERROR(ENOMEM);
 
     if (!avcodec_is_open(st->codec) && !st->info->found_decoder) {
         AVDictionary *thread_opt = NULL;
@@ -2360,7 +2379,8 @@ static int try_decode_frame(AVStream *st, AVPacket *avpkt, AVDictionary **option
 
         if (!codec) {
             st->info->found_decoder = -1;
-            return -1;
+            ret = -1;
+            goto fail;
         }
 
         /* force thread count to 1 since the h264 decoder will not extract SPS
@@ -2371,14 +2391,16 @@ static int try_decode_frame(AVStream *st, AVPacket *avpkt, AVDictionary **option
             av_dict_free(&thread_opt);
         if (ret < 0) {
             st->info->found_decoder = -1;
-            return ret;
+            goto fail;
         }
         st->info->found_decoder = 1;
     } else if (!st->info->found_decoder)
         st->info->found_decoder = 1;
 
-    if (st->info->found_decoder < 0)
-        return -1;
+    if (st->info->found_decoder < 0) {
+        ret = -1;
+        goto fail;
+    }
 
     while ((pkt.size > 0 || (!pkt.data && got_picture)) &&
            ret >= 0 &&
@@ -2386,14 +2408,14 @@ static int try_decode_frame(AVStream *st, AVPacket *avpkt, AVDictionary **option
            !has_decode_delay_been_guessed(st) ||
            (!st->codec_info_nb_frames && st->codec->codec->capabilities & CODEC_CAP_CHANNEL_CONF))) {
         got_picture = 0;
-        avcodec_get_frame_defaults(&picture);
+        avcodec_get_frame_defaults(frame);
         switch(st->codec->codec_type) {
         case AVMEDIA_TYPE_VIDEO:
-            ret = avcodec_decode_video2(st->codec, &picture,
+            ret = avcodec_decode_video2(st->codec, frame,
                                         &got_picture, &pkt);
             break;
         case AVMEDIA_TYPE_AUDIO:
-            ret = avcodec_decode_audio4(st->codec, &picture, &got_picture, &pkt);
+            ret = avcodec_decode_audio4(st->codec, frame, &got_picture, &pkt);
             break;
         case AVMEDIA_TYPE_SUBTITLE:
             ret = avcodec_decode_subtitle2(st->codec, &subtitle,
@@ -2411,8 +2433,12 @@ static int try_decode_frame(AVStream *st, AVPacket *avpkt, AVDictionary **option
             ret       = got_picture;
         }
     }
+
     if(!pkt.data && !got_picture)
-        return -1;
+        ret = -1;
+
+fail:
+    avcodec_free_frame(&frame);
     return ret;
 }
 
@@ -3030,6 +3056,7 @@ void ff_free_stream(AVFormatContext *s, AVStream *st){
     av_freep(&st->codec);
     av_freep(&st->priv_data);
     av_freep(&st->info);
+    av_freep(&st->probe_data.buf);
     av_freep(&s->streams[ --s->nb_streams ]);
 }
 
@@ -3689,16 +3716,36 @@ int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *out,
         }
     }
     if(stream_count && flush){
+        AVStream *st;
         pktl= s->packet_buffer;
         *out= pktl->pkt;
+        st = s->streams[out->stream_index];
 
         s->packet_buffer= pktl->next;
         if(!s->packet_buffer)
             s->packet_buffer_end= NULL;
 
-        if(s->streams[out->stream_index]->last_in_packet_buffer == pktl)
-            s->streams[out->stream_index]->last_in_packet_buffer= NULL;
+        if(st->last_in_packet_buffer == pktl)
+            st->last_in_packet_buffer= NULL;
         av_freep(&pktl);
+
+        if (s->avoid_negative_ts > 0) {
+            if (out->dts != AV_NOPTS_VALUE) {
+                if (!st->mux_ts_offset && out->dts < 0) {
+                    for(i=0; i < s->nb_streams; i++) {
+                        s->streams[i]->mux_ts_offset =
+                            av_rescale_q_rnd(-out->dts,
+                                             st->time_base,
+                                             s->streams[i]->time_base,
+                                             AV_ROUND_UP);
+                    }
+                }
+                out->dts += st->mux_ts_offset;
+            }
+            if (out->pts != AV_NOPTS_VALUE)
+                out->pts += st->mux_ts_offset;
+        }
+
         return 1;
     }else{
         av_init_packet(out);
@@ -4459,17 +4506,23 @@ int ff_find_stream_index(AVFormatContext *s, int id)
 void ff_make_absolute_url(char *buf, int size, const char *base,
                           const char *rel)
 {
-    char *sep;
+    char *sep, *path_query;
     /* Absolute path, relative to the current server */
     if (base && strstr(base, "://") && rel[0] == '/') {
         if (base != buf)
             av_strlcpy(buf, base, size);
         sep = strstr(buf, "://");
         if (sep) {
-            sep += 3;
-            sep = strchr(sep, '/');
-            if (sep)
-                *sep = '\0';
+            /* Take scheme from base url */
+            if (rel[1] == '/')
+                sep[1] = '\0';
+            else {
+                /* Take scheme and host from base url */
+                sep += 3;
+                sep = strchr(sep, '/');
+                if (sep)
+                    *sep = '\0';
+            }
         }
         av_strlcat(buf, rel, size);
         return;
@@ -4481,6 +4534,18 @@ void ff_make_absolute_url(char *buf, int size, const char *base,
     }
     if (base != buf)
         av_strlcpy(buf, base, size);
+
+    /* Strip off any query string from base */
+    path_query = strchr(buf, '?');
+    if (path_query != NULL)
+        *path_query = '\0';
+
+    /* Is relative path just a new query part? */
+    if (rel[0] == '?') {
+        av_strlcat(buf, rel, size);
+        return;
+    }
+
     /* Remove the file name from the base url */
     sep = strrchr(buf, '/');
     if (sep)
