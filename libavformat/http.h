@@ -35,6 +35,16 @@
  */
 void ff_http_init_auth_state(URLContext *dest, const URLContext *src);
 
+/**
+ * Send a new HTTP request, reusing the old connection.
+ *
+ * @param h pointer to the resource
+ * @param uri uri used to perform the request
+ * @return a negative value if an error condition occurred, 0
+ * otherwise
+ */
+int ff_http_do_new_request(URLContext *h, const char *uri);
+
 size_t ff_http_get_headers(URLContext *h, char *headers, int bufferSize);
 
 #endif /* AVFORMAT_HTTP_H */

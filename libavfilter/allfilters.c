@@ -20,6 +20,7 @@
  */
 
 #include "avfilter.h"
+#include "config.h"
 
 
 #define REGISTER_FILTER(X,x,y) { \
@@ -35,28 +36,43 @@ void avfilter_register_all(void)
     initialized = 1;
 
     REGISTER_FILTER (ACONVERT,    aconvert,    af);
+    REGISTER_FILTER (AFIFO,       afifo,       af);
     REGISTER_FILTER (AFORMAT,     aformat,     af);
     REGISTER_FILTER (AMERGE,      amerge,      af);
     REGISTER_FILTER (AMIX,        amix,        af);
     REGISTER_FILTER (ANULL,       anull,       af);
     REGISTER_FILTER (ARESAMPLE,   aresample,   af);
+    REGISTER_FILTER (ASENDCMD,    asendcmd,    af);
+    REGISTER_FILTER (ASETNSAMPLES, asetnsamples, af);
+    REGISTER_FILTER (ASETPTS,     asetpts,     af);
+    REGISTER_FILTER (ASETTB,      asettb,      af);
     REGISTER_FILTER (ASHOWINFO,   ashowinfo,   af);
     REGISTER_FILTER (ASPLIT,      asplit,      af);
     REGISTER_FILTER (ASTREAMSYNC, astreamsync, af);
     REGISTER_FILTER (ASYNCTS,     asyncts,     af);
+    REGISTER_FILTER (ATEMPO,      atempo,      af);
+    REGISTER_FILTER (CHANNELMAP,  channelmap,  af);
+    REGISTER_FILTER (CHANNELSPLIT,channelsplit,af);
     REGISTER_FILTER (EARWAX,      earwax,      af);
+    REGISTER_FILTER (JOIN,        join,        af);
     REGISTER_FILTER (PAN,         pan,         af);
     REGISTER_FILTER (SILENCEDETECT, silencedetect, af);
     REGISTER_FILTER (VOLUME,      volume,      af);
+    REGISTER_FILTER (VOLUMEDETECT,volumedetect,af);
     REGISTER_FILTER (RESAMPLE,    resample,    af);
 
     REGISTER_FILTER (AEVALSRC,    aevalsrc,    asrc);
-    REGISTER_FILTER (AMOVIE,      amovie,      asrc);
     REGISTER_FILTER (ANULLSRC,    anullsrc,    asrc);
+    REGISTER_FILTER (FLITE,       flite,       asrc);
 
+#if !AV_HAVE_INCOMPATIBLE_FORK_ABI
     REGISTER_FILTER (ABUFFERSINK, abuffersink, asink);
+#endif
     REGISTER_FILTER (ANULLSINK,   anullsink,   asink);
+    REGISTER_FILTER (FFABUFFERSINK, ffabuffersink, asink);
 
+    REGISTER_FILTER (ALPHAEXTRACT, alphaextract, vf);
+    REGISTER_FILTER (ALPHAMERGE,  alphamerge,  vf);
     REGISTER_FILTER (ASS,         ass,         vf);
     REGISTER_FILTER (BBOX,        bbox,        vf);
     REGISTER_FILTER (BLACKDETECT, blackdetect, vf);
@@ -67,19 +83,23 @@ void avfilter_register_all(void)
     REGISTER_FILTER (COPYPLANE,   copyplane,   vf);
     REGISTER_FILTER (CROP,        crop,        vf);
     REGISTER_FILTER (CROPDETECT,  cropdetect,  vf);
+    REGISTER_FILTER (DECIMATE,    decimate,    vf);
     REGISTER_FILTER (DELOGO,      delogo,      vf);
     REGISTER_FILTER (DESHAKE,     deshake,     vf);
     REGISTER_FILTER (DRAWBOX,     drawbox,     vf);
     REGISTER_FILTER (DRAWTEXT,    drawtext,    vf);
+    REGISTER_FILTER (EDGEDETECT,  edgedetect,  vf);
     REGISTER_FILTER (FADE,        fade,        vf);
     REGISTER_FILTER (FIELDORDER,  fieldorder,  vf);
     REGISTER_FILTER (FIFO,        fifo,        vf);
     REGISTER_FILTER (FORMAT,      format,      vf);
     REGISTER_FILTER (FPS,         fps,         vf);
+    REGISTER_FILTER (FRAMESTEP,   framestep,   vf);
     REGISTER_FILTER (FREI0R,      frei0r,      vf);
     REGISTER_FILTER (GRADFUN,     gradfun,     vf);
     REGISTER_FILTER (HFLIP,       hflip,       vf);
     REGISTER_FILTER (HQDN3D,      hqdn3d,      vf);
+    REGISTER_FILTER (HUE,         hue,         vf);
     REGISTER_FILTER (IDET,        idet,        vf);
     REGISTER_FILTER (LUT,         lut,         vf);
     REGISTER_FILTER (LUTRGB,      lutrgb,      vf);
@@ -93,7 +113,9 @@ void avfilter_register_all(void)
     REGISTER_FILTER (PAD,         pad,         vf);
     REGISTER_FILTER (PIXDESCTEST, pixdesctest, vf);
     REGISTER_FILTER (REMOVELOGO,  removelogo,  vf);
+    REGISTER_FILTER (SCALE,       scale,       vf);
     REGISTER_FILTER (SELECT,      select,      vf);
+    REGISTER_FILTER (SENDCMD,     sendcmd,     vf);
     REGISTER_FILTER (SETDAR,      setdar,      vf);
     REGISTER_FILTER (SETFIELD,    setfield,    vf);
     REGISTER_FILTER (SETPTS,      setpts,      vf);
@@ -101,6 +123,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER (SETTB,       settb,       vf);
     REGISTER_FILTER (SHOWINFO,    showinfo,    vf);
     REGISTER_FILTER (SLICIFY,     slicify,     vf);
+    REGISTER_FILTER (SMARTBLUR,   smartblur,   vf);
     REGISTER_FILTER (SPLIT,       split,       vf);
     REGISTER_FILTER (SUPER2XSAI,  super2xsai,  vf);
     REGISTER_FILTER (SWAPUV,      swapuv,      vf);
@@ -117,14 +140,26 @@ void avfilter_register_all(void)
     REGISTER_FILTER (FREI0R,      frei0r_src,  vsrc);
     REGISTER_FILTER (LIFE,        life,        vsrc);
     REGISTER_FILTER (MANDELBROT,  mandelbrot,  vsrc);
-    REGISTER_FILTER (MOVIE,       movie,       vsrc);
     REGISTER_FILTER (MPTESTSRC,   mptestsrc,   vsrc);
     REGISTER_FILTER (NULLSRC,     nullsrc,     vsrc);
     REGISTER_FILTER (RGBTESTSRC,  rgbtestsrc,  vsrc);
+    REGISTER_FILTER (SMPTEBARS,   smptebars,   vsrc);
     REGISTER_FILTER (TESTSRC,     testsrc,     vsrc);
 
+#if !AV_HAVE_INCOMPATIBLE_FORK_ABI
     REGISTER_FILTER (BUFFERSINK,  buffersink,  vsink);
+#endif
+    REGISTER_FILTER (FFBUFFERSINK,ffbuffersink,vsink);
     REGISTER_FILTER (NULLSINK,    nullsink,    vsink);
+
+    /* multimedia filters */
+    REGISTER_FILTER (CONCAT,      concat,      avf);
+    REGISTER_FILTER (SHOWSPECTRUM,showspectrum,avf);
+    REGISTER_FILTER (SHOWWAVES,   showwaves,   avf);
+
+    /* multimedia sources */
+    REGISTER_FILTER (AMOVIE,      amovie,      avsrc);
+    REGISTER_FILTER (MOVIE,       movie,       avsrc);
 
     /* those filters are part of public or internal API => registered
      * unconditionally */
@@ -143,9 +178,5 @@ void avfilter_register_all(void)
     {
         extern AVFilter avfilter_asink_abuffer;
         avfilter_register(&avfilter_asink_abuffer);
-    }
-    {
-        extern AVFilter avfilter_vf_scale;
-        avfilter_register(&avfilter_vf_scale);
     }
 }

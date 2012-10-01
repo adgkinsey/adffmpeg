@@ -27,6 +27,9 @@
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "avfilter.h"
+#include "formats.h"
+#include "video.h"
+
 
 typedef struct {
     const AVClass *class;
@@ -70,7 +73,7 @@ static int init(AVFilterContext *ctx, const char *args, void *opaque)
     int ret;
     
     copyplane->class = &copyplane_class;
-    av_opt_set_defaults2(copyplane, 0, 0);
+    av_opt_set_defaults(copyplane);
     
     if (args && (ret = av_set_options_string(copyplane, args, "=", ":")) < 0)
         return ret;
@@ -97,7 +100,7 @@ static enum PixelFormat rgb_pix_fmts[] = { RGB_FORMATS, PIX_FMT_NONE };
 static int query_formats(AVFilterContext *ctx)
 {
     //CopyPlaneContext *copyplane = ctx->priv;
-    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(rgb_pix_fmts));
+    ff_set_common_formats(ctx, ff_make_format_list(rgb_pix_fmts));
     return 0;
 }
 
@@ -163,8 +166,8 @@ static void start_frame(AVFilterLink *inlink, AVFilterBufferRef *picref)
     AVFilterBufferRef *outpicref;
     int i;
 
-    outlink->out_buf = avfilter_get_video_buffer(outlink, AV_PERM_WRITE,
-                                                outlink->w, outlink->h);
+    outlink->out_buf = ff_get_video_buffer(outlink, AV_PERM_WRITE,
+                                           outlink->w, outlink->h);
     outpicref = outlink->out_buf;
     avfilter_copy_buffer_ref_props(outpicref, picref);
 
@@ -182,7 +185,7 @@ static void start_frame(AVFilterLink *inlink, AVFilterBufferRef *picref)
     if (priv->pix_desc->flags & PIX_FMT_PAL)
         memcpy(outpicref->data[1], outpicref->data[1], 256*4);
 
-    avfilter_start_frame(outlink, avfilter_ref_buffer(outpicref, ~0));
+    ff_start_frame(outlink, avfilter_ref_buffer(outpicref, ~0));
 }
 
 static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
@@ -230,7 +233,7 @@ static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
     }
     av_free(line);
 
-    avfilter_draw_slice(inlink->dst->outputs[0], y, h, slice_dir);
+    ff_draw_slice(inlink->dst->outputs[0], y, h, slice_dir);
 }
 
 AVFilter avfilter_vf_copyplane = {

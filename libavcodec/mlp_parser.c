@@ -83,10 +83,10 @@ static const uint64_t thd_layout[13] = {
     AV_CH_BACK_LEFT|AV_CH_BACK_RIGHT,                       // LRrs
     AV_CH_BACK_CENTER,                                      // Cs
     AV_CH_TOP_CENTER,                                       // Ts
-    AV_CH_SIDE_LEFT|AV_CH_SIDE_RIGHT,                       // LRsd - TODO: Surround Direct
+    AV_CH_SURROUND_DIRECT_LEFT|AV_CH_SURROUND_DIRECT_RIGHT, // LRsd
     AV_CH_WIDE_LEFT|AV_CH_WIDE_RIGHT,                       // LRw
     AV_CH_TOP_FRONT_CENTER,                                 // Cvh
-    AV_CH_LOW_FREQUENCY                                     // LFE2
+    AV_CH_LOW_FREQUENCY_2,                                  // LFE2
 };
 
 static int mlp_samplerate(int in)
@@ -129,7 +129,7 @@ int ff_mlp_read_major_sync(void *log, MLPHeaderInfo *mh, GetBitContext *gb)
     int ratebits;
     uint16_t checksum;
 
-    assert(get_bits_count(gb) == 0);
+    av_assert1(get_bits_count(gb) == 0);
 
     if (gb->size_in_bits < 28 << 3) {
         av_log(log, AV_LOG_ERROR, "packet too short, unable to read major sync\n");
@@ -349,7 +349,7 @@ lost_sync:
 }
 
 AVCodecParser ff_mlp_parser = {
-    .codec_ids      = { CODEC_ID_MLP, CODEC_ID_TRUEHD },
+    .codec_ids      = { AV_CODEC_ID_MLP, AV_CODEC_ID_TRUEHD },
     .priv_data_size = sizeof(MLPParseContext),
     .parser_init    = mlp_init,
     .parser_parse   = mlp_parse,
