@@ -329,11 +329,6 @@ static AVLFG random_state;
 static FILE *logfile = NULL;
 
 /* FIXME: make ffserver work with IPv6 */
-void av_noreturn exit_program(int ret)
-{
-    exit(ret);
-}
-
 /* resolve host with also IP address parsing */
 static int resolve_host(struct in_addr *sin_addr, const char *hostname)
 {
@@ -2034,7 +2029,7 @@ static void compute_status(HTTPContext *c)
                         char cpuperc[10];
                         char cpuused[64];
 
-                        if (fscanf(pid_stat, "%10s %64s", cpuperc,
+                        if (fscanf(pid_stat, "%9s %63s", cpuperc,
                                    cpuused) == 2) {
                             avio_printf(pb, "Currently using %s%% of the cpu. Total time used %s.\n",
                                          cpuperc, cpuused);
@@ -2689,8 +2684,6 @@ static int http_receive_data(HTTPContext *c)
         /* a packet has been received : write it in the store, except
            if header */
         if (c->data_count > FFM_PACKET_SIZE) {
-
-            //            printf("writing pos=0x%"PRIx64" size=0x%"PRIx64"\n", feed->feed_write_index, feed->feed_size);
             /* XXX: use llseek or url_seek */
             lseek(c->feed_fd, feed->feed_write_index, SEEK_SET);
             if (write(c->feed_fd, c->buffer, FFM_PACKET_SIZE) < 0) {

@@ -28,6 +28,7 @@
 #include "libavutil/imgutils.h"
 #include "libavutil/log.h"
 #include "libavutil/opt.h"
+#include "libavutil/pixdesc.h"
 
 #include "avcodec.h"
 #include "config.h"
@@ -260,6 +261,7 @@ static int encode_frame(AVCodecContext * avctx, AVPacket *pkt,
 
     avctx->bits_per_coded_sample =
     s->bpp = av_get_bits_per_pixel(&av_pix_fmt_descriptors[avctx->pix_fmt]);
+    s->bpp_tab_size = av_pix_fmt_descriptors[avctx->pix_fmt].nb_components;
 
     switch (avctx->pix_fmt) {
     case PIX_FMT_RGBA64LE:
@@ -302,7 +304,6 @@ static int encode_frame(AVCodecContext * avctx, AVPacket *pkt,
         return -1;
     }
 
-    s->bpp_tab_size = av_pix_fmt_descriptors[avctx->pix_fmt].nb_components;
     for (i = 0; i < s->bpp_tab_size; i++)
         bpp_tab[i] = av_pix_fmt_descriptors[avctx->pix_fmt].comp[i].depth_minus1 + 1;
 
@@ -346,6 +347,7 @@ static int encode_frame(AVCodecContext * avctx, AVPacket *pkt,
     if (is_yuv){
         av_fast_padded_malloc(&s->yuv_line, &s->yuv_line_size, bytes_per_row);
         if (s->yuv_line == NULL){
+            av_log(s->avctx, AV_LOG_ERROR, "Not enough memory\n");
             ret = AVERROR(ENOMEM);
             goto fail;
         }
@@ -359,6 +361,10 @@ static int encode_frame(AVCodecContext * avctx, AVPacket *pkt,
 
         zlen = bytes_per_row * s->rps;
         zbuf = av_malloc(zlen);
+        if (!zbuf) {
+            ret = AVERROR(ENOMEM);
+            goto fail;
+        }
         s->strip_offsets[0] = ptr - pkt->data;
         zn = 0;
         for (j = 0; j < s->rps; j++) {
@@ -383,8 +389,13 @@ static int encode_frame(AVCodecContext * avctx, AVPacket *pkt,
     } else
 #endif
     {
-        if(s->compr == TIFF_LZW)
+        if (s->compr == TIFF_LZW) {
             s->lzws = av_malloc(ff_lzw_encode_state_size);
+            if (!s->lzws) {
+                ret = AVERROR(ENOMEM);
+                goto fail;
+            }
+        }
         for (i = 0; i < s->height; i++) {
             if (s->strip_sizes[i / s->rps] == 0) {
                 if(s->compr == TIFF_LZW){

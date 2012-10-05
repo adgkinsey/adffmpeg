@@ -3519,8 +3519,11 @@ Default mode is @code{merge}.
 
 Transpose rows with columns in the input video and optionally flip it.
 
-It accepts a parameter representing an integer, which can assume the
-values:
+This filter accepts the following named parameters:
+
+@table @option
+@item dir
+Specify the transposition direction. Can assume the following values:
 
 @table @samp
 @item 0, 4
@@ -3556,8 +3559,24 @@ l.r     l.L
 @end example
 @end table
 
-For values between 4-7 transposition is only done if the input video
-geometry is portrait and not landscape.
+For values between 4-7, the transposition is only done if the input
+video geometry is portrait and not landscape. These values are
+deprecated, the @code{passthrough} option should be used instead.
+
+@item passthrough
+Do not apply the transposition if the input geometry matches the one
+specified by the specified value. It accepts the following values:
+@table @samp
+@item none
+Always apply transposition.
+@item portrait
+Preserve portrait geometry (when @var{height} >= @var{width}).
+@item landscape
+Preserve landscape geometry (when @var{width} >= @var{height}).
+@end table
+
+Default value is @code{none}.
+@end table
 
 @section unsharp
 
@@ -4479,6 +4498,53 @@ Apply an offset of 10 seconds to the input PTS:
 setpts=PTS+10/TB
 @end example
 @end itemize
+
+@section ebur128
+
+EBU R128 scanner filter. This filter takes an audio stream as input and outputs
+it unchanged. By default, it logs a message at a frequency of 10Hz with the
+Momentary loudness (identified by @code{M}), Short-term loudness (@code{S}),
+Integrated loudness (@code{I}) and Loudness Range (@code{LRA}).
+
+The filter also has a video output (see the @var{video} option) with a real
+time graph to observe the loudness evolution. The graphic contains the logged
+message mentioned above, so it is not printed anymore when this option is set,
+unless the verbose logging is set. The main graphing area contains the
+short-term loudness (3 seconds of analysis), and the gauge on the right is for
+the momentary loudness (400 milliseconds).
+
+More information about the Loudness Recommendation EBU R128 on
+@url{http://tech.ebu.ch/loudness}.
+
+The filter accepts the following named parameters:
+
+@table @option
+
+@item video
+Activate the video output. The audio stream is passed unchanged whether this
+option is set or no. The video stream will be the first output stream if
+activated. Default is @code{0}.
+
+@item size
+Set the video size. This option is for video only. Default and minimum
+resolution is @code{640x480}.
+
+@item meter
+Set the EBU scale meter. Default is @code{9}. Common values are @code{9} and
+@code{18}, respectively for EBU scale meter +9 and EBU scale meter +18. Any
+other integer value between this range is allowed.
+
+@end table
+
+Example of real-time graph using @command{ffplay}, with a EBU scale meter +18:
+@example
+ffplay -f lavfi -i "amovie=input.mp3,ebur128=video=1:meter=18 [out0][out1]"
+@end example
+
+Run an analysis with @command{ffmpeg}:
+@example
+ffmpeg -nostats -i input.mp3 -filter_complex ebur128 -f null -
+@end example
 
 @section settb, asettb
 

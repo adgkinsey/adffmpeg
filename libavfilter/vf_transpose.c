@@ -28,6 +28,7 @@
 #include <stdio.h>
 
 #include "libavutil/intreadwrite.h"
+#include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
@@ -36,7 +37,14 @@
 #include "internal.h"
 #include "video.h"
 
+typedef enum {
+    TRANSPOSE_PT_TYPE_NONE,
+    TRANSPOSE_PT_TYPE_LANDSCAPE,
+    TRANSPOSE_PT_TYPE_PORTRAIT,
+} PassthroughType;
+
 typedef struct {
+    const AVClass *class;
     int hsub, vsub;
     int pixsteps[4];
 
@@ -45,23 +53,35 @@ typedef struct {
     /* 2    Rotate by 90 degrees counterclockwise.           */
     /* 3    Rotate by 90 degrees clockwise and vflip.        */
     int dir;
-    int passthrough; ///< landscape passthrough mode enabled
+    PassthroughType passthrough; ///< landscape passthrough mode enabled
 } TransContext;
+
+#define OFFSET(x) offsetof(TransContext, x)
+#define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
+
+static const AVOption transpose_options[] = {
+    { "dir", "set transpose direction", OFFSET(dir), AV_OPT_TYPE_INT, {.i64=0},  0, 7, FLAGS },
+
+    { "passthrough", "do not apply transposition if the input matches the specified geometry",
+      OFFSET(passthrough), AV_OPT_TYPE_INT, {.i64=TRANSPOSE_PT_TYPE_NONE},  0, INT_MAX, FLAGS, "passthrough" },
+    { "none",      "always apply transposition",   0, AV_OPT_TYPE_CONST, {.i64=TRANSPOSE_PT_TYPE_NONE},      INT_MIN, INT_MAX, FLAGS, "passthrough" },
+    { "portrait",  "preserve portrait geometry",   0, AV_OPT_TYPE_CONST, {.i64=TRANSPOSE_PT_TYPE_PORTRAIT},  INT_MIN, INT_MAX, FLAGS, "passthrough" },
+    { "landscape", "preserve landscape geometry",  0, AV_OPT_TYPE_CONST, {.i64=TRANSPOSE_PT_TYPE_LANDSCAPE}, INT_MIN, INT_MAX, FLAGS, "passthrough" },
+
+    { NULL },
+};
+
+AVFILTER_DEFINE_CLASS(transpose);
 
 static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     TransContext *trans = ctx->priv;
-    trans->dir = 0;
+    const char *shorthand[] = { "dir", "passthrough", NULL };
 
-    if (args)
-        sscanf(args, "%d", &trans->dir);
+    trans->class = &transpose_class;
+    av_opt_set_defaults(trans);
 
-    if (trans->dir < 0 || trans->dir > 7) {
-        av_log(ctx, AV_LOG_ERROR, "Invalid value %d not between 0 and 7.\n",
-               trans->dir);
-        return AVERROR(EINVAL);
-    }
-    return 0;
+    return av_opt_set_from_string(trans, args, shorthand, "=", ":");
 }
 
 static int query_formats(AVFilterContext *ctx)
@@ -99,15 +119,20 @@ static int config_props_output(AVFilterLink *outlink)
     const AVPixFmtDescriptor *pixdesc = &av_pix_fmt_descriptors[outlink->format];
 
     if (trans->dir&4) {
+        av_log(ctx, AV_LOG_WARNING,
+               "dir values greater than 3 are deprecated, use the passthrough option instead\n");
         trans->dir &= 3;
-        if (inlink->w >= inlink->h) {
-            trans->passthrough = 1;
+        trans->passthrough = TRANSPOSE_PT_TYPE_LANDSCAPE;
+    }
 
-            av_log(ctx, AV_LOG_VERBOSE,
-                   "w:%d h:%d -> w:%d h:%d (landscape passthrough mode)\n",
-                   inlink->w, inlink->h, outlink->w, outlink->h);
-            return 0;
-        }
+    if ((inlink->w >= inlink->h && trans->passthrough == TRANSPOSE_PT_TYPE_LANDSCAPE) ||
+        (inlink->w <= inlink->h && trans->passthrough == TRANSPOSE_PT_TYPE_PORTRAIT)) {
+        av_log(ctx, AV_LOG_VERBOSE,
+               "w:%d h:%d -> w:%d h:%d (passthrough mode)\n",
+               inlink->w, inlink->h, inlink->w, inlink->h);
+        return 0;
+    } else {
+        trans->passthrough = TRANSPOSE_PT_TYPE_NONE;
     }
 
     trans->hsub = av_pix_fmt_descriptors[inlink->format].log2_chroma_w;
@@ -262,4 +287,5 @@ AVFilter avfilter_vf_transpose = {
                                           .config_props    = config_props_output,
                                           .type            = AVMEDIA_TYPE_VIDEO, },
                                         { .name = NULL}},
+    .priv_class = &transpose_class,
 };

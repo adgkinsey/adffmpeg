@@ -161,6 +161,7 @@ typedef struct MOVContext {
     int itunes_metadata;  ///< metadata are itunes style
     int chapter_track;
     int use_absolute_path;
+    int ignore_editlist;
     int64_t next_root_atom; ///< offset of the next root atom
 } MOVContext;
 
@@ -204,7 +205,6 @@ int ff_mov_read_esds(AVFormatContext *fc, AVIOContext *pb, MOVAtom atom);
 enum AVCodecID ff_mov_get_lpcm_codec_id(int bps, int flags);
 
 int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries);
-int ff_mov_read_chan(AVFormatContext *s, AVIOContext *pb, AVStream *st, int64_t size);
 void ff_mov_write_chan(AVIOContext *pb, int64_t channel_layout);
 
 #endif /* AVFORMAT_ISOM_H */

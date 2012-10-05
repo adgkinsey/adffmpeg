@@ -278,7 +278,7 @@ static int exit_on_keydown;
 static int exit_on_mousedown;
 static int loop = 1;
 static int framedrop = -1;
-static int infinite_buffer = 0;
+static int infinite_buffer = -1;
 static enum ShowMode show_mode = SHOW_MODE_NONE;
 static const char *audio_codec_name;
 static const char *subtitle_codec_name;
@@ -300,10 +300,7 @@ static AVPacket flush_pkt;
 
 static SDL_Surface *screen;
 
-void av_noreturn exit_program(int ret)
-{
-    exit(ret);
-}
+static int packet_queue_put(PacketQueue *q, AVPacket *pkt);
 
 static int packet_queue_put_private(PacketQueue *q, AVPacket *pkt)
 {
@@ -2366,6 +2363,22 @@ static int decode_interrupt_cb(void *ctx)
     return is->abort_request;
 }
 
+static int is_realtime(AVFormatContext *s)
+{
+    if(   !strcmp(s->iformat->name, "rtp")
+       || !strcmp(s->iformat->name, "rtsp")
+       || !strcmp(s->iformat->name, "sdp")
+    )
+        return 1;
+
+    if(s->pb && (   !strncmp(s->filename, "rtp:", 4)
+                 || !strncmp(s->filename, "udp:", 4)
+                )
+    )
+        return 1;
+    return 0;
+}
+
 /* this thread gets the stream from the disk or the network */
 static int read_thread(void *arg)
 {
@@ -2488,6 +2501,9 @@ static int read_thread(void *arg)
         goto fail;
     }
 
+    if (infinite_buffer < 0 && is_realtime(ic))
+        infinite_buffer = 1;
+
     for (;;) {
         if (is->abort_request)
             break;
@@ -2541,7 +2557,7 @@ static int read_thread(void *arg)
         }
 
         /* if the queue are full, no need to read more */
-        if (!infinite_buffer &&
+        if (infinite_buffer<1 &&
               (is->audioq.size + is->videoq.size + is->subtitleq.size > MAX_QUEUE_SIZE
             || (   (is->audioq   .nb_packets > MIN_FRAMES || is->audio_stream < 0 || is->audioq.abort_request)
                 && (is->videoq   .nb_packets > MIN_FRAMES || is->video_stream < 0 || is->videoq.abort_request)
@@ -2988,7 +3004,7 @@ static void opt_input_file(void *optctx, const char *filename)
     if (input_filename) {
         fprintf(stderr, "Argument '%s' provided as input filename, but '%s' was already specified.\n",
                 filename, input_filename);
-        exit_program(1);
+        exit(1);
     }
     if (!strcmp(filename, "-"))
         filename = "pipe:";

@@ -288,6 +288,14 @@ static int mov_write_enda_tag(AVIOContext *pb)
     return 10;
 }
 
+static int mov_write_enda_tag_be(AVIOContext *pb)
+{
+  avio_wb32(pb, 10);
+  ffio_wfourcc(pb, "enda");
+  avio_wb16(pb, 0); /* big endian */
+  return 10;
+}
+
 static void put_descr(AVIOContext *pb, int tag, unsigned int size)
 {
     int i = 3;
@@ -369,6 +377,14 @@ static int mov_pcm_le_gt16(enum AVCodecID codec_id)
            codec_id == AV_CODEC_ID_PCM_F64LE;
 }
 
+static int mov_pcm_be_gt16(enum AVCodecID codec_id)
+{
+    return codec_id == AV_CODEC_ID_PCM_S24BE ||
+           codec_id == AV_CODEC_ID_PCM_S32BE ||
+           codec_id == AV_CODEC_ID_PCM_F32BE ||
+           codec_id == AV_CODEC_ID_PCM_F64BE;
+}
+
 static int mov_write_ms_tag(AVIOContext *pb, MOVTrack *track)
 {
     int64_t pos = avio_tell(pb);
@@ -432,8 +448,10 @@ static int mov_write_wave_tag(AVIOContext *pb, MOVTrack *track)
         ffio_wfourcc(pb, "mp4a");
         avio_wb32(pb, 0);
         mov_write_esds_tag(pb, track);
-    } else if (mov_pcm_le_gt16(track->enc->codec_id)) {
-        mov_write_enda_tag(pb);
+    } else if (mov_pcm_le_gt16(track->enc->codec_id))  {
+      mov_write_enda_tag(pb);
+    } else if (mov_pcm_be_gt16(track->enc->codec_id))  {
+      mov_write_enda_tag_be(pb);
     } else if (track->enc->codec_id == AV_CODEC_ID_AMR_NB) {
         mov_write_amr_tag(pb, track);
     } else if (track->enc->codec_id == AV_CODEC_ID_AC3) {
@@ -629,6 +647,7 @@ static int mov_write_audio_tag(AVIOContext *pb, MOVTrack *track)
                 tag = AV_RL32("lpcm");
             version = 2;
         } else if (track->audio_vbr || mov_pcm_le_gt16(track->enc->codec_id) ||
+                   mov_pcm_be_gt16(track->enc->codec_id) ||
                    track->enc->codec_id == AV_CODEC_ID_ADPCM_MS ||
                    track->enc->codec_id == AV_CODEC_ID_ADPCM_IMA_WAV ||
                    track->enc->codec_id == AV_CODEC_ID_QDM2) {
@@ -697,7 +716,8 @@ static int mov_write_audio_tag(AVIOContext *pb, MOVTrack *track)
         track->enc->codec_id == AV_CODEC_ID_ADPCM_MS ||
         track->enc->codec_id == AV_CODEC_ID_ADPCM_IMA_WAV ||
         track->enc->codec_id == AV_CODEC_ID_QDM2 ||
-        (mov_pcm_le_gt16(track->enc->codec_id) && version==1)))
+        (mov_pcm_le_gt16(track->enc->codec_id) && version==1) ||
+        (mov_pcm_be_gt16(track->enc->codec_id) && version==1)))
         mov_write_wave_tag(pb, track);
     else if(track->tag == MKTAG('m','p','4','a'))
         mov_write_esds_tag(pb, track);
@@ -2196,7 +2216,6 @@ static int mov_write_uuidusmt_tag(AVIOContext *pb, AVFormatContext *s)
 
         mov_write_psp_udta_tag(pb, LIBAVCODEC_IDENT,      "eng", 0x04);
         mov_write_psp_udta_tag(pb, title->value,          "eng", 0x01);
-//        snprintf(dt,32,"%04d/%02d/%02d %02d:%02d:%02d",t_st->tm_year+1900,t_st->tm_mon+1,t_st->tm_mday,t_st->tm_hour,t_st->tm_min,t_st->tm_sec);
         mov_write_psp_udta_tag(pb, "2006/04/01 11:11:11", "und", 0x03);
 
         update_size(pb, pos2);
@@ -3523,6 +3542,8 @@ static int mov_write_header(AVFormatContext *s)
                 track->height = track->tag>>24 == 'n' ? 486 : 576;
             }
             track->timescale = st->codec->time_base.den;
+            while(track->timescale < 10000)
+                track->timescale *= 2;
             if (track->mode == MODE_MOV && track->timescale > 100000)
                 av_log(s, AV_LOG_WARNING,
                        "WARNING codec timebase is very high. If duration is too long,\n"

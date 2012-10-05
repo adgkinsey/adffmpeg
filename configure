@@ -1245,6 +1245,12 @@ ARCH_EXT_LIST="
     mipsdspr2
 "
 
+HAVE_LIST_CMDLINE='
+    inline_asm
+    symver
+    yasm
+'
+
 HAVE_LIST_PUB='
     bigendian
     fast_unaligned
@@ -1255,6 +1261,7 @@ HAVE_LIST="
     $ARCH_EXT_LIST
     $(add_suffix _external $ARCH_EXT_LIST)
     $(add_suffix _inline   $ARCH_EXT_LIST)
+    $HAVE_LIST_CMDLINE
     $HAVE_LIST_PUB
     $THREADS_LIST
     aligned_malloc
@@ -1307,7 +1314,6 @@ HAVE_LIST="
     gnu_as
     ibm_asm
     inet_aton
-    inline_asm
     io_h
     isatty
     isinf
@@ -1371,7 +1377,6 @@ HAVE_LIST="
     struct_sockaddr_sa_len
     struct_sockaddr_storage
     struct_v4l2_frmivalenum_discrete
-    symver
     symver_asm_label
     symver_gnu_asm
     sysconf
@@ -1397,7 +1402,6 @@ HAVE_LIST="
     xform_asm
     xgetbv
     xmm_clobbers
-    yasm
 "
 
 # options emitted with CONFIG_ prefix but not available on command line
@@ -1429,18 +1433,16 @@ CONFIG_EXTRA="
 CMDLINE_SELECT="
     $ARCH_EXT_LIST
     $CONFIG_LIST
+    $HAVE_LIST_CMDLINE
     $THREADS_LIST
     asm
     coverage
     cross_compile
     debug
     extra_warnings
-    inline_asm
     logging
     optimizations
     stripping
-    symver
-    yasm
 "
 
 PATHS_LIST='
@@ -1770,6 +1772,7 @@ libopencore_amrwb_decoder_deps="libopencore_amrwb"
 libopenjpeg_decoder_deps="libopenjpeg"
 libopenjpeg_encoder_deps="libopenjpeg"
 libopus_decoder_deps="libopus"
+libopus_encoder_deps="libopus"
 libschroedinger_decoder_deps="libschroedinger"
 libschroedinger_encoder_deps="libschroedinger"
 libspeex_decoder_deps="libspeex"
@@ -1909,6 +1912,7 @@ decimate_filter_deps="gpl avcodec"
 delogo_filter_deps="gpl"
 deshake_filter_deps="avcodec"
 drawtext_filter_deps="libfreetype"
+ebur128_filter_deps="gpl"
 flite_filter_deps="libflite"
 frei0r_filter_deps="frei0r dlopen"
 frei0r_filter_extralibs='$ldl'
@@ -2416,6 +2420,8 @@ msvc_flags(){
             -fno-common)          ;;
             -fno-signed-zeros)    ;;
             -lz)                  echo zlib.lib ;;
+            -lavifil32)           echo vfw32.lib ;;
+            -lavicap32)           echo vfw32.lib user32.lib ;;
             -l*)                  echo ${flag#-l}.lib ;;
             *)                    echo $flag ;;
         esac

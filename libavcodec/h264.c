@@ -254,7 +254,6 @@ const uint8_t *ff_h264_decode_nal(H264Context *h, const uint8_t *src,
         }
     }
 
-    // printf("decoding esc\n");
     memcpy(dst, src, i);
     si = di = i;
     while (si + 2 < length) {
@@ -1112,6 +1111,8 @@ av_cold int ff_h264_decode_init(AVCodecContext *avctx)
         s->avctx->has_b_frames = h->sps.num_reorder_frames;
         s->low_delay           = 0;
     }
+
+    ff_init_cabac_states();
 
     return 0;
 }
@@ -2135,7 +2136,6 @@ static int init_poc(H264Context *h)
             h->poc_msb = h->prev_poc_msb - max_poc_lsb;
         else
             h->poc_msb = h->prev_poc_msb;
-        // printf("poc: %d %d\n", h->poc_msb, h->poc_lsb);
         field_poc[0] =
         field_poc[1] = h->poc_msb + h->poc_lsb;
         if (s->picture_structure == PICT_FRAME)
@@ -3535,7 +3535,6 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
         align_get_bits(&s->gb);
 
         /* init cabac */
-        ff_init_cabac_states();
         ff_init_cabac_decoder(&h->cabac,
                               s->gb.buffer + get_bits_count(&s->gb) / 8,
                               (get_bits_left(&s->gb) + 7) / 8);
@@ -4149,7 +4148,6 @@ not_extra:
 
     assert(pict->data[0] || !*data_size);
     ff_print_debug_info(s, pict);
-    // printf("out %d\n", (int)pict->data[0]);
 
     return get_consumed_bytes(s, buf_index, buf_size);
 }
