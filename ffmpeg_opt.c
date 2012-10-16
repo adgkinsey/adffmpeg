@@ -83,7 +83,6 @@ int debug_ts          = 0;
 int exit_on_error     = 0;
 int print_stats       = 1;
 int qp_hist           = 0;
-int same_quant        = 0;
 int stdin_interaction = 1;
 int frame_bits_per_raw_sample = 0;
 
@@ -156,6 +155,12 @@ static int opt_pad(void *optctx, const char *opt, const char *arg)
 {
     av_log(NULL, AV_LOG_FATAL, "Option '%s' has been removed, use the pad filter instead\n", opt);
     return -1;
+}
+
+static int opt_sameq(void *optctx, const char *opt, const char *arg)
+{
+    av_log(NULL, AV_LOG_WARNING, "Ignoring option '%s'\n", opt);
+    return 0;
 }
 
 static int opt_video_channel(void *optctx, const char *opt, const char *arg)
@@ -362,7 +367,7 @@ static int opt_map_channel(void *optctx, const char *opt, const char *arg)
 }
 
 /**
- * Parse a metadata specifier in arg.
+ * Parse a metadata specifier passed as 'arg' parameter.
  * @param type metadata type is written here -- g(lobal)/s(tream)/c(hapter)/p(rogram)
  * @param index for type c/p, chapter/program index is written here
  * @param stream_spec for type s, the stream specifier is written here
@@ -536,10 +541,8 @@ static AVCodec *choose_decoder(OptionsContext *o, AVFormatContext *s, AVStream *
         return avcodec_find_decoder(st->codec->codec_id);
 }
 
-/**
- * Add all the streams from the given input file to the global
- * list of input streams.
- */
+/* Add all the streams from the given input file to the global
+ * list of input streams. */
 static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
 {
     int i;
@@ -989,7 +992,7 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
     }
 
     MATCH_PER_STREAM_OPT(qscale, dbl, qscale, oc, st);
-    if (qscale >= 0 || same_quant) {
+    if (qscale >= 0) {
         st->codec->flags |= CODEC_FLAG_QSCALE;
         st->codec->global_quality = FF_QP2LAMBDA * qscale;
     }
@@ -1078,7 +1081,7 @@ static OutputStream *new_video_stream(OptionsContext *o, AVFormatContext *oc, in
             if (!*++frame_pix_fmt)
                 frame_pix_fmt = NULL;
         }
-        if (frame_pix_fmt && (video_enc->pix_fmt = av_get_pix_fmt(frame_pix_fmt)) == PIX_FMT_NONE) {
+        if (frame_pix_fmt && (video_enc->pix_fmt = av_get_pix_fmt(frame_pix_fmt)) == AV_PIX_FMT_NONE) {
             av_log(NULL, AV_LOG_FATAL, "Unknown pixel format requested: %s.\n", frame_pix_fmt);
             exit(1);
         }
@@ -1296,7 +1299,13 @@ static int copy_chapters(InputFile *ifile, OutputFile *ofile, int copy_metadata)
 {
     AVFormatContext *is = ifile->ctx;
     AVFormatContext *os = ofile->ctx;
+    AVChapter **tmp;
     int i;
+
+    tmp = av_realloc_f(os->chapters, is->nb_chapters + os->nb_chapters, sizeof(*os->chapters));
+    if (!tmp)
+        return AVERROR(ENOMEM);
+    os->chapters = tmp;
 
     for (i = 0; i < is->nb_chapters; i++) {
         AVChapter *in_ch = is->chapters[i], *out_ch;
@@ -1323,11 +1332,7 @@ static int copy_chapters(InputFile *ifile, OutputFile *ofile, int copy_metadata)
         if (copy_metadata)
             av_dict_copy(&out_ch->metadata, in_ch->metadata, 0);
 
-        os->nb_chapters++;
-        os->chapters = av_realloc_f(os->chapters, os->nb_chapters, sizeof(AVChapter));
-        if (!os->chapters)
-            return AVERROR(ENOMEM);
-        os->chapters[os->nb_chapters - 1] = out_ch;
+        os->chapters[os->nb_chapters++] = out_ch;
     }
     return 0;
 }
@@ -1368,8 +1373,11 @@ static int read_ffserver_streams(OptionsContext *o, AVFormatContext *s, const ch
             choose_pixel_fmt(st, codec, st->codec->pix_fmt);
     }
 
+    /* ffserver seeking with date=... needs a date reference */
+    err = parse_option(o, "metadata", "creation_time=now", options);
+
     avformat_close_input(&ic);
-    return 0;
+    return err;
 }
 
 static void init_output_filter(OutputFilter *ofilter, OptionsContext *o,
@@ -2150,7 +2158,7 @@ void show_help_default(const char *opt, const char *arg)
     const int per_file = OPT_SPEC | OPT_OFFSET | OPT_PERFILE;
     int show_advanced = 0, show_avoptions = 0;
 
-    if (opt) {
+    if (opt && *opt) {
         if (!strcmp(opt, "long"))
             show_advanced = 1;
         else if (!strcmp(opt, "full"))
@@ -2385,10 +2393,10 @@ const OptionDef options[] = {
         "rate control override for specific intervals", "override" },
     { "vcodec",       OPT_VIDEO | HAS_ARG  | OPT_PERFILE,                        { .func_arg = opt_video_codec },
         "force video codec ('copy' to copy stream)", "codec" },
-    { "sameq",        OPT_VIDEO | OPT_BOOL | OPT_EXPERT ,                        { &same_quant },
-        "use same quantizer as source (implies VBR)" },
-    { "same_quant",   OPT_VIDEO | OPT_BOOL | OPT_EXPERT,                         { &same_quant },
-        "use same quantizer as source (implies VBR)" },
+    { "sameq",        OPT_VIDEO | OPT_EXPERT ,                                   { .func_arg = opt_sameq },
+        "Removed" },
+    { "same_quant",   OPT_VIDEO | OPT_EXPERT ,                                   { .func_arg = opt_sameq },
+        "Removed" },
     { "timecode",     OPT_VIDEO | HAS_ARG | OPT_PERFILE,                         { .func_arg = opt_timecode },
         "set initial TimeCode value.", "hh:mm:ss[:;.]ff" },
     { "pass",         OPT_VIDEO | HAS_ARG | OPT_SPEC | OPT_INT,                  { .off = OFFSET(pass) },

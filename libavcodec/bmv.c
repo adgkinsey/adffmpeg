@@ -227,7 +227,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
             return AVERROR_INVALIDDATA;
         }
         for (i = 0; i < 256; i++)
-            c->pal[i] = 0xFF << 24 | bytestream_get_be24(&c->stream);
+            c->pal[i] = 0xFFU << 24 | bytestream_get_be24(&c->stream);
     }
     if (type & BMV_SCROLL) {
         if (c->stream - pkt->data > pkt->size - 2) {
@@ -270,7 +270,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     BMVDecContext * const c = avctx->priv_data;
 
     c->avctx = avctx;
-    avctx->pix_fmt = PIX_FMT_PAL8;
+    avctx->pix_fmt = AV_PIX_FMT_PAL8;
 
     if (avctx->width != SCREEN_WIDE || avctx->height != SCREEN_HIGH) {
         av_log(avctx, AV_LOG_ERROR, "Invalid dimension %dx%d\n", avctx->width, avctx->height);

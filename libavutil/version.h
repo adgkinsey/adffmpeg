@@ -21,7 +21,43 @@
 #ifndef AVUTIL_VERSION_H
 #define AVUTIL_VERSION_H
 
-#include "avutil.h"
+/**
+ * @defgroup preproc_misc Preprocessor String Macros
+ *
+ * String manipulation macros
+ *
+ * @{
+ */
+
+#define AV_STRINGIFY(s)         AV_TOSTRING(s)
+#define AV_TOSTRING(s) #s
+
+#define AV_GLUE(a, b) a ## b
+#define AV_JOIN(a, b) AV_GLUE(a, b)
+
+#define AV_PRAGMA(s) _Pragma(#s)
+
+/**
+ * @}
+ */
+
+/**
+ * @defgroup version_utils Library Version Macros
+ *
+ * Useful to check and match library version in order to maintain
+ * backward compatibility.
+ *
+ * @{
+ */
+
+#define AV_VERSION_INT(a, b, c) (a<<16 | b<<8 | c)
+#define AV_VERSION_DOT(a, b, c) a ##.## b ##.## c
+#define AV_VERSION(a, b, c) AV_VERSION_DOT(a, b, c)
+
+/**
+ * @}
+ */
+
 
 /**
  * @file
@@ -39,8 +75,8 @@
  */
 
 #define LIBAVUTIL_VERSION_MAJOR 51
-#define LIBAVUTIL_VERSION_MINOR 73
-#define LIBAVUTIL_VERSION_MICRO 102
+#define LIBAVUTIL_VERSION_MINOR 76
+#define LIBAVUTIL_VERSION_MICRO 100
 
 #define LIBAVUTIL_VERSION_INT   AV_VERSION_INT(LIBAVUTIL_VERSION_MAJOR, \
                                                LIBAVUTIL_VERSION_MINOR, \
@@ -80,6 +116,18 @@
 #endif
 #ifndef FF_API_OLD_TC_ADJUST_FRAMENUM
 #define FF_API_OLD_TC_ADJUST_FRAMENUM   (LIBAVUTIL_VERSION_MAJOR < 52)
+#endif
+#ifndef FF_API_PIX_FMT
+#define FF_API_PIX_FMT                  (LIBAVUTIL_VERSION_MAJOR < 52)
+#endif
+#ifndef FF_API_CONTEXT_SIZE
+#define FF_API_CONTEXT_SIZE             (LIBAVUTIL_VERSION_MAJOR < 52)
+#endif
+#ifndef FF_API_PIX_FMT_DESC
+#define FF_API_PIX_FMT_DESC             (LIBAVUTIL_VERSION_MAJOR < 52)
+#endif
+#ifndef FF_API_AV_REVERSE
+#define FF_API_AV_REVERSE               (LIBAVUTIL_VERSION_MAJOR < 52)
 #endif
 
 /**

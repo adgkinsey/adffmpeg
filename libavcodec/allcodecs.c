@@ -221,6 +221,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC  (SVQ1, svq1);
     REGISTER_DECODER (SVQ3, svq3);
     REGISTER_ENCDEC  (TARGA, targa);
+    REGISTER_DECODER (TARGA_Y216, targa_y216);
     REGISTER_DECODER (THEORA, theora);
     REGISTER_DECODER (THP, thp);
     REGISTER_DECODER (TIERTEXSEQVIDEO, tiertexseqvideo);
@@ -264,6 +265,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (XAN_WC3, xan_wc3);
     REGISTER_DECODER (XAN_WC4, xan_wc4);
     REGISTER_ENCDEC  (XBM, xbm);
+    REGISTER_ENCDEC  (XFACE, xface);
     REGISTER_DECODER (XL, xl);
     REGISTER_ENCDEC  (XWD, xwd);
     REGISTER_ENCDEC  (Y41P, y41p);
@@ -327,6 +329,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (SMACKAUD, smackaud);
     REGISTER_ENCDEC  (SONIC, sonic);
     REGISTER_ENCODER (SONIC_LS, sonic_ls);
+    REGISTER_DECODER (TAK, tak);
     REGISTER_DECODER (TRUEHD, truehd);
     REGISTER_DECODER (TRUESPEECH, truespeech);
     REGISTER_DECODER (TTA, tta);
@@ -485,6 +488,7 @@ void avcodec_register_all(void)
     REGISTER_PARSER  (PNM, pnm);
     REGISTER_PARSER  (RV30, rv30);
     REGISTER_PARSER  (RV40, rv40);
+    REGISTER_PARSER  (TAK, tak);
     REGISTER_PARSER  (VC1, vc1);
     REGISTER_PARSER  (VORBIS, vorbis);
     REGISTER_PARSER  (VP3, vp3);

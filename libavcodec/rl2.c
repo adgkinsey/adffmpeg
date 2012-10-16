@@ -134,7 +134,7 @@ static av_cold int rl2_decode_init(AVCodecContext *avctx)
     int back_size;
     int i;
     s->avctx = avctx;
-    avctx->pix_fmt = PIX_FMT_PAL8;
+    avctx->pix_fmt = AV_PIX_FMT_PAL8;
     avcodec_get_frame_defaults(&s->frame);
 
     /** parse extra data */
@@ -154,7 +154,7 @@ static av_cold int rl2_decode_init(AVCodecContext *avctx)
 
     /** initialize palette */
     for(i=0;i<AVPALETTE_COUNT;i++)
-        s->palette[i] = 0xFF << 24 | AV_RB24(&avctx->extradata[6 + i * 3]);
+        s->palette[i] = 0xFFU << 24 | AV_RB24(&avctx->extradata[6 + i * 3]);
 
     /** decode background frame if present */
     back_size = avctx->extradata_size - EXTRADATA1_SIZE;

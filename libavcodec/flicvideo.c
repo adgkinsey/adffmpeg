@@ -129,10 +129,10 @@ static av_cold int flic_decode_init(AVCodecContext *avctx)
     }
 
     switch (depth) {
-        case 8  : avctx->pix_fmt = PIX_FMT_PAL8; break;
-        case 15 : avctx->pix_fmt = PIX_FMT_RGB555; break;
-        case 16 : avctx->pix_fmt = PIX_FMT_RGB565; break;
-        case 24 : avctx->pix_fmt = PIX_FMT_BGR24; /* Supposedly BGR, but havent any files to test with */
+        case 8  : avctx->pix_fmt = AV_PIX_FMT_PAL8; break;
+        case 15 : avctx->pix_fmt = AV_PIX_FMT_RGB555; break;
+        case 16 : avctx->pix_fmt = AV_PIX_FMT_RGB565; break;
+        case 24 : avctx->pix_fmt = AV_PIX_FMT_BGR24; /* Supposedly BGR, but havent any files to test with */
                   av_log(avctx, AV_LOG_ERROR, "24Bpp FLC/FLX is unsupported due to no test files.\n");
                   return -1;
         default :
@@ -256,7 +256,7 @@ static int flic_decode_frame_8BPP(AVCodecContext *avctx,
                     r = bytestream2_get_byte(&g2) << color_shift;
                     g = bytestream2_get_byte(&g2) << color_shift;
                     b = bytestream2_get_byte(&g2) << color_shift;
-                    entry = 0xFF << 24 | r << 16 | g << 8 | b;
+                    entry = 0xFFU << 24 | r << 16 | g << 8 | b;
                     if (color_shift == 2)
                         entry |= entry >> 6 & 0x30303;
                     if (s->palette[palette_ptr] != entry)
@@ -768,16 +768,16 @@ static int flic_decode_frame(AVCodecContext *avctx,
 {
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
-    if (avctx->pix_fmt == PIX_FMT_PAL8) {
+    if (avctx->pix_fmt == AV_PIX_FMT_PAL8) {
       return flic_decode_frame_8BPP(avctx, data, data_size,
                                     buf, buf_size);
     }
-    else if ((avctx->pix_fmt == PIX_FMT_RGB555) ||
-             (avctx->pix_fmt == PIX_FMT_RGB565)) {
+    else if ((avctx->pix_fmt == AV_PIX_FMT_RGB555) ||
+             (avctx->pix_fmt == AV_PIX_FMT_RGB565)) {
       return flic_decode_frame_15_16BPP(avctx, data, data_size,
                                         buf, buf_size);
     }
-    else if (avctx->pix_fmt == PIX_FMT_BGR24) {
+    else if (avctx->pix_fmt == AV_PIX_FMT_BGR24) {
       return flic_decode_frame_24BPP(avctx, data, data_size,
                                      buf, buf_size);
     }

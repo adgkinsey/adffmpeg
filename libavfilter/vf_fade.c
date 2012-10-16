@@ -100,14 +100,14 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
         if ((ret = av_opt_set(fade, "start_frame", expr, 0)) < 0) {
             av_log(ctx, AV_LOG_ERROR,
                    "Invalid value '%s' for start_frame option\n", expr);
-            return ret;
+            goto end;
         }
     }
     if (expr = av_strtok(NULL, ":", &bufptr)) {
         if ((ret = av_opt_set(fade, "nb_frames", expr, 0)) < 0) {
             av_log(ctx, AV_LOG_ERROR,
                    "Invalid value '%s' for nb_frames option\n", expr);
-            return ret;
+            goto end;
         }
     }
 
@@ -146,40 +146,40 @@ static av_cold void uninit(AVFilterContext *ctx)
 
 static int query_formats(AVFilterContext *ctx)
 {
-    static const enum PixelFormat pix_fmts[] = {
-        PIX_FMT_YUV444P,  PIX_FMT_YUV422P,  PIX_FMT_YUV420P,
-        PIX_FMT_YUV411P,  PIX_FMT_YUV410P,
-        PIX_FMT_YUVJ444P, PIX_FMT_YUVJ422P, PIX_FMT_YUVJ420P,
-        PIX_FMT_YUV440P,  PIX_FMT_YUVJ440P,
-        PIX_FMT_YUVA420P,
-        PIX_FMT_RGB24,    PIX_FMT_BGR24,
-        PIX_FMT_ARGB,     PIX_FMT_ABGR,
-        PIX_FMT_RGBA,     PIX_FMT_BGRA,
-        PIX_FMT_NONE
+    static const enum AVPixelFormat pix_fmts[] = {
+        AV_PIX_FMT_YUV444P,  AV_PIX_FMT_YUV422P,  AV_PIX_FMT_YUV420P,
+        AV_PIX_FMT_YUV411P,  AV_PIX_FMT_YUV410P,
+        AV_PIX_FMT_YUVJ444P, AV_PIX_FMT_YUVJ422P, AV_PIX_FMT_YUVJ420P,
+        AV_PIX_FMT_YUV440P,  AV_PIX_FMT_YUVJ440P,
+        AV_PIX_FMT_YUVA420P,
+        AV_PIX_FMT_RGB24,    AV_PIX_FMT_BGR24,
+        AV_PIX_FMT_ARGB,     AV_PIX_FMT_ABGR,
+        AV_PIX_FMT_RGBA,     AV_PIX_FMT_BGRA,
+        AV_PIX_FMT_NONE
     };
 
     ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
     return 0;
 }
 
-const static enum PixelFormat studio_level_pix_fmts[] = {
-    PIX_FMT_YUV444P,  PIX_FMT_YUV422P,  PIX_FMT_YUV420P,
-    PIX_FMT_YUV411P,  PIX_FMT_YUV410P,
-    PIX_FMT_YUV440P,
-    PIX_FMT_NONE
+const static enum AVPixelFormat studio_level_pix_fmts[] = {
+    AV_PIX_FMT_YUV444P,  AV_PIX_FMT_YUV422P,  AV_PIX_FMT_YUV420P,
+    AV_PIX_FMT_YUV411P,  AV_PIX_FMT_YUV410P,
+    AV_PIX_FMT_YUV440P,
+    AV_PIX_FMT_NONE
 };
 
-static enum PixelFormat alpha_pix_fmts[] = {
-    PIX_FMT_YUVA420P,
-    PIX_FMT_ARGB, PIX_FMT_ABGR,
-    PIX_FMT_RGBA, PIX_FMT_BGRA,
-    PIX_FMT_NONE
+static enum AVPixelFormat alpha_pix_fmts[] = {
+    AV_PIX_FMT_YUVA420P,
+    AV_PIX_FMT_ARGB, AV_PIX_FMT_ABGR,
+    AV_PIX_FMT_RGBA, AV_PIX_FMT_BGRA,
+    AV_PIX_FMT_NONE
 };
 
 static int config_props(AVFilterLink *inlink)
 {
     FadeContext *fade = inlink->dst->priv;
-    const AVPixFmtDescriptor *pixdesc = &av_pix_fmt_descriptors[inlink->format];
+    const AVPixFmtDescriptor *pixdesc = av_pix_fmt_desc_get(inlink->format);
 
     fade->hsub = pixdesc->log2_chroma_w;
     fade->vsub = pixdesc->log2_chroma_h;
@@ -276,6 +276,28 @@ static int end_frame(AVFilterLink *inlink)
     return ret;
 }
 
+static const AVFilterPad avfilter_vf_fade_inputs[] = {
+    {
+        .name             = "default",
+        .type             = AVMEDIA_TYPE_VIDEO,
+        .config_props     = config_props,
+        .get_video_buffer = ff_null_get_video_buffer,
+        .start_frame      = ff_null_start_frame,
+        .draw_slice       = draw_slice,
+        .end_frame        = end_frame,
+        .min_perms        = AV_PERM_READ | AV_PERM_WRITE,
+    },
+    { NULL }
+};
+
+static const AVFilterPad avfilter_vf_fade_outputs[] = {
+    {
+        .name = "default",
+        .type = AVMEDIA_TYPE_VIDEO,
+    },
+    { NULL }
+};
+
 AVFilter avfilter_vf_fade = {
     .name          = "fade",
     .description   = NULL_IF_CONFIG_SMALL("Fade in/out input video."),
@@ -284,17 +306,7 @@ AVFilter avfilter_vf_fade = {
     .priv_size     = sizeof(FadeContext),
     .query_formats = query_formats,
 
-    .inputs    = (const AVFilterPad[]) {{ .name            = "default",
-                                          .type            = AVMEDIA_TYPE_VIDEO,
-                                          .config_props    = config_props,
-                                          .get_video_buffer = ff_null_get_video_buffer,
-                                          .start_frame      = ff_null_start_frame,
-                                          .draw_slice      = draw_slice,
-                                          .end_frame       = end_frame,
-                                          .min_perms       = AV_PERM_READ | AV_PERM_WRITE },
-                                        { .name = NULL}},
-    .outputs   = (const AVFilterPad[]) {{ .name            = "default",
-                                          .type            = AVMEDIA_TYPE_VIDEO, },
-                                        { .name = NULL}},
+    .inputs    = avfilter_vf_fade_inputs,
+    .outputs   = avfilter_vf_fade_outputs,
     .priv_class = &fade_class,
 };

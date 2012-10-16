@@ -1963,6 +1963,9 @@ static int decode_vop_header(MpegEncContext *s, GetBitContext *gb){
         }
 
         av_log(s->avctx, AV_LOG_ERROR, "my guess is %d bits ;)\n",s->time_increment_bits);
+        if (s->avctx->time_base.den && 4*s->avctx->time_base.den < 1<<s->time_increment_bits) {
+            s->avctx->time_base.den = 1<<s->time_increment_bits;
+        }
     }
 
     if(IS_3IV1) time_increment= get_bits1(gb); //FIXME investigate further
@@ -2319,8 +2322,8 @@ static const AVProfile mpeg4_video_profiles[] = {
 };
 
 static const AVOption mpeg4_options[] = {
-    {"quarter_sample", "1/4 subpel MC", offsetof(MpegEncContext, quarter_sample), FF_OPT_TYPE_INT, {.dbl = 0}, 0, 1, 0},
-    {"divx_packed", "divx style packed b frames", offsetof(MpegEncContext, divx_packed), FF_OPT_TYPE_INT, {.dbl = 0}, 0, 1, 0},
+    {"quarter_sample", "1/4 subpel MC", offsetof(MpegEncContext, quarter_sample), FF_OPT_TYPE_INT, {.i64 = 0}, 0, 1, 0},
+    {"divx_packed", "divx style packed b frames", offsetof(MpegEncContext, divx_packed), FF_OPT_TYPE_INT, {.i64 = 0}, 0, 1, 0},
     {NULL}
 };
 
@@ -2371,8 +2374,8 @@ AVCodec ff_mpeg4_vdpau_decoder = {
     .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_TRUNCATED | CODEC_CAP_DELAY |
                       CODEC_CAP_HWACCEL_VDPAU,
     .long_name      = NULL_IF_CONFIG_SMALL("MPEG-4 part 2 (VDPAU)"),
-    .pix_fmts       = (const enum PixelFormat[]){ PIX_FMT_VDPAU_MPEG4,
-                                                  PIX_FMT_NONE },
+    .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_VDPAU_MPEG4,
+                                                  AV_PIX_FMT_NONE },
     .priv_class     = &mpeg4_vdpau_class,
 };
 #endif

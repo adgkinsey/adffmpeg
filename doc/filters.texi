@@ -2446,14 +2446,10 @@ corresponding pixel component values.
 The @var{lut} filter requires either YUV or RGB pixel formats in
 input, and accepts the options:
 @table @option
-@item c0
-first  pixel component
-@item c1
-second pixel component
-@item c2
-third  pixel component
-@item c3
-fourth pixel component, corresponds to the alpha component
+@item @var{c0} (first  pixel component)
+@item @var{c1} (second pixel component)
+@item @var{c2} (third  pixel component)
+@item @var{c3} (fourth pixel component, corresponds to the alpha component)
 @end table
 
 The exact component associated to each option depends on the format in
@@ -2462,27 +2458,19 @@ input.
 The @var{lutrgb} filter requires RGB pixel formats in input, and
 accepts the options:
 @table @option
-@item r
-red component
-@item g
-green component
-@item b
-blue component
-@item a
-alpha component
+@item @var{r} (red component)
+@item @var{g} (green component)
+@item @var{b} (blue component)
+@item @var{a} (alpha component)
 @end table
 
 The @var{lutyuv} filter requires YUV pixel formats in input, and
 accepts the options:
 @table @option
-@item y
-Y/luminance component
-@item u
-U/Cb component
-@item v
-V/Cr component
-@item a
-alpha component
+@item @var{y} (Y/luminance component)
+@item @var{u} (U/Cb component)
+@item @var{v} (V/Cr component)
+@item @var{a} (alpha component)
 @end table
 
 The expressions can contain the following constants and functions:
@@ -3702,7 +3690,7 @@ This source is mainly intended for a programmatic use, in particular
 through the interface defined in @file{libavfilter/vsrc_buffer.h}.
 
 It accepts a list of options in the form of @var{key}=@var{value} pairs
-separated by ":". A descroption of the accepted options follows.
+separated by ":". A description of the accepted options follows.
 
 @table @option
 
@@ -3738,7 +3726,7 @@ will instruct the source to accept video frames with size 320x240 and
 with format "yuv410p", assuming 1/24 as the timestamps timebase and
 square pixels (1:1 sample aspect ratio).
 Since the pixel format with name "yuv410p" corresponds to the number 6
-(check the enum PixelFormat definition in @file{libavutil/pixfmt.h}),
+(check the enum AVPixelFormat definition in @file{libavutil/pixfmt.h}),
 this example corresponds to:
 @example
 buffer=size=320x240:pixfmt=6:time_base=1/24:pixel_aspect=1/1

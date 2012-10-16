@@ -336,6 +336,7 @@ typedef struct AVProbeData {
 } AVProbeData;
 
 #define AVPROBE_SCORE_MAX 100               ///< maximum score, half of that is used for file-extension-based detection
+#define AVPROBE_SCORE_RETRY (AVPROBE_SCORE_MAX/4)
 #define AVPROBE_PADDING_SIZE 32             ///< extra allocated bytes at the end of the probe buffer
 
 /// Demuxer will use avio_open, no opened file should be provided by the caller.
@@ -581,7 +582,7 @@ enum AVStreamParseType {
     AVSTREAM_PARSE_FULL_ONCE,  /**< full parsing and repack of the first frame only, only implemented for H.264 currently */
     AVSTREAM_PARSE_FULL_RAW=MKTAG(0,'R','A','W'),       /**< full parsing and repack with timestamp and position generation by parser for raw
                                                              this assumes that each packet in the file contains no demuxer level headers and
-                                                             just codec level data, otherwise position generaion would fail */
+                                                             just codec level data, otherwise position generation would fail */
 };
 
 typedef struct AVIndexEntry {
@@ -742,6 +743,7 @@ typedef struct AVStream {
         int duration_count;
         double duration_error[2][2][MAX_STD_TIMEBASES];
         int64_t codec_info_duration;
+        int64_t codec_info_duration_fields;
         int found_decoder;
 
         /**

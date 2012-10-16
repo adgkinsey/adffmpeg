@@ -31,10 +31,11 @@ tests/data/vsynth2.yuv: tests/rotozoom$(HOSTEXESUF) | tests/data
 	$(M)$< $(SRC_PATH)/tests/lena.pnm $@
 
 tests/data/ffprobe-test.nut: ffmpeg$(EXESUF) | tests/data
-	$(M)./$< \
+	$(M)$(TARGET_EXEC) ./$< \
         -f lavfi -i "aevalsrc=sin(400*PI*2*t)::d=0.125[out0]; testsrc=d=0.125[out1]; testsrc=s=100x100:d=0.125[out2]" \
         -f ffmetadata -i $(SRC_PATH)/tests/test.ffmeta \
         -flags +bitexact -map 0:0 -map 0:1 -map 0:2 -map_metadata 1 \
+        -map_metadata:s:0 1:s:0 -map_metadata:s:1 1:s:1 \
         -vcodec rawvideo -acodec pcm_s16le \
         -y $@ 2>/dev/null
 
@@ -68,6 +69,7 @@ include $(SRC_PATH)/tests/fate/h264.mak
 include $(SRC_PATH)/tests/fate/image.mak
 include $(SRC_PATH)/tests/fate/indeo.mak
 include $(SRC_PATH)/tests/fate/libavcodec.mak
+include $(SRC_PATH)/tests/fate/libavformat.mak
 include $(SRC_PATH)/tests/fate/libavutil.mak
 include $(SRC_PATH)/tests/fate/mapchan.mak
 include $(SRC_PATH)/tests/fate/lossless-audio.mak
@@ -107,6 +109,7 @@ FATE-$(CONFIG_FFMPEG) += $(FATE_FFMPEG)
 FATE-$(CONFIG_FFPROBE) += $(FATE_FFPROBE)
 
 FATE-$(CONFIG_AVCODEC)  += $(FATE_LIBAVCODEC)
+FATE-$(CONFIG_AVFORMAT) += $(FATE_LIBAVFORMAT)
 
 FATE_EXTERN-$(CONFIG_FFMPEG) += $(FATE_SAMPLES_AVCONV) $(FATE_SAMPLES_FFMPEG)
 FATE_EXTERN += $(FATE_EXTERN-yes)

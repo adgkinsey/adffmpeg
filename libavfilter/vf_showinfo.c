@@ -47,8 +47,9 @@ static int end_frame(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     ShowInfoContext *showinfo = ctx->priv;
     AVFilterBufferRef *picref = inlink->cur_buf;
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
     uint32_t plane_checksum[4] = {0}, checksum = 0;
-    int i, plane, vsub = av_pix_fmt_descriptors[inlink->format].log2_chroma_h;
+    int i, plane, vsub = desc->log2_chroma_h;
 
     for (plane = 0; picref->data[plane] && plane < 4; plane++) {
         size_t linesize = av_image_get_linesize(picref->format, picref->video->w, plane);
@@ -68,7 +69,7 @@ static int end_frame(AVFilterLink *inlink)
            "checksum:%08X plane_checksum:[%08X",
            showinfo->frame,
            av_ts2str(picref->pts), av_ts2timestr(picref->pts, &inlink->time_base), picref->pos,
-           av_pix_fmt_descriptors[picref->format].name,
+           desc->name,
            picref->video->sample_aspect_ratio.num, picref->video->sample_aspect_ratio.den,
            picref->video->w, picref->video->h,
            !picref->video->interlaced     ? 'P' :         /* Progressive  */
@@ -85,6 +86,26 @@ static int end_frame(AVFilterLink *inlink)
     return ff_end_frame(inlink->dst->outputs[0]);
 }
 
+static const AVFilterPad avfilter_vf_showinfo_inputs[] = {
+    {
+        .name             = "default",
+        .type             = AVMEDIA_TYPE_VIDEO,
+        .get_video_buffer = ff_null_get_video_buffer,
+        .start_frame      = ff_null_start_frame,
+        .end_frame        = end_frame,
+        .min_perms        = AV_PERM_READ,
+    },
+    { NULL }
+};
+
+static const AVFilterPad avfilter_vf_showinfo_outputs[] = {
+    {
+        .name = "default",
+        .type = AVMEDIA_TYPE_VIDEO
+    },
+    { NULL }
+};
+
 AVFilter avfilter_vf_showinfo = {
     .name        = "showinfo",
     .description = NULL_IF_CONFIG_SMALL("Show textual information for each video frame."),
@@ -92,15 +113,7 @@ AVFilter avfilter_vf_showinfo = {
     .priv_size = sizeof(ShowInfoContext),
     .init      = init,
 
-    .inputs    = (const AVFilterPad[]) {{ .name = "default",
-                                          .type             = AVMEDIA_TYPE_VIDEO,
-                                          .get_video_buffer = ff_null_get_video_buffer,
-                                          .start_frame      = ff_null_start_frame,
-                                          .end_frame        = end_frame,
-                                          .min_perms        = AV_PERM_READ, },
-                                        { .name = NULL}},
+    .inputs    = avfilter_vf_showinfo_inputs,
 
-    .outputs   = (const AVFilterPad[]) {{ .name             = "default",
-                                          .type             = AVMEDIA_TYPE_VIDEO },
-                                        { .name = NULL}},
+    .outputs   = avfilter_vf_showinfo_outputs,
 };

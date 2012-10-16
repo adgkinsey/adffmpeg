@@ -265,7 +265,7 @@ static void vmd_decode(VmdVideoContext *s)
             r = *p++ * 4;
             g = *p++ * 4;
             b = *p++ * 4;
-            palette32[i] = 0xFF << 24 | r << 16 | g << 8 | b;
+            palette32[i] = 0xFFU << 24 | r << 16 | g << 8 | b;
             palette32[i] |= palette32[i] >> 6 & 0x30303;
         }
     }
@@ -378,7 +378,7 @@ static av_cold int vmdvideo_decode_init(AVCodecContext *avctx)
     unsigned char *raw_palette;
 
     s->avctx = avctx;
-    avctx->pix_fmt = PIX_FMT_PAL8;
+    avctx->pix_fmt = AV_PIX_FMT_PAL8;
 
     /* make sure the VMD header made it */
     if (s->avctx->extradata_size != VMD_HEADER_SIZE) {

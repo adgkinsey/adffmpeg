@@ -86,25 +86,25 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
 
 static int query_formats(AVFilterContext *ctx)
 {
-    enum PixelFormat pix_fmts[] = {
-        PIX_FMT_ARGB,         PIX_FMT_RGBA,
-        PIX_FMT_ABGR,         PIX_FMT_BGRA,
-        PIX_FMT_RGB24,        PIX_FMT_BGR24,
-        PIX_FMT_RGB565BE,     PIX_FMT_RGB565LE,
-        PIX_FMT_RGB555BE,     PIX_FMT_RGB555LE,
-        PIX_FMT_BGR565BE,     PIX_FMT_BGR565LE,
-        PIX_FMT_BGR555BE,     PIX_FMT_BGR555LE,
-        PIX_FMT_GRAY16BE,     PIX_FMT_GRAY16LE,
-        PIX_FMT_YUV420P16LE,  PIX_FMT_YUV420P16BE,
-        PIX_FMT_YUV444P16LE,  PIX_FMT_YUV444P16BE,
-        PIX_FMT_NV12,         PIX_FMT_NV21,
-        PIX_FMT_RGB8,         PIX_FMT_BGR8,
-        PIX_FMT_RGB4_BYTE,    PIX_FMT_BGR4_BYTE,
-        PIX_FMT_YUV444P,      PIX_FMT_YUVJ444P,
-        PIX_FMT_YUV420P,      PIX_FMT_YUVJ420P,
-        PIX_FMT_YUV410P,
-        PIX_FMT_YUVA420P,     PIX_FMT_GRAY8,
-        PIX_FMT_NONE
+    enum AVPixelFormat pix_fmts[] = {
+        AV_PIX_FMT_ARGB,         AV_PIX_FMT_RGBA,
+        AV_PIX_FMT_ABGR,         AV_PIX_FMT_BGRA,
+        AV_PIX_FMT_RGB24,        AV_PIX_FMT_BGR24,
+        AV_PIX_FMT_RGB565BE,     AV_PIX_FMT_RGB565LE,
+        AV_PIX_FMT_RGB555BE,     AV_PIX_FMT_RGB555LE,
+        AV_PIX_FMT_BGR565BE,     AV_PIX_FMT_BGR565LE,
+        AV_PIX_FMT_BGR555BE,     AV_PIX_FMT_BGR555LE,
+        AV_PIX_FMT_GRAY16BE,     AV_PIX_FMT_GRAY16LE,
+        AV_PIX_FMT_YUV420P16LE,  AV_PIX_FMT_YUV420P16BE,
+        AV_PIX_FMT_YUV444P16LE,  AV_PIX_FMT_YUV444P16BE,
+        AV_PIX_FMT_NV12,         AV_PIX_FMT_NV21,
+        AV_PIX_FMT_RGB8,         AV_PIX_FMT_BGR8,
+        AV_PIX_FMT_RGB4_BYTE,    AV_PIX_FMT_BGR4_BYTE,
+        AV_PIX_FMT_YUV444P,      AV_PIX_FMT_YUVJ444P,
+        AV_PIX_FMT_YUV420P,      AV_PIX_FMT_YUVJ420P,
+        AV_PIX_FMT_YUV410P,
+        AV_PIX_FMT_YUVA420P,     AV_PIX_FMT_GRAY8,
+        AV_PIX_FMT_NONE
     };
 
     ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
@@ -116,7 +116,8 @@ static int config_props_output(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     TransContext *trans = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
-    const AVPixFmtDescriptor *pixdesc = &av_pix_fmt_descriptors[outlink->format];
+    const AVPixFmtDescriptor *desc_out = av_pix_fmt_desc_get(outlink->format);
+    const AVPixFmtDescriptor *desc_in  = av_pix_fmt_desc_get(inlink->format);
 
     if (trans->dir&4) {
         av_log(ctx, AV_LOG_WARNING,
@@ -135,10 +136,10 @@ static int config_props_output(AVFilterLink *outlink)
         trans->passthrough = TRANSPOSE_PT_TYPE_NONE;
     }
 
-    trans->hsub = av_pix_fmt_descriptors[inlink->format].log2_chroma_w;
-    trans->vsub = av_pix_fmt_descriptors[inlink->format].log2_chroma_h;
+    trans->hsub = desc_in->log2_chroma_w;
+    trans->vsub = desc_in->log2_chroma_h;
 
-    av_image_fill_max_pixsteps(trans->pixsteps, NULL, pixdesc);
+    av_image_fill_max_pixsteps(trans->pixsteps, NULL, desc_out);
 
     outlink->w = inlink->h;
     outlink->h = inlink->w;
@@ -266,6 +267,28 @@ static int draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
     return trans->passthrough ? ff_null_draw_slice(inlink, y, h, slice_dir) : 0;
 }
 
+static const AVFilterPad avfilter_vf_transpose_inputs[] = {
+    {
+        .name        = "default",
+        .type        = AVMEDIA_TYPE_VIDEO,
+        .get_video_buffer= get_video_buffer,
+        .start_frame = start_frame,
+        .draw_slice  = draw_slice,
+        .end_frame   = end_frame,
+        .min_perms   = AV_PERM_READ,
+    },
+    { NULL }
+};
+
+static const AVFilterPad avfilter_vf_transpose_outputs[] = {
+    {
+        .name         = "default",
+        .config_props = config_props_output,
+        .type         = AVMEDIA_TYPE_VIDEO,
+    },
+    { NULL }
+};
+
 AVFilter avfilter_vf_transpose = {
     .name      = "transpose",
     .description = NULL_IF_CONFIG_SMALL("Transpose input video."),
@@ -275,17 +298,7 @@ AVFilter avfilter_vf_transpose = {
 
     .query_formats = query_formats,
 
-    .inputs    = (const AVFilterPad[]) {{ .name            = "default",
-                                          .type            = AVMEDIA_TYPE_VIDEO,
-                                          .get_video_buffer= get_video_buffer,
-                                          .start_frame     = start_frame,
-                                          .draw_slice      = draw_slice,
-                                          .end_frame       = end_frame,
-                                          .min_perms       = AV_PERM_READ, },
-                                        { .name = NULL}},
-    .outputs   = (const AVFilterPad[]) {{ .name            = "default",
-                                          .config_props    = config_props_output,
-                                          .type            = AVMEDIA_TYPE_VIDEO, },
-                                        { .name = NULL}},
+    .inputs    = avfilter_vf_transpose_inputs,
+    .outputs   = avfilter_vf_transpose_outputs,
     .priv_class = &transpose_class,
 };

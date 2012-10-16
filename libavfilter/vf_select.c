@@ -204,21 +204,24 @@ static double get_scene_score(AVFilterContext *ctx, AVFilterBufferRef *picref)
         picref->video->h    == prev_picref->video->h &&
         picref->video->w    == prev_picref->video->w &&
         picref->linesize[0] == prev_picref->linesize[0]) {
-        int x, y;
-        int64_t sad;
+        int x, y, nb_sad = 0;
+        int64_t sad = 0;
         double mafd, diff;
         uint8_t *p1 =      picref->data[0];
         uint8_t *p2 = prev_picref->data[0];
         const int linesize = picref->linesize[0];
 
-        for (sad = y = 0; y < picref->video->h; y += 8)
-            for (x = 0; x < linesize; x += 8)
-                sad += select->c.sad[1](select,
-                                        p1 + y * linesize + x,
-                                        p2 + y * linesize + x,
+        for (y = 0; y < picref->video->h - 8; y += 8) {
+            for (x = 0; x < picref->video->w*3 - 8; x += 8) {
+                sad += select->c.sad[1](select, p1 + x, p2 + x,
                                         linesize, 8);
+                nb_sad += 8 * 8;
+            }
+            p1 += 8 * linesize;
+            p2 += 8 * linesize;
+        }
         emms_c();
-        mafd = sad / (picref->video->h * picref->video->w * 3);
+        mafd = nb_sad ? sad / nb_sad : 0;
         diff = fabs(mafd - select->prev_mafd);
         ret  = av_clipf(FFMIN(mafd, diff) / 100., 0, 1);
         select->prev_mafd = mafd;
@@ -408,14 +411,38 @@ static int query_formats(AVFilterContext *ctx)
     if (!select->do_scene_detect) {
         return ff_default_query_formats(ctx);
     } else {
-        static const enum PixelFormat pix_fmts[] = {
-            PIX_FMT_RGB24, PIX_FMT_BGR24,
-            PIX_FMT_NONE
+        static const enum AVPixelFormat pix_fmts[] = {
+            AV_PIX_FMT_RGB24, AV_PIX_FMT_BGR24,
+            AV_PIX_FMT_NONE
         };
         ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
     }
     return 0;
 }
+
+static const AVFilterPad avfilter_vf_select_inputs[] = {
+    {
+        .name             = "default",
+        .type             = AVMEDIA_TYPE_VIDEO,
+        .get_video_buffer = ff_null_get_video_buffer,
+        .min_perms        = AV_PERM_PRESERVE,
+        .config_props     = config_input,
+        .start_frame      = start_frame,
+        .draw_slice       = draw_slice,
+        .end_frame        = end_frame
+    },
+    { NULL }
+};
+
+static const AVFilterPad avfilter_vf_select_outputs[] = {
+    {
+        .name          = "default",
+        .type          = AVMEDIA_TYPE_VIDEO,
+        .poll_frame    = poll_frame,
+        .request_frame = request_frame,
+    },
+    { NULL }
+};
 
 AVFilter avfilter_vf_select = {
     .name      = "select",
@@ -426,18 +453,6 @@ AVFilter avfilter_vf_select = {
 
     .priv_size = sizeof(SelectContext),
 
-    .inputs    = (const AVFilterPad[]) {{ .name             = "default",
-                                          .type             = AVMEDIA_TYPE_VIDEO,
-                                          .get_video_buffer = ff_null_get_video_buffer,
-                                          .min_perms        = AV_PERM_PRESERVE,
-                                          .config_props     = config_input,
-                                          .start_frame      = start_frame,
-                                          .draw_slice       = draw_slice,
-                                          .end_frame        = end_frame },
-                                        { .name = NULL }},
-    .outputs   = (const AVFilterPad[]) {{ .name             = "default",
-                                          .type             = AVMEDIA_TYPE_VIDEO,
-                                          .poll_frame       = poll_frame,
-                                          .request_frame    = request_frame, },
-                                        { .name = NULL}},
+    .inputs    = avfilter_vf_select_inputs,
+    .outputs   = avfilter_vf_select_outputs,
 };

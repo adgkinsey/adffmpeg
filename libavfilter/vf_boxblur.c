@@ -124,13 +124,13 @@ static av_cold void uninit(AVFilterContext *ctx)
 
 static int query_formats(AVFilterContext *ctx)
 {
-    enum PixelFormat pix_fmts[] = {
-        PIX_FMT_YUV444P,  PIX_FMT_YUV422P,  PIX_FMT_YUV420P,
-        PIX_FMT_YUV411P,  PIX_FMT_YUV410P,  PIX_FMT_YUVA420P,
-        PIX_FMT_YUV440P,  PIX_FMT_GRAY8,
-        PIX_FMT_YUVJ444P, PIX_FMT_YUVJ422P, PIX_FMT_YUVJ420P,
-        PIX_FMT_YUVJ440P,
-        PIX_FMT_NONE
+    enum AVPixelFormat pix_fmts[] = {
+        AV_PIX_FMT_YUV444P,  AV_PIX_FMT_YUV422P,  AV_PIX_FMT_YUV420P,
+        AV_PIX_FMT_YUV411P,  AV_PIX_FMT_YUV410P,  AV_PIX_FMT_YUVA420P,
+        AV_PIX_FMT_YUV440P,  AV_PIX_FMT_GRAY8,
+        AV_PIX_FMT_YUVJ444P, AV_PIX_FMT_YUVJ422P, AV_PIX_FMT_YUVJ420P,
+        AV_PIX_FMT_YUVJ440P,
+        AV_PIX_FMT_NONE
     };
 
     ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
@@ -139,9 +139,9 @@ static int query_formats(AVFilterContext *ctx)
 
 static int config_input(AVFilterLink *inlink)
 {
-    AVFilterContext *ctx = inlink->dst;
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
+    AVFilterContext    *ctx = inlink->dst;
     BoxBlurContext *boxblur = ctx->priv;
-    const AVPixFmtDescriptor *desc = &av_pix_fmt_descriptors[inlink->format];
     int w = inlink->w, h = inlink->h;
     int cw, ch;
     double var_values[VARS_NB], res;
@@ -332,6 +332,26 @@ static int end_frame(AVFilterLink *inlink)
     return ff_end_frame(outlink);
 }
 
+static const AVFilterPad avfilter_vf_boxblur_inputs[] = {
+    {
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_VIDEO,
+        .config_props = config_input,
+        .draw_slice   = null_draw_slice,
+        .end_frame    = end_frame,
+        .min_perms    = AV_PERM_READ
+    },
+    { NULL }
+};
+
+static const AVFilterPad avfilter_vf_boxblur_outputs[] = {
+    {
+        .name = "default",
+        .type = AVMEDIA_TYPE_VIDEO,
+    },
+    { NULL }
+};
+
 AVFilter avfilter_vf_boxblur = {
     .name          = "boxblur",
     .description   = NULL_IF_CONFIG_SMALL("Blur the input."),
@@ -340,14 +360,6 @@ AVFilter avfilter_vf_boxblur = {
     .uninit        = uninit,
     .query_formats = query_formats,
 
-    .inputs    = (const AVFilterPad[]) {{ .name             = "default",
-                                          .type             = AVMEDIA_TYPE_VIDEO,
-                                          .config_props     = config_input,
-                                          .draw_slice       = null_draw_slice,
-                                          .end_frame        = end_frame,
-                                          .min_perms        = AV_PERM_READ },
-                                        { .name = NULL}},
-    .outputs   = (const AVFilterPad[]) {{ .name             = "default",
-                                          .type             = AVMEDIA_TYPE_VIDEO, },
-                                        { .name = NULL}},
+    .inputs    = avfilter_vf_boxblur_inputs,
+    .outputs   = avfilter_vf_boxblur_outputs,
 };

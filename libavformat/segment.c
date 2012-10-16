@@ -71,6 +71,8 @@ typedef struct {
     int nb_times;          ///< number of elments in the times array
     char *time_delta_str;  ///< approximation value duration used for the segment times
     int64_t time_delta;
+    int  individual_header_trailer; /**< Set by a private option. */
+    int  write_header_trailer; /**< Set by a private option. */
     int has_video;
     double start_time, end_time;
 } SegmentContext;
@@ -115,18 +117,19 @@ static int segment_mux_init(AVFormatContext *s)
     return 0;
 }
 
-
-static int segment_start(AVFormatContext *s)
+static int segment_start(AVFormatContext *s, int write_header)
 {
     SegmentContext *c = s->priv_data;
     AVFormatContext *oc = c->avf;
     int err = 0;
 
-    avformat_free_context(oc);
-    c->avf = NULL;
-    if ((err = segment_mux_init(s)) < 0)
-        return err;
-    oc = c->avf;
+    if (write_header) {
+        avformat_free_context(oc);
+        c->avf = NULL;
+        if ((err = segment_mux_init(s)) < 0)
+            return err;
+        oc = c->avf;
+    }
 
     if (c->segment_idx_wrap)
         c->segment_idx %= c->segment_idx_wrap;
@@ -142,8 +145,13 @@ static int segment_start(AVFormatContext *s)
                           &s->interrupt_callback, NULL)) < 0)
         return err;
 
-    if ((err = avformat_write_header(oc, NULL)) < 0)
-        return err;
+    if (oc->oformat->priv_class && oc->priv_data)
+        av_opt_set(oc->priv_data, "resend_headers", "1", 0); /* mpegts specific */
+
+    if (write_header) {
+        if ((err = avformat_write_header(oc, NULL)) < 0)
+            return err;
+    }
 
     return 0;
 }
@@ -188,13 +196,15 @@ static void segment_list_close(AVFormatContext *s)
     avio_close(seg->list_pb);
 }
 
-static int segment_end(AVFormatContext *s)
+static int segment_end(AVFormatContext *s, int write_trailer)
 {
     SegmentContext *seg = s->priv_data;
     AVFormatContext *oc = seg->avf;
     int ret = 0;
 
-    ret = av_write_trailer(oc);
+    av_write_frame(oc, NULL); /* Flush any buffered data (fragmented mp4) */
+    if (write_trailer)
+        ret = av_write_trailer(oc);
 
     if (ret < 0)
         av_log(s, AV_LOG_ERROR, "Failure occurred when ending segment '%s'\n",
@@ -279,6 +289,26 @@ end:
     return ret;
 }
 
+static int open_null_ctx(AVIOContext **ctx)
+{
+    int buf_size = 32768;
+    uint8_t *buf = av_malloc(buf_size);
+    if (!buf)
+        return AVERROR(ENOMEM);
+    *ctx = avio_alloc_context(buf, buf_size, AVIO_FLAG_WRITE, NULL, NULL, NULL, NULL);
+    if (!*ctx) {
+        av_free(buf);
+        return AVERROR(ENOMEM);
+    }
+    return 0;
+}
+
+static void close_null_ctx(AVIOContext *pb)
+{
+    av_free(pb->buffer);
+    av_free(pb);
+}
+
 static int seg_write_header(AVFormatContext *s)
 {
     SegmentContext *seg = s->priv_data;
@@ -286,6 +316,8 @@ static int seg_write_header(AVFormatContext *s)
     int ret, i;
 
     seg->segment_count = 0;
+    if (!seg->write_header_trailer)
+        seg->individual_header_trailer = 0;
 
     if (seg->time_str && seg->times_str) {
         av_log(s, AV_LOG_ERROR,
@@ -370,13 +402,28 @@ static int seg_write_header(AVFormatContext *s)
     }
     seg->segment_count++;
 
-    if ((ret = avio_open2(&oc->pb, oc->filename, AVIO_FLAG_WRITE,
-                          &s->interrupt_callback, NULL)) < 0)
-        goto fail;
+    if (seg->write_header_trailer) {
+        if ((ret = avio_open2(&oc->pb, oc->filename, AVIO_FLAG_WRITE,
+                              &s->interrupt_callback, NULL)) < 0)
+            goto fail;
+    } else {
+        if ((ret = open_null_ctx(&oc->pb)) < 0)
+            goto fail;
+    }
 
     if ((ret = avformat_write_header(oc, NULL)) < 0) {
         avio_close(oc->pb);
         goto fail;
+    }
+
+    if (oc->avoid_negative_ts > 0 && s->avoid_negative_ts < 0)
+        s->avoid_negative_ts = 1;
+
+    if (!seg->write_header_trailer) {
+        close_null_ctx(oc->pb);
+        if ((ret = avio_open2(&oc->pb, oc->filename, AVIO_FLAG_WRITE,
+                              &s->interrupt_callback, NULL)) < 0)
+            goto fail;
     }
 
 fail:
@@ -413,7 +460,12 @@ static int seg_write_packet(AVFormatContext *s, AVPacket *pkt)
         av_log(s, AV_LOG_DEBUG, "Next segment starts with packet stream:%d pts:%"PRId64" pts_time:%f\n",
                pkt->stream_index, pkt->pts, pkt->pts * av_q2d(st->time_base));
 
-        if ((ret = segment_end(s)) < 0 || (ret = segment_start(s)) < 0)
+        ret = segment_end(s, seg->individual_header_trailer);
+
+        if (!ret)
+            ret = segment_start(s, seg->individual_header_trailer);
+
+        if (ret)
             goto fail;
 
         oc = seg->avf;
@@ -440,7 +492,17 @@ static int seg_write_trailer(struct AVFormatContext *s)
 {
     SegmentContext *seg = s->priv_data;
     AVFormatContext *oc = seg->avf;
-    int ret = segment_end(s);
+    int ret;
+    if (!seg->write_header_trailer) {
+        if ((ret = segment_end(s, 0)) < 0)
+            goto fail;
+        open_null_ctx(&oc->pb);
+        ret = av_write_trailer(oc);
+        close_null_ctx(oc->pb);
+    } else {
+        ret = segment_end(s, 1);
+    }
+fail:
     if (seg->list)
         segment_list_close(s);
 
@@ -467,10 +529,13 @@ static const AVOption options[] = {
     { "csv",  "csv format",      0, AV_OPT_TYPE_CONST, {.i64=LIST_TYPE_CSV  }, INT_MIN, INT_MAX, 0, "list_type" },
     { "ext",  "extended format", 0, AV_OPT_TYPE_CONST, {.i64=LIST_TYPE_EXT  }, INT_MIN, INT_MAX, 0, "list_type" },
     { "m3u8", "M3U8 format",     0, AV_OPT_TYPE_CONST, {.i64=LIST_TYPE_M3U8 }, INT_MIN, INT_MAX, 0, "list_type" },
+    { "hls", "Apple HTTP Live Streaming compatible",     0, AV_OPT_TYPE_CONST, {.i64=LIST_TYPE_M3U8 }, INT_MIN, INT_MAX, 0, "list_type" },
     { "segment_time",      "set segment duration",                       OFFSET(time_str),AV_OPT_TYPE_STRING, {.str = NULL},  0, 0,       E },
     { "segment_time_delta","set approximation value used for the segment times", OFFSET(time_delta_str), AV_OPT_TYPE_STRING, {.str = "0"}, 0, 0, E },
     { "segment_times",     "set segment split time points",              OFFSET(times_str),AV_OPT_TYPE_STRING,{.str = NULL},  0, 0,       E },
     { "segment_wrap",      "set number after which the index wraps",     OFFSET(segment_idx_wrap), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, E },
+    { "individual_header_trailer", "write header/trailer to each segment", OFFSET(individual_header_trailer), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 1, E },
+    { "write_header_trailer", "write a header to the first segment and a trailer to the last one", OFFSET(write_header_trailer), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 1, E },
     { NULL },
 };
 
@@ -485,7 +550,7 @@ AVOutputFormat ff_segment_muxer = {
     .name           = "segment",
     .long_name      = NULL_IF_CONFIG_SMALL("segment"),
     .priv_data_size = sizeof(SegmentContext),
-    .flags          = AVFMT_GLOBALHEADER | AVFMT_NOFILE,
+    .flags          = AVFMT_NOFILE,
     .write_header   = seg_write_header,
     .write_packet   = seg_write_packet,
     .write_trailer  = seg_write_trailer,

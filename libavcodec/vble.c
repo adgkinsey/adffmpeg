@@ -29,6 +29,7 @@
 #include "avcodec.h"
 #include "dsputil.h"
 #include "get_bits.h"
+#include "mathops.h"
 
 typedef struct {
     AVCodecContext *avctx;
@@ -192,7 +193,7 @@ static av_cold int vble_decode_init(AVCodecContext *avctx)
     ctx->avctx = avctx;
     ff_dsputil_init(&ctx->dsp, avctx);
 
-    avctx->pix_fmt = PIX_FMT_YUV420P;
+    avctx->pix_fmt = AV_PIX_FMT_YUV420P;
     avctx->bits_per_raw_sample = 8;
     avctx->coded_frame = avcodec_alloc_frame();
 

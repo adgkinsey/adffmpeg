@@ -2,12 +2,20 @@ Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
 version next:
+
 - stream disposition information printing in ffprobe
 - filter for loudness analysis following EBU R128
 - Opus encoder using libopus
+- ffprobe -select_streams option
+- Pinnacle TARGA CineWave YUV16 decoder
+- TAK demuxer, decoder and parser
+- DTS-HD demuxer
+- remove -same_quant, it hasn't worked for years
+- X-Face image encoder and decoder
 
 
 version 1.0:
+
 - INI and flat output in ffprobe
 - Scene detection in libavfilter
 - Indeo Audio decoder

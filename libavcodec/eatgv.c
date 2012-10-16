@@ -54,7 +54,7 @@ static av_cold int tgv_decode_init(AVCodecContext *avctx){
     TgvContext *s = avctx->priv_data;
     s->avctx = avctx;
     avctx->time_base = (AVRational){1, 15};
-    avctx->pix_fmt = PIX_FMT_PAL8;
+    avctx->pix_fmt = AV_PIX_FMT_PAL8;
     avcodec_get_frame_defaults(&s->frame);
     avcodec_get_frame_defaults(&s->last_frame);
     return 0;
@@ -286,7 +286,7 @@ static int tgv_decode_frame(AVCodecContext *avctx,
         pal_count = AV_RL16(&buf[6]);
         buf += 12;
         for(i=0; i<pal_count && i<AVPALETTE_COUNT && buf_end - buf >= 3; i++) {
-            s->palette[i] = 0xFF << 24 | AV_RB24(buf);
+            s->palette[i] = 0xFFU << 24 | AV_RB24(buf);
             buf += 3;
         }
     }

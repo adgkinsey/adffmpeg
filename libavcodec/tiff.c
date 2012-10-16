@@ -34,7 +34,8 @@
 #include "tiff.h"
 #include "tiff_data.h"
 #include "faxcompr.h"
-#include "libavutil/common.h"
+#include "mathops.h"
+#include "libavutil/attributes.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/avstring.h"
@@ -216,8 +217,10 @@ static char *doubles2str(double *dp, int count, const char *sep)
     ap[0] = '\0';
     for (i = 0; i < count; i++) {
         unsigned l = snprintf(ap, component_len, "%f%s", dp[i], sep);
-        if(l >= component_len)
+        if(l >= component_len) {
+            av_free(ap0);
             return NULL;
+        }
         ap += l;
     }
     ap0[strlen(ap0) - strlen(sep)] = '\0';
@@ -332,7 +335,7 @@ static int tiff_uncompress(uint8_t *dst, unsigned long *len, const uint8_t *src,
     z_stream zstream = { 0 };
     int zret;
 
-    zstream.next_in = src;
+    zstream.next_in = (uint8_t *)src;
     zstream.avail_in = size;
     zstream.next_out = dst;
     zstream.avail_out = *len;
@@ -417,7 +420,7 @@ static int tiff_unpack_strip(TiffContext *s, uint8_t *dst, int stride,
         }
         src = zbuf;
         for (line = 0; line < lines; line++) {
-            if(s->bpp < 8 && s->avctx->pix_fmt == PIX_FMT_PAL8){
+            if(s->bpp < 8 && s->avctx->pix_fmt == AV_PIX_FMT_PAL8){
                 horizontal_fill(s->bpp, dst, 1, src, 0, width, 0);
             }else{
                 memcpy(dst, src, width);
@@ -456,7 +459,7 @@ static int tiff_unpack_strip(TiffContext *s, uint8_t *dst, int stride,
             memcpy(src2, src, size);
         } else {
             for (i = 0; i < size; i++)
-                src2[i] = av_reverse[src[i]];
+                src2[i] = ff_reverse[src[i]];
         }
         memset(src2 + size, 0, FF_INPUT_BUFFER_PADDING_SIZE);
         switch (s->compr) {
@@ -467,7 +470,7 @@ static int tiff_unpack_strip(TiffContext *s, uint8_t *dst, int stride,
                                   s->compr, s->fax_opts);
             break;
         }
-        if (s->bpp < 8 && s->avctx->pix_fmt == PIX_FMT_PAL8)
+        if (s->bpp < 8 && s->avctx->pix_fmt == AV_PIX_FMT_PAL8)
             for (line = 0; line < lines; line++) {
                 horizontal_fill(s->bpp, dst, 1, dst, 0, width, 0);
                 dst += stride;
@@ -485,12 +488,12 @@ static int tiff_unpack_strip(TiffContext *s, uint8_t *dst, int stride,
             if (ssrc + size - src < width)
                 return AVERROR_INVALIDDATA;
             if (!s->fill_order) {
-                horizontal_fill(s->bpp * (s->avctx->pix_fmt == PIX_FMT_PAL8),
+                horizontal_fill(s->bpp * (s->avctx->pix_fmt == AV_PIX_FMT_PAL8),
                                 dst, 1, src, 0, width, 0);
             } else {
                 int i;
                 for (i = 0; i < width; i++)
-                    dst[i] = av_reverse[src[i]];
+                    dst[i] = ff_reverse[src[i]];
             }
             src += width;
             break;
@@ -512,7 +515,7 @@ static int tiff_unpack_strip(TiffContext *s, uint8_t *dst, int stride,
                         av_log(s->avctx, AV_LOG_ERROR, "Read went out of bounds\n");
                         return AVERROR_INVALIDDATA;
                     }
-                    horizontal_fill(s->bpp * (s->avctx->pix_fmt == PIX_FMT_PAL8),
+                    horizontal_fill(s->bpp * (s->avctx->pix_fmt == AV_PIX_FMT_PAL8),
                                     dst, 1, src, 0, code, pixels);
                     src += code;
                     pixels += code;
@@ -524,7 +527,7 @@ static int tiff_unpack_strip(TiffContext *s, uint8_t *dst, int stride,
                         return -1;
                     }
                     c = *src++;
-                    horizontal_fill(s->bpp * (s->avctx->pix_fmt == PIX_FMT_PAL8),
+                    horizontal_fill(s->bpp * (s->avctx->pix_fmt == AV_PIX_FMT_PAL8),
                                     dst, 0, NULL, c, code, pixels);
                     pixels += code;
                 }
@@ -537,7 +540,7 @@ static int tiff_unpack_strip(TiffContext *s, uint8_t *dst, int stride,
                        pixels, width);
                 return -1;
             }
-            if (s->bpp < 8 && s->avctx->pix_fmt == PIX_FMT_PAL8)
+            if (s->bpp < 8 && s->avctx->pix_fmt == AV_PIX_FMT_PAL8)
                 horizontal_fill(s->bpp, dst, 1, dst, 0, width, 0);
             break;
         }
@@ -554,31 +557,31 @@ static int init_image(TiffContext *s)
     switch (s->bpp * 10 + s->bppcount) {
     case 11:
         if (!s->palette_is_set) {
-            s->avctx->pix_fmt = PIX_FMT_MONOBLACK;
+            s->avctx->pix_fmt = AV_PIX_FMT_MONOBLACK;
             break;
         }
     case 21:
     case 41:
     case 81:
-        s->avctx->pix_fmt = PIX_FMT_PAL8;
+        s->avctx->pix_fmt = AV_PIX_FMT_PAL8;
         break;
     case 243:
-        s->avctx->pix_fmt = PIX_FMT_RGB24;
+        s->avctx->pix_fmt = AV_PIX_FMT_RGB24;
         break;
     case 161:
-        s->avctx->pix_fmt = s->le ? PIX_FMT_GRAY16LE : PIX_FMT_GRAY16BE;
+        s->avctx->pix_fmt = s->le ? AV_PIX_FMT_GRAY16LE : AV_PIX_FMT_GRAY16BE;
         break;
     case 162:
-        s->avctx->pix_fmt = PIX_FMT_GRAY8A;
+        s->avctx->pix_fmt = AV_PIX_FMT_GRAY8A;
         break;
     case 324:
-        s->avctx->pix_fmt = PIX_FMT_RGBA;
+        s->avctx->pix_fmt = AV_PIX_FMT_RGBA;
         break;
     case 483:
-        s->avctx->pix_fmt = s->le ? PIX_FMT_RGB48LE : PIX_FMT_RGB48BE;
+        s->avctx->pix_fmt = s->le ? AV_PIX_FMT_RGB48LE : AV_PIX_FMT_RGB48BE;
         break;
     case 644:
-        s->avctx->pix_fmt = s->le ? PIX_FMT_RGBA64LE : PIX_FMT_RGBA64BE;
+        s->avctx->pix_fmt = s->le ? AV_PIX_FMT_RGBA64LE : AV_PIX_FMT_RGBA64BE;
         break;
     default:
         av_log(s->avctx, AV_LOG_ERROR,
@@ -597,14 +600,14 @@ static int init_image(TiffContext *s)
         av_log(s->avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
-    if (s->avctx->pix_fmt == PIX_FMT_PAL8) {
+    if (s->avctx->pix_fmt == AV_PIX_FMT_PAL8) {
         if (s->palette_is_set) {
             memcpy(s->picture.data[1], s->palette, sizeof(s->palette));
         } else {
             /* make default grayscale pal */
             pal = (uint32_t *) s->picture.data[1];
             for (i = 0; i < 1<<s->bpp; i++)
-                pal[i] = 0xFF << 24 | i * 255 / ((1<<s->bpp) - 1) * 0x010101;
+                pal[i] = 0xFFU << 24 | i * 255 / ((1<<s->bpp) - 1) * 0x010101;
         }
     }
     return 0;
@@ -821,7 +824,7 @@ static int tiff_decode_tag(TiffContext *s)
         for (k = 2; k >= 0; k--) {
             for (i = 0; i < count / 3; i++) {
                 if (k == 2)
-                    pal[i] = 0xff << 24;
+                    pal[i] = 0xFFU << 24;
                 j =  (tget(&s->gb, type, s->le) >> off) << (k * 8);
                 pal[i] |= j;
             }
@@ -1108,15 +1111,15 @@ static int decode_frame(AVCodecContext *avctx,
         dst = p->data[0];
         soff = s->bpp >> 3;
         ssize = s->width * soff;
-        if (s->avctx->pix_fmt == PIX_FMT_RGB48LE ||
-            s->avctx->pix_fmt == PIX_FMT_RGBA64LE) {
+        if (s->avctx->pix_fmt == AV_PIX_FMT_RGB48LE ||
+            s->avctx->pix_fmt == AV_PIX_FMT_RGBA64LE) {
             for (i = 0; i < s->height; i++) {
                 for (j = soff; j < ssize; j += 2)
                     AV_WL16(dst + j, AV_RL16(dst + j) + AV_RL16(dst + j - soff));
                 dst += stride;
             }
-        } else if (s->avctx->pix_fmt == PIX_FMT_RGB48BE ||
-                   s->avctx->pix_fmt == PIX_FMT_RGBA64BE) {
+        } else if (s->avctx->pix_fmt == AV_PIX_FMT_RGB48BE ||
+                   s->avctx->pix_fmt == AV_PIX_FMT_RGBA64BE) {
             for (i = 0; i < s->height; i++) {
                 for (j = soff; j < ssize; j += 2)
                     AV_WB16(dst + j, AV_RB16(dst + j) + AV_RB16(dst + j - soff));
@@ -1135,7 +1138,7 @@ static int decode_frame(AVCodecContext *avctx,
         dst = s->picture.data[0];
         for (i = 0; i < s->height; i++) {
             for (j = 0; j < s->picture.linesize[0]; j++)
-                dst[j] = (s->avctx->pix_fmt == PIX_FMT_PAL8 ? (1<<s->bpp) - 1 : 255) - dst[j];
+                dst[j] = (s->avctx->pix_fmt == AV_PIX_FMT_PAL8 ? (1<<s->bpp) - 1 : 255) - dst[j];
             dst += s->picture.linesize[0];
         }
     }

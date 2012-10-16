@@ -368,12 +368,12 @@ static int mkv_add_cuepoint(mkv_cues *cues, int stream, int64_t ts, int64_t clus
 {
     mkv_cuepoint *entries = cues->entries;
 
+    if (ts < 0)
+        return 0;
+
     entries = av_realloc(entries, (cues->num_entries + 1) * sizeof(mkv_cuepoint));
     if (entries == NULL)
         return AVERROR(ENOMEM);
-
-    if (ts < 0)
-        return 0;
 
     entries[cues->num_entries  ].pts = ts;
     entries[cues->num_entries  ].tracknum = stream + 1;
@@ -640,7 +640,6 @@ static int mkv_write_tracks(AVFormatContext *s)
                     int d_width = codec->width*av_q2d(st->sample_aspect_ratio);
                     put_ebml_uint(pb, MATROSKA_ID_VIDEODISPLAYWIDTH , d_width);
                     put_ebml_uint(pb, MATROSKA_ID_VIDEODISPLAYHEIGHT, codec->height);
-                    put_ebml_uint(pb, MATROSKA_ID_VIDEODISPLAYUNIT, 3);
                 }
 
                 if (codec->codec_id == AV_CODEC_ID_RAWVIDEO) {
@@ -902,6 +901,9 @@ static int mkv_write_header(AVFormatContext *s)
 
     if (!strcmp(s->oformat->name, "webm")) mkv->mode = MODE_WEBM;
     else                                   mkv->mode = MODE_MATROSKAv2;
+
+    if (s->avoid_negative_ts < 0)
+        s->avoid_negative_ts = 1;
 
     mkv->tracks = av_mallocz(s->nb_streams * sizeof(*mkv->tracks));
     if (!mkv->tracks)

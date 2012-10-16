@@ -157,18 +157,18 @@ static int query_formats(AVFilterContext *ctx)
     OverlayContext *over = ctx->priv;
 
     /* overlay formats contains alpha, for avoiding conversion with alpha information loss */
-    const enum PixelFormat main_pix_fmts_yuv[] = { PIX_FMT_YUV420P,  PIX_FMT_NONE };
-    const enum PixelFormat overlay_pix_fmts_yuv[] = { PIX_FMT_YUVA420P, PIX_FMT_NONE };
-    const enum PixelFormat main_pix_fmts_rgb[] = {
-        PIX_FMT_ARGB,  PIX_FMT_RGBA,
-        PIX_FMT_ABGR,  PIX_FMT_BGRA,
-        PIX_FMT_RGB24, PIX_FMT_BGR24,
-        PIX_FMT_NONE
+    const enum AVPixelFormat main_pix_fmts_yuv[] = { AV_PIX_FMT_YUV420P,  AV_PIX_FMT_NONE };
+    const enum AVPixelFormat overlay_pix_fmts_yuv[] = { AV_PIX_FMT_YUVA420P, AV_PIX_FMT_NONE };
+    const enum AVPixelFormat main_pix_fmts_rgb[] = {
+        AV_PIX_FMT_ARGB,  AV_PIX_FMT_RGBA,
+        AV_PIX_FMT_ABGR,  AV_PIX_FMT_BGRA,
+        AV_PIX_FMT_RGB24, AV_PIX_FMT_BGR24,
+        AV_PIX_FMT_NONE
     };
-    const enum PixelFormat overlay_pix_fmts_rgb[] = {
-        PIX_FMT_ARGB,  PIX_FMT_RGBA,
-        PIX_FMT_ABGR,  PIX_FMT_BGRA,
-        PIX_FMT_NONE
+    const enum AVPixelFormat overlay_pix_fmts_rgb[] = {
+        AV_PIX_FMT_ARGB,  AV_PIX_FMT_RGBA,
+        AV_PIX_FMT_ABGR,  AV_PIX_FMT_BGRA,
+        AV_PIX_FMT_NONE
     };
 
     AVFilterFormats *main_formats;
@@ -189,15 +189,15 @@ static int query_formats(AVFilterContext *ctx)
     return 0;
 }
 
-static const enum PixelFormat alpha_pix_fmts[] = {
-    PIX_FMT_YUVA420P, PIX_FMT_ARGB, PIX_FMT_ABGR, PIX_FMT_RGBA,
-    PIX_FMT_BGRA, PIX_FMT_NONE
+static const enum AVPixelFormat alpha_pix_fmts[] = {
+    AV_PIX_FMT_YUVA420P, AV_PIX_FMT_ARGB, AV_PIX_FMT_ABGR, AV_PIX_FMT_RGBA,
+    AV_PIX_FMT_BGRA, AV_PIX_FMT_NONE
 };
 
 static int config_input_main(AVFilterLink *inlink)
 {
     OverlayContext *over = inlink->dst->priv;
-    const AVPixFmtDescriptor *pix_desc = &av_pix_fmt_descriptors[inlink->format];
+    const AVPixFmtDescriptor *pix_desc = av_pix_fmt_desc_get(inlink->format);
 
     av_image_fill_max_pixsteps(over->main_pix_step,    NULL, pix_desc);
 
@@ -249,10 +249,10 @@ static int config_input_overlay(AVFilterLink *inlink)
     av_log(ctx, AV_LOG_VERBOSE,
            "main w:%d h:%d fmt:%s overlay x:%d y:%d w:%d h:%d fmt:%s\n",
            ctx->inputs[MAIN]->w, ctx->inputs[MAIN]->h,
-           av_pix_fmt_descriptors[ctx->inputs[MAIN]->format].name,
+           av_get_pix_fmt_name(ctx->inputs[MAIN]->format),
            over->x, over->y,
            ctx->inputs[OVERLAY]->w, ctx->inputs[OVERLAY]->h,
-           av_pix_fmt_descriptors[ctx->inputs[OVERLAY]->format].name);
+           av_get_pix_fmt_name(ctx->inputs[OVERLAY]->format));
 
     if (over->x < 0 || over->y < 0 ||
         over->x + var_values[VAR_OVERLAY_W] > var_values[VAR_MAIN_W] ||
@@ -607,6 +607,40 @@ static int null_draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
     return 0;
 }
 
+static const AVFilterPad avfilter_vf_overlay_inputs[] = {
+    {
+        .name         = "main",
+        .type         = AVMEDIA_TYPE_VIDEO,
+        .get_video_buffer= get_video_buffer,
+        .config_props = config_input_main,
+        .start_frame  = start_frame_main,
+        .draw_slice   = draw_slice_main,
+        .end_frame    = end_frame_main,
+        .min_perms    = AV_PERM_READ | AV_PERM_WRITE | AV_PERM_PRESERVE,
+    },
+    {
+        .name         = "overlay",
+        .type         = AVMEDIA_TYPE_VIDEO,
+        .config_props = config_input_overlay,
+        .start_frame  = start_frame_over,
+        .draw_slice   = null_draw_slice,
+        .end_frame    = end_frame_over,
+        .min_perms    = AV_PERM_READ | AV_PERM_PRESERVE,
+    },
+    { NULL }
+};
+
+static const AVFilterPad avfilter_vf_overlay_outputs[] = {
+    {
+        .name          = "default",
+        .type          = AVMEDIA_TYPE_VIDEO,
+        .rej_perms     = AV_PERM_WRITE,
+        .config_props  = config_output,
+        .request_frame = request_frame,
+    },
+    { NULL }
+};
+
 AVFilter avfilter_vf_overlay = {
     .name      = "overlay",
     .description = NULL_IF_CONFIG_SMALL("Overlay a video source on top of the input."),
@@ -618,27 +652,7 @@ AVFilter avfilter_vf_overlay = {
 
     .query_formats = query_formats,
 
-    .inputs    = (const AVFilterPad[]) {{ .name            = "main",
-                                          .type            = AVMEDIA_TYPE_VIDEO,
-                                          .get_video_buffer= get_video_buffer,
-                                          .config_props    = config_input_main,
-                                          .start_frame     = start_frame_main,
-                                          .draw_slice      = draw_slice_main,
-                                          .end_frame       = end_frame_main,
-                                          .min_perms       = AV_PERM_READ | AV_PERM_WRITE | AV_PERM_PRESERVE },
-                                        { .name            = "overlay",
-                                          .type            = AVMEDIA_TYPE_VIDEO,
-                                          .config_props    = config_input_overlay,
-                                          .start_frame     = start_frame_over,
-                                          .draw_slice      = null_draw_slice,
-                                          .end_frame       = end_frame_over,
-                                          .min_perms       = AV_PERM_READ | AV_PERM_PRESERVE },
-                                        { .name = NULL}},
-    .outputs   = (const AVFilterPad[]) {{ .name            = "default",
-                                          .type            = AVMEDIA_TYPE_VIDEO,
-                                          .rej_perms       = AV_PERM_WRITE,
-                                          .config_props    = config_output,
-                                          .request_frame   = request_frame, },
-                                        { .name = NULL}},
+    .inputs    = avfilter_vf_overlay_inputs,
+    .outputs   = avfilter_vf_overlay_outputs,
     .priv_class = &overlay_class,
 };

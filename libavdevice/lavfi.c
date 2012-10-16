@@ -54,14 +54,17 @@ static int *create_all_formats(int n)
 {
     int i, j, *fmts, count = 0;
 
-    for (i = 0; i < n; i++)
-        if (!(av_pix_fmt_descriptors[i].flags & PIX_FMT_HWACCEL))
+    for (i = 0; i < n; i++) {
+        const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(i);
+        if (!(desc->flags & PIX_FMT_HWACCEL))
             count++;
+    }
 
     if (!(fmts = av_malloc((count+1) * sizeof(int))))
         return NULL;
     for (j = 0, i = 0; i < n; i++) {
-        if (!(av_pix_fmt_descriptors[i].flags & PIX_FMT_HWACCEL))
+        const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(i);
+        if (!(desc->flags & PIX_FMT_HWACCEL))
             fmts[j++] = i;
     }
     fmts[j] = -1;
@@ -86,7 +89,7 @@ av_cold static int lavfi_read_header(AVFormatContext *avctx)
     LavfiContext *lavfi = avctx->priv_data;
     AVFilterInOut *input_links = NULL, *output_links = NULL, *inout;
     AVFilter *buffersink, *abuffersink;
-    int *pix_fmts = create_all_formats(PIX_FMT_NB);
+    int *pix_fmts = create_all_formats(AV_PIX_FMT_NB);
     enum AVMediaType type;
     int ret = 0, i, n;
 

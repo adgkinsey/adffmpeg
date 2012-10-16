@@ -625,7 +625,7 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
 
                 /* set pts and push frame */
                 pic->pts = pts;
-                if ((ret = ff_start_frame(outlink, avfilter_ref_buffer(pic, ~AV_PERM_WRITE)) < 0) < 0 ||
+                if ((ret = ff_start_frame(outlink, avfilter_ref_buffer(pic, ~AV_PERM_WRITE))) < 0 ||
                     (ret = ff_draw_slice(outlink, 0, outlink->h, 1)) < 0 ||
                     (ret = ff_end_frame(outlink)) < 0)
                     return ret;
@@ -651,7 +651,7 @@ static int query_formats(AVFilterContext *ctx)
 
     static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_DBL, -1 };
     static const int input_srate[] = {48000, -1}; // ITU-R BS.1770 provides coeff only for 48kHz
-    static const enum PixelFormat pix_fmts[] = { PIX_FMT_RGB24, -1 };
+    static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_RGB24, -1 };
 
     /* set input audio formats */
     formats = ff_make_format_list(sample_fmts);

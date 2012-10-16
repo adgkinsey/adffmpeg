@@ -126,9 +126,9 @@ static int config_input(AVFilterLink *inlink)
     var_values[VAR_IN_H]  = var_values[VAR_IH] = inlink->h;
     var_values[VAR_OUT_W] = var_values[VAR_OW] = NAN;
     var_values[VAR_OUT_H] = var_values[VAR_OH] = NAN;
-    var_values[VAR_A]     = (float) inlink->w / inlink->h;
+    var_values[VAR_A]     = (double) inlink->w / inlink->h;
     var_values[VAR_SAR]   = inlink->sample_aspect_ratio.num ?
-        (float) inlink->sample_aspect_ratio.num / inlink->sample_aspect_ratio.den : 1;
+        (double) inlink->sample_aspect_ratio.num / inlink->sample_aspect_ratio.den : 1;
     var_values[VAR_DAR]   = var_values[VAR_A] * var_values[VAR_SAR];
     var_values[VAR_HSUB]  = 1 << pad->draw.hsub_max;
     var_values[VAR_VSUB]  = 1 << pad->draw.vsub_max;
@@ -388,6 +388,27 @@ static int draw_slice(AVFilterLink *link, int y, int h, int slice_dir)
     return draw_send_bar_slice(link, y, h, slice_dir, -1);
 }
 
+static const AVFilterPad avfilter_vf_pad_inputs[] = {
+    {
+        .name             = "default",
+        .type             = AVMEDIA_TYPE_VIDEO,
+        .config_props     = config_input,
+        .get_video_buffer = get_video_buffer,
+        .start_frame      = start_frame,
+        .draw_slice       = draw_slice,
+    },
+    { NULL }
+};
+
+static const AVFilterPad avfilter_vf_pad_outputs[] = {
+    {
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_VIDEO,
+        .config_props = config_output,
+    },
+    { NULL }
+};
+
 AVFilter avfilter_vf_pad = {
     .name          = "pad",
     .description   = NULL_IF_CONFIG_SMALL("Pad input image to width:height[:x:y[:color]] (default x and y: 0, default color: black)."),
@@ -396,16 +417,7 @@ AVFilter avfilter_vf_pad = {
     .init          = init,
     .query_formats = query_formats,
 
-    .inputs    = (const AVFilterPad[]) {{ .name             = "default",
-                                          .type             = AVMEDIA_TYPE_VIDEO,
-                                          .config_props     = config_input,
-                                          .get_video_buffer = get_video_buffer,
-                                          .start_frame      = start_frame,
-                                          .draw_slice       = draw_slice, },
-                                        { .name = NULL}},
+    .inputs    = avfilter_vf_pad_inputs,
 
-    .outputs   = (const AVFilterPad[]) {{ .name             = "default",
-                                          .type             = AVMEDIA_TYPE_VIDEO,
-                                          .config_props     = config_output, },
-                                        { .name = NULL}},
+    .outputs   = avfilter_vf_pad_outputs,
 };
