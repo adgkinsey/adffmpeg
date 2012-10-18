@@ -622,6 +622,7 @@ static int createPacket(AVFormatContext *avf, AVPacket *pkt, int siz)
     else  {
         pkt->pts = AV_NOPTS_VALUE;
     }
+    pkt->dts = pkt->pts;
     pkt->duration = 1;
     
 #if defined(AD_SIDEDATA_IN_PRIV)
