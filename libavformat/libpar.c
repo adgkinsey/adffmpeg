@@ -591,13 +591,19 @@ static int createPacket(AVFormatContext *avf, AVPacket *pkt, int siz)
         }
     }
     else  {
-        av_new_packet(pkt, siz);
+        if ( ((uint8_t*)fi->frameData + siz) < ((uint8_t*)fi->frameBuffer + MAX_FRAMEBUFFER_SIZE) )  {
+            av_new_packet(pkt, siz);
 
-        if (NULL == pkt->data)  {
-            pkt->size = 0;
+            if (NULL == pkt->data)  {
+                pkt->size = 0;
+                return AVERROR(ENOMEM);
+            }
+            memcpy(pkt->data, fi->frameData, siz);
+        }
+        else  {
+            av_log(avf, AV_LOG_ERROR, "Copying %d bytes would read beyond framebuffer end", siz);
             return AVERROR(ENOMEM);
         }
-        memcpy(pkt->data, fi->frameData, siz);
     }
     pkt->stream_index = st->index;
 
@@ -843,9 +849,7 @@ static int par_read_packet(AVFormatContext * avf, AVPacket * pkt)
         return AVERROR(EAGAIN);
     }
     
-    createPacket(avf, pkt, siz);
-
-    return 0;
+    return createPacket(avf, pkt, siz);
 }
 
 static int par_read_seek(AVFormatContext *avf, int stream,
