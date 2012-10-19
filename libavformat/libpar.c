@@ -66,7 +66,7 @@ void libpar_packet_destroy(struct AVPacket *packet);
 #endif
 
 
-const unsigned int MAX_FRAMEBUFFER_SIZE = 256 * 1024;
+const unsigned int MAX_FRAMEBUFFER_SIZE = 512 * 1024;
 
 
 static void importMetadata(const AVDictionaryEntry *tag, struct PAREncStreamContext *ps)
