@@ -689,7 +689,9 @@ static int mov_read_wfex(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         return 0;
     st = c->fc->streams[c->fc->nb_streams-1];
 
-    ff_get_wav_header(pb, st->codec, atom.size);
+    if (ff_get_wav_header(pb, st->codec, atom.size) < 0) {
+        av_log(c->fc, AV_LOG_WARNING, "get_wav_header failed\n");
+    }
 
     return 0;
 }
@@ -778,14 +780,16 @@ static int mov_read_moof(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     return mov_read_default(c, pb, atom);
 }
 
-static void mov_metadata_creation_time(AVDictionary **metadata, time_t time)
+static void mov_metadata_creation_time(AVDictionary **metadata, int64_t time)
 {
     char buffer[32];
     if (time) {
         struct tm *ptm;
+        time_t timet;
         if(time >= 2082844800)
             time -= 2082844800;  /* seconds between 1904-01-01 and Epoch */
-        ptm = gmtime(&time);
+        timet = time;
+        ptm = gmtime(&timet);
         if (!ptm) return;
         strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", ptm);
         av_dict_set(metadata, "creation_time", buffer, 0);
@@ -799,7 +803,7 @@ static int mov_read_mdhd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     int version;
     char language[4] = {0};
     unsigned lang;
-    time_t creation_time;
+    int64_t creation_time;
 
     if (c->fc->nb_streams < 1)
         return 0;
@@ -834,7 +838,7 @@ static int mov_read_mdhd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
 static int mov_read_mvhd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
-    time_t creation_time;
+    int64_t creation_time;
     int version = avio_r8(pb); /* version */
     avio_rb24(pb); /* flags */
 
@@ -1173,18 +1177,18 @@ enum AVCodecID ff_mov_get_lpcm_codec_id(int bps, int flags)
         }
     } else {
         if (flags & 2) {
-            if      (bps == 8)
+            if      (bps == 8) {
                 // signed integer
                 if (flags & 4)  return AV_CODEC_ID_PCM_S8;
                 else            return AV_CODEC_ID_PCM_U8;
-            else if (bps == 16) return AV_CODEC_ID_PCM_S16BE;
+           }else if (bps == 16) return AV_CODEC_ID_PCM_S16BE;
             else if (bps == 24) return AV_CODEC_ID_PCM_S24BE;
             else if (bps == 32) return AV_CODEC_ID_PCM_S32BE;
         } else {
-            if      (bps == 8)
+            if      (bps == 8) {
                 if (flags & 4)  return AV_CODEC_ID_PCM_S8;
                 else            return AV_CODEC_ID_PCM_U8;
-            else if (bps == 16) return AV_CODEC_ID_PCM_S16LE;
+           }else if (bps == 16) return AV_CODEC_ID_PCM_S16LE;
             else if (bps == 24) return AV_CODEC_ID_PCM_S24LE;
             else if (bps == 32) return AV_CODEC_ID_PCM_S32LE;
         }
@@ -2854,46 +2858,74 @@ static int mov_read_default(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
 static int mov_probe(AVProbeData *p)
 {
-    unsigned int offset;
+    int64_t offset;
     uint32_t tag;
     int score = 0;
+    int moov_offset = -1;
 
     /* check file header */
     offset = 0;
     for (;;) {
         /* ignore invalid offset */
         if ((offset + 8) > (unsigned int)p->buf_size)
-            return score;
+            break;
         tag = AV_RL32(p->buf + offset + 4);
         switch(tag) {
         /* check for obvious tags */
-        case MKTAG('j','P',' ',' '): /* jpeg 2000 signature */
         case MKTAG('m','o','o','v'):
+            moov_offset = offset + 4;
+        case MKTAG('j','P',' ',' '): /* jpeg 2000 signature */
         case MKTAG('m','d','a','t'):
         case MKTAG('p','n','o','t'): /* detect movs with preview pics like ew.mov and april.mov */
         case MKTAG('u','d','t','a'): /* Packet Video PVAuthor adds this and a lot of more junk */
         case MKTAG('f','t','y','p'):
-            return AVPROBE_SCORE_MAX;
+            score  = AVPROBE_SCORE_MAX;
+            offset = FFMAX(4, AV_RB32(p->buf+offset)) + offset;
+            break;
         /* those are more common words, so rate then a bit less */
         case MKTAG('e','d','i','w'): /* xdcam files have reverted first tags */
         case MKTAG('w','i','d','e'):
         case MKTAG('f','r','e','e'):
         case MKTAG('j','u','n','k'):
         case MKTAG('p','i','c','t'):
-            return AVPROBE_SCORE_MAX - 5;
+            score  = FFMAX(score, AVPROBE_SCORE_MAX - 5);
+            offset = FFMAX(4, AV_RB32(p->buf+offset)) + offset;
+            break;
         case MKTAG(0x82,0x82,0x7f,0x7d):
         case MKTAG('s','k','i','p'):
         case MKTAG('u','u','i','d'):
         case MKTAG('p','r','f','l'):
-            offset = AV_RB32(p->buf+offset) + offset;
             /* if we only find those cause probedata is too small at least rate them */
-            score = AVPROBE_SCORE_MAX - 50;
+            score  = FFMAX(score, AVPROBE_SCORE_MAX - 50);
+            offset = FFMAX(4, AV_RB32(p->buf+offset)) + offset;
             break;
         default:
-            /* unrecognized tag */
-            return score;
+            offset = FFMAX(4, AV_RB32(p->buf+offset)) + offset;
         }
     }
+    if(tag > AVPROBE_SCORE_MAX - 50 && moov_offset != -1) {
+        /* moov atom in the header - we should make sure that this is not a
+         * MOV-packed MPEG-PS */
+        offset = moov_offset;
+
+        while(offset < (p->buf_size - 16)){ /* Sufficient space */
+               /* We found an actual hdlr atom */
+            if(AV_RL32(p->buf + offset     ) == MKTAG('h','d','l','r') &&
+               AV_RL32(p->buf + offset +  8) == MKTAG('m','h','l','r') &&
+               AV_RL32(p->buf + offset + 12) == MKTAG('M','P','E','G')){
+                av_log(NULL, AV_LOG_WARNING, "Found media data tag MPEG indicating this is a MOV-packed MPEG-PS.\n");
+                /* We found a media handler reference atom describing an
+                 * MPEG-PS-in-MOV, return a
+                 * low score to force expanding the probe window until
+                 * mpegps_probe finds what it needs */
+                return 5;
+            }else
+                /* Keep looking */
+                offset+=2;
+        }
+    }
+
+    return score;
 }
 
 // must be done after parsing all trak because there's no order requirement

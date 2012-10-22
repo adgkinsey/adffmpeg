@@ -428,6 +428,10 @@ static int copy_metadata(char *outspec, char *inspec, AVFormatContext *oc, AVFor
     if (type_in == 'c' || type_out == 'c')
         o->metadata_chapters_manual = 1;
 
+    /* ic is NULL when just disabling automatic mappings */
+    if (!ic)
+        return 0;
+
 #define METADATA_CHECK_INDEX(index, nb_elems, desc)\
     if ((index) < 0 || (index) >= (nb_elems)) {\
         av_log(NULL, AV_LOG_FATAL, "Invalid %s index %d while processing metadata maps.\n",\
@@ -578,6 +582,9 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
         }
 
         ist->dec = choose_decoder(o, ic, st);
+
+        ist->reinit_filters = -1;
+        MATCH_PER_STREAM_OPT(reinit_filters, i, ist->reinit_filters, ic, st);
 
         switch (dec->codec_type) {
         case AVMEDIA_TYPE_VIDEO:
@@ -1703,7 +1710,9 @@ loop_end:
             av_log(NULL, AV_LOG_FATAL, "Invalid input file index %d while processing metadata maps\n", in_file_index);
             exit(1);
         }
-        copy_metadata(o->metadata_map[i].specifier, *p ? p + 1 : p, oc, in_file_index >= 0 ? input_files[in_file_index]->ctx : NULL, o);
+        copy_metadata(o->metadata_map[i].specifier, *p ? p + 1 : p, oc,
+                      in_file_index >= 0 ?
+                      input_files[in_file_index]->ctx : NULL, o);
     }
 
     /* copy chapters */
@@ -2341,6 +2350,8 @@ const OptionDef options[] = {
         "set profile", "profile" },
     { "filter",         HAS_ARG | OPT_STRING | OPT_SPEC,             { .off = OFFSET(filters) },
         "set stream filterchain", "filter_list" },
+    { "reinit_filter",  HAS_ARG | OPT_INT | OPT_SPEC,                { .off = OFFSET(reinit_filters) },
+        "reinit filtergraph on input parameter changes", "" },
     { "filter_complex", HAS_ARG | OPT_EXPERT,                        { .func_arg = opt_filter_complex },
         "create a complex filtergraph", "graph_description" },
     { "stats",          OPT_BOOL,                                    { &print_stats },

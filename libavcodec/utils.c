@@ -246,11 +246,13 @@ void avcodec_align_dimensions2(AVCodecContext *s, int *width, int *height,
             w_align = 64;
             h_align = 64;
         }
+        break;
     case AV_PIX_FMT_RGB555:
         if (s->codec_id == AV_CODEC_ID_RPZA) {
             w_align = 4;
             h_align = 4;
         }
+        break;
     case AV_PIX_FMT_PAL8:
     case AV_PIX_FMT_BGR8:
     case AV_PIX_FMT_RGB8:
@@ -798,6 +800,27 @@ int attribute_align_arg avcodec_open(AVCodecContext *avctx, AVCodec *codec)
 }
 #endif
 
+int attribute_align_arg ff_codec_open2_recursive(AVCodecContext *avctx, const AVCodec *codec, AVDictionary **options)
+{
+    int ret = 0;
+
+    entangled_thread_counter--;
+    /* Release any user-supplied mutex. */
+    if (ff_lockmgr_cb) {
+        (*ff_lockmgr_cb)(&codec_mutex, AV_LOCK_RELEASE);
+    }
+
+    ret = avcodec_open2(avctx, codec, options);
+
+    /* If there is a user-supplied mutex locking routine, call it. */
+    if (ff_lockmgr_cb) {
+        if ((*ff_lockmgr_cb)(&codec_mutex, AV_LOCK_OBTAIN))
+            return -1;
+    }
+    entangled_thread_counter++;
+    return ret;
+}
+
 int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *codec, AVDictionary **options)
 {
     int ret = 0;
@@ -807,12 +830,12 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
         return 0;
 
     if ((!codec && !avctx->codec)) {
-        av_log(avctx, AV_LOG_ERROR, "No codec provided to avcodec_open2().\n");
+        av_log(avctx, AV_LOG_ERROR, "No codec provided to avcodec_open2()\n");
         return AVERROR(EINVAL);
     }
     if ((codec && avctx->codec && codec != avctx->codec)) {
         av_log(avctx, AV_LOG_ERROR, "This AVCodecContext was allocated for %s, "
-                                    "but %s passed to avcodec_open2().\n", avctx->codec->name, codec->name);
+                                    "but %s passed to avcodec_open2()\n", avctx->codec->name, codec->name);
         return AVERROR(EINVAL);
     }
     if (!codec)
@@ -832,7 +855,7 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
 
     entangled_thread_counter++;
     if (entangled_thread_counter != 1) {
-        av_log(avctx, AV_LOG_ERROR, "insufficient thread locking around avcodec_open/close()\n");
+        av_log(avctx, AV_LOG_ERROR, "Insufficient thread locking around avcodec_open/close()\n");
         ret = -1;
         goto end;
     }
@@ -865,7 +888,9 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
 
     if (codec->capabilities & CODEC_CAP_EXPERIMENTAL)
         if (avctx->strict_std_compliance > FF_COMPLIANCE_EXPERIMENTAL) {
-            av_log(avctx, AV_LOG_ERROR, "Codec is experimental but experimental codecs are not enabled, try -strict -2\n");
+            av_log(avctx, AV_LOG_ERROR,
+                   "Codec %s is experimental but experimental codecs are not enabled, try -strict %d\n",
+                   codec->name, FF_COMPLIANCE_EXPERIMENTAL);
             ret = -1;
             goto free_and_end;
         }
@@ -882,7 +907,7 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
     if ((avctx->coded_width || avctx->coded_height || avctx->width || avctx->height)
         && (  av_image_check_size(avctx->coded_width, avctx->coded_height, 0, avctx) < 0
            || av_image_check_size(avctx->width,       avctx->height,       0, avctx) < 0)) {
-        av_log(avctx, AV_LOG_WARNING, "ignoring invalid width/height values\n");
+        av_log(avctx, AV_LOG_WARNING, "Ignoring invalid width/height values\n");
         avcodec_set_dimensions(avctx, 0, 0);
     }
 
@@ -905,7 +930,7 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
     }
     if (avctx->codec_id != codec->id || (avctx->codec_type != codec->type
                                          && avctx->codec_type != AVMEDIA_TYPE_ATTACHMENT)) {
-        av_log(avctx, AV_LOG_ERROR, "codec type or id mismatches\n");
+        av_log(avctx, AV_LOG_ERROR, "Codec type or id mismatches\n");
         ret = AVERROR(EINVAL);
         goto free_and_end;
     }
@@ -960,7 +985,10 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
                 }
             }
             if (avctx->codec->sample_fmts[i] == AV_SAMPLE_FMT_NONE) {
-                av_log(avctx, AV_LOG_ERROR, "Specified sample_fmt is not supported.\n");
+                char buf[128];
+                snprintf(buf, sizeof(buf), "%d", avctx->sample_fmt);
+                av_log(avctx, AV_LOG_ERROR, "Specified sample format %s is invalid or not supported\n",
+                       (char *)av_x_if_null(av_get_sample_fmt_name(avctx->sample_fmt), buf));
                 ret = AVERROR(EINVAL);
                 goto free_and_end;
             }
@@ -972,7 +1000,10 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
             if (avctx->codec->pix_fmts[i] == AV_PIX_FMT_NONE
                 && !((avctx->codec_id == AV_CODEC_ID_MJPEG || avctx->codec_id == AV_CODEC_ID_LJPEG)
                      && avctx->strict_std_compliance <= FF_COMPLIANCE_UNOFFICIAL)) {
-                av_log(avctx, AV_LOG_ERROR, "Specified pix_fmt is not supported\n");
+                char buf[128];
+                snprintf(buf, sizeof(buf), "%d", avctx->pix_fmt);
+                av_log(avctx, AV_LOG_ERROR, "Specified pixel format %s is invalid or not supported\n",
+                       (char *)av_x_if_null(av_get_pix_fmt_name(avctx->pix_fmt), buf));
                 ret = AVERROR(EINVAL);
                 goto free_and_end;
             }
@@ -982,28 +1013,36 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
                 if (avctx->sample_rate == avctx->codec->supported_samplerates[i])
                     break;
             if (avctx->codec->supported_samplerates[i] == 0) {
-                av_log(avctx, AV_LOG_ERROR, "Specified sample_rate is not supported\n");
+                av_log(avctx, AV_LOG_ERROR, "Specified sample rate %d is not supported\n",
+                       avctx->sample_rate);
                 ret = AVERROR(EINVAL);
                 goto free_and_end;
             }
         }
         if (avctx->codec->channel_layouts) {
             if (!avctx->channel_layout) {
-                av_log(avctx, AV_LOG_WARNING, "channel_layout not specified\n");
+                av_log(avctx, AV_LOG_WARNING, "Channel layout not specified\n");
             } else {
                 for (i = 0; avctx->codec->channel_layouts[i] != 0; i++)
                     if (avctx->channel_layout == avctx->codec->channel_layouts[i])
                         break;
                 if (avctx->codec->channel_layouts[i] == 0) {
-                    av_log(avctx, AV_LOG_ERROR, "Specified channel_layout is not supported\n");
+                    char buf[512];
+                    av_get_channel_layout_string(buf, sizeof(buf), -1, avctx->channel_layout);
+                    av_log(avctx, AV_LOG_ERROR, "Specified channel layout '%s' is not supported\n", buf);
                     ret = AVERROR(EINVAL);
                     goto free_and_end;
                 }
             }
         }
         if (avctx->channel_layout && avctx->channels) {
-            if (av_get_channel_layout_nb_channels(avctx->channel_layout) != avctx->channels) {
-                av_log(avctx, AV_LOG_ERROR, "channel layout does not match number of channels\n");
+            int channels = av_get_channel_layout_nb_channels(avctx->channel_layout);
+            if (channels != avctx->channels) {
+                char buf[512];
+                av_get_channel_layout_string(buf, sizeof(buf), -1, avctx->channel_layout);
+                av_log(avctx, AV_LOG_ERROR,
+                       "Channel layout '%s' with %d channels does not match number of specified channels %d\n",
+                       buf, channels, avctx->channels);
                 ret = AVERROR(EINVAL);
                 goto free_and_end;
             }
@@ -1036,8 +1075,12 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
             if (!avctx->channels)
                 avctx->channels = channels;
             else if (channels != avctx->channels) {
+                char buf[512];
+                av_get_channel_layout_string(buf, sizeof(buf), -1, avctx->channel_layout);
                 av_log(avctx, AV_LOG_WARNING,
-                       "channel layout does not match number of channels\n");
+                       "Channel layout '%s' with %d channels does not match specified number of channels %d: "
+                       "ignoring specified channel layout\n",
+                       buf, channels, avctx->channels);
                 avctx->channel_layout = 0;
             }
         }
@@ -1284,7 +1327,7 @@ int attribute_align_arg avcodec_encode_audio(AVCodecContext *avctx,
                                              const short *samples)
 {
     AVPacket pkt;
-    AVFrame frame0;
+    AVFrame frame0 = { 0 };
     AVFrame *frame;
     int ret, samples_size, got_packet;
 
@@ -1551,6 +1594,31 @@ static void apply_param_change(AVCodecContext *avctx, AVPacket *avpkt)
     }
 }
 
+static int add_metadata_from_side_data(AVCodecContext *avctx, AVFrame *frame)
+{
+    int size, ret = 0;
+    const uint8_t *side_metadata;
+    const uint8_t *end;
+
+    av_dict_free(&avctx->metadata);
+    side_metadata = av_packet_get_side_data(avctx->pkt,
+                                            AV_PKT_DATA_STRINGS_METADATA, &size);
+    if (!side_metadata)
+        goto end;
+    end = side_metadata + size;
+    while (side_metadata < end) {
+        const uint8_t *key = side_metadata;
+        const uint8_t *val = side_metadata + strlen(key) + 1;
+        int ret = av_dict_set(&frame->metadata, key, val, 0);
+        if (ret < 0)
+            break;
+        side_metadata = val + strlen(val) + 1;
+    }
+end:
+    avctx->metadata = frame->metadata;
+    return ret;
+}
+
 int attribute_align_arg avcodec_decode_video2(AVCodecContext *avctx, AVFrame *picture,
                                               int *got_picture_ptr,
                                               const AVPacket *avpkt)
@@ -1589,6 +1657,7 @@ int attribute_align_arg avcodec_decode_video2(AVCodecContext *avctx, AVFrame *pi
             if (!picture->height)                  picture->height              = avctx->height;
             if (picture->format == AV_PIX_FMT_NONE)   picture->format              = avctx->pix_fmt;
         }
+        add_metadata_from_side_data(avctx, picture);
 
         emms_c(); //needed to avoid an emms_c() call before every return;
 
@@ -1708,6 +1777,7 @@ int attribute_align_arg avcodec_decode_audio4(AVCodecContext *avctx,
             if (!frame->sample_rate)
                 frame->sample_rate = avctx->sample_rate;
         }
+        add_metadata_from_side_data(avctx, frame);
 
         side= av_packet_get_side_data(avctx->pkt, AV_PKT_DATA_SKIP_SAMPLES, &side_size);
         if(side && side_size>=10) {
@@ -1809,6 +1879,27 @@ void avsubtitle_free(AVSubtitle *sub)
     memset(sub, 0, sizeof(AVSubtitle));
 }
 
+av_cold int ff_codec_close_recursive(AVCodecContext *avctx)
+{
+    int ret = 0;
+
+    entangled_thread_counter--;
+    /* Release any user-supplied mutex. */
+    if (ff_lockmgr_cb) {
+        (*ff_lockmgr_cb)(&codec_mutex, AV_LOCK_RELEASE);
+    }
+
+    ret = avcodec_close(avctx);
+
+    /* If there is a user-supplied mutex locking routine, call it. */
+    if (ff_lockmgr_cb) {
+        if ((*ff_lockmgr_cb)(&codec_mutex, AV_LOCK_OBTAIN))
+            return -1;
+    }
+    entangled_thread_counter++;
+    return ret;
+}
+
 av_cold int avcodec_close(AVCodecContext *avctx)
 {
     /* If there is a user-supplied mutex locking routine, call it. */
@@ -1839,6 +1930,7 @@ av_cold int avcodec_close(AVCodecContext *avctx)
         avctx->internal->byte_buffer_size = 0;
         av_freep(&avctx->internal->byte_buffer);
         av_freep(&avctx->internal);
+        av_dict_free(&avctx->metadata);
     }
 
     if (avctx->priv_data && avctx->codec && avctx->codec->priv_class)

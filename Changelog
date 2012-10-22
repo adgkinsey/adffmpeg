@@ -1,7 +1,7 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
-version next:
+version <next>:
 
 - stream disposition information printing in ffprobe
 - filter for loudness analysis following EBU R128
@@ -12,6 +12,9 @@ version next:
 - DTS-HD demuxer
 - remove -same_quant, it hasn't worked for years
 - X-Face image encoder and decoder
+- metadata (INFO tag) support in WAV muxer
+- subtitles raw text decoder
+- support for building DLLs using MSVC
 
 
 version 1.0:
@@ -78,6 +81,7 @@ version 1.0:
 - WebVTT demuxer and decoder (simple tags supported)
 - RTP packetization of JPEG
 - faststart option in the MOV/MP4 muxer
+- support for building with MSVC
 
 
 version 0.11:

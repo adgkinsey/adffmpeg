@@ -154,8 +154,8 @@ OBJS-$(CONFIG_LOAS_DEMUXER)              += loasdec.o
 OBJS-$(CONFIG_LXF_DEMUXER)               += lxfdec.o
 OBJS-$(CONFIG_M4V_DEMUXER)               += m4vdec.o rawdec.o
 OBJS-$(CONFIG_M4V_MUXER)                 += rawenc.o
-OBJS-$(CONFIG_MATROSKA_DEMUXER)          += matroskadec.o matroska.o \
-                                            isom.o rmdec.o rm.o
+OBJS-$(CONFIG_MATROSKA_DEMUXER)          += matroskadec.o matroska.o  \
+                                            isom.o rmsipr.o
 OBJS-$(CONFIG_MATROSKA_MUXER)            += matroskaenc.o matroska.o \
                                             isom.o avc.o \
                                             flacenc_header.o avlanguage.o
@@ -267,7 +267,7 @@ OBJS-$(CONFIG_RAWVIDEO_DEMUXER)          += rawvideodec.o rawdec.o
 OBJS-$(CONFIG_RAWVIDEO_MUXER)            += rawenc.o
 OBJS-$(CONFIG_REALTEXT_DEMUXER)          += realtextdec.o
 OBJS-$(CONFIG_RL2_DEMUXER)               += rl2.o
-OBJS-$(CONFIG_RM_DEMUXER)                += rmdec.o rm.o
+OBJS-$(CONFIG_RM_DEMUXER)                += rmdec.o rm.o rmsipr.o
 OBJS-$(CONFIG_RM_MUXER)                  += rmenc.o rm.o
 OBJS-$(CONFIG_ROQ_DEMUXER)               += idroqdec.o
 OBJS-$(CONFIG_ROQ_MUXER)                 += idroqenc.o rawenc.o
@@ -353,9 +353,9 @@ OBJS-$(CONFIG_VMD_DEMUXER)               += sierravmd.o
 OBJS-$(CONFIG_VOC_DEMUXER)               += vocdec.o voc.o
 OBJS-$(CONFIG_VOC_MUXER)                 += vocenc.o voc.o
 OBJS-$(CONFIG_VQF_DEMUXER)               += vqf.o
-OBJS-$(CONFIG_W64_DEMUXER)               += wav.o pcm.o
-OBJS-$(CONFIG_WAV_DEMUXER)               += wav.o pcm.o
-OBJS-$(CONFIG_WAV_MUXER)                 += wav.o
+OBJS-$(CONFIG_W64_DEMUXER)               += wavdec.o pcm.o
+OBJS-$(CONFIG_WAV_DEMUXER)               += wavdec.o pcm.o
+OBJS-$(CONFIG_WAV_MUXER)                 += wavenc.o
 OBJS-$(CONFIG_WC3_DEMUXER)               += wc3movie.o
 OBJS-$(CONFIG_WEBM_MUXER)                += matroskaenc.o matroska.o \
                                             isom.o avc.o \

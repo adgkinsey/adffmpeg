@@ -249,9 +249,11 @@ int ff_start_frame(AVFilterLink *link, AVFilterBufferRef *picref)
 
     FF_TPRINTF_START(NULL, start_frame); ff_tlog_link(NULL, link, 0); ff_tlog(NULL, " "); ff_tlog_ref(NULL, picref, 1);
 
-    av_assert1(picref->format                     == link->format);
-    av_assert1(picref->video->w                   == link->w);
-    av_assert1(picref->video->h                   == link->h);
+    if (strcmp(link->dst->filter->name, "scale")) {
+        av_assert1(picref->format                     == link->format);
+        av_assert1(picref->video->w                   == link->w);
+        av_assert1(picref->video->h                   == link->h);
+    }
 
     if (link->closed) {
         avfilter_unref_buffer(picref);
@@ -284,7 +286,7 @@ int ff_start_frame(AVFilterLink *link, AVFilterBufferRef *picref)
         avfilter_copy_buffer_ref_props(link->cur_buf, link->src_buf);
 
         /* copy palette if required */
-        if (av_pix_fmt_descriptors[link->format].flags & PIX_FMT_PAL)
+        if (av_pix_fmt_desc_get(link->format)->flags & PIX_FMT_PAL)
             memcpy(link->cur_buf->data[1], link->src_buf-> data[1], AVPALETTE_SIZE);
     }
     else

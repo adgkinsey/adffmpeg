@@ -945,6 +945,12 @@ enum AVPacketSideDataType {
      * @endcode
      */
     AV_PKT_DATA_JP_DUALMONO,
+
+    /**
+     * A list of zero terminated key/value strings. There is no end marker for
+     * the list, so it is required to rely on the side data size to stop.
+     */
+    AV_PKT_DATA_STRINGS_METADATA,
     
 #ifdef AD_SIDEDATA
     AV_PKT_DATA_AD_FRAME=0x4000,
@@ -1075,7 +1081,7 @@ typedef struct AVFrame {
      * extended_data must be used by the decoder in order to access all
      * channels.
      *
-     * encoding: unused
+     * encoding: set by user
      * decoding: set by AVCodecContext.get_buffer()
      */
     uint8_t **extended_data;
@@ -3100,6 +3106,13 @@ typedef struct AVCodecContext {
     int64_t pts_correction_num_faulty_dts; /// Number of incorrect DTS values so far
     int64_t pts_correction_last_pts;       /// PTS of the last frame
     int64_t pts_correction_last_dts;       /// DTS of the last frame
+
+    /**
+     * Current frame metadata.
+     * - decoding: maintained and used by libavcodec, not intended to be used by user apps
+     * - encoding: unused
+     */
+    AVDictionary *metadata;
 } AVCodecContext;
 
 AVRational av_codec_get_pkt_timebase         (const AVCodecContext *avctx);

@@ -2475,6 +2475,7 @@ static int tb_unreliable(AVCodecContext *c){
        || c->time_base.den <    5L*c->time_base.num
 /*       || c->codec_tag == AV_RL32("DIVX")
        || c->codec_tag == AV_RL32("XVID")*/
+       || c->codec_tag == AV_RL32("mp4v")
        || c->codec_id == AV_CODEC_ID_MPEG2VIDEO
        || c->codec_id == AV_CODEC_ID_H264
        )
@@ -3016,6 +3017,9 @@ void ff_free_stream(AVFormatContext *s, AVStream *st){
 void avformat_free_context(AVFormatContext *s)
 {
     int i;
+
+    if (!s)
+        return;
 
     av_opt_free(s);
     if (s->iformat && s->iformat->priv_class && s->priv_data)

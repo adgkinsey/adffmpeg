@@ -75,6 +75,7 @@ OBJS = adler32.o                                                        \
        lfg.o                                                            \
        lls.o                                                            \
        log.o                                                            \
+       log2.o                                                           \
        log2_tab.o                                                       \
        lzo.o                                                            \
        mathematics.o                                                    \
@@ -89,6 +90,7 @@ OBJS = adler32.o                                                        \
        rc4.o                                                            \
        samplefmt.o                                                      \
        sha.o                                                            \
+       sqrt_tab.o                                                       \
        time.o                                                           \
        timecode.o                                                       \
        tree.o                                                           \
@@ -96,9 +98,8 @@ OBJS = adler32.o                                                        \
        xga_font_data.o                                                  \
        xtea.o                                                           \
 
-OBJS-$(HAVE_BROKEN_SNPRINTF) += ../compat/msvcrt/snprintf.o
 
-OBJS-$(HAVE_MSVCRT) += ../compat/strtod.o
+OBJS += $(COMPAT_OBJS:%=../compat/%)
 
 SKIPHEADERS          = old_pix_fmts.h
 

@@ -37,7 +37,7 @@ enum AVPixelFormat choose_pixel_fmt(AVStream *st, AVCodec *codec, enum AVPixelFo
 {
     if (codec && codec->pix_fmts) {
         const enum AVPixelFormat *p = codec->pix_fmts;
-        int has_alpha= av_pix_fmt_descriptors[target].nb_components % 2 == 0;
+        int has_alpha= av_pix_fmt_desc_get(target)->nb_components % 2 == 0;
         enum AVPixelFormat best= AV_PIX_FMT_NONE;
         if (st->codec->strict_std_compliance <= FF_COMPLIANCE_UNOFFICIAL) {
             if (st->codec->codec_id == AV_CODEC_ID_MJPEG) {
@@ -56,9 +56,9 @@ enum AVPixelFormat choose_pixel_fmt(AVStream *st, AVCodec *codec, enum AVPixelFo
             if (target != AV_PIX_FMT_NONE)
                 av_log(NULL, AV_LOG_WARNING,
                        "Incompatible pixel format '%s' for codec '%s', auto-selecting format '%s'\n",
-                       av_pix_fmt_descriptors[target].name,
+                       av_get_pix_fmt_name(target),
                        codec->name,
-                       av_pix_fmt_descriptors[best].name);
+                       av_get_pix_fmt_name(best));
             return best;
         }
     }
@@ -558,10 +558,10 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
     int pad_idx = in->pad_idx;
     int ret;
 
-    if (!ist->framerate.num) {
+    if (!ist->framerate.num && ist->st->codec->ticks_per_frame>1) {
         AVRational codec_fr = av_inv_q(ist->st->codec->time_base);
         codec_fr.den *= ist->st->codec->ticks_per_frame;
-        if(av_q2d(codec_fr) < av_q2d(fr)*0.7)
+        if(codec_fr.num>0 && codec_fr.den>0 && av_q2d(codec_fr) < av_q2d(fr)*0.7)
             fr = codec_fr;
     }
 
