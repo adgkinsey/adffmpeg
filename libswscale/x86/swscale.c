@@ -54,22 +54,22 @@ DECLARE_ASM_CONST(8, uint64_t, b15Mask)=   0x001F001F001F001FLL;
 DECLARE_ASM_CONST(8, uint64_t, g15Mask)=   0x03E003E003E003E0LL;
 DECLARE_ASM_CONST(8, uint64_t, r15Mask)=   0x7C007C007C007C00LL;
 
-DECLARE_ALIGNED(8, const uint64_t __attribute__((visibility("hidden"))), ff_M24A)         = 0x00FF0000FF0000FFLL;
-DECLARE_ALIGNED(8, const uint64_t __attribute__((visibility("hidden"))), ff_M24B)         = 0xFF0000FF0000FF00LL;
-DECLARE_ALIGNED(8, const uint64_t __attribute__((visibility("hidden"))), ff_M24C)         = 0x0000FF0000FF0000LL;
+DECLARE_ALIGNED(8, const uint64_t, ff_M24A)         = 0x00FF0000FF0000FFLL;
+DECLARE_ALIGNED(8, const uint64_t, ff_M24B)         = 0xFF0000FF0000FF00LL;
+DECLARE_ALIGNED(8, const uint64_t, ff_M24C)         = 0x0000FF0000FF0000LL;
 
 #ifdef FAST_BGR2YV12
-DECLARE_ALIGNED(8, const uint64_t __attribute__((visibility("hidden"))), ff_bgr2YCoeff)   = 0x000000210041000DULL;
-DECLARE_ALIGNED(8, const uint64_t __attribute__((visibility("hidden"))), ff_bgr2UCoeff)   = 0x0000FFEEFFDC0038ULL;
-DECLARE_ALIGNED(8, const uint64_t __attribute__((visibility("hidden"))), ff_bgr2VCoeff)   = 0x00000038FFD2FFF8ULL;
+DECLARE_ALIGNED(8, const uint64_t, ff_bgr2YCoeff)   = 0x000000210041000DULL;
+DECLARE_ALIGNED(8, const uint64_t, ff_bgr2UCoeff)   = 0x0000FFEEFFDC0038ULL;
+DECLARE_ALIGNED(8, const uint64_t, ff_bgr2VCoeff)   = 0x00000038FFD2FFF8ULL;
 #else
-DECLARE_ALIGNED(8, const uint64_t __attribute__((visibility("hidden"))), ff_bgr2YCoeff)   = 0x000020E540830C8BULL;
-DECLARE_ALIGNED(8, const uint64_t __attribute__((visibility("hidden"))), ff_bgr2UCoeff)   = 0x0000ED0FDAC23831ULL;
-DECLARE_ALIGNED(8, const uint64_t __attribute__((visibility("hidden"))), ff_bgr2VCoeff)   = 0x00003831D0E6F6EAULL;
+DECLARE_ALIGNED(8, const uint64_t, ff_bgr2YCoeff)   = 0x000020E540830C8BULL;
+DECLARE_ALIGNED(8, const uint64_t, ff_bgr2UCoeff)   = 0x0000ED0FDAC23831ULL;
+DECLARE_ALIGNED(8, const uint64_t, ff_bgr2VCoeff)   = 0x00003831D0E6F6EAULL;
 #endif /* FAST_BGR2YV12 */
-DECLARE_ALIGNED(8, const uint64_t __attribute__((visibility("hidden"))), ff_bgr2YOffset)  = 0x1010101010101010ULL;
-DECLARE_ALIGNED(8, const uint64_t __attribute__((visibility("hidden"))), ff_bgr2UVOffset) = 0x8080808080808080ULL;
-DECLARE_ALIGNED(8, const uint64_t __attribute__((visibility("hidden"))), ff_w1111)        = 0x0001000100010001ULL;
+DECLARE_ALIGNED(8, const uint64_t, ff_bgr2YOffset)  = 0x1010101010101010ULL;
+DECLARE_ALIGNED(8, const uint64_t, ff_bgr2UVOffset) = 0x8080808080808080ULL;
+DECLARE_ALIGNED(8, const uint64_t, ff_w1111)        = 0x0001000100010001ULL;
 
 
 //MMX versions
