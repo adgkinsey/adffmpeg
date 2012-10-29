@@ -849,14 +849,14 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
 
     /* If there is a user-supplied mutex locking routine, call it. */
     if (ff_lockmgr_cb) {
-        if ((*ff_lockmgr_cb)(&codec_mutex, AV_LOCK_OBTAIN))
-            return -1;
+        if ((ret = (*ff_lockmgr_cb)(&codec_mutex, AV_LOCK_OBTAIN)) < 0)
+            return ret;
     }
 
     entangled_thread_counter++;
     if (entangled_thread_counter != 1) {
         av_log(avctx, AV_LOG_ERROR, "Insufficient thread locking around avcodec_open/close()\n");
-        ret = -1;
+        ret = AVERROR(EINVAL);
         goto end;
     }
 
@@ -885,15 +885,6 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
     }
     if ((ret = av_opt_set_dict(avctx, &tmp)) < 0)
         goto free_and_end;
-
-    if (codec->capabilities & CODEC_CAP_EXPERIMENTAL)
-        if (avctx->strict_std_compliance > FF_COMPLIANCE_EXPERIMENTAL) {
-            av_log(avctx, AV_LOG_ERROR,
-                   "Codec %s is experimental but experimental codecs are not enabled, try -strict %d\n",
-                   codec->name, FF_COMPLIANCE_EXPERIMENTAL);
-            ret = -1;
-            goto free_and_end;
-        }
 
     //We only call avcodec_set_dimensions() for non h264 codecs so as not to overwrite previously setup dimensions
     if (!( avctx->coded_width && avctx->coded_height && avctx->width && avctx->height && avctx->codec_id == AV_CODEC_ID_H264)){
@@ -936,6 +927,22 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
     }
     avctx->frame_number = 0;
     avctx->codec_descriptor = avcodec_descriptor_get(avctx->codec_id);
+
+    if (avctx->codec->capabilities & CODEC_CAP_EXPERIMENTAL &&
+        avctx->strict_std_compliance > FF_COMPLIANCE_EXPERIMENTAL) {
+        const char *codec_string = av_codec_is_encoder(codec) ? "encoder" : "decoder";
+        AVCodec *codec2;
+        av_log(NULL, AV_LOG_ERROR,
+               "The %s '%s' is experimental but experimental codecs are not enabled, "
+               "add '-strict %d' if you want to use it.\n",
+               codec_string, codec->name, FF_COMPLIANCE_EXPERIMENTAL);
+        codec2 = av_codec_is_encoder(codec) ? avcodec_find_encoder(codec->id) : avcodec_find_decoder(codec->id);
+        if (!(codec2->capabilities & CODEC_CAP_EXPERIMENTAL))
+            av_log(NULL, AV_LOG_ERROR, "Alternatively use the non experimental %s '%s'.\n",
+                codec_string, codec2->name);
+        ret = AVERROR_EXPERIMENTAL;
+        goto free_and_end;
+    }
 
     if (avctx->codec_type == AVMEDIA_TYPE_AUDIO &&
         (!avctx->time_base.num || !avctx->time_base.den)) {
@@ -1321,7 +1328,7 @@ end:
     return ret;
 }
 
-#if FF_API_OLD_DECODE_AUDIO
+#if FF_API_OLD_ENCODE_AUDIO
 int attribute_align_arg avcodec_encode_audio(AVCodecContext *avctx,
                                              uint8_t *buf, int buf_size,
                                              const short *samples)
@@ -1636,6 +1643,8 @@ int attribute_align_arg avcodec_decode_video2(AVCodecContext *avctx, AVFrame *pi
     if ((avctx->coded_width || avctx->coded_height) && av_image_check_size(avctx->coded_width, avctx->coded_height, 0, avctx))
         return AVERROR(EINVAL);
 
+    avcodec_get_frame_defaults(picture);
+
     if ((avctx->codec->capabilities & CODEC_CAP_DELAY) || avpkt->size || (avctx->active_thread_type & FF_THREAD_FRAME)) {
         int did_split = av_packet_split_side_data(&tmp);
         apply_param_change(avctx, &tmp);
@@ -1752,6 +1761,8 @@ int attribute_align_arg avcodec_decode_audio4(AVCodecContext *avctx,
         return AVERROR(EINVAL);
     }
 
+    avcodec_get_frame_defaults(frame);
+
     if ((avctx->codec->capabilities & CODEC_CAP_DELAY) || avpkt->size) {
         uint8_t *side;
         int side_size;
@@ -1841,22 +1852,39 @@ int avcodec_decode_subtitle2(AVCodecContext *avctx, AVSubtitle *sub,
                              int *got_sub_ptr,
                              AVPacket *avpkt)
 {
-    int ret;
+    int ret = 0;
 
     if (avctx->codec->type != AVMEDIA_TYPE_SUBTITLE) {
         av_log(avctx, AV_LOG_ERROR, "Invalid media type for subtitles\n");
         return AVERROR(EINVAL);
     }
 
-    avctx->pkt = avpkt;
     *got_sub_ptr = 0;
     avcodec_get_subtitle_defaults(sub);
+
+    if (avpkt->size) {
+        AVPacket tmp = *avpkt;
+        int did_split = av_packet_split_side_data(&tmp);
+        //apply_param_change(avctx, &tmp);
+
+        avctx->pkt = &tmp;
+
     if (avctx->pkt_timebase.den && avpkt->pts != AV_NOPTS_VALUE)
         sub->pts = av_rescale_q(avpkt->pts,
                                 avctx->pkt_timebase, AV_TIME_BASE_Q);
-    ret = avctx->codec->decode(avctx, sub, got_sub_ptr, avpkt);
+        ret = avctx->codec->decode(avctx, sub, got_sub_ptr, &tmp);
+
+        avctx->pkt = NULL;
+        if (did_split) {
+            ff_packet_free_side_data(&tmp);
+            if(ret == tmp.size)
+                ret = avpkt->size;
+        }
+
     if (*got_sub_ptr)
         avctx->frame_number++;
+    }
+
     return ret;
 }
 
@@ -1961,13 +1989,14 @@ static enum AVCodecID remap_deprecated_codec_id(enum AVCodecID id)
     }
 }
 
-AVCodec *avcodec_find_encoder(enum AVCodecID id)
+static AVCodec *find_encdec(enum AVCodecID id, int encoder)
 {
     AVCodec *p, *experimental = NULL;
     p = first_avcodec;
     id= remap_deprecated_codec_id(id);
     while (p) {
-        if (av_codec_is_encoder(p) && p->id == id) {
+        if ((encoder ? av_codec_is_encoder(p) : av_codec_is_decoder(p)) &&
+            p->id == id) {
             if (p->capabilities & CODEC_CAP_EXPERIMENTAL && !experimental) {
                 experimental = p;
             } else
@@ -1976,6 +2005,11 @@ AVCodec *avcodec_find_encoder(enum AVCodecID id)
         p = p->next;
     }
     return experimental;
+}
+
+AVCodec *avcodec_find_encoder(enum AVCodecID id)
+{
+    return find_encdec(id, 1);
 }
 
 AVCodec *avcodec_find_encoder_by_name(const char *name)
@@ -1994,19 +2028,7 @@ AVCodec *avcodec_find_encoder_by_name(const char *name)
 
 AVCodec *avcodec_find_decoder(enum AVCodecID id)
 {
-    AVCodec *p, *experimental=NULL;
-    p = first_avcodec;
-    id= remap_deprecated_codec_id(id);
-    while (p) {
-        if (av_codec_is_decoder(p) && p->id == id) {
-            if (p->capabilities & CODEC_CAP_EXPERIMENTAL && !experimental) {
-                experimental = p;
-            } else
-                return p;
-        }
-        p = p->next;
-    }
-    return experimental;
+    return find_encdec(id, 0);
 }
 
 AVCodec *avcodec_find_decoder_by_name(const char *name)

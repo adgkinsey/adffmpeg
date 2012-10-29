@@ -951,6 +951,17 @@ enum AVPacketSideDataType {
      * the list, so it is required to rely on the side data size to stop.
      */
     AV_PKT_DATA_STRINGS_METADATA,
+
+    /**
+     * Subtitle event position
+     * @code
+     * u32le x1
+     * u32le y1
+     * u32le x2
+     * u32le y2
+     * @endcode
+     */
+    AV_PKT_DATA_SUBTITLE_POSITION,
     
 #ifdef AD_SIDEDATA
     AV_PKT_DATA_AD_FRAME=0x4000,
@@ -1616,6 +1627,8 @@ typedef struct AVCodecContext {
     int ticks_per_frame;
 
     /**
+     * Codec delay.
+     *
      * Encoding: Number of frames delay there will be from the encoder input to
      *           the decoder output. (we assume the decoder matches the spec)
      * Decoding: Number of frames delay in addition to what a standard decoder
@@ -2258,7 +2271,13 @@ typedef struct AVCodecContext {
 
     /* The following data should not be initialized. */
     /**
-     * Samples per packet, initialized when calling 'init'.
+     * Number of samples per channel in an audio frame.
+     *
+     * - encoding: set by libavcodec in avcodec_open2(). Each submitted frame
+     *   except the last must contain exactly frame_size samples per channel.
+     *   May be 0 when the codec has CODEC_CAP_VARIABLE_FRAME_SIZE set, then the
+     *   frame size is not restricted.
+     * - decoding: may be set by some decoders to indicate constant frame size
      */
     int frame_size;
 
