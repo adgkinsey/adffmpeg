@@ -159,8 +159,11 @@ static int opt_pad(void *optctx, const char *opt, const char *arg)
 
 static int opt_sameq(void *optctx, const char *opt, const char *arg)
 {
-    av_log(NULL, AV_LOG_WARNING, "Ignoring option '%s'\n", opt);
-    return 0;
+    av_log(NULL, AV_LOG_ERROR, "Option '%s' was removed. "
+           "If you are looking for an option to preserve the quality (which is not "
+           "what -%s was for), use -qscale 0 or an equivalent quality factor option.\n",
+           opt, opt);
+    return AVERROR(EINVAL);
 }
 
 static int opt_video_channel(void *optctx, const char *opt, const char *arg)
@@ -368,6 +371,7 @@ static int opt_map_channel(void *optctx, const char *opt, const char *arg)
 
 /**
  * Parse a metadata specifier passed as 'arg' parameter.
+ * @param arg  metadata string to parse
  * @param type metadata type is written here -- g(lobal)/s(tream)/c(hapter)/p(rogram)
  * @param index for type c/p, chapter/program index is written here
  * @param stream_spec for type s, the stream specifier is written here

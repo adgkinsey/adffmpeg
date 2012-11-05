@@ -907,8 +907,7 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
     if (av_codec_is_decoder(codec))
         av_freep(&avctx->subtitle_header);
 
-#define SANE_NB_CHANNELS 128U
-    if (avctx->channels > SANE_NB_CHANNELS) {
+    if (avctx->channels > FF_SANE_NB_CHANNELS) {
         ret = AVERROR(EINVAL);
         goto free_and_end;
     }
@@ -1090,6 +1089,11 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
                        buf, channels, avctx->channels);
                 avctx->channel_layout = 0;
             }
+        }
+        if (avctx->channels && avctx->channels < 0 ||
+            avctx->channels > FF_SANE_NB_CHANNELS) {
+            ret = AVERROR(EINVAL);
+            goto free_and_end;
         }
     }
 end:
@@ -1698,7 +1702,7 @@ int attribute_align_arg avcodec_decode_audio3(AVCodecContext *avctx, int16_t *sa
                                               int *frame_size_ptr,
                                               AVPacket *avpkt)
 {
-    AVFrame frame;
+    AVFrame frame = {0};
     int ret, got_frame = 0;
 
     if (avctx->get_buffer != avcodec_default_get_buffer) {
@@ -2391,7 +2395,6 @@ int av_get_audio_frame_duration(AVCodecContext *avctx, int frame_bytes)
     case AV_CODEC_ID_GSM:
     case AV_CODEC_ID_QCELP:
     case AV_CODEC_ID_RA_288:       return  160;
-    case AV_CODEC_ID_IMC:          return  256;
     case AV_CODEC_ID_AMR_WB:
     case AV_CODEC_ID_GSM_MS:       return  320;
     case AV_CODEC_ID_MP1:          return  384;
@@ -2439,6 +2442,8 @@ int av_get_audio_frame_duration(AVCodecContext *avctx, int frame_bytes)
             return 256 * (frame_bytes / 64);
         if (id == AV_CODEC_ID_RA_144)
             return 160 * (frame_bytes / 20);
+        if (id == AV_CODEC_ID_G723_1)
+            return 240 * (frame_bytes / 24);
 
         if (bps > 0) {
             /* calc from frame_bytes and bits_per_coded_sample */
@@ -2470,6 +2475,9 @@ int av_get_audio_frame_duration(AVCodecContext *avctx, int frame_bytes)
                 return 6 * frame_bytes / ch;
             case AV_CODEC_ID_PCM_LXF:
                 return 2 * (frame_bytes / (5 * ch));
+            case AV_CODEC_ID_IAC:
+            case AV_CODEC_ID_IMC:
+                return 4 * frame_bytes / ch;
             }
 
             if (tag) {

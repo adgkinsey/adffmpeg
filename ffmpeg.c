@@ -109,7 +109,7 @@ const int program_birth_year = 2000;
 
 static FILE *vstats_file;
 
-static void do_video_stats(AVFormatContext *os, OutputStream *ost, int frame_size);
+static void do_video_stats(OutputStream *ost, int frame_size);
 static int64_t getutime(void);
 
 static int run_as_daemon  = 0;
@@ -921,7 +921,7 @@ static void do_video_out(AVFormatContext *s,
   }
 
     if (vstats_filename && frame_size)
-        do_video_stats(output_files[ost->file_index]->ctx, ost, frame_size);
+        do_video_stats(ost, frame_size);
 }
 
 static double psnr(double d)
@@ -929,8 +929,7 @@ static double psnr(double d)
     return -10.0 * log(d) / log(10.0);
 }
 
-static void do_video_stats(AVFormatContext *os, OutputStream *ost,
-                           int frame_size)
+static void do_video_stats(OutputStream *ost, int frame_size)
 {
     AVCodecContext *enc;
     int frame_number;
@@ -1395,7 +1394,6 @@ static void do_streamcopy(InputStream *ist, OutputStream *ost, const AVPacket *p
 
     write_frame(of->ctx, &opkt, ost);
     ost->st->codec->frame_number++;
-    av_free_packet(&opkt);
 }
 
 static void rate_emu_sleep(InputStream *ist)
