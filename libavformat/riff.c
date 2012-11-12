@@ -39,6 +39,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { AV_CODEC_ID_H264,         MKTAG('x', '2', '6', '4') },
     { AV_CODEC_ID_H264,         MKTAG('a', 'v', 'c', '1') },
     { AV_CODEC_ID_H264,         MKTAG('D', 'A', 'V', 'C') },
+    { AV_CODEC_ID_H264,         MKTAG('S', 'M', 'V', '2') },
     { AV_CODEC_ID_H264,         MKTAG('V', 'S', 'S', 'H') },
     { AV_CODEC_ID_H264,         MKTAG('Q', '2', '6', '4') }, /* QNAP surveillance system */
     { AV_CODEC_ID_H263,         MKTAG('H', '2', '6', '3') },
@@ -48,6 +49,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { AV_CODEC_ID_H263,         MKTAG('V', 'X', '1', 'K') },
     { AV_CODEC_ID_H263,         MKTAG('Z', 'y', 'G', 'o') },
     { AV_CODEC_ID_H263,         MKTAG('M', '2', '6', '3') },
+    { AV_CODEC_ID_H263,         MKTAG('l', 's', 'v', 'm') },
     { AV_CODEC_ID_H263P,        MKTAG('H', '2', '6', '3') },
     { AV_CODEC_ID_H263I,        MKTAG('I', '2', '6', '3') }, /* intel h263 */
     { AV_CODEC_ID_H261,         MKTAG('H', '2', '6', '1') },
@@ -111,6 +113,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { AV_CODEC_ID_MSMPEG4V1,    MKTAG('M', 'P', '4', '1') },
     { AV_CODEC_ID_WMV1,         MKTAG('W', 'M', 'V', '1') },
     { AV_CODEC_ID_WMV2,         MKTAG('W', 'M', 'V', '2') },
+    { AV_CODEC_ID_WMV2,         MKTAG('G', 'X', 'V', 'E') },
     { AV_CODEC_ID_DVVIDEO,      MKTAG('d', 'v', 's', 'd') },
     { AV_CODEC_ID_DVVIDEO,      MKTAG('d', 'v', 'h', 'd') },
     { AV_CODEC_ID_DVVIDEO,      MKTAG('d', 'v', 'h', '1') },

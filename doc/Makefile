@@ -1,10 +1,10 @@
-ifeq ($(CONFIG_AVCODEC),yes)
-DOCLIBS += libavcodec
-endif
+DOCLIBS-$(CONFIG_AVUTIL)  += libavutil
+DOCLIBS-$(CONFIG_AVCODEC) += libavcodec
+DOCLIBS-$(CONFIG_AVFILTER) += libavfilter
 
-MANPAGES    = $(PROGS-yes:%=doc/%.1)    $(DOCLIBS:%=doc/%.3)
-PODPAGES    = $(PROGS-yes:%=doc/%.pod)  $(DOCLIBS:%=doc/%.pod)
-HTMLPAGES   = $(PROGS-yes:%=doc/%.html) $(DOCLIBS:%=doc/%.html)         \
+MANPAGES    = $(PROGS-yes:%=doc/%.1)    $(DOCLIBS-yes:%=doc/%.3)
+PODPAGES    = $(PROGS-yes:%=doc/%.pod)  $(DOCLIBS-yes:%=doc/%.pod)
+HTMLPAGES   = $(PROGS-yes:%=doc/%.html) $(DOCLIBS-yes:%=doc/%.html)     \
               doc/developer.html                                        \
               doc/faq.html                                              \
               doc/fate.html                                             \
@@ -55,8 +55,10 @@ doc/%.pod: doc/%.texi $(GENTEXI)
 	$(M)perl $(SRC_PATH)/doc/texi2pod.pl -Idoc $< $@
 
 doc/%.1 doc/%.3: TAG = MAN
-doc/%.1 doc/%.3: doc/%.pod $(GENTEXI)
+doc/%.1: doc/%.pod $(GENTEXI)
 	$(M)pod2man --section=1 --center=" " --release=" " $< > $@
+doc/%.3: doc/%.pod $(GENTEXI)
+	$(M)pod2man --section=3 --center=" " --release=" " $< > $@
 
 $(DOCS) doc/doxy/html: | doc/
 
@@ -79,7 +81,7 @@ uninstall-man:
 	$(RM) $(addprefix "$(MANDIR)/man1/",$(ALLMANPAGES))
 
 clean::
-	$(RM) $(TXTPAGES) doc/*.html doc/*.pod doc/*.1 $(CLEANSUFFIXES:%=doc/%) doc/avoptions_*.texi
+	$(RM) $(TXTPAGES) doc/*.html doc/*.pod doc/*.1 doc/*.3 $(CLEANSUFFIXES:%=doc/%) doc/avoptions_*.texi
 	$(RM) -r doc/doxy/html
 
 -include $(wildcard $(DOCS:%=%.d))
