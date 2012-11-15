@@ -520,7 +520,7 @@ static int avi_write_packet(AVFormatContext *s, AVPacket *pkt)
 
         if(pkt->dts - avist->packet_count > 60000){
             av_log(s, AV_LOG_ERROR, "Too large number of skipped frames %"PRId64" > 60000\n", pkt->dts - avist->packet_count);
-            return AVERROR(EINVAL);
+            //return AVERROR(EINVAL);
         }
 
         av_init_packet(&empty_packet);

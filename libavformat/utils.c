@@ -3620,7 +3620,7 @@ void av_url_split(char *proto, int proto_size,
     /* the rest is hostname, use that to parse auth/port */
     if (ls != p) {
         /* authorization (user[:pass]@hostname) */
-        if ((at = strchr(p, '@')) && at < ls) {
+        if ((at = strrchr(p, '@')) && at < ls) {
             av_strlcpy(authorization, p,
                        FFMIN(authorization_size, at + 1 - p));
             p = at + 1; /* skip '@' */
