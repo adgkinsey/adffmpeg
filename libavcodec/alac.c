@@ -45,7 +45,7 @@
  * 32bit  samplerate
  */
 
-#include "libavutil/audioconvert.h"
+#include "libavutil/channel_layout.h"
 #include "avcodec.h"
 #include "get_bits.h"
 #include "bytestream.h"
@@ -638,7 +638,7 @@ static av_cold int alac_decode_init(AVCodecContext * avctx)
         else
             avctx->channels = alac->channels;
     }
-    if (avctx->channels > MAX_CHANNELS) {
+    if (avctx->channels > MAX_CHANNELS || avctx->channels <= 0 ) {
         av_log(avctx, AV_LOG_ERROR, "Unsupported channel count: %d\n",
                avctx->channels);
         return AVERROR_PATCHWELCOME;
