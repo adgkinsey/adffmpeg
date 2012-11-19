@@ -63,6 +63,7 @@
 #define ID_BODY       MKTAG('B','O','D','Y')
 #define ID_DBOD       MKTAG('D','B','O','D')
 #define ID_DPEL       MKTAG('D','P','E','L')
+#define ID_DLOC       MKTAG('D','L','O','C')
 
 #define LEFT    2
 #define RIGHT   4
@@ -137,6 +138,9 @@ static int iff_probe(AVProbeData *p)
 
 static const uint8_t deep_rgb24[] = {0, 0, 0, 3, 0, 1, 0, 8, 0, 2, 0, 8, 0, 3, 0, 8};
 static const uint8_t deep_rgba[]  = {0, 0, 0, 4, 0, 1, 0, 8, 0, 2, 0, 8, 0, 3, 0, 8};
+static const uint8_t deep_bgra[]  = {0, 0, 0, 4, 0, 3, 0, 8, 0, 2, 0, 8, 0, 1, 0, 8};
+static const uint8_t deep_argb[]  = {0, 0, 0, 4, 0,17, 0, 8, 0, 1, 0, 8, 0, 2, 0, 8};
+static const uint8_t deep_abgr[]  = {0, 0, 0, 4, 0,17, 0, 8, 0, 3, 0, 8, 0, 2, 0, 8};
 
 static int iff_read_header(AVFormatContext *s)
 {
@@ -249,6 +253,12 @@ static int iff_read_header(AVFormatContext *s)
                 st->codec->pix_fmt = AV_PIX_FMT_RGB24;
             else if (fmt_size == sizeof(deep_rgba) && !memcmp(fmt, deep_rgba, sizeof(deep_rgba)))
                 st->codec->pix_fmt = AV_PIX_FMT_RGBA;
+            else if (fmt_size == sizeof(deep_bgra) && !memcmp(fmt, deep_bgra, sizeof(deep_bgra)))
+                st->codec->pix_fmt = AV_PIX_FMT_BGRA;
+            else if (fmt_size == sizeof(deep_argb) && !memcmp(fmt, deep_argb, sizeof(deep_argb)))
+                st->codec->pix_fmt = AV_PIX_FMT_ARGB;
+            else if (fmt_size == sizeof(deep_abgr) && !memcmp(fmt, deep_abgr, sizeof(deep_abgr)))
+                st->codec->pix_fmt = AV_PIX_FMT_ABGR;
             else {
                 av_log_ask_for_sample(s, "unsupported color format\n");
                 return AVERROR_PATCHWELCOME;
@@ -270,6 +280,13 @@ static int iff_read_header(AVFormatContext *s)
             st->sample_aspect_ratio.num      = avio_r8(pb);
             st->sample_aspect_ratio.den      = avio_r8(pb);
             st->codec->bits_per_coded_sample = 24;
+            break;
+
+        case ID_DLOC:
+            if (data_size < 4)
+                return AVERROR_INVALIDDATA;
+            st->codec->width  = avio_rb16(pb);
+            st->codec->height = avio_rb16(pb);
             break;
 
         case ID_ANNO:

@@ -78,6 +78,7 @@ Help options:
 Standard options:
   --logfile=FILE           log tests and output to FILE [config.log]
   --disable-logging        do not log configure debug information
+  --fatal-warnings         fail if any configure warning is generated
   --prefix=PREFIX          install in PREFIX [$prefix]
   --bindir=DIR             install binaries in DIR [PREFIX/bin]
   --datadir=DIR            install data files in DIR [PREFIX/share/ffmpeg]
@@ -101,6 +102,13 @@ Configuration options:
   --enable-gray            enable full grayscale support (slower color)
   --disable-swscale-alpha  disable alpha channel support in swscale
 
+Program options:
+  --disable-programs       do not build command line programs
+  --disable-ffmpeg         disable ffmpeg build
+  --disable-ffplay         disable ffplay build
+  --disable-ffprobe        disable ffprobe build
+  --disable-ffserver       disable ffserver build
+
 Documentation options:
   --disable-doc            do not build documentation
   --disable-htmlpages      do not build HTML documentation pages
@@ -109,10 +117,6 @@ Documentation options:
   --disable-txtpages       do not build text documentation pages
 
 Component options:
-  --disable-ffmpeg         disable ffmpeg build
-  --disable-ffplay         disable ffplay build
-  --disable-ffprobe        disable ffprobe build
-  --disable-ffserver       disable ffserver build
   --disable-avdevice       disable libavdevice build
   --disable-avcodec        disable libavcodec build
   --disable-avformat       disable libavformat build
@@ -2208,6 +2212,9 @@ for opt do
     ;;
     --enable-debug=*) debuglevel="$optval"
     ;;
+    --disable-programs)
+    disable $PROGRAM_LIST
+    ;;
     --disable-everything)
     map 'eval unset \${$(toupper ${v%s})_LIST}' $COMPONENT_LIST
     ;;
@@ -2224,7 +2231,9 @@ for opt do
     is_in "${thing}s" $COMPONENT_LIST || die_unknown "$opt"
     eval list=\$$(toupper $thing)_LIST
     name=$(echo "${optval}" | sed "s/,/_${thing}|/g")_${thing}
-    $action $(filter "$name" $list)
+    list=$(filter "$name" $list)
+    [ "$list" = "" ] && warn "Option $opt did not match anything"
+    $action $list
     ;;
     --enable-?*|--disable-?*)
     eval $(echo "$opt" | sed 's/--/action=/;s/-/ option=/;s/-/_/g')
@@ -2244,6 +2253,8 @@ for opt do
         eval show_list $NAME \$$(toupper $NAME)_LIST
     ;;
     --help|-h) show_help
+    ;;
+    --fatal-warnings) enable fatal_warnings
     ;;
     *)
     optname="${opt%%=*}"
@@ -3411,6 +3422,14 @@ elif enabled mips; then
     enabled mipsfpu   && add_cflags "-mhard-float" && add_asflags "-mhard-float" &&
      check_inline_asm mipsfpu   '"madd.d $f0, $f2, $f4, $f6"'
 
+elif enabled parisc; then
+
+    if enabled gcc; then
+        case $($cc -dumpversion) in
+            4.[3-8].*) check_cflags -fno-optimize-sibling-calls ;;
+        esac
+    fi
+
 elif enabled ppc; then
 
     enable local_aligned_8 local_aligned_16
@@ -3963,6 +3982,8 @@ elif enabled llvm_gcc; then
 elif enabled clang; then
     check_cflags -mllvm -stack-alignment=16
     check_cflags -Qunused-arguments
+    check_cflags -Werror=implicit-function-declaration
+    check_cflags -Werror=missing-prototypes
 elif enabled armcc; then
     # 2523: use of inline assembler is deprecated
     add_cflags -W${armcc_opt},--diag_suppress=2523
@@ -4377,7 +4398,10 @@ echo "#endif /* AVUTIL_AVCONFIG_H */" >> $TMPH
 
 cp_if_changed $TMPH libavutil/avconfig.h
 
-test -n "$WARNINGS" && printf "\n$WARNINGS"
+if test -n "$WARNINGS"; then
+    printf "\n$WARNINGS"
+    enabled fatal_warnings && exit 1
+fi
 
 # build pkg-config files
 

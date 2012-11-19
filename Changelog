@@ -23,6 +23,9 @@ version <next>:
 - field filter ported from libmpcodecs
 - AVR demuxer
 - geq filter ported from libmpcodecs
+- remove ffserver daemon mode
+- AST demuxer
+- new expansion syntax for drawtext
 
 
 version 1.0:
