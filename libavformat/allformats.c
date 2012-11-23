@@ -275,11 +275,6 @@ void av_register_all(void)
     REGISTER_DEMUXER  (ADRAW, adraw);
     REGISTER_DEMUXER  (DSPIC, dspic);
 
-    /* external libraries */
-#if CONFIG_LIBMODPLUG
-    REGISTER_DEMUXER  (LIBMODPLUG, libmodplug);
-#endif
-
     /* protocols */
 #if FF_API_APPLEHTTP_PROTO
     REGISTER_PROTOCOL (APPLEHTTP, applehttp);
@@ -315,6 +310,7 @@ void av_register_all(void)
     REGISTER_PROTOCOL (NETVU, netvu);
 
     /* external libraries */
+    REGISTER_DEMUXER  (LIBMODPLUG, libmodplug);
     REGISTER_MUXDEMUX (LIBNUT, libnut);
     REGISTER_PROTOCOL (LIBRTMP, librtmp);
     REGISTER_PROTOCOL (LIBRTMPE, librtmpe);

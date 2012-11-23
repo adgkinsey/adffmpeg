@@ -1162,6 +1162,13 @@ typedef struct AVFormatContext {
      */
     enum AVDurationEstimationMethod duration_estimation_method;
 
+    /**
+     * Skip initial bytes when opening stream
+     * - encoding: unused
+     * - decoding: Set by user via AVOptions (NO direct access)
+     */
+    unsigned int skip_initial_bytes;
+
     /*****************************************************************
      * All fields below this line are not part of the public API. They
      * may not be used outside of libavformat and can be changed and
@@ -1796,9 +1803,9 @@ enum AVCodecID av_guess_codec(AVOutputFormat *fmt, const char *short_name,
  * work in real time.
  * @param s          media file handle
  * @param stream     stream in the media file
- * @param dts[out]   DTS of the last packet output for the stream, in stream
+ * @param[out] dts   DTS of the last packet output for the stream, in stream
  *                   time_base units
- * @param wall[out]  absolute time when that packet whas output,
+ * @param[out] wall  absolute time when that packet whas output,
  *                   in microsecond
  * @return  0 if OK, AVERROR(ENOSYS) if the format does not support it
  * Note: some formats or devices may not allow to measure dts and wall

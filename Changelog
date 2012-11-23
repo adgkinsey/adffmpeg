@@ -26,6 +26,9 @@ version <next>:
 - remove ffserver daemon mode
 - AST demuxer
 - new expansion syntax for drawtext
+- BRender PIX image decoder
+- ffprobe -show_entries option
+- ffprobe -sections option
 
 
 version 1.0:
