@@ -418,7 +418,7 @@ static int audio_get_buffer(AVCodecContext *avctx, AVFrame *frame)
         }
         if ((ret = avcodec_fill_audio_frame(frame, avctx->channels,
                                             avctx->sample_fmt, buf->data[0],
-                                            buf->audio_data_size, 0)))
+                                            buf->audio_data_size, 0)) < 0)
             return ret;
 
         if (frame->extended_data == frame->data)
@@ -1383,7 +1383,7 @@ int attribute_align_arg avcodec_encode_audio(AVCodecContext *avctx,
         if ((ret = avcodec_fill_audio_frame(frame, avctx->channels,
                                             avctx->sample_fmt,
                                             (const uint8_t *)samples,
-                                            samples_size, 1)))
+                                            samples_size, 1)) < 0)
             return ret;
 
         /* fabricate frame pts from sample count.
@@ -2300,6 +2300,7 @@ int av_get_exact_bits_per_sample(enum AVCodecID codec_id)
     case AV_CODEC_ID_ADPCM_CT:
     case AV_CODEC_ID_ADPCM_IMA_APC:
     case AV_CODEC_ID_ADPCM_IMA_EA_SEAD:
+    case AV_CODEC_ID_ADPCM_IMA_OKI:
     case AV_CODEC_ID_ADPCM_IMA_WS:
     case AV_CODEC_ID_ADPCM_G722:
     case AV_CODEC_ID_ADPCM_YAMAHA:
@@ -2464,6 +2465,8 @@ int av_get_audio_frame_duration(AVCodecContext *avctx, int frame_bytes)
         if (ch > 0) {
             /* calc from frame_bytes and channels */
             switch (id) {
+            case AV_CODEC_ID_ADPCM_AFC:
+                return frame_bytes / (9 * ch) * 16;
             case AV_CODEC_ID_ADPCM_4XM:
             case AV_CODEC_ID_ADPCM_IMA_ISS:
                 return (frame_bytes - 4 * ch) * 2 / ch;

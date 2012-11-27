@@ -2410,7 +2410,7 @@ static int decode_slice_header(H264Context *h, H264Context *h0)
     if (slice_type > 9) {
         av_log(h->s.avctx, AV_LOG_ERROR,
                "slice type too large (%d) at %d %d\n",
-               h->slice_type, s->mb_x, s->mb_y);
+               slice_type, s->mb_x, s->mb_y);
         return -1;
     }
     if (slice_type > 4) {
@@ -4007,8 +4007,15 @@ again:
 
                 if (s->flags & CODEC_FLAG_LOW_DELAY ||
                     (h->sps.bitstream_restriction_flag &&
-                     !h->sps.num_reorder_frames))
-                    s->low_delay = 1;
+                     !h->sps.num_reorder_frames)) {
+                    if (s->avctx->has_b_frames > 1 || h->delayed_pic[0])
+                        av_log(avctx, AV_LOG_WARNING, "Delayed frames seen "
+                               "reenabling low delay requires a codec "
+                               "flush.\n");
+                        else
+                            s->low_delay = 1;
+                }
+
                 if (avctx->has_b_frames < 2)
                     avctx->has_b_frames = !s->low_delay;
                 break;

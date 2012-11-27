@@ -25,6 +25,7 @@
 
 #include "libavutil/avassert.h"
 #include "libavutil/channel_layout.h"
+#include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavcodec/avcodec.h" // avcodec_find_best_pix_fmt_of_2()
 #include "avfilter.h"
@@ -32,9 +33,19 @@
 #include "formats.h"
 #include "internal.h"
 
+#define OFFSET(x) offsetof(AVFilterGraph,x)
+
+static const AVOption options[]={
+{"scale_sws_opts"       , "default scale filter options"        , OFFSET(scale_sws_opts)        ,  AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, 0 },
+{"aresample_swr_opts"   , "default aresample filter options"    , OFFSET(aresample_swr_opts)    ,  AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, 0 },
+{0}
+};
+
+
 static const AVClass filtergraph_class = {
     .class_name = "AVFilterGraph",
     .item_name  = av_default_item_name,
+    .option     = options,
     .version    = LIBAVUTIL_VERSION_INT,
     .category   = AV_CLASS_CATEGORY_FILTER,
 };
@@ -56,6 +67,7 @@ void avfilter_graph_free(AVFilterGraph **graph)
         avfilter_free((*graph)->filters[(*graph)->filter_count - 1]);
     av_freep(&(*graph)->sink_links);
     av_freep(&(*graph)->scale_sws_opts);
+    av_freep(&(*graph)->aresample_swr_opts);
     av_freep(&(*graph)->filters);
     av_freep(graph);
 }
@@ -376,7 +388,7 @@ static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
                     snprintf(inst_name, sizeof(inst_name), "auto-inserted resampler %d",
                              resampler_count++);
                     if ((ret = avfilter_graph_create_filter(&convert, filter,
-                                                            inst_name, NULL, NULL, graph)) < 0)
+                                                            inst_name, graph->aresample_swr_opts, NULL, graph)) < 0)
                         return ret;
                     break;
                 default:

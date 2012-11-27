@@ -179,6 +179,9 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamplesref)
     AVFilterBufferRef *outsamplesref = ff_get_audio_buffer(outlink, AV_PERM_WRITE, n_out);
     int ret;
 
+    if(!outsamplesref)
+        return AVERROR(ENOMEM);
+
     avfilter_copy_buffer_ref_props(outsamplesref, insamplesref);
     outsamplesref->format                = outlink->format;
     outsamplesref->audio->channel_layout = outlink->channel_layout;
@@ -188,11 +191,10 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamplesref)
         int64_t inpts = av_rescale(insamplesref->pts, inlink->time_base.num * (int64_t)outlink->sample_rate * inlink->sample_rate, inlink->time_base.den);
         int64_t outpts= swr_next_pts(aresample->swr, inpts);
         aresample->next_pts =
-        outsamplesref->pts  = (outpts + inlink->sample_rate/2) / inlink->sample_rate;
+        outsamplesref->pts  = ROUNDED_DIV(outpts, inlink->sample_rate);
     } else {
         outsamplesref->pts  = AV_NOPTS_VALUE;
     }
-
     n_out = swr_convert(aresample->swr, outsamplesref->extended_data, n_out,
                                  (void *)insamplesref->extended_data, n_in);
     if (n_out <= 0) {
@@ -241,7 +243,8 @@ static int request_frame(AVFilterLink *outlink)
         if(aresample->next_pts != AV_NOPTS_VALUE)
             aresample->next_pts += av_rescale_q(n_out, (AVRational){1 ,outlink->sample_rate}, outlink->time_base);
 #else
-        outsamplesref->pts = (swr_next_pts(aresample->swr, INT64_MIN) + inlink->sample_rate/2) / inlink->sample_rate;
+        outsamplesref->pts = swr_next_pts(aresample->swr, INT64_MIN);
+        outsamplesref->pts = ROUNDED_DIV(outsamplesref->pts, inlink->sample_rate);
 #endif
 
         ff_filter_samples(outlink, outsamplesref);

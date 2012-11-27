@@ -338,8 +338,10 @@ const AVCodecTag ff_codec_wav_tags[] = {
     { AV_CODEC_ID_PCM_ALAW,        0x0006 },
     { AV_CODEC_ID_PCM_MULAW,       0x0007 },
     { AV_CODEC_ID_WMAVOICE,        0x000A },
+    { AV_CODEC_ID_ADPCM_IMA_OKI,   0x0010 },
     { AV_CODEC_ID_ADPCM_IMA_WAV,   0x0011 },
     { AV_CODEC_ID_PCM_ZORK,        0x0011 }, /* must come after adpcm_ima_wav in this list */
+    { AV_CODEC_ID_ADPCM_IMA_OKI,   0x0017 },
     { AV_CODEC_ID_ADPCM_YAMAHA,    0x0020 },
     { AV_CODEC_ID_TRUESPEECH,      0x0022 },
     { AV_CODEC_ID_GSM_MS,          0x0031 },
@@ -413,13 +415,6 @@ const AVMetadataConv ff_riff_info_conv[] = {
     { "ISMP", "timecode"  },
     { "ITCH", "encoded_by"},
     { 0 },
-};
-
-const char ff_riff_tags[][5] = {
-    "IARL", "IART", "ICMS", "ICMT", "ICOP", "ICRD", "ICRP", "IDIM", "IDPI",
-    "IENG", "IGNR", "IKEY", "ILGT", "ILNG", "IMED", "INAM", "IPLT", "IPRD",
-    "IPRT", "ISBJ", "ISFT", "ISHP", "ISMP", "ISRC", "ISRF", "ITCH",
-    {0}
 };
 
 #if CONFIG_MUXERS
@@ -638,12 +633,19 @@ void ff_riff_write_info_tag(AVIOContext *pb, const char *tag, const char *str)
     }
 }
 
+static const char riff_tags[][5] = {
+    "IARL", "IART", "ICMS", "ICMT", "ICOP", "ICRD", "ICRP", "IDIM", "IDPI",
+    "IENG", "IGNR", "IKEY", "ILGT", "ILNG", "IMED", "INAM", "IPLT", "IPRD",
+    "IPRT", "ISBJ", "ISFT", "ISHP", "ISMP", "ISRC", "ISRF", "ITCH",
+    {0}
+};
+
 static int riff_has_valid_tags(AVFormatContext *s)
 {
     int i;
 
-    for (i = 0; *ff_riff_tags[i]; i++) {
-        if (av_dict_get(s->metadata, ff_riff_tags[i], NULL, AV_DICT_MATCH_CASE))
+    for (i = 0; *riff_tags[i]; i++) {
+        if (av_dict_get(s->metadata, riff_tags[i], NULL, AV_DICT_MATCH_CASE))
             return 1;
     }
 
@@ -665,8 +667,8 @@ void ff_riff_write_info(AVFormatContext *s)
 
     list_pos = ff_start_tag(pb, "LIST");
     ffio_wfourcc(pb, "INFO");
-    for (i = 0; *ff_riff_tags[i]; i++) {
-        if ((t = av_dict_get(s->metadata, ff_riff_tags[i], NULL, AV_DICT_MATCH_CASE)))
+    for (i = 0; *riff_tags[i]; i++) {
+        if ((t = av_dict_get(s->metadata, riff_tags[i], NULL, AV_DICT_MATCH_CASE)))
             ff_riff_write_info_tag(s->pb, t->key, t->value);
     }
     ff_end_tag(pb, list_pos);
@@ -759,7 +761,8 @@ enum AVCodecID ff_wav_codec_get_id(unsigned int tag, int bps)
     /* handle specific u8 codec */
     if (id == AV_CODEC_ID_PCM_S16LE && bps == 8)
         id = AV_CODEC_ID_PCM_U8;
-    if (id == AV_CODEC_ID_PCM_S16LE && bps == 24)
+    if (id == AV_CODEC_ID_PCM_S16LE && bps == 20 ||
+        id == AV_CODEC_ID_PCM_S16LE && bps == 24)
         id = AV_CODEC_ID_PCM_S24LE;
     if (id == AV_CODEC_ID_PCM_S16LE && bps == 32)
         id = AV_CODEC_ID_PCM_S32LE;

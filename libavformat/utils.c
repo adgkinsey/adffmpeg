@@ -237,7 +237,7 @@ int ffio_limit(AVIOContext *s, int size)
         }
 
         if(s->maxsize>=0 && remaining+1 < size){
-            av_log(0, remaining ? AV_LOG_ERROR : AV_LOG_DEBUG, "Truncating packet of size %d to %"PRId64"\n", size, remaining+1);
+            av_log(NULL, remaining ? AV_LOG_ERROR : AV_LOG_DEBUG, "Truncating packet of size %d to %"PRId64"\n", size, remaining+1);
             size= remaining+1;
         }
     }
@@ -547,7 +547,7 @@ int avformat_open_input(AVFormatContext **ps, const char *filename, AVInputForma
     if (!s && !(s = avformat_alloc_context()))
         return AVERROR(ENOMEM);
     if (!s->av_class){
-        av_log(0, AV_LOG_ERROR, "Input context has not been properly allocated by avformat_alloc_context() and is not NULL either\n");
+        av_log(NULL, AV_LOG_ERROR, "Input context has not been properly allocated by avformat_alloc_context() and is not NULL either\n");
         return AVERROR(EINVAL);
     }
     if (fmt)
@@ -826,7 +826,10 @@ void ff_compute_frame_duration(int *pnum, int *pden, AVStream *st,
             *pnum = st->codec->time_base.num;
             *pden = st->codec->time_base.den;
             if (pc && pc->repeat_pict) {
-                *pnum = (*pnum) * (1 + pc->repeat_pict);
+                if (*pnum > INT_MAX / (1 + pc->repeat_pict))
+                    *pden /= 1 + pc->repeat_pict;
+                else
+                    *pnum *= 1 + pc->repeat_pict;
             }
             //If this codec can be interlaced or progressive then we need a parser to compute duration of a packet
             //Thus if we have no parser in such case leave duration undefined.

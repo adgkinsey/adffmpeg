@@ -147,9 +147,11 @@ library:
     @tab Multimedia format used in game Heart Of Darkness.
 @item Apple HTTP Live Streaming @tab   @tab X
 @item Artworx Data Format       @tab   @tab X
+@item AFC                       @tab   @tab X
+    @tab Audio format used on the Nintendo Gamecube.
 @item ASF                       @tab X @tab X
 @item AST                       @tab   @tab X
-    @tab Used on the Nintendo Wii.
+    @tab Audio format used on the Nintendo Wii.
 @item AVI                       @tab X @tab X
 @item AVISynth                  @tab   @tab X
 @item AVR                       @tab   @tab X
@@ -749,6 +751,7 @@ following image formats are supported:
 @item ADPCM IMA Westwood     @tab     @tab  X
 @item ADPCM ISS IMA          @tab     @tab  X
     @tab Used in FunCom games.
+@item ADPCM IMA Dialogic     @tab     @tab  X
 @item ADPCM IMA Duck DK3     @tab     @tab  X
     @tab Used in some Sega Saturn console games.
 @item ADPCM IMA Duck DK4     @tab     @tab  X
