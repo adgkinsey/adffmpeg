@@ -126,4 +126,5 @@ AVInputFormat ff_adraw_demuxer = {
     .read_header    = adraw_read_header,
     .read_packet    = adraw_read_packet,
     .read_close     = adraw_read_close,
+    .flags          = AVFMT_TS_DISCONT | AVFMT_VARIABLE_FPS | AVFMT_NO_BYTE_SEEK,
 };
