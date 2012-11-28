@@ -815,4 +815,5 @@ AVInputFormat ff_admime_demuxer = {
     .read_header    = admime_read_header,
     .read_packet    = admime_read_packet,
     .read_close     = admime_read_close,
+    .flags          = AVFMT_TS_DISCONT | AVFMT_VARIABLE_FPS | AVFMT_NO_BYTE_SEEK,
 };

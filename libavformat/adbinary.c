@@ -601,4 +601,5 @@ AVInputFormat ff_adbinary_demuxer = {
     .read_header    = adbinary_read_header,
     .read_packet    = adbinary_read_packet,
     .read_close     = adbinary_read_close,
+    .flags          = AVFMT_TS_DISCONT | AVFMT_VARIABLE_FPS | AVFMT_NO_BYTE_SEEK,
 };
