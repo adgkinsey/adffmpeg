@@ -980,4 +980,5 @@ AVInputFormat ff_libparreader_demuxer = {
     .read_packet    = par_read_packet,
     .read_close     = par_read_close,
     .read_seek      = par_read_seek,
+    .flags          = AVFMT_TS_DISCONT | AVFMT_VARIABLE_FPS | AVFMT_NO_BYTE_SEEK,
 };
