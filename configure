@@ -120,6 +120,7 @@ Component options:
   --disable-avdevice       disable libavdevice build
   --disable-avcodec        disable libavcodec build
   --disable-avformat       disable libavformat build
+  --disable-avutil         disable libavutil build
   --disable-swresample     disable libswresample build
   --disable-swscale        disable libswscale build
   --disable-postproc       disable libpostproc build
@@ -1092,6 +1093,17 @@ DOCUMENT_LIST="
     txtpages
 "
 
+LIBRARY_LIST="
+    avcodec
+    avdevice
+    avfilter
+    avformat
+    avresample
+    avutil
+    swresample
+    swscale
+"
+
 PROGRAM_LIST="
     ffplay
     ffprobe
@@ -1102,12 +1114,8 @@ PROGRAM_LIST="
 CONFIG_LIST="
     $COMPONENT_LIST
     $DOCUMENT_LIST
+    $LIBRARY_LIST
     $PROGRAM_LIST
-    avcodec
-    avdevice
-    avfilter
-    avformat
-    avresample
     avisynth
     bzlib
     crystalhd
@@ -1181,8 +1189,6 @@ CONFIG_LIST="
     small
     sram
     static
-    swresample
-    swscale
     swscale_alpha
     thumb
     vaapi
@@ -1227,6 +1233,15 @@ ARCH_LIST='
     x86_64
 '
 
+ARCH_EXT_LIST_ARM='
+    armv5te
+    armv6
+    armv6t2
+    armvfp
+    neon
+    vfpv3
+'
+
 ARCH_EXT_LIST_X86='
     amd3dnow
     amd3dnowext
@@ -1243,15 +1258,10 @@ ARCH_EXT_LIST_X86='
 '
 
 ARCH_EXT_LIST="
+    $ARCH_EXT_LIST_ARM
     $ARCH_EXT_LIST_X86
     altivec
-    armv5te
-    armv6
-    armv6t2
-    armvfp
-    neon
     ppc4xx
-    vfpv3
     vis
     mipsfpu
     mips32r2
@@ -1320,6 +1330,7 @@ HAVE_LIST="
     clock_gettime
     closesocket
     cmov
+    CommandLineToArgvW
     cpunop
     CryptGenRandom
     dcbzl
@@ -1388,6 +1399,7 @@ HAVE_LIST="
     sched_getaffinity
     sdl
     sdl_video_size
+    SetConsoleTextAttribute
     setmode
     setrlimit
     Sleep
@@ -1434,7 +1446,6 @@ HAVE_LIST="
 CONFIG_EXTRA="
     aandcttables
     ac3dsp
-    avutil
     error_resilience
     gcrypt
     golomb
@@ -1835,6 +1846,7 @@ eac3_demuxer_select="ac3_parser"
 f4v_muxer_select="mov_muxer"
 flac_demuxer_select="flac_parser"
 ipod_muxer_select="mov_muxer"
+ismv_muxer_select="mov_muxer"
 libnut_demuxer_deps="libnut"
 libnut_muxer_deps="libnut"
 libparreader_demuxer_deps="libparreader"
@@ -1974,9 +1986,13 @@ tinterlace_merge_test_deps="tinterlace_filter"
 tinterlace_pad_test_deps="tinterlace_filter"
 
 # libraries
-avdevice_deps="avcodec avformat"
-avformat_deps="avcodec"
+avcodec_deps="avutil"
+avdevice_deps="avutil avcodec avformat"
+avfilter_deps="avutil"
+avformat_deps="avutil avcodec"
+avresample_deps="avutil"
 postproc_deps="gpl"
+swscale_deps="avutil"
 
 # programs
 ffmpeg_deps="avcodec avfilter avformat swscale swresample"
@@ -2043,16 +2059,9 @@ ALT_PP_VER=$ALT_PP_VER_MAJOR.$ALT_PP_VER_MINOR.$ALT_PP_VER_MICRO
 # configurable options
 enable $PROGRAM_LIST
 enable $DOCUMENT_LIST
-
-enable avcodec
-enable avdevice
-enable avfilter
-enable avformat
-enable avutil
+enable $(filter_out avresample $LIBRARY_LIST)
 enable postproc
 enable stripping
-enable swresample
-enable swscale
 
 enable asm
 enable debug
@@ -2206,70 +2215,70 @@ do_random(){
 for opt do
     optval="${opt#*=}"
     case "$opt" in
-    --extra-ldflags=*) add_ldflags $optval
-    ;;
-    --extra-libs=*) add_extralibs $optval
-    ;;
-    --disable-devices) disable $INDEV_LIST $OUTDEV_LIST
-    ;;
-    --enable-debug=*) debuglevel="$optval"
-    ;;
-    --disable-programs)
-    disable $PROGRAM_LIST
-    ;;
-    --disable-everything)
-    map 'eval unset \${$(toupper ${v%s})_LIST}' $COMPONENT_LIST
-    ;;
-    --enable-random|--disable-random)
-    action=${opt%%-random}
-    do_random ${action#--} $COMPONENT_LIST
-    ;;
-    --enable-random=*|--disable-random=*)
-    action=${opt%%-random=*}
-    do_random ${action#--} $optval
-    ;;
-    --enable-*=*|--disable-*=*)
-    eval $(echo "${opt%%=*}" | sed 's/--/action=/;s/-/ thing=/')
-    is_in "${thing}s" $COMPONENT_LIST || die_unknown "$opt"
-    eval list=\$$(toupper $thing)_LIST
-    name=$(echo "${optval}" | sed "s/,/_${thing}|/g")_${thing}
-    list=$(filter "$name" $list)
-    [ "$list" = "" ] && warn "Option $opt did not match anything"
-    $action $list
-    ;;
-    --enable-?*|--disable-?*)
-    eval $(echo "$opt" | sed 's/--/action=/;s/-/ option=/;s/-/_/g')
-    if is_in $option $COMPONENT_LIST; then
-        test $action = disable && action=unset
-        eval $action \$$(toupper ${option%s})_LIST
-    elif is_in $option $CMDLINE_SELECT; then
-        $action $option
-    else
-        die_unknown $opt
-    fi
-    ;;
-    --list-*)
-        NAME="${opt#--list-}"
-        is_in $NAME $COMPONENT_LIST || die_unknown $opt
-        NAME=${NAME%s}
-        eval show_list $NAME \$$(toupper $NAME)_LIST
-    ;;
-    --help|-h) show_help
-    ;;
-    --fatal-warnings) enable fatal_warnings
-    ;;
-    *)
-    optname="${opt%%=*}"
-    optname="${optname#--}"
-    optname=$(echo "$optname" | sed 's/-/_/g')
-    if is_in $optname $CMDLINE_SET; then
-        eval $optname='$optval'
-    elif is_in $optname $CMDLINE_APPEND; then
-        append $optname "$optval"
-    else
-         die_unknown $opt
-    fi
-    ;;
+        --extra-ldflags=*) add_ldflags $optval
+        ;;
+        --extra-libs=*) add_extralibs $optval
+        ;;
+        --disable-devices) disable $INDEV_LIST $OUTDEV_LIST
+        ;;
+        --enable-debug=*) debuglevel="$optval"
+        ;;
+        --disable-programs)
+            disable $PROGRAM_LIST
+        ;;
+        --disable-everything)
+            map 'eval unset \${$(toupper ${v%s})_LIST}' $COMPONENT_LIST
+        ;;
+        --enable-random|--disable-random)
+            action=${opt%%-random}
+            do_random ${action#--} $COMPONENT_LIST
+        ;;
+        --enable-random=*|--disable-random=*)
+            action=${opt%%-random=*}
+            do_random ${action#--} $optval
+        ;;
+        --enable-*=*|--disable-*=*)
+            eval $(echo "${opt%%=*}" | sed 's/--/action=/;s/-/ thing=/')
+            is_in "${thing}s" $COMPONENT_LIST || die_unknown "$opt"
+            eval list=\$$(toupper $thing)_LIST
+            name=$(echo "${optval}" | sed "s/,/_${thing}|/g")_${thing}
+            list=$(filter "$name" $list)
+            [ "$list" = "" ] && warn "Option $opt did not match anything"
+            $action $list
+        ;;
+        --enable-?*|--disable-?*)
+            eval $(echo "$opt" | sed 's/--/action=/;s/-/ option=/;s/-/_/g')
+            if is_in $option $COMPONENT_LIST; then
+                test $action = disable && action=unset
+                eval $action \$$(toupper ${option%s})_LIST
+            elif is_in $option $CMDLINE_SELECT; then
+                $action $option
+            else
+                die_unknown $opt
+            fi
+        ;;
+        --list-*)
+            NAME="${opt#--list-}"
+            is_in $NAME $COMPONENT_LIST || die_unknown $opt
+            NAME=${NAME%s}
+            eval show_list $NAME \$$(toupper $NAME)_LIST
+        ;;
+        --help|-h) show_help
+        ;;
+        --fatal-warnings) enable fatal_warnings
+        ;;
+        *)
+            optname="${opt%%=*}"
+            optname="${optname#--}"
+            optname=$(echo "$optname" | sed 's/-/_/g')
+            if is_in $optname $CMDLINE_SET; then
+                eval $optname='$optval'
+            elif is_in $optname $CMDLINE_APPEND; then
+                append $optname "$optval"
+            else
+                die_unknown $opt
+            fi
+        ;;
     esac
 done
 
@@ -3653,6 +3662,7 @@ check_func_headers windows.h GetProcessAffinityMask
 check_func_headers windows.h GetProcessTimes
 check_func_headers windows.h GetSystemTimeAsFileTime
 check_func_headers windows.h MapViewOfFile
+check_func_headers windows.h SetConsoleTextAttribute
 check_func_headers windows.h Sleep
 check_func_headers windows.h VirtualAlloc
 check_func_headers glob.h glob
@@ -3690,7 +3700,7 @@ if ! disabled vda && ! enabled ppc; then
 fi
 
 if ! disabled w32threads && ! enabled pthreads; then
-    check_func _beginthreadex && enable w32threads
+    check_func_headers "windows.h process.h" _beginthreadex && enable w32threads
 fi
 
 # check for some common methods of building with pthread support
@@ -4348,7 +4358,7 @@ NOREDZONE_FLAGS=$noredzone_flags
 EOF
 
 get_version(){
-    lcname=$1
+    lcname=lib${1}
     name=$(toupper $lcname)
     file=$source_path/$lcname/version.h
     eval $(awk "/#define ${name}_VERSION_M/ { print \$2 \"=\" \$3 }" "$file")
@@ -4372,14 +4382,7 @@ fi
 
 get_version_old LIBPOSTPROC libpostproc/version.h
 
-get_version libavcodec
-get_version libavdevice
-get_version libavfilter
-get_version libavformat
-get_version libavresample
-get_version libavutil
-get_version libswresample
-get_version libswscale
+map 'get_version $v' $LIBRARY_LIST
 
 cat > $TMPH <<EOF
 /* Automatically generated by configure - do not modify! */
@@ -4496,6 +4499,7 @@ EOF
 libavfilter_pc_deps="libavutil = $LIBAVUTIL_VERSION"
 enabled libavfilter_deps_avcodec    && prepend libavfilter_pc_deps "libavcodec = $LIBAVCODEC_VERSION,"
 enabled libavfilter_deps_avformat   && prepend libavfilter_pc_deps "libavformat = $LIBAVFORMAT_VERSION,"
+enabled libavfilter_deps_avresample && prepend libavfilter_pc_deps "libavresample = $LIBAVRESAMPLE_VERSION,"
 enabled libavfilter_deps_swscale    && prepend libavfilter_pc_deps "libswscale = $LIBSWSCALE_VERSION,"
 enabled libavfilter_deps_swresample && prepend libavfilter_pc_deps "libswresample = $LIBSWRESAMPLE_VERSION,"
 enabled libavfilter_deps_postproc   && prepend libavfilter_pc_deps "libpostproc = $LIBPOSTPROC_VERSION,"

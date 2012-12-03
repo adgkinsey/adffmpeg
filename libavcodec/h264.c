@@ -2709,6 +2709,11 @@ static int decode_slice_header(H264Context *h, H264Context *h0)
             s->picture_structure = last_pic_structure;
             s->dropable          = last_pic_dropable;
             return AVERROR_INVALIDDATA;
+        } else if (!s->current_picture_ptr) {
+            av_log(s->avctx, AV_LOG_ERROR,
+                   "unset current_picture_ptr on %d. slice\n",
+                   h0->current_slice + 1);
+            return AVERROR_INVALIDDATA;
         }
     } else {
         /* Shorten frame num gaps so we don't have to allocate reference
@@ -2931,9 +2936,9 @@ static int decode_slice_header(H264Context *h, H264Context *h0)
 
         if (num_ref_idx_active_override_flag) {
             h->ref_count[0] = get_ue_golomb(&s->gb) + 1;
-            if (h->slice_type_nos == AV_PICTURE_TYPE_B)
+            if (h->slice_type_nos == AV_PICTURE_TYPE_B) {
                 h->ref_count[1] = get_ue_golomb(&s->gb) + 1;
-            else
+            } else
                 // full range is spec-ok in this case, even for frames
                 h->ref_count[1] = 1;
         }
@@ -2962,10 +2967,12 @@ static int decode_slice_header(H264Context *h, H264Context *h0)
 
     if (h->slice_type_nos != AV_PICTURE_TYPE_I) {
         s->last_picture_ptr = &h->ref_list[0][0];
+        s->last_picture_ptr->owner2 = s;
         ff_copy_picture(&s->last_picture, s->last_picture_ptr);
     }
     if (h->slice_type_nos == AV_PICTURE_TYPE_B) {
         s->next_picture_ptr = &h->ref_list[1][0];
+        s->next_picture_ptr->owner2 = s;
         ff_copy_picture(&s->next_picture, s->next_picture_ptr);
     }
 
@@ -3761,6 +3768,13 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
         ff_h264_reset_sei(h);
     }
 
+    if (h->nal_length_size == 4) {
+        if (buf_size > 8 && AV_RB32(buf) == 1 && AV_RB32(buf+5) > (unsigned)buf_size) {
+            h->is_avc = 0;
+        }else if(buf_size > 3 && AV_RB32(buf) > 1 && AV_RB32(buf) <= (unsigned)buf_size)
+            h->is_avc = 1;
+    }
+
     for (; pass <= 1; pass++) {
         buf_index     = 0;
         context_count = 0;
@@ -3980,6 +3994,7 @@ again:
                 if (hx->redundant_pic_count == 0 &&
                     hx->intra_gb_ptr &&
                     hx->s.data_partitioning &&
+                    s->current_picture_ptr &&
                     s->context_initialized &&
                     (avctx->skip_frame < AVDISCARD_NONREF || hx->nal_ref_idc) &&
                     (avctx->skip_frame < AVDISCARD_BIDIR  ||
@@ -4000,6 +4015,8 @@ again:
                            "SPS decoding failure, trying again with the complete NAL\n");
                     if (h->is_avc)
                         av_assert0(next_avc - buf_index + consumed == nalsize);
+                    if ((next_avc - buf_index + consumed - 1) >= INT_MAX/8)
+                        break;
                     init_get_bits(&s->gb, &buf[buf_index + 1 - consumed],
                                   8*(next_avc - buf_index + consumed - 1));
                     ff_h264_decode_seq_parameter_set(h);

@@ -30,6 +30,9 @@ version <next>:
 - ffprobe -show_entries option
 - ffprobe -sections option
 - ADPCM IMA Dialogic decoder
+- BRSTM demuxer
+- animated GIF decoder and demuxer
+- PVF demuxer
 
 
 version 1.0:
