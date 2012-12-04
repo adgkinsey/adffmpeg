@@ -224,7 +224,7 @@ static void lpc_prediction(int32_t *error_buffer, int32_t *buffer_out,
     }
 
     /* read warm-up samples */
-    for (i = 1; i <= lpc_order; i++)
+    for (i = 1; i <= lpc_order && i < nb_samples; i++)
         buffer_out[i] = sign_extend(buffer_out[i - 1] + error_buffer[i], bps);
 
     /* NOTE: 4 and 8 are very common cases that could be optimized. */
@@ -542,7 +542,11 @@ static av_cold int alac_decode_close(AVCodecContext *avctx)
 static int allocate_buffers(ALACContext *alac)
 {
     int ch;
-    int buf_size = alac->max_samples_per_frame * sizeof(int32_t);
+    int buf_size;
+
+    if (alac->max_samples_per_frame > INT_MAX / sizeof(int32_t))
+        goto buf_alloc_fail;
+    buf_size = alac->max_samples_per_frame * sizeof(int32_t);
 
     for (ch = 0; ch < FFMIN(alac->channels, 2); ch++) {
         FF_ALLOC_OR_GOTO(alac->avctx, alac->predict_error_buffer[ch],

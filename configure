@@ -1929,6 +1929,9 @@ showspectrum_filter_deps="avcodec"
 super2xsai_filter_deps="gpl"
 tinterlace_filter_deps="gpl"
 yadif_filter_deps="gpl"
+pixfmts_super2xsai_test_deps="super2xsai_filter"
+tinterlace_merge_test_deps="tinterlace_filter"
+tinterlace_pad_test_deps="tinterlace_filter"
 
 # libraries
 avdevice_deps="avcodec avformat"
@@ -1955,18 +1958,16 @@ doc_deps_any="manpages htmlpages podpages txtpages"
 # tests
 colormatrix1_test_deps="colormatrix_filter"
 colormatrix2_test_deps="colormatrix_filter"
-flashsv2_test_deps="zlib"
 mpg_test_deps="mpeg1system_muxer mpegps_demuxer"
-mpng_test_deps="zlib"
+png_test_deps="zlib"
 pp_test_deps="mp_filter"
 pp2_test_deps="mp_filter"
 pp3_test_deps="mp_filter"
 pp4_test_deps="mp_filter"
 pp5_test_deps="mp_filter"
 pp6_test_deps="mp_filter"
+seek_flashsv_flv_test_deps="zlib"
 seek_lavf_mxf_d10_test_deps="mxf_d10_test"
-zlib_test_deps="zlib"
-zmbv_test_deps="zlib"
 
 test_deps(){
     suf1=$1
