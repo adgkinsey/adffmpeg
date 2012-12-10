@@ -14,6 +14,7 @@ version <next>:
 - FFM2 support
 - X-Face image encoder and decoder
 - 24-bit FLAC encoding
+- multi-channel ALAC encoding up to 7.1
 - metadata (INFO tag) support in WAV muxer
 - subtitles raw text decoder
 - support for building DLLs using MSVC
@@ -24,7 +25,7 @@ version <next>:
 - AVR demuxer
 - geq filter ported from libmpcodecs
 - remove ffserver daemon mode
-- AST demuxer
+- AST muxer/demuxer
 - new expansion syntax for drawtext
 - BRender PIX image decoder
 - ffprobe -show_entries option
@@ -34,6 +35,11 @@ version <next>:
 - animated GIF decoder and demuxer
 - PVF demuxer
 - subtitles filter
+- IRCAM muxer/demuxer
+- Paris Audio File demuxer
+- Virtual concatenation demuxer
+- VobSub demuxer
+- JSON captions for TED talks decoding support
 
 
 version 1.0:

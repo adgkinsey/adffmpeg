@@ -29,6 +29,7 @@
 #include "bytestream.h"
 #include "avcodec.h"
 #include "get_bits.h"
+#include "internal.h"
 
 // TODO: masking bits
 typedef enum {
@@ -590,7 +591,7 @@ static int unsupported(AVCodecContext *avctx)
 }
 
 static int decode_frame(AVCodecContext *avctx,
-                            void *data, int *data_size,
+                            void *data, int *got_frame,
                             AVPacket *avpkt)
 {
     IffContext *s = avctx->priv_data;
@@ -606,7 +607,7 @@ static int decode_frame(AVCodecContext *avctx,
             av_log(avctx, AV_LOG_ERROR, "reget_buffer() failed\n");
             return res;
         }
-    } else if ((res = avctx->get_buffer(avctx, &s->frame)) < 0) {
+    } else if ((res = ff_get_buffer(avctx, &s->frame)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return res;
     } else if (avctx->bits_per_coded_sample <= 8 && avctx->pix_fmt == AV_PIX_FMT_PAL8) {
@@ -783,7 +784,7 @@ static int decode_frame(AVCodecContext *avctx,
         return unsupported(avctx);
     }
 
-    *data_size = sizeof(AVFrame);
+    *got_frame = 1;
     *(AVFrame*)data = s->frame;
     return buf_size;
 }
