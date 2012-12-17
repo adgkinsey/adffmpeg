@@ -213,6 +213,7 @@ External library support:
   --enable-libpulse        enable Pulseaudio input via libpulse [no]
   --enable-librtmp         enable RTMP[E] support via librtmp [no]
   --enable-libschroedinger enable Dirac de/encoding via libschroedinger [no]
+  --enable-libsoxr         enable Include libsoxr resampling [no]
   --enable-libspeex        enable Speex de/encoding via libspeex [no]
   --enable-libstagefright-h264  enable H.264 decoding via libstagefright [no]
   --enable-libtheora       enable Theora encoding via libtheora [no]
@@ -1174,6 +1175,7 @@ CONFIG_LIST="
     libpulse
     librtmp
     libschroedinger
+    libsoxr
     libspeex
     libstagefright_h264
     libtheora
@@ -1413,6 +1415,7 @@ HAVE_LIST="
     posix_memalign
     pthread_cancel
     rdtsc
+    rsync_contimeout
     sched_getaffinity
     sdl
     sdl_video_size
@@ -3845,6 +3848,7 @@ enabled libopus    && require_pkg_config opus opus_multistream.h opus_multistrea
 enabled libpulse && require_pkg_config libpulse-simple pulse/simple.h pa_simple_new
 enabled librtmp    && require_pkg_config librtmp librtmp/rtmp.h RTMP_Socket
 enabled libschroedinger && require_pkg_config schroedinger-1.0 schroedinger/schro.h schro_init
+enabled libsoxr    && require  libsoxr soxr.h soxr_create -lsoxr
 enabled libspeex   && require  libspeex speex/speex.h speex_decoder_init -lspeex
 enabled libstagefright_h264  && require_cpp libstagefright_h264 "binder/ProcessState.h media/stagefright/MetaData.h
     media/stagefright/MediaBufferGroup.h media/stagefright/MediaDebug.h media/stagefright/MediaDefs.h
@@ -3914,6 +3918,7 @@ texi2html --help 2> /dev/null | grep -q 'init-file' && enable texi2html || disab
 makeinfo --version > /dev/null 2>&1 && enable makeinfo  || disable makeinfo
 perl --version > /dev/null 2>&1 && enable perl || disable perl
 pod2man --help > /dev/null 2>&1 && enable pod2man || disable pod2man
+rsync --help 2> /dev/null | grep -q 'contimeout' && enable rsync_contimeout || disable rsync_contimeout
 
 check_header linux/fb.h
 check_header linux/videodev.h
@@ -4206,6 +4211,7 @@ if enabled arm; then
     echo "ARMv6T2 enabled           ${armv6t2-no}"
     echo "VFP enabled               ${vfp-no}"
     echo "NEON enabled              ${neon-no}"
+    echo "THUMB enabled             ${thumb-no}"
 fi
 if enabled mips; then
     echo "MIPS FPU enabled          ${mipsfpu-no}"
@@ -4261,6 +4267,7 @@ echo "libopus enabled           ${libopus-no}"
 echo "libpulse enabled          ${libpulse-no}"
 echo "librtmp enabled           ${librtmp-no}"
 echo "libschroedinger enabled   ${libschroedinger-no}"
+echo "libsoxr enabled           ${libsoxr-no}"
 echo "libspeex enabled          ${libspeex-no}"
 echo "libstagefright-h264 enabled    ${libstagefright_h264-no}"
 echo "libtheora enabled         ${libtheora-no}"
