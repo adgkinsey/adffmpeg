@@ -27,6 +27,11 @@
 #include "avfilter.h"
 #include "internal.h"
 
+int avfilter_ref_get_channels(AVFilterBufferRef *ref)
+{
+    return ref->audio ? ref->audio->channels : 0;
+}
+
 AVFilterBufferRef *ff_null_get_audio_buffer(AVFilterLink *link, int perms,
                                             int nb_samples)
 {
@@ -93,6 +98,7 @@ AVFilterBufferRef* avfilter_get_audio_buffer_ref_from_arrays(uint8_t **data,
                                                              enum AVSampleFormat sample_fmt,
                                                              uint64_t channel_layout)
 {
+    int channels = av_get_channel_layout_nb_channels(channel_layout);
     int planes;
     AVFilterBuffer    *samples    = av_mallocz(sizeof(*samples));
     AVFilterBufferRef *samplesref = av_mallocz(sizeof(*samplesref));
@@ -107,9 +113,9 @@ AVFilterBufferRef* avfilter_get_audio_buffer_ref_from_arrays(uint8_t **data,
 
     samplesref->audio->nb_samples     = nb_samples;
     samplesref->audio->channel_layout = channel_layout;
+    samplesref->audio->channels       = channels;
 
-    planes = av_sample_fmt_is_planar(sample_fmt) ?
-        av_get_channel_layout_nb_channels(channel_layout) : 1;
+    planes = av_sample_fmt_is_planar(sample_fmt) ? channels : 1;
 
     /* make sure the buffer gets read permission or it's useless for output */
     samplesref->perms = perms | AV_PERM_READ;
@@ -225,6 +231,7 @@ int ff_filter_samples(AVFilterLink *link, AVFilterBufferRef *samplesref)
     int ret = 0;
 
     av_assert1(samplesref->format                == link->format);
+    av_assert1(samplesref->audio->channels       == link->channels);
     av_assert1(samplesref->audio->channel_layout == link->channel_layout);
     av_assert1(samplesref->audio->sample_rate    == link->sample_rate);
 

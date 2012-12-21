@@ -16,10 +16,10 @@ To illustrate the sorts of things that are possible, we can
 use a complex filter graph. For example, the following one:
 
 @example
-input --> split --> fifo -----------------------> overlay --> output
-            |                                        ^
-            |                                        |
-            +------> fifo --> crop --> vflip --------+
+input --> split ---------------------> overlay --> output
+            |                             ^
+            |                             |
+            +-----> crop --> vflip -------+
 @end example
 
 splits the stream in two streams, sends one stream through the crop filter
@@ -27,7 +27,7 @@ and the vflip filter before merging it back with the other stream by
 overlaying it on top. You can use the following command to achieve this:
 
 @example
-ffmpeg -i input -vf "[in] split [T1], fifo, [T2] overlay=0:H/2 [out]; [T1] fifo, crop=iw:ih/2:0:ih/2, vflip [T2]" output
+ffmpeg -i input -vf "[in] split [T1], [T2] overlay=0:H/2 [out]; [T1] crop=iw:ih/2:0:ih/2, vflip [T2]" output
 @end example
 
 The result will be that in output the top half of the video is mirrored
@@ -35,8 +35,8 @@ onto the bottom half.
 
 Filters are loaded using the @var{-vf} or @var{-af} option passed to
 @command{ffmpeg} or to @command{ffplay}. Filters in the same linear
-chain are separated by commas. In our example, @var{split, fifo,
-overlay} are in one linear chain, and @var{fifo, crop, vflip} are in
+chain are separated by commas. In our example, @var{split,
+overlay} are in one linear chain, and @var{crop, vflip} are in
 another. The points where the linear chains join are labeled by names
 enclosed in square brackets. In our example, that is @var{[T1]} and
 @var{[T2]}. The special labels @var{[in]} and @var{[out]} are the points
@@ -240,8 +240,8 @@ And finally inserted in a filtergraph like:
 drawtext=text=\'Caesar: tu quoque\, Brute\, fili mi\'
 @end example
 
-See the @ref{quoting_and_escaping, Quoting and escaping} section for
-more information about the escaping and quoting rules adopted by
+See the ``Quoting and escaping'' section in the ffmpeg-utils manual
+for more information about the escaping and quoting rules adopted by
 FFmpeg.
 
 @c man end FILTERGRAPH DESCRIPTION
@@ -408,6 +408,11 @@ stream ends. The default value is 2 seconds.
 @section anull
 
 Pass the audio source unchanged to the output.
+
+@section apad
+
+Pad the end of a audio stream with silence, this can be used together with
+-shortest to extend audio streams to the same length as the video stream.
 
 @section aresample
 
@@ -2660,27 +2665,45 @@ This filter is designed for playback only.  Do not use it prior to
 lossy compression, because compression tends to lose the dither and
 bring back the bands.
 
-The filter takes two optional parameters, separated by ':':
-@var{strength}:@var{radius}
+The filter accepts a list of options in the form of @var{key}=@var{value} pairs
+separated by ":". A description of the accepted options follows.
 
-@var{strength} is the maximum amount by which the filter will change
+@table @option
+
+@item strength
+The maximum amount by which the filter will change
 any one pixel. Also the threshold for detecting nearly flat
-regions. Acceptable values range from .51 to 255, default value is
-1.2, out-of-range values will be clipped to the valid range.
+regions. Acceptable values range from @code{0.51} to @code{64}, default value
+is @code{1.2}.
 
-@var{radius} is the neighborhood to fit the gradient to. A larger
+@item radius
+The neighborhood to fit the gradient to. A larger
 radius makes for smoother gradients, but also prevents the filter from
 modifying the pixels near detailed regions. Acceptable values are
-8-32, default value is 16, out-of-range values will be clipped to the
-valid range.
+@code{8-32}, default value is @code{16}.
 
+@end table
+
+Alternatively, the options can be specified as a flat string:
+@var{strength}[:@var{radius}]
+
+@subsection Examples
+
+@itemize
+@item
+Apply the filter with a @code{3.5} strength and radius of @code{8}:
 @example
-# default parameters
-gradfun=1.2:16
-
-# omitting radius
-gradfun=1.2
+gradfun=3.5:8
 @end example
+
+@item
+Specify radius, omitting the strength (which will fall-back to the default
+value):
+@example
+gradfun=radius=8
+@end example
+
+@end itemize
 
 @section hflip
 
@@ -5371,12 +5394,12 @@ starting from this seek point, the parameter is evaluated with
 postfix. Default value is "0".
 
 @item streams, s
-Specifies the streams to read. Several streams can be specified, separated
-by "+". The source will then have as many outputs, in the same order. The
-syntax is explained in the @ref{Stream specifiers} chapter. Two special
-names, "dv" and "da" specify respectively the default (best suited) video
-and audio stream. Default is "dv", or "da" if the filter is called as
-"amovie".
+Specifies the streams to read. Several streams can be specified,
+separated by "+". The source will then have as many outputs, in the
+same order. The syntax is explained in the ``Stream specifiers''
+section in the ffmpeg manual. Two special names, "dv" and "da" specify
+respectively the default (best suited) video and audio stream. Default
+is "dv", or "da" if the filter is called as "amovie".
 
 @item stream_index, si
 Specifies the index of the video stream to read. If the value is -1,

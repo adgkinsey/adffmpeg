@@ -99,7 +99,7 @@ static void gif_fill_rect(AVFrame *picture, uint32_t color, int l, int t, int w,
 {
     const int linesize = picture->linesize[0] / sizeof(uint32_t);
     const uint32_t *py = (uint32_t *)picture->data[0] + t * linesize;
-    const uint32_t *pr, *pb = py + (t + h) * linesize;
+    const uint32_t *pr, *pb = py + h * linesize;
     uint32_t *px;
 
     for (; py < pb; py += linesize) {
@@ -118,7 +118,7 @@ static void gif_copy_img_rect(const uint32_t *src, uint32_t *dst,
     const uint32_t *src_px, *src_pr,
                    *src_py = src + y_start,
                    *dst_py = dst + y_start;
-    const uint32_t *src_pb = src_py + (t + h) * linesize;
+    const uint32_t *src_pb = src_py + t * linesize;
     uint32_t *dst_px;
 
     for (; src_py < src_pb; src_py += linesize, dst_py += linesize) {
@@ -241,8 +241,9 @@ static int gif_read_image(GifState *s)
         pr = ptr + width;
 
         for (px = ptr, idx = s->idx_line; px < pr; px++, idx++) {
-            if (*idx != s->transparent_color_index)
-                *px = pal[*idx];
+            *px = pal[*idx];
+            if (*idx == s->transparent_color_index)
+                *px &= 0xFFFFFF;
         }
 
         if (is_interleaved) {
@@ -313,7 +314,6 @@ static int gif_read_extension(GifState *s)
         if (bytestream2_get_bytes_left(&s->gb) < 5)
             return AVERROR_INVALIDDATA;
 
-        s->transparent_color_index = -1;
         gce_flags = bytestream2_get_byteu(&s->gb);
         bytestream2_skipu(&s->gb, 2);    // delay during which the frame is shown
         gce_transparent_index = bytestream2_get_byteu(&s->gb);
