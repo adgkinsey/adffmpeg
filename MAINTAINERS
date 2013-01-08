@@ -183,7 +183,7 @@ Codecs:
   lzo.h, lzo.c                          Reimar Doeffinger
   mdec.c                                Michael Niedermayer
   mimic.c                               Ramiro Polla
-  mjpeg.c                               Michael Niedermayer
+  mjpeg*.c                              Michael Niedermayer
   mlp*                                  Ramiro Polla
   mmvideo.c                             Peter Ross
   mpc*                                  Kostya Shishkov
@@ -312,6 +312,7 @@ Muxers/Demuxers:
   ape.c                                 Kostya Shishkov
   ass*                                  Aurelien Jacobs
   astdec.c                              Paul B Mahol
+  astenc.c                              James Almer
   avi*                                  Michael Niedermayer
   avr.c                                 Paul B Mahol
   bink.c                                Peter Ross
@@ -362,6 +363,7 @@ Muxers/Demuxers:
   mtv.c                                 Reynaldo H. Verdejo Pinochet
   mxf*                                  Baptiste Coudurier
   mxfdec.c                              Tomas Härdin
+  nistspheredec.c                       Paul B Mahol
   nsvdec.c                              Francois Revol
   nut.c                                 Michael Niedermayer
   nuv.c                                 Reimar Doeffinger
@@ -409,6 +411,20 @@ Protocols:
   udp.c                                 Luca Abeni
 
 
+libswresample
+=============
+
+Generic parts:
+  audioconvert.c                        Michael Niedermayer
+  dither.c                              Michael Niedermayer
+  rematrix*.c                           Michael Niedermayer
+  swresample*.c                         Michael Niedermayer
+
+Resamplers:
+  resample*.c                           Michael Niedermayer
+  soxr_resample.c                       Rob Sykes
+
+
 Operating systems / CPU architectures
 =====================================
 
@@ -429,9 +445,9 @@ x86                                     Michael Niedermayer
 Releases
 ========
 
+1.1                                     Michael Niedermayer
 1.0                                     Michael Niedermayer
 0.11                                    Michael Niedermayer
-0.10                                    Michael Niedermayer
 
 
 

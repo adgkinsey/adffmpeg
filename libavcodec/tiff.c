@@ -462,6 +462,9 @@ static int tiff_unpack_strip(TiffContext *s, uint8_t *dst, int stride,
             src = s->deinvert_buf;
             ssrc = src;
         }
+        if (size > 1 && !src[0] && (src[1]&1)) {
+            av_log(s->avctx, AV_LOG_ERROR, "Old style LZW is unsupported\n");
+        }
         if (ff_lzw_decode_init(s->lzw, 8, src, size, FF_LZW_TIFF) < 0) {
             av_log(s->avctx, AV_LOG_ERROR, "Error initializing LZW decoder\n");
             return -1;
@@ -769,7 +772,7 @@ static int tiff_decode_tag(TiffContext *s)
         break;
     case TIFF_ROWSPERSTRIP:
         if (type == TIFF_LONG && value == UINT_MAX)
-            value = s->avctx->height;
+            value = s->height;
         if (value < 1) {
             av_log(s->avctx, AV_LOG_ERROR,
                    "Incorrect value of rows per strip\n");

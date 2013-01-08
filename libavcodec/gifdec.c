@@ -164,7 +164,7 @@ static int gif_read_image(GifState *s)
         pal = s->local_palette;
     } else {
         if (!s->has_global_palette) {
-            av_log(s->avctx, AV_LOG_FATAL, "picture doesn't have either global or local palette.\n");
+            av_log(s->avctx, AV_LOG_ERROR, "picture doesn't have either global or local palette.\n");
             return AVERROR_INVALIDDATA;
         }
 
@@ -185,7 +185,7 @@ static int gif_read_image(GifState *s)
     /* verify that all the image is inside the screen dimensions */
     if (left + width > s->screen_width ||
         top + height > s->screen_height)
-        return AVERROR(EINVAL);
+        return AVERROR_INVALIDDATA;
 
     /* process disposal method */
     if (s->gce_prev_disposal == GCE_DISPOSAL_BACKGROUND) {
@@ -202,7 +202,7 @@ static int gif_read_image(GifState *s)
         s->gce_w = width; s->gce_h = height;
 
         if (s->gce_disposal == GCE_DISPOSAL_BACKGROUND) {
-            if (s->background_color_index == s->transparent_color_index)
+            if (s->transparent_color_index >= 0)
                 s->stored_bg_color = s->trans_color;
             else
                 s->stored_bg_color = s->bg_color;
@@ -241,9 +241,8 @@ static int gif_read_image(GifState *s)
         pr = ptr + width;
 
         for (px = ptr, idx = s->idx_line; px < pr; px++, idx++) {
-            *px = pal[*idx];
-            if (*idx == s->transparent_color_index)
-                *px &= 0xFFFFFF;
+            if (*idx != s->transparent_color_index)
+                *px = pal[*idx];
         }
 
         if (is_interleaved) {
