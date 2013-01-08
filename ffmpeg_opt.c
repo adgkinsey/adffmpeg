@@ -1585,7 +1585,7 @@ static int open_output_file(OptionsContext *o, const char *filename)
 loop_end:
                 if (!ofilter) {
                     av_log(NULL, AV_LOG_FATAL, "Output with label '%s' does not exist "
-                           "in any defined filter graph.\n", map->linklabel);
+                           "in any defined filter graph, or was already used elsewhere.\n", map->linklabel);
                     exit(1);
                 }
                 init_output_filter(ofilter, o, oc);
@@ -1615,18 +1615,6 @@ loop_end:
         }
     }
 
-
-    for (i = nb_output_streams - oc->nb_streams; i < nb_output_streams; i++) { //for all streams of this output file
-        AVDictionaryEntry *e;
-        ost = output_streams[i];
-
-        if (   ost->stream_copy
-            && (e = av_dict_get(o->g->codec_opts, "flags", NULL, AV_DICT_IGNORE_SUFFIX))
-            && (!e->key[5] || check_stream_specifier(oc, ost->st, e->key+6)))
-            if (av_opt_set(ost->st->codec, "flags", e->value, 0) < 0)
-                exit(1);
-    }
-
     /* handle attached files */
     for (i = 0; i < o->nb_attachments; i++) {
         AVIOContext *pb;
@@ -1654,12 +1642,24 @@ loop_end:
         ost = new_attachment_stream(o, oc, -1);
         ost->stream_copy               = 0;
         ost->attachment_filename       = o->attachments[i];
+        ost->finished                  = 1;
         ost->st->codec->extradata      = attachment;
         ost->st->codec->extradata_size = len;
 
         p = strrchr(o->attachments[i], '/');
         av_dict_set(&ost->st->metadata, "filename", (p && *p) ? p + 1 : o->attachments[i], AV_DICT_DONT_OVERWRITE);
         avio_close(pb);
+    }
+
+    for (i = nb_output_streams - oc->nb_streams; i < nb_output_streams; i++) { //for all streams of this output file
+        AVDictionaryEntry *e;
+        ost = output_streams[i];
+
+        if ((ost->stream_copy || ost->attachment_filename)
+            && (e = av_dict_get(o->g->codec_opts, "flags", NULL, AV_DICT_IGNORE_SUFFIX))
+            && (!e->key[5] || check_stream_specifier(oc, ost->st, e->key+6)))
+            if (av_opt_set(ost->st->codec, "flags", e->value, 0) < 0)
+                exit(1);
     }
 
     GROW_ARRAY(output_files, nb_output_files);

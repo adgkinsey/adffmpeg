@@ -44,9 +44,6 @@
 static const enum AVPixelFormat pixfmt_rgb24[] = {
     AV_PIX_FMT_BGR24, AV_PIX_FMT_RGB32, AV_PIX_FMT_NONE };
 
-/*
- * Decoder context
- */
 typedef struct EightBpsContext {
     AVCodecContext *avctx;
     AVFrame pic;
@@ -57,12 +54,6 @@ typedef struct EightBpsContext {
     uint32_t pal[256];
 } EightBpsContext;
 
-
-/*
- *
- * Decode a frame
- *
- */
 static int decode_frame(AVCodecContext *avctx, void *data,
                         int *got_frame, AVPacket *avpkt)
 {
@@ -77,15 +68,16 @@ static int decode_frame(AVCodecContext *avctx, void *data,
     unsigned char count;
     unsigned int planes     = c->planes;
     unsigned char *planemap = c->planemap;
+    int ret;
 
     if (c->pic.data[0])
         avctx->release_buffer(avctx, &c->pic);
 
     c->pic.reference    = 0;
     c->pic.buffer_hints = FF_BUFFER_HINTS_VALID;
-    if (ff_get_buffer(avctx, &c->pic) < 0){
+    if ((ret = ff_get_buffer(avctx, &c->pic)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
-        return -1;
+        return ret;
     }
 
     /* Set data pointer after line lengths */
@@ -105,14 +97,14 @@ static int decode_frame(AVCodecContext *avctx, void *data,
             /* Decode a row of this plane */
             while (dlen > 0) {
                 if (dp + 1 >= buf + buf_size)
-                    return -1;
+                    return AVERROR_INVALIDDATA;
                 if ((count = *dp++) <= 127) {
                     count++;
                     dlen -= count + 1;
                     if (pixptr + count * planes > pixptr_end)
                         break;
                     if (dp + count > buf + buf_size)
-                        return -1;
+                        return AVERROR_INVALIDDATA;
                     while (count--) {
                         *pixptr = *dp++;
                         pixptr += planes;
@@ -151,12 +143,6 @@ static int decode_frame(AVCodecContext *avctx, void *data,
     return buf_size;
 }
 
-
-/*
- *
- * Init 8BPS decoder
- *
- */
 static av_cold int decode_init(AVCodecContext *avctx)
 {
     EightBpsContext * const c = avctx->priv_data;
@@ -196,20 +182,12 @@ static av_cold int decode_init(AVCodecContext *avctx)
     default:
         av_log(avctx, AV_LOG_ERROR, "Error: Unsupported color depth: %u.\n",
                avctx->bits_per_coded_sample);
-        return -1;
+        return AVERROR_INVALIDDATA;
     }
 
     return 0;
 }
 
-
-
-
-/*
- *
- * Uninit 8BPS decoder
- *
- */
 static av_cold int decode_end(AVCodecContext *avctx)
 {
     EightBpsContext * const c = avctx->priv_data;
@@ -219,8 +197,6 @@ static av_cold int decode_end(AVCodecContext *avctx)
 
     return 0;
 }
-
-
 
 AVCodec ff_eightbps_decoder = {
     .name           = "8bps",

@@ -1263,6 +1263,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .props     = AV_CODEC_PROP_INTRA_ONLY,
     },
     {
+        .id        = AV_CODEC_ID_012V,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "012v",
+        .long_name = NULL_IF_CONFIG_SMALL("Uncompressed 4:2:2 10-bit"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY,
+    },
+    {
         .id        = AV_CODEC_ID_G2M,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "g2m",
@@ -2405,6 +2412,12 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("MicroDVD subtitle"),
     },
     {
+        .id        = AV_CODEC_ID_MPL2,
+        .type      = AVMEDIA_TYPE_SUBTITLE,
+        .name      = "mpl2",
+        .long_name = NULL_IF_CONFIG_SMALL("MPL2 subtitle"),
+    },
+    {
         .id        = AV_CODEC_ID_EIA_608,
         .type      = AVMEDIA_TYPE_SUBTITLE,
         .name      = "eia_608",
@@ -2415,6 +2428,12 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_SUBTITLE,
         .name      = "jacosub",
         .long_name = NULL_IF_CONFIG_SMALL("JACOsub subtitle"),
+    },
+    {
+        .id        = AV_CODEC_ID_PJS,
+        .type      = AVMEDIA_TYPE_SUBTITLE,
+        .name      = "pjs",
+        .long_name = NULL_IF_CONFIG_SMALL("PJS (Phoenix Japanimation Society) subtitle"),
     },
     {
         .id        = AV_CODEC_ID_SAMI,
@@ -2429,10 +2448,22 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("RealText subtitle"),
     },
     {
+        .id        = AV_CODEC_ID_SUBVIEWER1,
+        .type      = AVMEDIA_TYPE_SUBTITLE,
+        .name      = "subviewer1",
+        .long_name = NULL_IF_CONFIG_SMALL("SubViewer v1 subtitle"),
+    },
+    {
         .id        = AV_CODEC_ID_SUBVIEWER,
         .type      = AVMEDIA_TYPE_SUBTITLE,
         .name      = "subviewer",
         .long_name = NULL_IF_CONFIG_SMALL("SubViewer subtitle"),
+    },
+    {
+        .id        = AV_CODEC_ID_VPLAYER,
+        .type      = AVMEDIA_TYPE_SUBTITLE,
+        .name      = "vplayer",
+        .long_name = NULL_IF_CONFIG_SMALL("VPlayer subtitle"),
     },
     {
         .id        = AV_CODEC_ID_WEBVTT,
