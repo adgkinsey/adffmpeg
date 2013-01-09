@@ -52,6 +52,7 @@ typedef struct PGSSubPresentation {
     int                    id_number;
     int                    object_count;
     PGSSubPictureReference *objects;
+    int64_t pts;
 } PGSSubPresentation;
 
 typedef struct PGSSubPicture {
@@ -67,13 +68,12 @@ typedef struct PGSSubContext {
     PGSSubPresentation presentation;
     uint32_t           clut[256];
     PGSSubPicture      pictures[UINT16_MAX];
-    int64_t            pts;
     int forced_subs_only;
 } PGSSubContext;
 
 static av_cold int init_decoder(AVCodecContext *avctx)
 {
-    avctx->pix_fmt     = PIX_FMT_PAL8;
+    avctx->pix_fmt     = AV_PIX_FMT_PAL8;
 
     return 0;
 }
@@ -295,7 +295,8 @@ static void parse_palette_segment(AVCodecContext *avctx,
  * @todo TODO: Implement cropping
  */
 static void parse_presentation_segment(AVCodecContext *avctx,
-                                       const uint8_t *buf, int buf_size)
+                                       const uint8_t *buf, int buf_size,
+                                       int64_t pts)
 {
     PGSSubContext *ctx = avctx->priv_data;
 
@@ -303,6 +304,8 @@ static void parse_presentation_segment(AVCodecContext *avctx,
     int h = bytestream_get_be16(&buf);
 
     uint16_t object_index;
+
+    ctx->presentation.pts = pts;
 
     av_dlog(avctx, "Video Dimensions %dx%d\n",
             w, h);
@@ -394,10 +397,10 @@ static int display_end_segment(AVCodecContext *avctx, void *data,
      *      not been cleared by a subsequent empty display command.
      */
 
-    pts = ctx->pts != AV_NOPTS_VALUE ? ctx->pts : sub->pts;
+    pts = ctx->presentation.pts != AV_NOPTS_VALUE ? ctx->presentation.pts : sub->pts;
     memset(sub, 0, sizeof(*sub));
     sub->pts = pts;
-    ctx->pts = AV_NOPTS_VALUE;
+    ctx->presentation.pts = AV_NOPTS_VALUE;
 
     // Blank if last object_count was 0.
     if (!ctx->presentation.object_count)
@@ -434,7 +437,7 @@ static int display_end_segment(AVCodecContext *avctx, void *data,
         sub->rects[rect]->pict.data[1] = av_mallocz(AVPALETTE_SIZE);
 
         /* Copy the forced flag */
-        sub->rects[rect]->forced = (ctx->presentation.objects[rect].composition & 0x40) != 0;
+        sub->rects[rect]->flags = (ctx->presentation.objects[rect].composition & 0x40) != 0 ? AV_SUBTITLE_FLAG_FORCED : 0;
 
         if (!ctx->forced_subs_only || ctx->presentation.objects[rect].composition & 0x40)
         memcpy(sub->rects[rect]->pict.data[1], ctx->clut, sub->rects[rect]->nb_colors * sizeof(uint32_t));
@@ -446,7 +449,6 @@ static int display_end_segment(AVCodecContext *avctx, void *data,
 static int decode(AVCodecContext *avctx, void *data, int *data_size,
                   AVPacket *avpkt)
 {
-    PGSSubContext *ctx = avctx->priv_data;
     const uint8_t *buf = avpkt->data;
     int buf_size       = avpkt->size;
     AVSubtitle *sub    = data;
@@ -493,8 +495,7 @@ static int decode(AVCodecContext *avctx, void *data, int *data_size,
             parse_picture_segment(avctx, buf, segment_length);
             break;
         case PRESENTATION_SEGMENT:
-            parse_presentation_segment(avctx, buf, segment_length);
-            ctx->pts = sub->pts;
+            parse_presentation_segment(avctx, buf, segment_length, sub->pts);
             break;
         case WINDOW_SEGMENT:
             /*
