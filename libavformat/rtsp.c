@@ -1863,6 +1863,7 @@ int ff_rtsp_fetch_packet(AVFormatContext *s, AVPacket *pkt)
             rt->cur_transport_priv = NULL;
     }
 
+redo:
     if (rt->transport == RTSP_TRANSPORT_RTP) {
         int i;
         int64_t first_queue_time = 0;
@@ -1878,12 +1879,15 @@ int ff_rtsp_fetch_packet(AVFormatContext *s, AVPacket *pkt)
                 first_queue_st   = rt->rtsp_streams[i];
             }
         }
-        if (first_queue_time)
+        if (first_queue_time) {
             wait_end = first_queue_time + s->max_delay;
+        } else {
+            wait_end = 0;
+            first_queue_st = NULL;
+        }
     }
 
     /* read next RTP packet */
- redo:
     if (!rt->recvbuf) {
         rt->recvbuf = av_malloc(RECVBUF_SIZE);
         if (!rt->recvbuf)
@@ -1904,7 +1908,11 @@ int ff_rtsp_fetch_packet(AVFormatContext *s, AVPacket *pkt)
             ff_rtp_check_and_send_back_rr(rtsp_st->transport_priv, rtsp_st->rtp_handle, NULL, len);
         break;
     case RTSP_LOWER_TRANSPORT_CUSTOM:
-        len = ffio_read_partial(s->pb, rt->recvbuf, RECVBUF_SIZE);
+        if (first_queue_st && rt->transport == RTSP_TRANSPORT_RTP &&
+            wait_end && wait_end < av_gettime())
+            len = AVERROR(EAGAIN);
+        else
+            len = ffio_read_partial(s->pb, rt->recvbuf, RECVBUF_SIZE);
         len = pick_stream(s, &rtsp_st, rt->recvbuf, len);
         if (len > 0 && rtsp_st->transport_priv && rt->transport == RTSP_TRANSPORT_RTP)
             ff_rtp_check_and_send_back_rr(rtsp_st->transport_priv, NULL, s->pb, len);
