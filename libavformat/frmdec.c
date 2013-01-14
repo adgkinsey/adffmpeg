@@ -24,16 +24,16 @@
  * Megalux Frame demuxer
  */
 
+#include "libavcodec/raw.h"
 #include "libavutil/intreadwrite.h"
 #include "avformat.h"
-#include "riff.h"
 
-static const AVCodecTag frm_pix_fmt_tags[] = {
+static const PixelFormatTag frm_pix_fmt_tags[] = {
     { AV_PIX_FMT_RGB555, 1 },
     { AV_PIX_FMT_RGB0,   2 },
     { AV_PIX_FMT_RGB24,  3 },
     { AV_PIX_FMT_BGR0,   4 },
-    { AV_PIX_FMT_BGR0,   5 },
+    { AV_PIX_FMT_BGRA,   5 },
     { AV_PIX_FMT_NONE,   0 },
 };
 
@@ -61,7 +61,7 @@ static int frm_read_header(AVFormatContext *avctx)
     st->codec->codec_id   = AV_CODEC_ID_RAWVIDEO;
     avio_skip(pb, 3);
 
-    st->codec->pix_fmt    = ff_codec_get_id(frm_pix_fmt_tags, avio_r8(pb));
+    st->codec->pix_fmt    = avpriv_find_pix_fmt(frm_pix_fmt_tags, avio_r8(pb));
     if (!st->codec->pix_fmt)
         return AVERROR_INVALIDDATA;
 
@@ -87,6 +87,12 @@ static int frm_read_packet(AVFormatContext *avctx, AVPacket *pkt)
     ret = av_get_packet(avctx->pb, pkt, packet_size);
     if (ret < 0)
         return ret;
+
+    if (stc->pix_fmt == AV_PIX_FMT_BGRA) {
+        int i;
+        for (i = 3; i + 1 <= pkt->size; i += 4)
+            pkt->data[i] = 0xFF - pkt->data[i];
+    }
 
     pkt->stream_index = 0;
     s->count++;

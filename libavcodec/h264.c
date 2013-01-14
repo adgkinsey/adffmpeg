@@ -2153,12 +2153,19 @@ static void idr(H264Context *h)
 /* forget old pics after a seek */
 static void flush_change(H264Context *h)
 {
+    int i, j;
+
     h->outputed_poc = h->next_outputed_poc = INT_MIN;
     h->prev_interlaced_frame = 1;
     idr(h);
     h->prev_frame_num = -1;
-    if (h->s.current_picture_ptr)
+    if (h->s.current_picture_ptr) {
         h->s.current_picture_ptr->f.reference = 0;
+        for (j=i=0; h->delayed_pic[i]; i++)
+            if (h->delayed_pic[i] != h->s.current_picture_ptr)
+                h->delayed_pic[j++] = h->delayed_pic[i];
+        h->delayed_pic[j] = NULL;
+    }
     h->s.first_field = 0;
     memset(h->ref_list[0], 0, sizeof(h->ref_list[0]));
     memset(h->ref_list[1], 0, sizeof(h->ref_list[1]));
@@ -2589,7 +2596,7 @@ static int h264_slice_header_init(H264Context *h, int reinit)
             return ret;
         }
     } else {
-        if ((ret = ff_MPV_common_init(s) < 0)) {
+        if ((ret = ff_MPV_common_init(s)) < 0) {
             av_log(h->s.avctx, AV_LOG_ERROR, "ff_MPV_common_init() failed.\n");
             return ret;
         }
@@ -4287,6 +4294,7 @@ static int decode_frame(AVCodecContext *avctx, void *data,
  out:
 
         s->current_picture_ptr = NULL;
+        s->first_field = 0;
 
         // FIXME factorize this with the output code below
         out     = h->delayed_pic[0];
