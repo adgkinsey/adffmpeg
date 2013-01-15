@@ -638,6 +638,7 @@ int initADData(int data_type, enum AVMediaType *mediaType, enum CodecID *codecId
     return 0;
 }
 
+#if CONFIG_ADBINARY_DEMUXER || CONFIG_ADMIME_DEMUXER
 int ad_read_jpeg(AVFormatContext *s, AVPacket *pkt, struct NetVuImageData *video_data, 
                  char **text_data)
 {
@@ -796,6 +797,48 @@ int ad_read_layout(AVFormatContext *s, AVPacket *pkt, int size)
     return errorVal;
 }
 
+int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int channel, int insize, char **text_data)
+{
+    AdContext* adContext = s->priv_data;
+    AVIOContext *pb      = s->pb;
+    AVStream *st         = NULL;
+    uint8_t *inbuf       = NULL;
+    int n, w, h;
+    char *comment = NULL;
+    
+    inbuf = av_malloc(insize);
+    n = avio_read(pb, inbuf, insize);
+    if (n != insize)  {
+        av_log(s, AV_LOG_ERROR, "%s: short of data reading pbm data body, expected %d, read %d\n", __func__, insize, n);
+        return ADFFMPEG_AD_ERROR_OVERLAY_GET_BUFFER;
+    }
+    
+    pkt->size = ad_pbmDecompress(&comment, &inbuf, insize, pkt, &w, &h);
+    if (pkt->size <= 0) {
+		av_log(s, AV_LOG_ERROR, "ADPIC: ad_pbmDecompress failed\n");
+		return ADFFMPEG_AD_ERROR_OVERLAY_PBM_READ;
+	}
+    
+    if (text_data)  {
+        int len = 12 + strlen(comment);
+        *text_data = av_malloc(len);
+        snprintf(*text_data, len-1, "Camera %u: %s", channel+1, comment);
+        
+        st = ad_get_overlay_stream(s, channel, *text_data);
+        st->codec->width = w;
+        st->codec->height = h;
+    }
+    
+    av_free(comment);
+    
+    if (adContext)
+        pkt->dts = pkt->pts = adContext->lastVideoPTS;
+    
+    return 0;
+}
+#endif
+
+
 int ad_pbmDecompress(char **comment, uint8_t **src, int size, AVPacket *pkt, int *width, int *height)
 {
     static const uint8_t pbm[3] = { 0x50, 0x34, 0x0A };
@@ -885,46 +928,6 @@ int ad_pbmDecompress(char **comment, uint8_t **src, int size, AVPacket *pkt, int
         av_freep(src);
         return size;
     }
-}
-
-int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int channel, int insize, char **text_data)
-{
-    AdContext* adContext = s->priv_data;
-    AVIOContext *pb      = s->pb;
-    AVStream *st         = NULL;
-    uint8_t *inbuf       = NULL;
-    int n, w, h;
-    char *comment = NULL;
-    
-    inbuf = av_malloc(insize);
-    n = avio_read(pb, inbuf, insize);
-    if (n != insize)  {
-        av_log(s, AV_LOG_ERROR, "%s: short of data reading pbm data body, expected %d, read %d\n", __func__, insize, n);
-        return ADFFMPEG_AD_ERROR_OVERLAY_GET_BUFFER;
-    }
-    
-    pkt->size = ad_pbmDecompress(&comment, &inbuf, insize, pkt, &w, &h);
-    if (pkt->size <= 0) {
-		av_log(s, AV_LOG_ERROR, "ADPIC: ad_pbmDecompress failed\n");
-		return ADFFMPEG_AD_ERROR_OVERLAY_PBM_READ;
-	}
-    
-    if (text_data)  {
-        int len = 12 + strlen(comment);
-        *text_data = av_malloc(len);
-        snprintf(*text_data, len-1, "Camera %u: %s", channel+1, comment);
-        
-        st = ad_get_overlay_stream(s, channel, *text_data);
-        st->codec->width = w;
-        st->codec->height = h;
-    }
-    
-    av_free(comment);
-    
-    if (adContext)
-        pkt->dts = pkt->pts = adContext->lastVideoPTS;
-    
-    return 0;
 }
             
 static int addSideData(AVFormatContext *s, AVPacket *pkt, 
