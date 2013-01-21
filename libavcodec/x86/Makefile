@@ -23,6 +23,7 @@ OBJS-$(CONFIG_V210_DECODER)            += x86/v210-init.o
 OBJS-$(CONFIG_TRUEHD_DECODER)          += x86/mlpdsp.o
 OBJS-$(CONFIG_VC1_DECODER)             += x86/vc1dsp_init.o
 OBJS-$(CONFIG_VIDEODSP)                += x86/videodsp_init.o
+OBJS-$(CONFIG_VORBIS_DECODER)          += x86/vorbisdsp_init.o
 OBJS-$(CONFIG_VP3DSP)                  += x86/vp3dsp_init.o
 OBJS-$(CONFIG_VP5_DECODER)             += x86/vp56dsp_init.o
 OBJS-$(CONFIG_VP6_DECODER)             += x86/vp56dsp_init.o
@@ -35,17 +36,18 @@ MMX-OBJS                               += x86/dsputil_mmx.o             \
                                           x86/idct_sse2_xvid.o          \
                                           x86/simple_idct.o             \
 
-MMX-OBJS-$(CONFIG_DWT)                 += x86/snowdsp.o \
-                                          x86/dwt.o
 MMX-OBJS-$(CONFIG_ENCODERS)            += x86/dsputilenc_mmx.o          \
                                           x86/motion_est.o
+MMX-OBJS-$(CONFIG_DIRAC_DECODER)       += x86/dirac_dwt.o
+MMX-OBJS-$(CONFIG_SNOW_DECODER)        += x86/snowdsp.o
+MMX-OBJS-$(CONFIG_SNOW_ENCODER)        += x86/snowdsp.o
 MMX-OBJS-$(CONFIG_VC1_DECODER)         += x86/vc1dsp_mmx.o
 
 YASM-OBJS-$(CONFIG_AAC_DECODER)        += x86/sbrdsp.o
 YASM-OBJS-$(CONFIG_AC3DSP)             += x86/ac3dsp.o
 YASM-OBJS-$(CONFIG_DCT)                += x86/dct32.o
-YASM-OBJS-$(CONFIG_DIRAC_DECODER)      += x86/diracdsp_mmx.o x86/diracdsp_yasm.o
-YASM-OBJS-$(CONFIG_DWT)                += x86/dwt_yasm.o
+YASM-OBJS-$(CONFIG_DIRAC_DECODER)      += x86/diracdsp_mmx.o x86/diracdsp_yasm.o\
+                                          x86/dwt_yasm.o
 YASM-OBJS-$(CONFIG_ENCODERS)           += x86/dsputilenc.o
 YASM-OBJS-$(CONFIG_FFT)                += x86/fft.o
 YASM-OBJS-$(CONFIG_H264CHROMA)         += x86/h264_chromamc.o           \

@@ -309,7 +309,7 @@ typedef struct DSPContext {
      */
     op_pixels_func avg_no_rnd_pixels_tab[4][4];
 
-    void (*put_no_rnd_pixels_l2[2])(uint8_t *block/*align width (8 or 16)*/, const uint8_t *a/*align 1*/, const uint8_t *b/*align 1*/, int line_size, int h);
+    void (*put_no_rnd_pixels_l2)(uint8_t *block/*align 8*/, const uint8_t *a/*align 1*/, const uint8_t *b/*align 1*/, int line_size, int h);
 
     /**
      * Thirdpel motion compensation with rounding (a+b+1)>>1.
@@ -364,14 +364,10 @@ typedef struct DSPContext {
 
     void (*h261_loop_filter)(uint8_t *src, int stride);
 
-    /* assume len is a multiple of 4, and arrays are 16-byte aligned */
-    void (*vorbis_inverse_coupling)(float *mag, float *ang, int blocksize);
     /* assume len is a multiple of 16, and arrays are 32-byte aligned */
     void (*vector_fmul_reverse)(float *dst, const float *src0, const float *src1, int len);
     /* assume len is a multiple of 8, and src arrays are 16-byte aligned */
     void (*vector_fmul_add)(float *dst, const float *src0, const float *src1, const float *src2, int len);
-    /* assume len is a multiple of 4, and arrays are 16-byte aligned */
-    void (*vector_fmul_window)(float *dst, const float *src0, const float *src1, const float *win, int len);
     /* assume len is a multiple of 8, and arrays are 16-byte aligned */
     void (*vector_clipf)(float *dst /* align 16 */, const float *src /* align 16 */, float min, float max, int len /* align 16 */);
     /**
@@ -584,7 +580,6 @@ void ff_dsputil_init_mmx(DSPContext* c, AVCodecContext *avctx);
 void ff_dsputil_init_ppc(DSPContext* c, AVCodecContext *avctx);
 void ff_dsputil_init_sh4(DSPContext* c, AVCodecContext *avctx);
 void ff_dsputil_init_vis(DSPContext* c, AVCodecContext *avctx);
-void ff_dsputil_init_mips(DSPContext* c, AVCodecContext *avctx);
 
 void ff_dsputil_init_dwt(DSPContext *c);
 

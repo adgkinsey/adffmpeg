@@ -197,14 +197,12 @@ DECLARE_ALIGNED(16, const double, ff_pd_2)[2] = { 2.0, 2.0 };
 
 #define DEF(x) x ## _3dnow
 #define PAVGB "pavgusb"
-#define OP_AVG PAVGB
 #define SKIP_FOR_3DNOW
 
 #include "dsputil_avg_template.c"
 
 #undef DEF
 #undef PAVGB
-#undef OP_AVG
 #undef SKIP_FOR_3DNOW
 
 /***********************************/
@@ -214,13 +212,11 @@ DECLARE_ALIGNED(16, const double, ff_pd_2)[2] = { 2.0, 2.0 };
 
 /* Introduced only in MMXEXT set */
 #define PAVGB "pavgb"
-#define OP_AVG PAVGB
 
 #include "dsputil_avg_template.c"
 
 #undef DEF
 #undef PAVGB
-#undef OP_AVG
 
 #define put_no_rnd_pixels16_mmx put_pixels16_mmx
 #define put_no_rnd_pixels8_mmx put_pixels8_mmx
@@ -1932,11 +1928,6 @@ static void put_vp_no_rnd_pixels8_l2_mmx(uint8_t *dst, const uint8_t *a, const u
         :"memory");
 //    STOP_TIMER("put_vp_no_rnd_pixels8_l2_mmx")
 }
-static void put_vp_no_rnd_pixels16_l2_mmx(uint8_t *dst, const uint8_t *a, const uint8_t *b, int stride, int h)
-{
-    put_vp_no_rnd_pixels8_l2_mmx(dst, a, b, stride, h);
-    put_vp_no_rnd_pixels8_l2_mmx(dst+8, a+8, b+8, stride, h);
-}
 
 #if CONFIG_DIRAC_DECODER
 #define DIRAC_PIXOP(OPNAME, EXT)\
@@ -2011,131 +2002,6 @@ static void ff_libmpeg2mmx2_idct_add(uint8_t *dest, int line_size,
     ff_add_pixels_clamped_mmx(block, dest, line_size);
 }
 #endif
-
-static void vorbis_inverse_coupling_3dnow(float *mag, float *ang, int blocksize)
-{
-    int i;
-    __asm__ volatile ("pxor %%mm7, %%mm7":);
-    for (i = 0; i < blocksize; i += 2) {
-        __asm__ volatile (
-            "movq       %0, %%mm0   \n\t"
-            "movq       %1, %%mm1   \n\t"
-            "movq    %%mm0, %%mm2   \n\t"
-            "movq    %%mm1, %%mm3   \n\t"
-            "pfcmpge %%mm7, %%mm2   \n\t" // m <= 0.0
-            "pfcmpge %%mm7, %%mm3   \n\t" // a <= 0.0
-            "pslld     $31, %%mm2   \n\t" // keep only the sign bit
-            "pxor    %%mm2, %%mm1   \n\t"
-            "movq    %%mm3, %%mm4   \n\t"
-            "pand    %%mm1, %%mm3   \n\t"
-            "pandn   %%mm1, %%mm4   \n\t"
-            "pfadd   %%mm0, %%mm3   \n\t" // a = m + ((a < 0) & (a ^ sign(m)))
-            "pfsub   %%mm4, %%mm0   \n\t" // m = m + ((a > 0) & (a ^ sign(m)))
-            "movq    %%mm3, %1      \n\t"
-            "movq    %%mm0, %0      \n\t"
-            : "+m"(mag[i]), "+m"(ang[i])
-            :: "memory"
-        );
-    }
-    __asm__ volatile ("femms");
-}
-
-static void vorbis_inverse_coupling_sse(float *mag, float *ang, int blocksize)
-{
-    int i;
-
-    __asm__ volatile (
-        "movaps  %0, %%xmm5 \n\t"
-        :: "m"(ff_pdw_80000000[0])
-    );
-    for (i = 0; i < blocksize; i += 4) {
-        __asm__ volatile (
-            "movaps      %0, %%xmm0 \n\t"
-            "movaps      %1, %%xmm1 \n\t"
-            "xorps   %%xmm2, %%xmm2 \n\t"
-            "xorps   %%xmm3, %%xmm3 \n\t"
-            "cmpleps %%xmm0, %%xmm2 \n\t" // m <= 0.0
-            "cmpleps %%xmm1, %%xmm3 \n\t" // a <= 0.0
-            "andps   %%xmm5, %%xmm2 \n\t" // keep only the sign bit
-            "xorps   %%xmm2, %%xmm1 \n\t"
-            "movaps  %%xmm3, %%xmm4 \n\t"
-            "andps   %%xmm1, %%xmm3 \n\t"
-            "andnps  %%xmm1, %%xmm4 \n\t"
-            "addps   %%xmm0, %%xmm3 \n\t" // a = m + ((a < 0) & (a ^ sign(m)))
-            "subps   %%xmm4, %%xmm0 \n\t" // m = m + ((a > 0) & (a ^ sign(m)))
-            "movaps  %%xmm3, %1     \n\t"
-            "movaps  %%xmm0, %0     \n\t"
-            : "+m"(mag[i]), "+m"(ang[i])
-            :: "memory"
-        );
-    }
-}
-
-#if HAVE_6REGS
-static void vector_fmul_window_3dnowext(float *dst, const float *src0,
-                                        const float *src1, const float *win,
-                                        int len)
-{
-    x86_reg i = -len * 4;
-    x86_reg j =  len * 4 - 8;
-    __asm__ volatile (
-        "1:                             \n"
-        "pswapd (%5, %1), %%mm1         \n"
-        "movq   (%5, %0), %%mm0         \n"
-        "pswapd (%4, %1), %%mm5         \n"
-        "movq   (%3, %0), %%mm4         \n"
-        "movq      %%mm0, %%mm2         \n"
-        "movq      %%mm1, %%mm3         \n"
-        "pfmul     %%mm4, %%mm2         \n" // src0[len + i] * win[len + i]
-        "pfmul     %%mm5, %%mm3         \n" // src1[j]       * win[len + j]
-        "pfmul     %%mm4, %%mm1         \n" // src0[len + i] * win[len + j]
-        "pfmul     %%mm5, %%mm0         \n" // src1[j]       * win[len + i]
-        "pfadd     %%mm3, %%mm2         \n"
-        "pfsub     %%mm0, %%mm1         \n"
-        "pswapd    %%mm2, %%mm2         \n"
-        "movq      %%mm1, (%2, %0)      \n"
-        "movq      %%mm2, (%2, %1)      \n"
-        "sub          $8, %1            \n"
-        "add          $8, %0            \n"
-        "jl           1b                \n"
-        "femms                          \n"
-        : "+r"(i), "+r"(j)
-        : "r"(dst + len), "r"(src0 + len), "r"(src1), "r"(win + len)
-    );
-}
-
-static void vector_fmul_window_sse(float *dst, const float *src0,
-                                   const float *src1, const float *win, int len)
-{
-    x86_reg i = -len * 4;
-    x86_reg j =  len * 4 - 16;
-    __asm__ volatile (
-        "1:                             \n"
-        "movaps      (%5, %1), %%xmm1   \n"
-        "movaps      (%5, %0), %%xmm0   \n"
-        "movaps      (%4, %1), %%xmm5   \n"
-        "movaps      (%3, %0), %%xmm4   \n"
-        "shufps $0x1b, %%xmm1, %%xmm1   \n"
-        "shufps $0x1b, %%xmm5, %%xmm5   \n"
-        "movaps        %%xmm0, %%xmm2   \n"
-        "movaps        %%xmm1, %%xmm3   \n"
-        "mulps         %%xmm4, %%xmm2   \n" // src0[len + i] * win[len + i]
-        "mulps         %%xmm5, %%xmm3   \n" // src1[j]       * win[len + j]
-        "mulps         %%xmm4, %%xmm1   \n" // src0[len + i] * win[len + j]
-        "mulps         %%xmm5, %%xmm0   \n" // src1[j]       * win[len + i]
-        "addps         %%xmm3, %%xmm2   \n"
-        "subps         %%xmm0, %%xmm1   \n"
-        "shufps $0x1b, %%xmm2, %%xmm2   \n"
-        "movaps        %%xmm1, (%2, %0) \n"
-        "movaps        %%xmm2, (%2, %1) \n"
-        "sub              $16, %1       \n"
-        "add              $16, %0       \n"
-        "jl                1b           \n"
-        : "+r"(i), "+r"(j)
-        : "r"(dst + len), "r"(src0 + len), "r"(src1), "r"(win + len)
-    );
-}
-#endif /* HAVE_6REGS */
 
 static void vector_clipf_sse(float *dst, const float *src,
                              float min, float max, int len)
@@ -2311,8 +2177,7 @@ static void dsputil_init_mmx(DSPContext *c, AVCodecContext *avctx, int mm_flags)
 
     c->add_bytes = add_bytes_mmx;
 
-    c->put_no_rnd_pixels_l2[0]= put_vp_no_rnd_pixels16_l2_mmx;
-    c->put_no_rnd_pixels_l2[1]= put_vp_no_rnd_pixels8_l2_mmx;
+    c->put_no_rnd_pixels_l2= put_vp_no_rnd_pixels8_l2_mmx;
 
     if (CONFIG_H263_DECODER || CONFIG_H263_ENCODER) {
         c->h263_v_loop_filter = h263_v_loop_filter_mmx;
@@ -2471,8 +2336,6 @@ static void dsputil_init_3dnow(DSPContext *c, AVCodecContext *avctx,
         c->put_no_rnd_pixels_tab[1][1] = put_no_rnd_pixels8_x2_exact_3dnow;
         c->put_no_rnd_pixels_tab[1][2] = put_no_rnd_pixels8_y2_exact_3dnow;
     }
-
-    c->vorbis_inverse_coupling = vorbis_inverse_coupling_3dnow;
 #endif /* HAVE_INLINE_ASM */
 
 #if HAVE_YASM
@@ -2481,14 +2344,6 @@ static void dsputil_init_3dnow(DSPContext *c, AVCodecContext *avctx,
         c->avg_h264_chroma_pixels_tab[1] = ff_avg_h264_chroma_mc4_3dnow;
     }
 #endif /* HAVE_YASM */
-}
-
-static void dsputil_init_3dnowext(DSPContext *c, AVCodecContext *avctx,
-                                  int mm_flags)
-{
-#if HAVE_AMD3DNOWEXT_INLINE && HAVE_6REGS
-    c->vector_fmul_window  = vector_fmul_window_3dnowext;
-#endif
 }
 
 static void dsputil_init_sse(DSPContext *c, AVCodecContext *avctx, int mm_flags)
@@ -2503,12 +2358,6 @@ static void dsputil_init_sse(DSPContext *c, AVCodecContext *avctx, int mm_flags)
             c->clear_blocks = clear_blocks_sse;
         }
     }
-
-    c->vorbis_inverse_coupling = vorbis_inverse_coupling_sse;
-
-#if HAVE_6REGS
-    c->vector_fmul_window = vector_fmul_window_sse;
-#endif
 
     c->vector_clipf = vector_clipf_sse;
 #endif /* HAVE_INLINE_ASM */
@@ -2738,9 +2587,6 @@ void ff_dsputil_init_mmx(DSPContext *c, AVCodecContext *avctx)
 
     if (mm_flags & AV_CPU_FLAG_3DNOW)
         dsputil_init_3dnow(c, avctx, mm_flags);
-
-    if (mm_flags & AV_CPU_FLAG_3DNOWEXT)
-        dsputil_init_3dnowext(c, avctx, mm_flags);
 
     if (mm_flags & AV_CPU_FLAG_SSE)
         dsputil_init_sse(c, avctx, mm_flags);

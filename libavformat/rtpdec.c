@@ -26,6 +26,7 @@
 #include "avformat.h"
 #include "mpegts.h"
 #include "network.h"
+#include "srtp.h"
 #include "url.h"
 #include "rtpdec.h"
 #include "rtpdec_formats.h"
@@ -50,7 +51,6 @@ static RTPDynamicProtocolHandler opus_dynamic_handler = {
     .codec_id   = AV_CODEC_ID_OPUS,
 };
 
-/* statistics functions */
 static RTPDynamicProtocolHandler *rtp_first_dynamic_payload_handler = NULL;
 
 void ff_register_dynamic_payload_handler(RTPDynamicProtocolHandler *handler)
@@ -264,7 +264,7 @@ int ff_rtp_check_and_send_back_rr(RTPDemuxContext *s, URLContext *fd,
     uint32_t extended_max;
     uint32_t expected_interval;
     uint32_t received_interval;
-    uint32_t lost_interval;
+    int32_t  lost_interval;
     uint32_t expected;
     uint32_t fraction;
 
@@ -549,6 +549,13 @@ void ff_rtp_parse_set_dynamic_protocol(RTPDemuxContext *s, PayloadContext *ctx,
     s->handler                  = handler;
 }
 
+void ff_rtp_parse_set_crypto(RTPDemuxContext *s, const char *suite,
+                             const char *params)
+{
+    if (!ff_srtp_set_crypto(&s->srtp, suite, params))
+        s->srtp_enabled = 1;
+}
+
 /**
  * This was the second switch in rtp_parse packet.
  * Normalizes time, if required, sets stream_index, etc.
@@ -626,6 +633,10 @@ static int rtp_parse_packet_internal(RTPDemuxContext *s, AVPacket *pkt,
         if (len >= 12 + padding)
             len -= padding;
     }
+
+    h = buf[0] & 0x0F;
+    buf += 4*h;
+    len -= 4*h;
 
     s->seq = seq;
     len   -= 12;
@@ -732,15 +743,14 @@ void ff_rtp_reset_packet_queue(RTPDemuxContext *s)
 static void enqueue_packet(RTPDemuxContext *s, uint8_t *buf, int len)
 {
     uint16_t seq   = AV_RB16(buf + 2);
-    RTPPacket *cur = s->queue, *prev = NULL, *packet;
+    RTPPacket **cur = &s->queue, *packet;
 
     /* Find the correct place in the queue to insert the packet */
-    while (cur) {
-        int16_t diff = seq - cur->seq;
+    while (*cur) {
+        int16_t diff = seq - (*cur)->seq;
         if (diff < 0)
             break;
-        prev = cur;
-        cur  = cur->next;
+        cur = &(*cur)->next;
     }
 
     packet = av_mallocz(sizeof(*packet));
@@ -750,11 +760,8 @@ static void enqueue_packet(RTPDemuxContext *s, uint8_t *buf, int len)
     packet->seq      = seq;
     packet->len      = len;
     packet->buf      = buf;
-    packet->next     = cur;
-    if (prev)
-        prev->next = packet;
-    else
-        s->queue = packet;
+    packet->next     = *cur;
+    *cur = packet;
     s->queue_len++;
 }
 
@@ -889,7 +896,10 @@ static int rtp_parse_one_packet(RTPDemuxContext *s, AVPacket *pkt,
 int ff_rtp_parse_packet(RTPDemuxContext *s, AVPacket *pkt,
                         uint8_t **bufptr, int len)
 {
-    int rv = rtp_parse_one_packet(s, pkt, bufptr, len);
+    int rv;
+    if (s->srtp_enabled && bufptr && ff_srtp_decrypt(&s->srtp, *bufptr, &len) < 0)
+        return -1;
+    rv = rtp_parse_one_packet(s, pkt, bufptr, len);
     s->prev_ret = rv;
     while (rv == AVERROR(EAGAIN) && has_next_packet(s))
         rv = rtp_parse_queued_packet(s, pkt);
@@ -902,6 +912,7 @@ void ff_rtp_parse_close(RTPDemuxContext *s)
     if (!strcmp(ff_rtp_enc_name(s->payload_type), "MP2T")) {
         ff_mpegts_parse_close(s->ts);
     }
+    ff_srtp_free(&s->srtp);
     av_free(s);
 }
 
