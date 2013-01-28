@@ -774,13 +774,15 @@ static int decode_audio_specific_config(AACContext *ac,
 {
     GetBitContext gb;
     int i;
+    int ret;
 
     av_dlog(avctx, "audio specific config size %d\n", bit_size >> 3);
     for (i = 0; i < bit_size >> 3; i++)
          av_dlog(avctx, "%02x ", data[i]);
     av_dlog(avctx, "\n");
 
-    init_get_bits(&gb, data, bit_size);
+    if ((ret = init_get_bits(&gb, data, bit_size)) < 0)
+        return ret;
 
     if ((i = avpriv_mpeg4audio_get_config(m4ac, data, bit_size, sync_extension)) < 0)
         return -1;
@@ -914,6 +916,11 @@ static av_cold int aac_decode_init(AVCodecContext *avctx)
         }
     }
 
+    if (avctx->channels > MAX_CHANNELS) {
+        av_log(avctx, AV_LOG_ERROR, "Too many channels\n");
+        return AVERROR_INVALIDDATA;
+    }
+
     AAC_INIT_VLC_STATIC( 0, 304);
     AAC_INIT_VLC_STATIC( 1, 270);
     AAC_INIT_VLC_STATIC( 2, 550);
@@ -928,7 +935,6 @@ static av_cold int aac_decode_init(AVCodecContext *avctx)
 
     ff_aac_sbr_init();
 
-    ff_dsputil_init(&ac->dsp, avctx);
     ff_fmt_convert_init(&ac->fmt_conv, avctx);
     avpriv_float_dsp_init(&ac->fdsp, avctx->flags & CODEC_FLAG_BITEXACT);
 
@@ -1394,7 +1400,7 @@ static int decode_spectrum_and_dequant(AACContext *ac, float coef[1024],
                         cfo[k] = ac->random_state;
                     }
 
-                    band_energy = ac->dsp.scalarproduct_float(cfo, cfo, off_len);
+                    band_energy = ac->fdsp.scalarproduct_float(cfo, cfo, off_len);
                     scale = sf[idx] / sqrtf(band_energy);
                     ac->fdsp.vector_fmul_scalar(cfo, cfo, scale, off_len);
                 }
@@ -1729,9 +1735,9 @@ static void apply_mid_side_stereo(AACContext *ac, ChannelElement *cpe)
             if (cpe->ms_mask[idx] &&
                     cpe->ch[0].band_type[idx] < NOISE_BT && cpe->ch[1].band_type[idx] < NOISE_BT) {
                 for (group = 0; group < ics->group_len[g]; group++) {
-                    ac->dsp.butterflies_float(ch0 + group * 128 + offsets[i],
-                                              ch1 + group * 128 + offsets[i],
-                                              offsets[i+1] - offsets[i]);
+                    ac->fdsp.butterflies_float(ch0 + group * 128 + offsets[i],
+                                               ch1 + group * 128 + offsets[i],
+                                               offsets[i+1] - offsets[i]);
                 }
             }
         }
@@ -2131,9 +2137,9 @@ static void windowing_and_mdct_ltp(AACContext *ac, float *out,
         ac->fdsp.vector_fmul(in + 448, in + 448, swindow_prev, 128);
     }
     if (ics->window_sequence[0] != LONG_START_SEQUENCE) {
-        ac->dsp.vector_fmul_reverse(in + 1024, in + 1024, lwindow, 1024);
+        ac->fdsp.vector_fmul_reverse(in + 1024, in + 1024, lwindow, 1024);
     } else {
-        ac->dsp.vector_fmul_reverse(in + 1024 + 448, in + 1024 + 448, swindow, 128);
+        ac->fdsp.vector_fmul_reverse(in + 1024 + 448, in + 1024 + 448, swindow, 128);
         memset(in + 1024 + 576, 0, 448 * sizeof(float));
     }
     ac->mdct_ltp.mdct_calc(&ac->mdct_ltp, out, in);
@@ -2186,17 +2192,17 @@ static void update_ltp(AACContext *ac, SingleChannelElement *sce)
     if (ics->window_sequence[0] == EIGHT_SHORT_SEQUENCE) {
         memcpy(saved_ltp,       saved, 512 * sizeof(float));
         memset(saved_ltp + 576, 0,     448 * sizeof(float));
-        ac->dsp.vector_fmul_reverse(saved_ltp + 448, ac->buf_mdct + 960,     &swindow[64],      64);
+        ac->fdsp.vector_fmul_reverse(saved_ltp + 448, ac->buf_mdct + 960,     &swindow[64],      64);
         for (i = 0; i < 64; i++)
             saved_ltp[i + 512] = ac->buf_mdct[1023 - i] * swindow[63 - i];
     } else if (ics->window_sequence[0] == LONG_START_SEQUENCE) {
         memcpy(saved_ltp,       ac->buf_mdct + 512, 448 * sizeof(float));
         memset(saved_ltp + 576, 0,                  448 * sizeof(float));
-        ac->dsp.vector_fmul_reverse(saved_ltp + 448, ac->buf_mdct + 960,     &swindow[64],      64);
+        ac->fdsp.vector_fmul_reverse(saved_ltp + 448, ac->buf_mdct + 960,     &swindow[64],      64);
         for (i = 0; i < 64; i++)
             saved_ltp[i + 512] = ac->buf_mdct[1023 - i] * swindow[63 - i];
     } else { // LONG_STOP or ONLY_LONG
-        ac->dsp.vector_fmul_reverse(saved_ltp,       ac->buf_mdct + 512,     &lwindow[512],     512);
+        ac->fdsp.vector_fmul_reverse(saved_ltp,       ac->buf_mdct + 512,     &lwindow[512],     512);
         for (i = 0; i < 512; i++)
             saved_ltp[i + 512] = ac->buf_mdct[1023 - i] * lwindow[511 - i];
     }
@@ -2918,7 +2924,8 @@ static int latm_decode_frame(AVCodecContext *avctx, void *out,
     int                 muxlength, err;
     GetBitContext       gb;
 
-    init_get_bits(&gb, avpkt->data, avpkt->size * 8);
+    if ((err = init_get_bits8(&gb, avpkt->data, avpkt->size)) < 0)
+        return err;
 
     // check for LOAS sync word
     if (get_bits(&gb, 11) != LOAS_SYNC_WORD)

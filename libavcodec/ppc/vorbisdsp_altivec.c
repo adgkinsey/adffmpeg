@@ -23,13 +23,11 @@
 #include <altivec.h>
 #endif
 #include "libavutil/cpu.h"
-#include "libavutil/ppc/types_altivec.h"
-#include "libavutil/ppc/util_altivec.h"
 #include "libavcodec/vorbisdsp.h"
 
 #if HAVE_ALTIVEC
 static void vorbis_inverse_coupling_altivec(float *mag, float *ang,
-                                            int blocksize)
+                                            intptr_t blocksize)
 {
     int i;
     vector float m, a;
