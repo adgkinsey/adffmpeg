@@ -456,67 +456,98 @@ static AVStream* createStream(AVFormatContext * avf)
     }
     else if (parReader_frameIsAudio(fi))  {
         st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
-        st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
         st->codec->channels = 1;
         st->codec->block_align = 0;
-        st->codec->bits_per_coded_sample = 4;
         st->start_time = fi->imageTime * 1000LL + fi->imageMS;
         st->duration = getLastFrameTime(fc, fi, &p->dispSet) - st->start_time;
 
         switch(parReader_getFrameSubType(fi))  {
             case(FRAME_FORMAT_AUD_ADPCM_8000):
+                st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
+                st->codec->bits_per_coded_sample = 4;
                 st->codec->sample_rate = 8000;
                 break;
             case(FRAME_FORMAT_AUD_ADPCM_16000):
+                st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
+                st->codec->bits_per_coded_sample = 4;
                 st->codec->sample_rate = 16000;
                 break;
             case(FRAME_FORMAT_AUD_L16_44100):
+                st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
+                st->codec->bits_per_coded_sample = 4;
                 st->codec->sample_rate = 441000;
                 break;
             case(FRAME_FORMAT_AUD_ADPCM_11025):
+                st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
+                st->codec->bits_per_coded_sample = 4;
                 st->codec->sample_rate = 11025;
                 break;
             case(FRAME_FORMAT_AUD_ADPCM_22050):
+                st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
+                st->codec->bits_per_coded_sample = 4;
                 st->codec->sample_rate = 22050;
                 break;
             case(FRAME_FORMAT_AUD_ADPCM_32000):
+                st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
+                st->codec->bits_per_coded_sample = 4;
                 st->codec->sample_rate = 32000;
                 break;
             case(FRAME_FORMAT_AUD_ADPCM_44100):
+                st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
+                st->codec->bits_per_coded_sample = 4;
                 st->codec->sample_rate = 44100;
                 break;
             case(FRAME_FORMAT_AUD_ADPCM_48000):
+                st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
+                st->codec->bits_per_coded_sample = 4;
                 st->codec->sample_rate = 48000;
                 break;
             case(FRAME_FORMAT_AUD_L16_8000):
+                st->codec->codec_id = CODEC_ID_PCM_S16LE;
+                st->codec->bits_per_coded_sample = 16;
                 st->codec->sample_rate = 8000;
                 break;
             case(FRAME_FORMAT_AUD_L16_11025):
+                st->codec->codec_id = CODEC_ID_PCM_S16LE;
+                st->codec->bits_per_coded_sample = 16;
                 st->codec->sample_rate = 11025;
                 break;
             case(FRAME_FORMAT_AUD_L16_16000):
+                st->codec->codec_id = CODEC_ID_PCM_S16LE;
+                st->codec->bits_per_coded_sample = 16;
                 st->codec->sample_rate = 16000;
                 break;
             case(FRAME_FORMAT_AUD_L16_22050):
+                st->codec->codec_id = CODEC_ID_PCM_S16LE;
+                st->codec->bits_per_coded_sample = 16;
                 st->codec->sample_rate = 22050;
                 break;
             case(FRAME_FORMAT_AUD_L16_32000):
+                st->codec->codec_id = CODEC_ID_PCM_S16LE;
+                st->codec->bits_per_coded_sample = 16;
                 st->codec->sample_rate = 32000;
                 break;
             case(FRAME_FORMAT_AUD_L16_48000):
+                st->codec->codec_id = CODEC_ID_PCM_S16LE;
+                st->codec->bits_per_coded_sample = 16;
                 st->codec->sample_rate = 48000;
                 break;
             case(FRAME_FORMAT_AUD_L16_12000):
+                st->codec->codec_id = CODEC_ID_PCM_S16LE;
+                st->codec->bits_per_coded_sample = 16;
                 st->codec->sample_rate = 12000;
                 break;
             case(FRAME_FORMAT_AUD_L16_24000):
+                st->codec->codec_id = CODEC_ID_PCM_S16LE;
+                st->codec->bits_per_coded_sample = 16;
                 st->codec->sample_rate = 24000;
                 break;
             default:
+                st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
                 st->codec->sample_rate = 8000;
                 break;
         }
-        avpriv_set_pts_info(st, 32, 1, 1000);
+        avpriv_set_pts_info(st, 64, 1, st->codec->sample_rate);
     }
     else  {
         st->codec->codec_type = AVMEDIA_TYPE_DATA;
@@ -826,8 +857,8 @@ static int par_read_header(AVFormatContext * avf)
 static int par_read_packet(AVFormatContext * avf, AVPacket * pkt)
 {
     PARDecContext *p = avf->priv_data;
-
     int siz = 0;
+
     if (p->frameCached)  {
         siz = p->frameCached;
     }

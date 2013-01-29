@@ -279,12 +279,33 @@ AVStream * ad_get_audio_stream(AVFormatContext *s, struct NetVuAudioData* audioH
         if (st) {
             st->id = audioHeader->channel;
             st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
-            st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
             st->codec->channels = 1;
             st->codec->block_align = 0;
-            st->codec->bits_per_coded_sample = 4;
 
             if (audioHeader)  {
+                switch(audioHeader->mode)  {
+                    default:
+                    case(RTP_PAYLOAD_TYPE_8000HZ_ADPCM):
+                    case(RTP_PAYLOAD_TYPE_16000HZ_ADPCM):
+                    case(RTP_PAYLOAD_TYPE_44100HZ_ADPCM):
+                    case(RTP_PAYLOAD_TYPE_11025HZ_ADPCM):
+                    case(RTP_PAYLOAD_TYPE_22050HZ_ADPCM):
+                    case(RTP_PAYLOAD_TYPE_32000HZ_ADPCM):
+                    case(RTP_PAYLOAD_TYPE_48000HZ_ADPCM):
+                        st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
+                        st->codec->bits_per_coded_sample = 4;
+                        break;
+                    case(RTP_PAYLOAD_TYPE_8000HZ_PCM):
+                    case(RTP_PAYLOAD_TYPE_16000HZ_PCM):
+                    case(RTP_PAYLOAD_TYPE_44100HZ_PCM):
+                    case(RTP_PAYLOAD_TYPE_11025HZ_PCM):
+                    case(RTP_PAYLOAD_TYPE_22050HZ_PCM):
+                    case(RTP_PAYLOAD_TYPE_32000HZ_PCM):
+                    case(RTP_PAYLOAD_TYPE_48000HZ_PCM):
+                        st->codec->codec_id = CODEC_ID_PCM_S16LE;
+                        st->codec->bits_per_coded_sample = 16;
+                        break;
+                }
                 switch(audioHeader->mode)  {
                     default:
                     case(RTP_PAYLOAD_TYPE_8000HZ_ADPCM):
@@ -317,9 +338,12 @@ AVStream * ad_get_audio_stream(AVFormatContext *s, struct NetVuAudioData* audioH
                         break;
                 }
             }
-            else
+            else  {
+                st->codec->codec_id = CODEC_ID_ADPCM_IMA_WAV;
+                st->codec->bits_per_coded_sample = 4;
                 st->codec->sample_rate = 8000;
-            avpriv_set_pts_info(st, 32, 1, st->codec->sample_rate);
+            }
+            avpriv_set_pts_info(st, 64, 1, st->codec->sample_rate);
 
             st->index = i;
         }
