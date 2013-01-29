@@ -169,7 +169,9 @@ static int adbinary_mpeg_minimal(AVFormatContext *s,
  * Audio frame with a Netvu header
  */
 static int ad_read_audio(AVFormatContext *s,
-                         AVPacket *pkt, int size, struct NetVuAudioData *data)
+                         AVPacket *pkt, int size, 
+                         struct NetVuAudioData *data,
+                         enum AVCodecID codec_id)
 {
     AVIOContext *pb = s->pb;
     int status;
@@ -200,8 +202,9 @@ static int ad_read_audio(AVFormatContext *s,
                __func__, data->sizeOfAudioData, status);
         return ADFFMPEG_AD_ERROR_AUDIO_ADPCM_MIME_NEW_PACKET;
     }
-
-    audiodata_network2host(pkt->data, pkt->data, data->sizeOfAudioData);
+    
+    if (codec_id == CODEC_ID_ADPCM_IMA_WAV)
+        audiodata_network2host(pkt->data, pkt->data, data->sizeOfAudioData);
 
     return status;
 }
@@ -521,7 +524,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
                 errorVal = adbinary_audio_minimal(s, pkt, size, payload);
                 break;
             case AD_DATATYPE_AUDIO_ADPCM:
-                errorVal = ad_read_audio(s, pkt, size, payload);
+                errorVal = ad_read_audio(s, pkt, size, payload, CODEC_ID_ADPCM_IMA_WAV);
                 break;
             case AD_DATATYPE_INFO:
             case AD_DATATYPE_XML_INFO:
