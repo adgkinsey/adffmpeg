@@ -638,12 +638,13 @@ static int createPacket(AVFormatContext *avf, AVPacket *pkt, int siz)
     }
     pkt->stream_index = st->index;
 
-    if (parReader_frameIsVideo(fi))  {
+    if (parReader_frameIsAudio(fi))  {
+        if (st->codec->codec_id == CODEC_ID_ADPCM_IMA_WAV)
+            endianSwapAudioData(pkt->data, siz);
+    }
+    else if (parReader_frameIsVideo(fi))  {
         if (parReader_isIFrame(fi))
             pkt->flags |= AV_PKT_FLAG_KEY;
-    }
-    else if (parReader_frameIsAudio(fi))  {
-        endianSwapAudioData(pkt->data, siz);
     }
 
     if (fi->imageTime > 0)  {

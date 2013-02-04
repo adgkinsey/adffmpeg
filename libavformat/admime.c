@@ -561,7 +561,8 @@ static int admime_mpeg(AVFormatContext *s,
  */
 static int ad_read_audio(AVFormatContext *s,
                          AVPacket *pkt, int size, long extra,
-                         struct NetVuAudioData *audDat)
+                         struct NetVuAudioData *audDat,
+                         enum AVCodecID codec_id)
 {
     AVIOContext *pb = s->pb;
     
@@ -583,7 +584,8 @@ static int ad_read_audio(AVFormatContext *s,
     if (avio_read( pb, pkt->data, size) != size)
         return ADFFMPEG_AD_ERROR_AUDIO_ADPCM_MIME_GET_BUFFER;
 
-    audiodata_network2host(pkt->data, pkt->data, size);
+    if (codec_id == CODEC_ID_ADPCM_IMA_WAV)
+        audiodata_network2host(pkt->data, pkt->data, size);
 
     return 0;
 }
@@ -740,7 +742,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
             errorVal = admime_mpeg(s, pkt, size, &extra, payload, &txtDat, data_type);
             break;
         case AD_DATATYPE_AUDIO_ADPCM:
-            errorVal = ad_read_audio(s, pkt, size, extra, payload);
+            errorVal = ad_read_audio(s, pkt, size, extra, payload, CODEC_ID_ADPCM_IMA_WAV);
             break;
         case AD_DATATYPE_INFO:
         case AD_DATATYPE_XML_INFO:
