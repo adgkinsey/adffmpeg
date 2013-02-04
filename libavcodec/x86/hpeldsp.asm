@@ -4,6 +4,7 @@
 ;* Copyright (c)      Nick Kurshev <nickols_k@mail.ru>
 ;* Copyright (c) 2002 Michael Niedermayer <michaelni@gmx.at>
 ;* Copyright (c) 2002 Zdenek Kabelac <kabi@informatics.muni.cz>
+;* Copyright (c) 2013 Daniel Kang
 ;*
 ;* MMX optimized hpel functions
 ;*
@@ -318,8 +319,8 @@ PUT_NO_RND_PIXELS8_Y2_EXACT
 ; avg_pixels8(uint8_t *block, const uint8_t *pixels, int line_size, int h)
 %macro AVG_PIXELS8 0
 cglobal avg_pixels8, 4,5
-    movsxdifnidn r2, edx
-    lea          r4, [r2+r2]
+    movsxdifnidn r2, r2d
+    lea          r4, [r2*2]
 .loop:
     mova         m0, [r0]
     mova         m1, [r0+r2]
@@ -349,7 +350,7 @@ AVG_PIXELS8
 ; avg_pixels8_x2(uint8_t *block, const uint8_t *pixels, int line_size, int h)
 %macro AVG_PIXELS8_X2 0
 cglobal avg_pixels8_x2, 4,5
-    movsxdifnidn r2, edx
+    movsxdifnidn r2, r2d
     lea          r4, [r2*2]
 .loop:
     mova         m0, [r1]
@@ -469,3 +470,46 @@ INIT_MMX mmxext
 AVG_PIXELS8_XY2
 INIT_MMX 3dnow
 AVG_PIXELS8_XY2
+
+INIT_XMM sse2
+; void put_pixels16_sse2(uint8_t *block, const uint8_t *pixels, int line_size, int h)
+cglobal put_pixels16, 4,5,4
+    movsxdifnidn r2, r2d
+    lea          r4, [r2*3]
+.loop:
+    movu         m0, [r1]
+    movu         m1, [r1+r2]
+    movu         m2, [r1+r2*2]
+    movu         m3, [r1+r4]
+    lea          r1, [r1+r2*4]
+    mova       [r0], m0
+    mova    [r0+r2], m1
+    mova  [r0+r2*2], m2
+    mova    [r0+r4], m3
+    sub         r3d, 4
+    lea          r0, [r0+r2*4]
+    jnz       .loop
+    REP_RET
+
+; void avg_pixels16_sse2(uint8_t *block, const uint8_t *pixels, int line_size, int h)
+cglobal avg_pixels16, 4,5,4
+    movsxdifnidn r2, r2d
+    lea          r4, [r2*3]
+.loop:
+    movu         m0, [r1]
+    movu         m1, [r1+r2]
+    movu         m2, [r1+r2*2]
+    movu         m3, [r1+r4]
+    lea          r1, [r1+r2*4]
+    pavgb        m0, [r0]
+    pavgb        m1, [r0+r2]
+    pavgb        m2, [r0+r2*2]
+    pavgb        m3, [r0+r4]
+    mova       [r0], m0
+    mova    [r0+r2], m1
+    mova  [r0+r2*2], m2
+    mova    [r0+r4], m3
+    sub         r3d, 4
+    lea          r0, [r0+r2*4]
+    jnz       .loop
+    REP_RET
