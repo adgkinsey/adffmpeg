@@ -377,7 +377,7 @@ static AVStream * ad_get_data_stream(AVFormatContext *s, enum CodecID codecId)
         st = avformat_new_stream(s, NULL);
         if (st) {
             st->id = codecId;
-            st->codec->codec_type = AVMEDIA_TYPE_DATA;
+            st->codec->codec_type = AVMEDIA_TYPE_SUBTITLE;
             st->codec->codec_id = CODEC_ID_TEXT;
 
             // Use milliseconds as the time base
