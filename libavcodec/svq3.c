@@ -219,6 +219,8 @@ void ff_svq3_add_idct_c(uint8_t *dst, int16_t *block,
         dst[i + stride * 2] = av_clip_uint8(dst[i + stride * 2] + ((z1 - z2) * qmul + rr >> 20));
         dst[i + stride * 3] = av_clip_uint8(dst[i + stride * 3] + ((z0 - z3) * qmul + rr >> 20));
     }
+
+    memset(block, 0, 16 * sizeof(int16_t));
 }
 
 static inline int svq3_decode_block(GetBitContext *gb, int16_t *block,
@@ -295,9 +297,7 @@ static inline void svq3_mc_dir_part(SVQ3Context *s,
 
     if (mx < 0 || mx >= s->h_edge_pos - width  - 1 ||
         my < 0 || my >= s->v_edge_pos - height - 1) {
-        if ((h->flags & CODEC_FLAG_EMU_EDGE))
-            emu = 1;
-
+        emu = 1;
         mx = av_clip(mx, -16, s->h_edge_pos - width  + 15);
         my = av_clip(my, -16, s->v_edge_pos - height + 15);
     }
@@ -671,8 +671,6 @@ static int svq3_decode_mb(SVQ3Context *s, unsigned int mb_type)
     }
     if (!IS_SKIP(mb_type) || h->pict_type == AV_PICTURE_TYPE_B) {
         memset(h->non_zero_count_cache + 8, 0, 14 * 8 * sizeof(uint8_t));
-        h->dsp.clear_blocks(h->mb +   0);
-        h->dsp.clear_blocks(h->mb + 384);
     }
 
     if (!IS_INTRA16x16(mb_type) &&
@@ -1055,6 +1053,11 @@ static int get_buffer(AVCodecContext *avctx, Picture *pic)
     pic->f.reference = !(h->pict_type == AV_PICTURE_TYPE_B);
 
     ret = ff_get_buffer(avctx, &pic->f);
+    if (!h->edge_emu_buffer) {
+        h->edge_emu_buffer = av_mallocz(pic->f.linesize[0] * 17);
+        if (!h->edge_emu_buffer)
+            return AVERROR(ENOMEM);
+    }
 
     h->linesize   = pic->f.linesize[0];
     h->uvlinesize = pic->f.linesize[1];
@@ -1234,7 +1237,7 @@ static int svq3_decode_frame(AVCodecContext *avctx, void *data,
                 return -1;
             }
 
-            if (mb_type != 0)
+            if (mb_type != 0 || h->cbp)
                 ff_h264_hl_decode_mb(h);
 
             if (h->pict_type != AV_PICTURE_TYPE_B && !h->low_delay)
@@ -1242,8 +1245,8 @@ static int svq3_decode_frame(AVCodecContext *avctx, void *data,
                     (h->pict_type == AV_PICTURE_TYPE_P && mb_type < 8) ? (mb_type - 1) : -1;
         }
 
-        ff_draw_horiz_band(avctx, &h->dsp, s->cur_pic, s->last_pic->f.data[0] ? s->last_pic : NULL,
-                           16 * h->mb_y, 16, h->picture_structure, 0, 1,
+        ff_draw_horiz_band(avctx, NULL, s->cur_pic, s->last_pic->f.data[0] ? s->last_pic : NULL,
+                           16 * h->mb_y, 16, h->picture_structure, 0, 0,
                            h->low_delay, h->mb_height * 16, h->mb_width * 16);
     }
 
@@ -1302,6 +1305,7 @@ static int svq3_decode_end(AVCodecContext *avctx)
 
     av_freep(&s->buf);
     s->buf_size = 0;
+    av_freep(&h->edge_emu_buffer);
 
     return 0;
 }

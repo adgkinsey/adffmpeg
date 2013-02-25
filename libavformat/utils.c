@@ -1767,7 +1767,10 @@ int av_index_search_timestamp(AVStream *st, int64_t wanted_timestamp,
 static int64_t ff_read_timestamp(AVFormatContext *s, int stream_index, int64_t *ppos, int64_t pos_limit,
                                  int64_t (*read_timestamp)(struct AVFormatContext *, int , int64_t *, int64_t ))
 {
-    return wrap_timestamp(s->streams[stream_index], read_timestamp(s, stream_index, ppos, pos_limit));
+    int64_t ts = read_timestamp(s, stream_index, ppos, pos_limit);
+    if (stream_index >= 0)
+        ts = wrap_timestamp(s->streams[stream_index], ts);
+    return ts;
 }
 
 int ff_seek_frame_binary(AVFormatContext *s, int stream_index, int64_t target_ts, int flags)
@@ -1860,10 +1863,10 @@ int64_t ff_gen_search(AVFormatContext *s, int stream_index, int64_t target_ts,
         filesize = avio_size(s->pb);
         pos_max = filesize - 1;
         do{
-            pos_max -= step;
+            pos_max = FFMAX(0, pos_max - step);
             ts_max = ff_read_timestamp(s, stream_index, &pos_max, pos_max + step, read_timestamp);
             step += step;
-        }while(ts_max == AV_NOPTS_VALUE && pos_max >= step);
+        }while(ts_max == AV_NOPTS_VALUE && pos_max > 0);
         if (ts_max == AV_NOPTS_VALUE)
             return -1;
 
@@ -2888,9 +2891,12 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
                 double dts= (is_relative(pkt->dts) ?  pkt->dts - RELATIVE_TS_BASE : pkt->dts) * av_q2d(st->time_base);
                 int64_t duration= pkt->dts - last;
 
+                if (!st->info->duration_error)
+                    st->info->duration_error = av_mallocz(sizeof(st->info->duration_error[0])*2);
+
 //                 if(st->codec->codec_type == AVMEDIA_TYPE_VIDEO)
 //                     av_log(NULL, AV_LOG_ERROR, "%f\n", dts);
-                for (i=0; i<FF_ARRAY_ELEMS(st->info->duration_error[0][0]); i++) {
+                for (i=0; i<MAX_STD_TIMEBASES; i++) {
                     int framerate= get_std_framerate(i);
                     double sdts= dts*framerate/(1001*12);
                     for(j=0; j<2; j++){
@@ -3023,7 +3029,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
                 int num = 0;
                 double best_error= 0.01;
 
-                for (j=0; j<FF_ARRAY_ELEMS(st->info->duration_error[0][0]); j++) {
+                for (j=0; j<MAX_STD_TIMEBASES; j++) {
                     int k;
 
                     if(st->info->codec_info_duration && st->info->codec_info_duration*av_q2d(st->time_base) < (1001*12.0)/get_std_framerate(j))
@@ -3084,9 +3090,12 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
 
  find_stream_info_err:
     for (i=0; i < ic->nb_streams; i++) {
+        st = ic->streams[i];
         if (ic->streams[i]->codec)
             ic->streams[i]->codec->thread_count = 0;
-        //av_freep(&ic->streams[i]->info);
+        if (st->info)
+            av_freep(&st->info->duration_error);
+       //av_freep(&ic->streams[i]->info);
     }
     if(ic->pb)
         av_log(ic, AV_LOG_DEBUG, "File position after avformat_find_stream_info() is %"PRId64"\n", avio_tell(ic->pb));
@@ -3205,6 +3214,8 @@ void ff_free_stream(AVFormatContext *s, AVStream *st){
     av_freep(&st->codec->subtitle_header);
     av_freep(&st->codec);
     av_freep(&st->priv_data);
+    if (st->info)
+        av_freep(&st->info->duration_error);
     av_freep(&st->info);
     av_freep(&st->probe_data.buf);
     av_freep(&s->streams[ --s->nb_streams ]);

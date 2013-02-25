@@ -354,9 +354,6 @@ typedef struct H264Context {
     int mb_linesize;    ///< may be equal to s->linesize or s->linesize * 2, for mbaff
     int mb_uvlinesize;
 
-    int emu_edge_width;
-    int emu_edge_height;
-
     unsigned current_sps_id; ///< id of the current SPS
     SPS sps; ///< current sps
 
@@ -575,6 +572,7 @@ typedef struct H264Context {
     enum AVPictureType pict_type;
 
     int last_slice_type;
+    unsigned int last_ref_count[2];
     /** @} */
 
     /**
@@ -647,6 +645,8 @@ typedef struct H264Context {
     int parse_last_mb;
     uint8_t *edge_emu_buffer;
     int16_t *dc_val_base;
+
+    uint8_t *visualization_buffer[3]; ///< temporary buffer vor MV visualization
 } H264Context;
 
 extern const uint8_t ff_h264_chroma_qp[7][QP_MAX_NUM + 1]; ///< One chroma qp table for each possible bit depth (8-14).
@@ -687,7 +687,7 @@ const uint8_t *ff_h264_decode_nal(H264Context *h, const uint8_t *src,
  * Free any data that may have been allocated in the H264 context
  * like SPS, PPS etc.
  */
-av_cold void ff_h264_free_context(H264Context *h);
+void ff_h264_free_context(H264Context *h);
 
 /**
  * Reconstruct bitstream slice_type.
@@ -734,8 +734,8 @@ int ff_h264_check_intra_pred_mode(H264Context *h, int mode, int is_chroma);
 void ff_h264_hl_decode_mb(H264Context *h);
 int ff_h264_frame_start(H264Context *h);
 int ff_h264_decode_extradata(H264Context *h, const uint8_t *buf, int size);
-av_cold int ff_h264_decode_init(AVCodecContext *avctx);
-av_cold void ff_h264_decode_init_vlc(void);
+int ff_h264_decode_init(AVCodecContext *avctx);
+void ff_h264_decode_init_vlc(void);
 
 /**
  * Decode a macroblock

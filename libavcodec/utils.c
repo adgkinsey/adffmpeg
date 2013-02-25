@@ -267,7 +267,8 @@ void avcodec_align_dimensions2(AVCodecContext *s, int *width, int *height,
     case AV_PIX_FMT_PAL8:
     case AV_PIX_FMT_BGR8:
     case AV_PIX_FMT_RGB8:
-        if (s->codec_id == AV_CODEC_ID_SMC) {
+        if (s->codec_id == AV_CODEC_ID_SMC ||
+            s->codec_id == AV_CODEC_ID_CINEPAK) {
             w_align = 4;
             h_align = 4;
         }
@@ -275,6 +276,12 @@ void avcodec_align_dimensions2(AVCodecContext *s, int *width, int *height,
     case AV_PIX_FMT_BGR24:
         if ((s->codec_id == AV_CODEC_ID_MSZH) ||
             (s->codec_id == AV_CODEC_ID_ZLIB)) {
+            w_align = 4;
+            h_align = 4;
+        }
+        break;
+    case AV_PIX_FMT_RGB24:
+        if (s->codec_id == AV_CODEC_ID_CINEPAK) {
             w_align = 4;
             h_align = 4;
         }
@@ -1824,7 +1831,7 @@ int attribute_align_arg avcodec_decode_audio4(AVCodecContext *avctx,
             av_log(avctx, AV_LOG_DEBUG, "skip %d samples due to side data\n",
                    avctx->internal->skip_samples);
         }
-        if (avctx->internal->skip_samples) {
+        if (avctx->internal->skip_samples && *got_frame_ptr) {
             if(frame->nb_samples <= avctx->internal->skip_samples){
                 *got_frame_ptr = 0;
                 avctx->internal->skip_samples -= frame->nb_samples;
@@ -1969,6 +1976,8 @@ int avcodec_decode_subtitle2(AVCodecContext *avctx, AVSubtitle *sub,
                 sub->pts = av_rescale_q(avpkt->pts,
                                         avctx->pkt_timebase, AV_TIME_BASE_Q);
             ret = avctx->codec->decode(avctx, sub, got_sub_ptr, &pkt_recoded);
+            av_assert1((ret >= 0) >= !!*got_sub_ptr &&
+                       !!*got_sub_ptr >= !!sub->num_rects);
             if (tmp.data != pkt_recoded.data)
                 av_free(pkt_recoded.data);
             sub->format = !(avctx->codec_descriptor->props & AV_CODEC_PROP_BITMAP_SUB);
