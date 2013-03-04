@@ -188,6 +188,7 @@ External library support:
   --enable-fontconfig      enable fontconfig
   --enable-frei0r          enable frei0r video filtering
   --enable-gnutls          enable gnutls [no]
+  --enable-iconv           enable iconv [autodetect]
   --enable-libaacplus      enable AAC+ encoding via libaacplus [no]
   --enable-libass          enable libass subtitles rendering [no]
   --enable-libbluray       enable BluRay reading using libbluray [no]
@@ -1123,6 +1124,7 @@ EXTERNAL_LIBRARY_LIST="
     fontconfig
     frei0r
     gnutls
+    iconv
     libaacplus
     libass
     libbluray
@@ -1408,7 +1410,6 @@ HAVE_LIST="
     gnu_as
     gsm_h
     ibm_asm
-    iconv
     inet_aton
     io_h
     isatty
@@ -1657,7 +1658,7 @@ mdct_select="fft"
 rdft_select="fft"
 mpegaudio_select="mpegaudiodsp"
 mpegaudiodsp_select="dct"
-mpegvideo_select="videodsp"
+mpegvideo_select="error_resilience videodsp"
 mpegvideoenc_select="mpegvideo"
 
 # decoders / encoders
@@ -1708,7 +1709,7 @@ h263_decoder_select="error_resilience h263_parser mpegvideo"
 h263_encoder_select="aandcttables error_resilience mpegvideoenc"
 h263i_decoder_select="h263_decoder"
 h263p_encoder_select="h263_encoder"
-h264_decoder_select="error_resilience golomb h264chroma h264dsp h264pred h264qpel mpegvideo videodsp"
+h264_decoder_select="golomb h264chroma h264dsp h264pred h264qpel videodsp"
 huffyuv_encoder_select="huffman"
 iac_decoder_select="fft mdct sinewin"
 imc_decoder_select="fft mdct sinewin"
@@ -1869,7 +1870,7 @@ wmv3_vdpau_decoder_select="vc1_vdpau_decoder"
 wmv3_vdpau_hwaccel_select="vc1_vdpau_hwaccel"
 
 # parsers
-h264_parser_select="error_resilience golomb h264chroma h264dsp h264pred h264qpel mpegvideo videodsp"
+h264_parser_select="golomb h264chroma h264dsp h264pred h264qpel videodsp"
 mpeg4video_parser_select="error_resilience mpegvideo"
 mpegvideo_parser_select="error_resilience mpegvideo"
 vc1_parser_select="error_resilience mpegvideo"
@@ -2126,7 +2127,7 @@ cxx_default="g++"
 host_cc_default="gcc"
 cp_f="cp -f"
 install="install"
-ln_s="ln -sf"
+ln_s="ln -s -f"
 nm_default="nm -g"
 objformat="elf"
 pkg_config_default=pkg-config
@@ -2642,7 +2643,7 @@ probe_cc(){
         fi
         _cflags_speed='-O3'
         _cflags_size='-Os'
-    elif $_cc --version 2>/dev/null | grep -q Intel; then
+    elif $_cc --version 2>/dev/null | grep -q ^icc; then
         _type=icc
         _ident=$($_cc --version | head -n1)
         _depflags='-MMD'
@@ -3397,7 +3398,6 @@ case $target_os in
         network_extralibs='-lbsd'
         exeobjs=compat/plan9/main.o
         disable ffserver
-        ln_s='ln -s -f'
         cp_f='cp'
         ;;
     none)
@@ -3772,7 +3772,6 @@ check_func  getopt
 check_func  getrusage
 check_struct "sys/time.h sys/resource.h" "struct rusage" ru_maxrss
 check_func  gettimeofday
-check_func  iconv || check_lib2 iconv.h iconv -liconv
 check_func  inet_aton $network_extralibs
 check_func  isatty
 check_func  localtime_r
@@ -3881,6 +3880,7 @@ enabled avisynth   && require2 vfw32 "windows.h vfw.h" AVIFileInit -lavifil32
 enabled fontconfig && require_pkg_config fontconfig "fontconfig/fontconfig.h" FcInit
 enabled frei0r     && { check_header frei0r.h || die "ERROR: frei0r.h header not found"; }
 enabled gnutls     && require_pkg_config gnutls gnutls/gnutls.h gnutls_global_init
+enabled iconv      && { check_func_headers iconv.h iconv || check_lib2 iconv.h iconv -liconv || die "ERROR: iconv not found"; }
 enabled libiec61883 && require libiec61883 libiec61883/iec61883.h iec61883_cmp_connect -lraw1394 -lavc1394 -lrom1394 -liec61883
 enabled libaacplus && require  "libaacplus >= 2.0.0" aacplus.h aacplusEncOpen -laacplus
 enabled libass     && require_pkg_config libass ass/ass.h ass_library_init
@@ -4145,8 +4145,6 @@ if enabled icc; then
     # 11030: Warning unknown option --as-needed
     # 10156: ignoring option '-export'; no argument required
     check_ldflags -wd10156,11030
-    # Allow to compile with optimizations
-    check_ldflags -march=$cpu
     # icc 11.0 and 11.1 work with ebp_available, but don't pass the test
     enable ebp_available
     if enabled x86_32; then

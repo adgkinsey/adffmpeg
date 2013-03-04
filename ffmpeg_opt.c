@@ -81,7 +81,7 @@ int copy_ts           = 0;
 int copy_tb           = -1;
 int debug_ts          = 0;
 int exit_on_error     = 0;
-int print_stats       = 1;
+int print_stats       = -1;
 int qp_hist           = 0;
 int stdin_interaction = 1;
 int frame_bits_per_raw_sample = 0;
@@ -144,7 +144,8 @@ static void init_options(OptionsContext *o, int is_input)
                 "-t is not an input option, keeping it for the next output;"
                 " consider fixing your command line.\n");
     } else
-    o->recording_time = INT64_MAX;
+        o->recording_time = INT64_MAX;
+    o->stop_time = INT64_MAX;
     o->mux_max_delay  = 0.7;
     o->limit_filesize = UINT64_MAX;
     o->chapters_input_file = INT_MAX;
@@ -956,6 +957,8 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
                    preset, ost->file_index, ost->index);
             exit(1);
         }
+    } else {
+        ost->opts = filter_codec_opts(o->g->codec_opts, AV_CODEC_ID_NONE, oc, st, NULL);
     }
 
     avcodec_get_context_defaults3(st->codec, ost->enc);
@@ -1656,6 +1659,20 @@ loop_end:
                 exit(1);
     }
 
+    if (o->stop_time != INT64_MAX && o->recording_time != INT64_MAX) {
+        o->stop_time = INT64_MAX;
+        av_log(NULL, AV_LOG_WARNING, "-t and -to cannot be used together; using -t.\n");
+    }
+
+    if (o->stop_time != INT64_MAX && o->recording_time == INT64_MAX) {
+        if (o->stop_time <= o->start_time) {
+            av_log(NULL, AV_LOG_WARNING, "-to value smaller than -ss; ignoring -to.\n");
+            o->stop_time = INT64_MAX;
+        } else {
+            o->recording_time = o->stop_time - o->start_time;
+        }
+    }
+
     GROW_ARRAY(output_files, nb_output_files);
     if (!(output_files[nb_output_files - 1] = av_mallocz(sizeof(*output_files[0]))))
         exit(1);
@@ -1689,7 +1706,8 @@ loop_end:
             print_error(filename, err);
             exit(1);
         }
-    }
+    } else if (strcmp(oc->oformat->name, "image2")==0 && !av_filename_number_test(filename))
+        assert_file_overwrite(filename);
 
     if (o->mux_preload) {
         uint8_t buf[64];
@@ -2111,12 +2129,14 @@ static int opt_vsync(void *optctx, const char *opt, const char *arg)
     return 0;
 }
 
+#if FF_API_DEINTERLACE
 static int opt_deinterlace(void *optctx, const char *opt, const char *arg)
 {
     av_log(NULL, AV_LOG_WARNING, "-%s is deprecated, use -filter:v yadif instead\n", opt);
     do_deinterlace = 1;
     return 0;
 }
+#endif
 
 static int opt_timecode(void *optctx, const char *opt, const char *arg)
 {
@@ -2389,6 +2409,8 @@ const OptionDef options[] = {
     { "t",              HAS_ARG | OPT_TIME | OPT_OFFSET,             { .off = OFFSET(recording_time) },
         "record or transcode \"duration\" seconds of audio/video",
         "duration" },
+    { "to",             HAS_ARG | OPT_TIME | OPT_OFFSET,             { .off = OFFSET(stop_time) },
+        "record or transcode stop time", "time_stop" },
     { "fs",             HAS_ARG | OPT_INT64 | OPT_OFFSET,            { .off = OFFSET(limit_filesize) },
         "set the limit file size in bytes", "limit_size" },
     { "ss",             HAS_ARG | OPT_TIME | OPT_OFFSET,             { .off = OFFSET(start_time) },
@@ -2502,8 +2524,10 @@ const OptionDef options[] = {
         "select the pass number (1 to 3)", "n" },
     { "passlogfile",  OPT_VIDEO | HAS_ARG | OPT_STRING | OPT_EXPERT | OPT_SPEC,  { .off = OFFSET(passlogfiles) },
         "select two pass log file name prefix", "prefix" },
+#if FF_API_DEINTERLACE
     { "deinterlace",  OPT_VIDEO | OPT_EXPERT ,                                   { .func_arg = opt_deinterlace },
         "this option is deprecated, use the yadif filter instead" },
+#endif
     { "psnr",         OPT_VIDEO | OPT_BOOL | OPT_EXPERT,                         { &do_psnr },
         "calculate PSNR of compressed frames" },
     { "vstats",       OPT_VIDEO | OPT_EXPERT ,                                   { &opt_vstats },
