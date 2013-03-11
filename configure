@@ -457,14 +457,18 @@ set_weak(){
     done
 }
 
+sanitize_var_name(){
+    echo $@ | sed 's/[^A-Za-z0-9_]/_/g'
+}
+
 set_safe(){
     var=$1
     shift
-    eval $(echo "$var" | sed 's/[^A-Za-z0-9_]/_/g')='$*'
+    eval $(sanitize_var_name "$var")='$*'
 }
 
 get_safe(){
-    eval echo \$$(echo "$1" | sed 's/[^A-Za-z0-9_]/_/g')
+    eval echo \$$(sanitize_var_name "$1")
 }
 
 pushvar(){
@@ -1021,7 +1025,7 @@ check_type(){
 }
 
 check_struct(){
-    log check_type "$@"
+    log check_struct "$@"
     headers=$1
     struct=$2
     member=$3
@@ -1029,6 +1033,16 @@ check_struct(){
     disable_safe "${struct}_${member}"
     check_code cc "$headers" "const void *p = &(($struct *)0)->$member" "$@" &&
         enable_safe "${struct}_${member}"
+}
+
+check_builtin(){
+    log check_builtin "$@"
+    name=$1
+    headers=$2
+    builtin=$3
+    shift 3
+    disable "$name"
+    check_code ld "$headers" "$builtin" "cc" "$@" && enable "$name"
 }
 
 require(){
@@ -1425,10 +1439,12 @@ HAVE_LIST="
     lzo1x_999_compress
     machine_ioctl_bt848_h
     machine_ioctl_meteor_h
+    machine_rw_barrier
     makeinfo
     malloc_h
     MapViewOfFile
     memalign
+    MemoryBarrier
     mkstemp
     mm_empty
     mmap
@@ -1468,6 +1484,7 @@ HAVE_LIST="
     struct_v4l2_frmivalenum_discrete
     symver_asm_label
     symver_gnu_asm
+    sync_synchronize
     sysconf
     sysctl
     sys_mman_h
@@ -1658,7 +1675,7 @@ mdct_select="fft"
 rdft_select="fft"
 mpegaudio_select="mpegaudiodsp"
 mpegaudiodsp_select="dct"
-mpegvideo_select="error_resilience videodsp"
+mpegvideo_select="error_resilience videodsp h264chroma"
 mpegvideoenc_select="mpegvideo"
 
 # decoders / encoders
@@ -1676,7 +1693,7 @@ atrac1_decoder_select="mdct sinewin"
 atrac3_decoder_select="mdct"
 binkaudio_dct_decoder_select="mdct rdft dct sinewin"
 binkaudio_rdft_decoder_select="mdct rdft sinewin"
-cavs_decoder_select="golomb mpegvideo"
+cavs_decoder_select="golomb h264chroma mpegvideo videodsp"
 comfortnoise_encoder_select="lpc"
 cook_decoder_select="mdct sinewin"
 cscd_decoder_select="lzo"
@@ -1687,9 +1704,9 @@ dnxhd_encoder_select="aandcttables mpegvideoenc"
 dxa_decoder_select="zlib"
 eac3_decoder_select="ac3_decoder"
 eac3_encoder_select="ac3_encoder"
-eamad_decoder_select="aandcttables error_resilience mpegvideo"
+eamad_decoder_select="aandcttables mpegvideo"
 eatgq_decoder_select="aandcttables"
-eatqi_decoder_select="aandcttables error_resilience mpegvideo"
+eatqi_decoder_select="aandcttables mpegvideo"
 exr_decoder_select="zlib"
 ffv1_decoder_select="golomb rangecoder"
 ffv1_encoder_select="rangecoder"
@@ -1706,7 +1723,7 @@ fraps_decoder_select="huffman"
 h261_decoder_select="error_resilience mpegvideo"
 h261_encoder_select="aandcttables mpegvideoenc"
 h263_decoder_select="error_resilience h263_parser mpegvideo"
-h263_encoder_select="aandcttables error_resilience mpegvideoenc"
+h263_encoder_select="aandcttables mpegvideoenc"
 h263i_decoder_select="h263_decoder"
 h263p_encoder_select="h263_encoder"
 h264_decoder_select="golomb h264chroma h264dsp h264pred h264qpel videodsp"
@@ -1735,9 +1752,9 @@ mpc8_decoder_select="mpegaudiodsp"
 mpeg_xvmc_decoder_deps="X11_extensions_XvMClib_h"
 mpeg_xvmc_decoder_select="mpegvideo_decoder"
 mpeg1video_decoder_select="error_resilience mpegvideo"
-mpeg1video_encoder_select="aandcttables error_resilience mpegvideoenc"
+mpeg1video_encoder_select="aandcttables mpegvideoenc"
 mpeg2video_decoder_select="error_resilience mpegvideo"
-mpeg2video_encoder_select="aandcttables error_resilience mpegvideoenc"
+mpeg2video_encoder_select="aandcttables mpegvideoenc"
 mpeg4_decoder_select="h263_decoder mpeg4video_parser"
 mpeg4_encoder_select="h263_encoder"
 msmpeg4v1_decoder_select="h263_decoder"
@@ -1746,7 +1763,7 @@ msmpeg4v2_decoder_select="h263_decoder"
 msmpeg4v2_encoder_select="h263_encoder"
 msmpeg4v3_decoder_select="h263_decoder"
 msmpeg4v3_encoder_select="h263_encoder"
-mss2_decoder_select="vc1_decoder"
+mss2_decoder_select="error_resilience vc1_decoder"
 nellymoser_decoder_select="mdct sinewin"
 nellymoser_encoder_select="audio_frame_queue mdct sinewin"
 nuv_decoder_select="lzo"
@@ -1756,22 +1773,22 @@ qcelp_decoder_select="lsp"
 qdm2_decoder_select="mdct rdft mpegaudiodsp"
 ra_144_encoder_select="audio_frame_queue lpc"
 ralf_decoder_select="golomb"
-rv10_decoder_select="h263_decoder"
+rv10_decoder_select="error_resilience h263_decoder"
 rv10_encoder_select="h263_encoder"
-rv20_decoder_select="h263_decoder"
+rv20_decoder_select="error_resilience h263_decoder"
 rv20_encoder_select="h263_encoder"
-rv30_decoder_select="error_resilience golomb h264chroma h264pred h264qpel mpegvideo"
-rv40_decoder_select="error_resilience golomb h264chroma h264pred h264qpel mpegvideo"
+rv30_decoder_select="error_resilience golomb h264chroma h264pred h264qpel mpegvideo videodsp"
+rv40_decoder_select="error_resilience golomb h264chroma h264pred h264qpel mpegvideo videodsp"
 shorten_decoder_select="golomb"
 sipr_decoder_select="lsp"
-snow_decoder_select="dwt rangecoder"
-snow_encoder_select="aandcttables dwt error_resilience mpegvideoenc rangecoder"
+snow_decoder_select="dwt h264qpel rangecoder"
+snow_encoder_select="aandcttables dwt h264qpel error_resilience mpegvideoenc rangecoder"
 sonic_decoder_select="golomb"
 sonic_encoder_select="golomb"
 sonic_ls_encoder_select="golomb"
-svq1_decoder_select="error_resilience mpegvideo"
-svq1_encoder_select="aandcttables error_resilience mpegvideoenc"
-svq3_decoder_select="error_resilience golomb h264chroma h264dsp h264pred h264qpel mpegvideo"
+svq1_decoder_select="mpegvideo"
+svq1_encoder_select="aandcttables mpegvideoenc"
+svq3_decoder_select="error_resilience golomb h264chroma h264dsp h264pred h264qpel mpegvideo videodsp"
 svq3_decoder_suggest="zlib"
 theora_decoder_select="vp3_decoder"
 tiff_decoder_suggest="zlib"
@@ -1780,13 +1797,13 @@ truehd_decoder_select="mlp_parser"
 tscc_decoder_select="zlib"
 twinvq_decoder_select="mdct lsp sinewin"
 utvideo_encoder_select="huffman"
-vc1_decoder_select="h263_decoder h264chroma h264qpel"
+vc1_decoder_select="error_resilience h263_decoder h264chroma h264qpel"
 vc1image_decoder_select="vc1_decoder"
 vorbis_decoder_select="mdct"
 vorbis_encoder_select="mdct"
 vp3_decoder_select="vp3dsp videodsp"
-vp5_decoder_select="vp3dsp videodsp"
-vp6_decoder_select="huffman vp3dsp videodsp"
+vp5_decoder_select="h264chroma videodsp vp3dsp"
+vp6_decoder_select="h264chroma huffman videodsp vp3dsp"
 vp6a_decoder_select="vp6_decoder"
 vp6f_decoder_select="vp6_decoder"
 vp8_decoder_select="h264pred videodsp"
@@ -1798,7 +1815,7 @@ wmav2_encoder_select="mdct sinewin"
 wmavoice_decoder_select="lsp rdft dct mdct sinewin"
 wmv1_decoder_select="h263_decoder"
 wmv1_encoder_select="h263_encoder"
-wmv2_decoder_select="h263_decoder"
+wmv2_decoder_select="h263_decoder videodsp"
 wmv2_encoder_select="h263_encoder"
 wmv3_decoder_select="vc1_decoder"
 wmv3image_decoder_select="wmv3_decoder"
@@ -1873,7 +1890,7 @@ wmv3_vdpau_hwaccel_select="vc1_vdpau_hwaccel"
 h264_parser_select="golomb h264chroma h264dsp h264pred h264qpel videodsp"
 mpeg4video_parser_select="error_resilience mpegvideo"
 mpegvideo_parser_select="error_resilience mpegvideo"
-vc1_parser_select="error_resilience mpegvideo"
+vc1_parser_select="mpegvideo"
 
 # external libraries
 libaacplus_encoder_deps="libaacplus"
@@ -2073,6 +2090,7 @@ removelogo_filter_deps="avcodec avformat swscale"
 scale_filter_deps="swscale"
 smartblur_filter_deps="gpl swscale"
 showspectrum_filter_deps="avcodec rdft"
+stereo3d_filter_deps="gpl"
 subtitles_filter_deps="avformat avcodec libass"
 super2xsai_filter_deps="gpl"
 tinterlace_filter_deps="gpl"
@@ -3646,9 +3664,8 @@ elif enabled sparc; then
 
 elif enabled x86; then
 
-    check_code ld intrin.h "__rdtsc()" "cc" && enable rdtsc
-
-    check_code ld mmintrin.h "_mm_empty()" "cc" && enable mm_empty
+    check_builtin rdtsc    intrin.h   "__rdtsc()"
+    check_builtin mm_empty mmintrin.h "_mm_empty()"
 
     enable local_aligned_8 local_aligned_16
 
@@ -3784,6 +3801,9 @@ check_func_headers malloc.h _aligned_malloc     && enable aligned_malloc
 check_func  setrlimit
 check_func  strerror_r
 check_func  sched_getaffinity
+check_builtin sync_synchronize "" "__sync_synchronize()"
+check_builtin machine_rw_barrier mbarrier.h "__machine_rw_barrier()"
+check_builtin MemoryBarrier windows.h "MemoryBarrier()"
 check_func  sysconf
 check_func  sysctl
 check_func  usleep
@@ -3880,7 +3900,6 @@ enabled avisynth   && require2 vfw32 "windows.h vfw.h" AVIFileInit -lavifil32
 enabled fontconfig && require_pkg_config fontconfig "fontconfig/fontconfig.h" FcInit
 enabled frei0r     && { check_header frei0r.h || die "ERROR: frei0r.h header not found"; }
 enabled gnutls     && require_pkg_config gnutls gnutls/gnutls.h gnutls_global_init
-enabled iconv      && { check_func_headers iconv.h iconv || check_lib2 iconv.h iconv -liconv || die "ERROR: iconv not found"; }
 enabled libiec61883 && require libiec61883 libiec61883/iec61883.h iec61883_cmp_connect -lraw1394 -lavc1394 -lrom1394 -liec61883
 enabled libaacplus && require  "libaacplus >= 2.0.0" aacplus.h aacplusEncOpen -laacplus
 enabled libass     && require_pkg_config libass ass/ass.h ass_library_init
@@ -4045,6 +4064,9 @@ fi
 enabled vdpau &&
     check_cpp_condition vdpau/vdpau.h "defined VDP_DECODER_PROFILE_MPEG4_PART2_ASP" ||
     disable vdpau
+
+# Funny iconv installations are not unusual, so check it after all flags have been set
+disabled iconv || check_func_headers iconv.h iconv || check_lib2 iconv.h iconv -liconv || disable iconv
 
 enabled debug && add_cflags -g"$debuglevel" && add_asflags -g"$debuglevel"
 enabled coverage && add_cflags "-fprofile-arcs -ftest-coverage" && add_ldflags "-fprofile-arcs -ftest-coverage"

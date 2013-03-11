@@ -28,6 +28,7 @@
 
 #include "internal.h"
 #include "avcodec.h"
+#include "error_resilience.h"
 #include "mpegvideo.h"
 #include "h263.h"
 #include "h264chroma.h"
@@ -5292,6 +5293,11 @@ static av_cold int vc1_decode_init(AVCodecContext *avctx)
             v->sprite_height > 1 << 14 ||
             v->output_width  > 1 << 14 ||
             v->output_height > 1 << 14) return -1;
+
+        if ((v->sprite_width&1) || (v->sprite_height&1)) {
+            av_log_ask_for_sample(avctx, "odd sprites are not supported\n");
+            return AVERROR_PATCHWELCOME;
+        }
     }
     return 0;
 }

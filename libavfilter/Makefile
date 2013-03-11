@@ -40,8 +40,6 @@ OBJS = allfilters.o                                                     \
        formats.o                                                        \
        graphdump.o                                                      \
        graphparser.o                                                    \
-       sink_buffer.o                                                    \
-       src_buffer.o                                                     \
        transform.o                                                      \
        video.o                                                          \
 
@@ -106,6 +104,7 @@ OBJS-$(CONFIG_COLORMATRIX_FILTER)            += vf_colormatrix.o
 OBJS-$(CONFIG_COPY_FILTER)                   += vf_copy.o
 OBJS-$(CONFIG_CROP_FILTER)                   += vf_crop.o
 OBJS-$(CONFIG_CROPDETECT_FILTER)             += vf_cropdetect.o
+OBJS-$(CONFIG_CURVES_FILTER)                 += vf_curves.o
 OBJS-$(CONFIG_DECIMATE_FILTER)               += vf_decimate.o
 OBJS-$(CONFIG_DELOGO_FILTER)                 += vf_delogo.o
 OBJS-$(CONFIG_DESHAKE_FILTER)                += vf_deshake.o
@@ -154,6 +153,7 @@ OBJS-$(CONFIG_SETTB_FILTER)                  += f_settb.o
 OBJS-$(CONFIG_SHOWINFO_FILTER)               += vf_showinfo.o
 OBJS-$(CONFIG_SMARTBLUR_FILTER)              += vf_smartblur.o
 OBJS-$(CONFIG_SPLIT_FILTER)                  += split.o
+OBJS-$(CONFIG_STEREO3D_FILTER)               += vf_stereo3d.o
 OBJS-$(CONFIG_SUBTITLES_FILTER)              += vf_subtitles.o
 OBJS-$(CONFIG_SUPER2XSAI_FILTER)             += vf_super2xsai.o
 OBJS-$(CONFIG_SWAPUV_FILTER)                 += vf_swapuv.o
@@ -203,7 +203,6 @@ OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_qp.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_sab.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_softpulldown.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_spp.o
-OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_stereo3d.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_telecine.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_tinterlace.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_uspp.o

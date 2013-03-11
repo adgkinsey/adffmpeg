@@ -100,6 +100,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(COPY,           copy,           vf);
     REGISTER_FILTER(CROP,           crop,           vf);
     REGISTER_FILTER(CROPDETECT,     cropdetect,     vf);
+    REGISTER_FILTER(CURVES,         curves,         vf);
     REGISTER_FILTER(DECIMATE,       decimate,       vf);
     REGISTER_FILTER(DELOGO,         delogo,         vf);
     REGISTER_FILTER(DESHAKE,        deshake,        vf);
@@ -148,6 +149,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(SHOWINFO,       showinfo,       vf);
     REGISTER_FILTER(SMARTBLUR,      smartblur,      vf);
     REGISTER_FILTER(SPLIT,          split,          vf);
+    REGISTER_FILTER(STEREO3D,       stereo3d,       vf);
     REGISTER_FILTER(SUBTITLES,      subtitles,      vf);
     REGISTER_FILTER(SUPER2XSAI,     super2xsai,     vf);
     REGISTER_FILTER(SWAPUV,         swapuv,         vf);
@@ -192,8 +194,8 @@ void avfilter_register_all(void)
      * unconditionally */
     REGISTER_FILTER_UNCONDITIONAL(asrc_abuffer);
     REGISTER_FILTER_UNCONDITIONAL(vsrc_buffer);
-    REGISTER_FILTER_UNCONDITIONAL(asink_abuffer);
-    REGISTER_FILTER_UNCONDITIONAL(vsink_buffer);
+    //REGISTER_FILTER_UNCONDITIONAL(asink_abuffer);
+    //REGISTER_FILTER_UNCONDITIONAL(vsink_buffer);
     REGISTER_FILTER_UNCONDITIONAL(af_afifo);
     REGISTER_FILTER_UNCONDITIONAL(vf_fifo);
 }

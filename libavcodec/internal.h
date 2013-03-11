@@ -62,7 +62,7 @@ typedef struct AVCodecInternal {
      */
     int is_copy;
 
-#if FF_API_OLD_DECODE_AUDIO
+#if FF_API_OLD_ENCODE_AUDIO
     /**
      * Internal sample count used by avcodec_encode_audio() to fabricate pts.
      * Can be removed along with avcodec_encode_audio().
@@ -212,7 +212,5 @@ int ff_codec_close_recursive(AVCodecContext *avctx);
  * Finalize buf into extradata and set its size appropriately.
  */
 int avpriv_bprint_to_extradata(AVCodecContext *avctx, struct AVBPrint *buf);
-
-AVDictionary **ff_frame_get_metadatap(AVFrame *frame);
 
 #endif /* AVCODEC_INTERNAL_H */
