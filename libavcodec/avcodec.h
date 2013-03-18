@@ -998,6 +998,12 @@ enum AVPacketSideDataType {
      * by data.
      */
     AV_PKT_DATA_MATROSKA_BLOCKADDITIONAL,
+    
+#ifdef AD_SIDEDATA
+    AV_PKT_DATA_AD_FRAME=0x4000,
+    AV_PKT_DATA_AD_TEXT,
+    AV_PKT_DATA_AD_PARINF,
+#endif
 };
 
 /**
