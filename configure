@@ -4327,7 +4327,6 @@ echo "texi2html enabled         ${texi2html-no}"
 echo "perl enabled              ${perl-no}"
 echo "pod2man enabled           ${pod2man-no}"
 echo "makeinfo enabled          ${makeinfo-no}"
-echo "libparreader enabled      ${libparreader-no}"
 test -n "$random_seed" &&
     echo "random seed               ${random_seed}"
 echo
