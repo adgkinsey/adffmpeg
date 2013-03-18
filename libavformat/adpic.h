@@ -75,7 +75,7 @@ typedef struct {
 
 int ad_read_header(AVFormatContext *s, int *utcOffset);
 void ad_network2host(struct NetVuImageData *pic, uint8_t *data);
-int initADData(int data_type, enum AVMediaType *media, enum CodecID *codecId, void **payload);
+int initADData(int data_type, enum AVMediaType *media, enum AVCodecID *codecId, void **payload);
 int ad_read_jpeg(AVFormatContext *s, AVPacket *pkt, struct NetVuImageData *vid, char **txt);
 int ad_read_jfif(AVFormatContext *s, AVPacket *pkt, int manual_size, int size,
                  struct NetVuImageData *video_data, char **text_data);
@@ -83,7 +83,7 @@ int ad_read_info(AVFormatContext *s, AVPacket *pkt, int size);
 int ad_read_layout(AVFormatContext *s, AVPacket *pkt, int size);
 int ad_read_overlay(AVFormatContext *s, AVPacket *pkt, int channel, int size, char **text_data);
 int ad_read_packet(AVFormatContext *s, AVPacket *pkt, int channel,
-                   enum AVMediaType mediaType, enum CodecID codecId, 
+                   enum AVMediaType mediaType, enum AVCodecID codecId, 
                    void *data, char *text_data);
 AVStream * ad_get_vstream(AVFormatContext *s, uint16_t w, uint16_t h,
                           uint8_t cam, int format, const char *title);

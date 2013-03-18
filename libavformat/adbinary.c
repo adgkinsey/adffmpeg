@@ -461,7 +461,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
     int                 errorVal  = -1;
     unsigned char *     tempbuf   = NULL;
     enum AVMediaType    mediaType = AVMEDIA_TYPE_UNKNOWN;
-    enum CodecID        codecId   = CODEC_ID_NONE;
+    enum AVCodecID      codecId   = CODEC_ID_NONE;
     int                 data_type, data_channel;
     unsigned int        size;
     uint8_t             temp[6];
