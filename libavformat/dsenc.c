@@ -21,6 +21,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include "avformat.h"
 #include "libavutil/avstring.h"
 #include "dsenc.h"
