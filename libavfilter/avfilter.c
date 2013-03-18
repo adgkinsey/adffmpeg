@@ -329,8 +329,7 @@ int ff_request_frame(AVFilterLink *link)
     if (ret == AVERROR_EOF && link->partial_buf) {
         AVFrame *pbuf = link->partial_buf;
         link->partial_buf = NULL;
-        ff_filter_frame_framed(link, pbuf);
-        return 0;
+        ret = ff_filter_frame_framed(link, pbuf);
     }
     if (ret == AVERROR_EOF)
         link->closed = 1;
@@ -626,7 +625,6 @@ static int default_filter_frame(AVFilterLink *link, AVFrame *frame)
 static int ff_filter_frame_framed(AVFilterLink *link, AVFrame *frame)
 {
     int (*filter_frame)(AVFilterLink *, AVFrame *);
-    AVFilterPad *src = link->srcpad;
     AVFilterPad *dst = link->dstpad;
     AVFrame *out;
     int ret;

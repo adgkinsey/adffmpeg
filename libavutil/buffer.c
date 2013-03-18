@@ -122,7 +122,7 @@ int av_buffer_is_writable(const AVBufferRef *buf)
     if (buf->buffer->flags & AV_BUFFER_FLAG_READONLY)
         return 0;
 
-    return avpriv_atomic_int_add_and_fetch(&buf->buffer->refcount, 0) == 1;
+    return avpriv_atomic_int_get(&buf->buffer->refcount) == 1;
 }
 
 int av_buffer_make_writable(AVBufferRef **pbuf)
@@ -239,14 +239,14 @@ void av_buffer_pool_uninit(AVBufferPool **ppool)
 /* remove the whole buffer list from the pool and return it */
 static BufferPoolEntry *get_pool(AVBufferPool *pool)
 {
-    BufferPoolEntry *cur = NULL, *last = NULL;
+    BufferPoolEntry *cur = *(void * volatile *)&pool->pool, *last = NULL;
 
-    do {
-        FFSWAP(BufferPoolEntry*, cur, last);
+    while (cur != last) {
+        last = cur;
         cur = avpriv_atomic_ptr_cas((void * volatile *)&pool->pool, last, NULL);
         if (!cur)
             return NULL;
-    } while (cur != last);
+    }
 
     return cur;
 }

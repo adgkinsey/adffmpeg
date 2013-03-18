@@ -55,6 +55,7 @@
 #include "timefilter.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/pixdesc.h"
+#include "libavutil/time.h"
 #include "libavutil/avstring.h"
 
 #if CONFIG_LIBV4L2
@@ -526,8 +527,8 @@ static int init_convert_timestamp(AVFormatContext *ctx, int64_t ts)
     now = av_gettime_monotonic();
     if (s->ts_mode == V4L_TS_MONO2ABS ||
         (ts <= now + 1 * AV_TIME_BASE && ts >= now - 10 * AV_TIME_BASE)) {
-        int64_t period = av_rescale_q(1, AV_TIME_BASE_Q,
-                                      ctx->streams[0]->avg_frame_rate);
+        AVRational tb = {AV_TIME_BASE, 1};
+        int64_t period = av_rescale_q(1, tb, ctx->streams[0]->avg_frame_rate);
         av_log(ctx, AV_LOG_INFO, "Detected monotonic timestamps, converting\n");
         /* microseconds instead of seconds, MHz instead of Hz */
         s->timefilter = ff_timefilter_new(1, period, 1.0E-6);
@@ -882,6 +883,12 @@ static int v4l2_read_header(AVFormatContext *s1)
     st = avformat_new_stream(s1, NULL);
     if (!st)
         return AVERROR(ENOMEM);
+
+#if CONFIG_LIBV4L2
+    /* silence libv4l2 logging. if fopen() fails v4l2_log_file will be NULL
+       and errors will get sent to stderr */
+    v4l2_log_file = fopen("/dev/null", "w");
+#endif
 
     s->fd = device_open(s1);
     if (s->fd < 0)

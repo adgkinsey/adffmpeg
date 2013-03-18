@@ -20,11 +20,8 @@ OBJS = allcodecs.o                                                      \
        bitstream.o                                                      \
        bitstream_filter.o                                               \
        codec_desc.o                                                     \
-       dsputil.o                                                        \
-       faanidct.o                                                       \
        fmtconvert.o                                                     \
        imgconvert.o                                                     \
-       jrevdct.o                                                        \
        mathtables.o                                                     \
        options.o                                                        \
        parser.o                                                         \
@@ -32,7 +29,6 @@ OBJS = allcodecs.o                                                      \
        rawdec.o                                                         \
        resample.o                                                       \
        resample2.o                                                      \
-       simple_idct.o                                                    \
        utils.o                                                          \
 
 # parts needed for many different codecs
@@ -42,6 +38,9 @@ OBJS-$(CONFIG_AUDIO_FRAME_QUEUE)       += audio_frame_queue.o
 OBJS-$(CONFIG_CRYSTALHD)               += crystalhd.o
 OBJS-$(CONFIG_DCT)                     += dct.o dct32_fixed.o dct32_float.o
 OBJS-$(CONFIG_DXVA2)                   += dxva2.o
+OBJS-$(CONFIG_DSPUTIL)                 += dsputil.o faanidct.o \
+                                          simple_idct.o \
+                                          jrevdct.o
 OBJS-$(CONFIG_ENCODERS)                += faandct.o jfdctfst.o jfdctint.o
 OBJS-$(CONFIG_ERROR_RESILIENCE)        += error_resilience.o
 FFT-OBJS-$(CONFIG_HARDCODED_TABLES)    += cos_tables.o cos_fixed_tables.o
@@ -52,6 +51,7 @@ OBJS-$(CONFIG_H264CHROMA)              += h264chroma.o
 OBJS-$(CONFIG_H264DSP)                 += h264dsp.o h264idct.o
 OBJS-$(CONFIG_H264PRED)                += h264pred.o
 OBJS-$(CONFIG_H264QPEL)                += h264qpel.o
+OBJS-$(CONFIG_HPELDSP)                 += hpeldsp.o
 OBJS-$(CONFIG_HUFFMAN)                 += huffman.o
 OBJS-$(CONFIG_LIBXVID)                 += libxvid_rc.o
 OBJS-$(CONFIG_LPC)                     += lpc.o
@@ -743,6 +743,7 @@ OBJS-$(CONFIG_PNG_PARSER)              += png_parser.o
 OBJS-$(CONFIG_MPEGAUDIO_PARSER)        += mpegaudio_parser.o \
                                           mpegaudiodecheader.o mpegaudiodata.o
 OBJS-$(CONFIG_MPEGVIDEO_PARSER)        += mpegvideo_parser.o    \
+                                          dvd_nav_parser.o \
                                           mpeg12.o mpeg12data.o
 OBJS-$(CONFIG_PNM_PARSER)              += pnm_parser.o pnm.o
 OBJS-$(CONFIG_RV30_PARSER)             += rv34_parser.o
@@ -773,9 +774,11 @@ OBJS-$(CONFIG_REMOVE_EXTRADATA_BSF)       += remove_extradata_bsf.o
 OBJS-$(CONFIG_TEXT2MOVSUB_BSF)            += movsub_bsf.o
 
 # thread libraries
-OBJS-$(HAVE_PTHREADS)                  += pthread.o frame_thread_encoder.o
-OBJS-$(HAVE_W32THREADS)                += pthread.o frame_thread_encoder.o
-OBJS-$(HAVE_OS2THREADS)                += pthread.o frame_thread_encoder.o
+OBJS-$(HAVE_PTHREADS)                  += pthread.o
+OBJS-$(HAVE_W32THREADS)                += pthread.o
+OBJS-$(HAVE_OS2THREADS)                += pthread.o
+
+OBJS-$(CONFIG_FRAME_THREAD_ENCODER)    += frame_thread_encoder.o
 
 SKIPHEADERS                            += %_tablegen.h                  \
                                           %_tables.h                    \
