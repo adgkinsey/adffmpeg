@@ -90,7 +90,7 @@ static int is_valid_separator( unsigned char * buf, int bufLen )
         unsigned char *     b = &buf[strlen(BOUNDARY_PREFIX1)];
 
         // Now we have a server type string. We must skip past this
-        while( !isspace(*b) && *b != ':' && (b - buf) < bufLen ) {
+        while( !av_isspace(*b) && *b != ':' && (b - buf) < bufLen ) {
             b++;
         }
 
@@ -132,9 +132,9 @@ static int process_line(char *line, int *line_count, int *dataType,
             return -1;
     }
     else if (*line_count == 1 ) { // Second line will contain the HTTP status code
-        while (!isspace(*p) && *p != '\0')
+        while (!av_isspace(*p) && *p != '\0')
             p++;
-        while (isspace(*p))
+        while (av_isspace(*p))
             p++;
         http_code = strtol(p, NULL, 10);
     }
@@ -149,7 +149,7 @@ static int process_line(char *line, int *line_count, int *dataType,
         *p = '\0';
         tag = line;
         p++;
-        while (isspace(*p))
+        while (av_isspace(*p))
             p++;
 
         if (!strcmp(tag, "Content-length")) {
@@ -188,7 +188,7 @@ static int process_line(char *line, int *line_count, int *dataType,
                     return 1;
 
                 p++;
-                while (isspace(*p))
+                while (av_isspace(*p))
                     p++;
 
                 // p now pointing at the rate. Look for the first '='
@@ -201,7 +201,7 @@ static int process_line(char *line, int *line_count, int *dataType,
 
                 tag = p;
 
-                while( *p != '\0' && !isspace(*p) )
+                while( *p != '\0' && !av_isspace(*p) )
                     p++;
 
                 if (*p != '\0' )
