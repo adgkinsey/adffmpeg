@@ -51,8 +51,8 @@ extern const int this_year;
 extern AVCodecContext *avcodec_opts[AVMEDIA_TYPE_NB];
 extern AVFormatContext *avformat_opts;
 extern struct SwsContext *sws_opts;
-extern struct SwrContext *swr_opts;
-extern AVDictionary *format_opts, *codec_opts;
+extern AVDictionary *swr_opts;
+extern AVDictionary *format_opts, *codec_opts, *resample_opts;
 
 /**
  * Initialize the cmdutils option system, in particular
@@ -123,7 +123,7 @@ double parse_number_or_die(const char *context, const char *numstr, int type,
  * not zero timestr is interpreted as a duration, otherwise as a
  * date
  *
- * @see parse_date()
+ * @see av_parse_time()
  */
 int64_t parse_time_or_die(const char *context, const char *timestr,
                           int is_duration);
@@ -253,8 +253,9 @@ typedef struct OptionGroup {
 
     AVDictionary *codec_opts;
     AVDictionary *format_opts;
+    AVDictionary *resample_opts;
     struct SwsContext *sws_opts;
-    struct SwrContext *swr_opts;
+    AVDictionary *swr_opts;
 } OptionGroup;
 
 /**
