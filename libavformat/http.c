@@ -65,6 +65,7 @@ typedef struct {
     int rw_timeout;
     char *mime_type;
     char *cookies;          ///< holds newline (\n) delimited Set-Cookie header field values (without the "Set-Cookie: " field name)
+    unsigned char response_headers[BUFFER_SIZE];
 } HTTPContext;
 
 #define OFFSET(x) offsetof(HTTPContext, x)
