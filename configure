@@ -1178,6 +1178,7 @@ EXTERNAL_LIBRARY_LIST="
     libx264
     libxavs
     libxvid
+    libparreader
     openal
     openssl
     x11grab
