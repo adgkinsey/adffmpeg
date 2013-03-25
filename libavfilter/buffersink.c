@@ -63,7 +63,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     if (sink->fifo) {
         while (av_fifo_size(sink->fifo) >= sizeof(AVFilterBufferRef *)) {
             av_fifo_generic_read(sink->fifo, &frame, sizeof(frame), NULL);
-            av_frame_unref(frame);
+            av_frame_free(&frame);
         }
         av_fifo_free(sink->fifo);
         sink->fifo = NULL;
@@ -137,7 +137,8 @@ int attribute_align_arg av_buffersink_get_frame_flags(AVFilterContext *ctx, AVFr
 
     if (flags & AV_BUFFERSINK_FLAG_PEEK) {
         cur_frame = *((AVFrame **)av_fifo_peek2(buf->fifo, 0));
-        av_frame_ref(frame, cur_frame); /* TODO check failure */
+        if ((ret = av_frame_ref(frame, cur_frame)) < 0)
+            return ret;
     } else {
         av_fifo_generic_read(buf->fifo, &cur_frame, sizeof(cur_frame), NULL);
         av_frame_move_ref(frame, cur_frame);

@@ -263,7 +263,7 @@ static void add_to_pool(BufferPoolEntry *buf)
     while (end->next)
         end = end->next;
 
-    while ((cur = avpriv_atomic_ptr_cas((void * volatile *)&pool->pool, NULL, buf))) {
+    while (avpriv_atomic_ptr_cas((void * volatile *)&pool->pool, NULL, buf)) {
         /* pool is not empty, retrieve it and append it to our list */
         cur = get_pool(pool);
         end->next = cur;
@@ -276,6 +276,10 @@ static void pool_release_buffer(void *opaque, uint8_t *data)
 {
     BufferPoolEntry *buf = opaque;
     AVBufferPool *pool = buf->pool;
+
+    if(CONFIG_MEMORY_POISONING)
+        memset(buf->data, 0x2a, pool->size);
+
     add_to_pool(buf);
     if (!avpriv_atomic_int_add_and_fetch(&pool->refcount, -1))
         buffer_pool_free(pool);
@@ -307,6 +311,7 @@ static AVBufferRef *pool_alloc_buffer(AVBufferPool *pool)
     ret->buffer->free   = pool_release_buffer;
 
     avpriv_atomic_int_add_and_fetch(&pool->refcount, 1);
+    avpriv_atomic_int_add_and_fetch(&pool->nb_allocated, 1);
 
     return ret;
 }
@@ -318,6 +323,12 @@ AVBufferRef *av_buffer_pool_get(AVBufferPool *pool)
 
     /* check whether the pool is empty */
     buf = get_pool(pool);
+    if (!buf && pool->refcount <= pool->nb_allocated) {
+        av_log(NULL, AV_LOG_DEBUG, "Pool race dectected, spining to avoid overallocation and eventual OOM\n");
+        while (!buf && avpriv_atomic_int_get(&pool->refcount) <= avpriv_atomic_int_get(&pool->nb_allocated))
+            buf = get_pool(pool);
+    }
+
     if (!buf)
         return pool_alloc_buffer(pool);
 

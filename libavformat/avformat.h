@@ -1167,11 +1167,11 @@ typedef struct AVFormatContext {
     int use_wallclock_as_timestamps;
 
     /**
-     * Avoids negative timestamps during muxing
+     * Avoid negative timestamps during muxing.
      *  0 -> allow negative timestamps
      *  1 -> avoid negative timestamps
      * -1 -> choose automatically (default)
-     * Note, this is only works when interleave_packet_per_dts is in use
+     * Note, this only works when interleave_packet_per_dts is in use.
      * - encoding: Set by user via AVOptions (NO direct access)
      * - decoding: unused
      */
@@ -1212,6 +1212,13 @@ typedef struct AVFormatContext {
      * - decoding: Set by user via AVOPtions (NO direct access)
      */
     int seek2any;
+
+    /**
+     * Flush the I/O context after each packet.
+     * - encoding: Set by user via AVOptions (NO direct access)
+     * - decoding: unused
+     */
+    int flush_packets;
 
     /*****************************************************************
      * All fields below this line are not part of the public API. They

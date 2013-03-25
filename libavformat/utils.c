@@ -280,7 +280,6 @@ int ffio_limit(AVIOContext *s, int size)
  */
 static int append_packet_chunked(AVIOContext *s, AVPacket *pkt, int size)
 {
-    int64_t chunk_size = size;
     int orig_pos       = pkt->pos; // av_grow_packet might reset pos
     int orig_size      = pkt->size;
     int ret;
@@ -293,13 +292,6 @@ static int append_packet_chunked(AVIOContext *s, AVPacket *pkt, int size)
          * When the caller requests a lot of data, limit it to the amount left
          * in file or SANE_CHUNK_SIZE when it is not known
          */
-#if 0
-        if (size > SANE_CHUNK_SIZE) {
-            int64_t filesize = avio_size(s) - avio_tell(s);
-            chunk_size = FFMAX(filesize, SANE_CHUNK_SIZE);
-        }
-        read_size = FFMIN(size, chunk_size);
-#else
         read_size = size;
         if (read_size > SANE_CHUNK_SIZE/10) {
             read_size = ffio_limit(s, read_size);
@@ -307,7 +299,6 @@ static int append_packet_chunked(AVIOContext *s, AVPacket *pkt, int size)
             if (s->maxsize < 0)
                 read_size = FFMIN(read_size, SANE_CHUNK_SIZE);
         }
-#endif
 
         ret = av_grow_packet(pkt, read_size);
         if (ret < 0)
@@ -780,6 +771,8 @@ int ff_read_packet(AVFormatContext *s, AVPacket *pkt)
         if (pktl) {
             *pkt = pktl->pkt;
             st = s->streams[pkt->stream_index];
+            if (s->raw_packet_buffer_remaining_size <= 0)
+                probe_codec(s, st, NULL);
             if(st->request_probe <= 0){
                 s->raw_packet_buffer = pktl->next;
                 s->raw_packet_buffer_remaining_size += pkt->size;
@@ -2146,6 +2139,8 @@ int avformat_seek_file(AVFormatContext *s, int stream_index, int64_t min_ts, int
 {
     if(min_ts > ts || max_ts < ts)
         return -1;
+    if (stream_index < -1 || stream_index >= (int)s->nb_streams)
+        return AVERROR(EINVAL);
 
     if(s->seek2any>0)
         flags |= AVSEEK_FLAG_ANY;
@@ -2740,7 +2735,8 @@ int av_find_stream_info(AVFormatContext *ic)
 
 int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
 {
-    int i, count, ret, read_size, j;
+    int i, count, ret, j;
+    int64_t read_size;
     AVStream *st;
     AVPacket pkt1, *pkt;
     int64_t old_offset = avio_tell(ic->pb);

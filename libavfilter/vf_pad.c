@@ -111,25 +111,11 @@ AVFILTER_DEFINE_CLASS(pad);
 static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     PadContext *pad = ctx->priv;
-    static const char *shorthand[] = { "width", "height", "x", "y", "color", NULL };
-    int ret;
-
-    pad->class = &pad_class;
-    av_opt_set_defaults(pad);
-
-    if ((ret = av_opt_set_from_string(pad, args, shorthand, "=", ":")) < 0)
-        return ret;
 
     if (av_parse_color(pad->rgba_color, pad->color_str, -1, ctx) < 0)
         return AVERROR(EINVAL);
 
     return 0;
-}
-
-static av_cold void uninit(AVFilterContext *ctx)
-{
-    PadContext *pad = ctx->priv;
-    av_opt_free(pad);
 }
 
 static int config_input(AVFilterLink *inlink)
@@ -282,7 +268,7 @@ static int buffer_needs_copy(PadContext *s, AVFrame *frame, AVBufferRef *buf)
         int vsub = s->draw.vsub[planes[i]];
 
         uint8_t *start = frame->data[planes[i]];
-        uint8_t *end   = start + (frame->height >> hsub) *
+        uint8_t *end   = start + (frame->height >> vsub) *
                                  frame->linesize[planes[i]];
 
         /* amount of free space needed before the start and after the end
@@ -301,9 +287,9 @@ static int buffer_needs_copy(PadContext *s, AVFrame *frame, AVBufferRef *buf)
 
 #define SIGN(x) ((x) > 0 ? 1 : -1)
         for (j = 0; j < FF_ARRAY_ELEMS(planes) && planes[j] >= 0; j++) {
-            int hsub1 = s->draw.hsub[planes[j]];
+            int vsub1 = s->draw.vsub[planes[j]];
             uint8_t *start1 = frame->data[planes[j]];
-            uint8_t *end1   = start1 + (frame->height >> hsub1) *
+            uint8_t *end1   = start1 + (frame->height >> vsub1) *
                                        frame->linesize[planes[j]];
             if (i == j)
                 continue;
@@ -416,17 +402,19 @@ static const AVFilterPad avfilter_vf_pad_outputs[] = {
     { NULL }
 };
 
+static const char *const shorthand[] = { "width", "height", "x", "y", "color", NULL };
+
 AVFilter avfilter_vf_pad = {
     .name          = "pad",
     .description   = NULL_IF_CONFIG_SMALL("Pad input image to width:height[:x:y[:color]] (default x and y: 0, default color: black)."),
 
     .priv_size     = sizeof(PadContext),
     .init          = init,
-    .uninit        = uninit,
     .query_formats = query_formats,
 
     .inputs    = avfilter_vf_pad_inputs,
 
     .outputs   = avfilter_vf_pad_outputs,
     .priv_class = &pad_class,
+    .shorthand = shorthand,
 };

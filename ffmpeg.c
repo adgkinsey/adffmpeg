@@ -482,7 +482,7 @@ static void exit_program(void)
         av_frame_free(&input_streams[i]->filter_frame);
         av_dict_free(&input_streams[i]->opts);
         avsubtitle_free(&input_streams[i]->prev_sub.subtitle);
-        avcodec_free_frame(&input_streams[i]->sub2video.frame);
+        av_frame_free(&input_streams[i]->sub2video.frame);
         av_freep(&input_streams[i]->filters);
         av_freep(&input_streams[i]);
     }
@@ -700,49 +700,6 @@ static void do_audio_out(AVFormatContext *s, OutputStream *ost,
         av_free_packet(&pkt);
     }
 }
-
-#if FF_API_DEINTERLACE
-static void pre_process_video_frame(InputStream *ist, AVPicture *picture, void **bufp)
-{
-    AVCodecContext *dec;
-    AVPicture *picture2;
-    AVPicture picture_tmp;
-    uint8_t *buf = 0;
-
-    dec = ist->st->codec;
-
-    /* deinterlace : must be done before any resize */
-    if (FF_API_DEINTERLACE && do_deinterlace) {
-        int size;
-
-        /* create temporary picture */
-        size = avpicture_get_size(dec->pix_fmt, dec->width, dec->height);
-        if (size < 0)
-            return;
-        buf  = av_malloc(size);
-        if (!buf)
-            return;
-
-        picture2 = &picture_tmp;
-        avpicture_fill(picture2, buf, dec->pix_fmt, dec->width, dec->height);
-
-        if (avpicture_deinterlace(picture2, picture,
-                                 dec->pix_fmt, dec->width, dec->height) < 0) {
-            /* if error, do not deinterlace */
-            av_log(NULL, AV_LOG_WARNING, "Deinterlacing failed\n");
-            av_free(buf);
-            buf = NULL;
-            picture2 = picture;
-        }
-    } else {
-        picture2 = picture;
-    }
-
-    if (picture != picture2)
-        *picture = *picture2;
-    *bufp = buf;
-}
-#endif
 
 static void do_subtitle_out(AVFormatContext *s,
                             OutputStream *ost,
@@ -1006,10 +963,10 @@ static void do_video_out(AVFormatContext *s,
      * flush, we need to limit them here, before they go into encoder.
      */
     ost->frame_number++;
-  }
 
     if (vstats_filename && frame_size)
         do_video_stats(ost, frame_size);
+  }
 }
 
 static double psnr(double d)
@@ -1712,9 +1669,6 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output)
     }
 
     pkt->size = 0;
-#if FF_API_DEINTERLACE
-    pre_process_video_frame(ist, (AVPicture *)decoded_frame, &buffer_to_free);
-#endif
 
     rate_emu_sleep(ist);
 
@@ -2341,6 +2295,13 @@ static int transcode_init(void)
                     ost->frame_aspect_ratio ? // overridden by the -aspect cli option
                     av_d2q(ost->frame_aspect_ratio * codec->height/codec->width, 255) :
                     ost->filter->filter->inputs[0]->sample_aspect_ratio;
+                if (!strncmp(ost->enc->name, "libx264", 7) &&
+                    codec->pix_fmt == AV_PIX_FMT_NONE &&
+                    ost->filter->filter->inputs[0]->format != AV_PIX_FMT_YUV420P)
+                    av_log(NULL, AV_LOG_INFO,
+                           "No pixel format specified, %s for H.264 encoding chosen.\n"
+                           "Use -pix_fmt yuv420p for compatibility with outdated media players.\n",
+                           av_get_pix_fmt_name(ost->filter->filter->inputs[0]->format));
                 codec->pix_fmt = ost->filter->filter->inputs[0]->format;
 
                 if (!icodec ||
@@ -2981,6 +2942,23 @@ static int process_input(int file_index)
     if (pkt.dts != AV_NOPTS_VALUE)
         pkt.dts *= ist->ts_scale;
 
+    if (pkt.dts != AV_NOPTS_VALUE && ist->next_dts == AV_NOPTS_VALUE && !copy_ts
+        && (is->iformat->flags & AVFMT_TS_DISCONT) && ifile->last_ts != AV_NOPTS_VALUE) {
+        int64_t pkt_dts = av_rescale_q(pkt.dts, ist->st->time_base, AV_TIME_BASE_Q);
+        int64_t delta   = pkt_dts - ifile->last_ts;
+        if(delta < -1LL*dts_delta_threshold*AV_TIME_BASE ||
+            (delta > 1LL*dts_delta_threshold*AV_TIME_BASE &&
+                ist->st->codec->codec_type != AVMEDIA_TYPE_SUBTITLE)){
+            ifile->ts_offset -= delta;
+            av_log(NULL, AV_LOG_DEBUG,
+                   "Inter stream timestamp discontinuity %"PRId64", new offset= %"PRId64"\n",
+                   delta, ifile->ts_offset);
+            pkt.dts -= av_rescale_q(delta, AV_TIME_BASE_Q, ist->st->time_base);
+            if (pkt.pts != AV_NOPTS_VALUE)
+                pkt.pts -= av_rescale_q(delta, AV_TIME_BASE_Q, ist->st->time_base);
+        }
+    }
+
     if (pkt.dts != AV_NOPTS_VALUE && ist->next_dts != AV_NOPTS_VALUE &&
         !copy_ts) {
         int64_t pkt_dts = av_rescale_q(pkt.dts, ist->st->time_base, AV_TIME_BASE_Q);
@@ -3017,6 +2995,9 @@ static int process_input(int file_index)
             }
         }
     }
+
+    if (pkt.dts != AV_NOPTS_VALUE)
+        ifile->last_ts = av_rescale_q(pkt.dts, ist->st->time_base, AV_TIME_BASE_Q);
 
     if (debug_ts) {
         av_log(NULL, AV_LOG_INFO, "demuxer+ffmpeg -> ist_index:%d type:%s pkt_pts:%s pkt_pts_time:%s pkt_dts:%s pkt_dts_time:%s off:%s off_time:%s\n",

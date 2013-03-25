@@ -236,7 +236,7 @@ static void h_block_filter(ERContext *s, uint8_t *dst, int w,
                            int h, int stride, int is_luma)
 {
     int b_x, b_y, mvx_stride, mvy_stride;
-    uint8_t *cm = ff_cropTbl + MAX_NEG_CROP;
+    const uint8_t *cm = ff_cropTbl + MAX_NEG_CROP;
     set_mv_strides(s, &mvx_stride, &mvy_stride);
     mvx_stride >>= is_luma;
     mvy_stride *= mvx_stride;
@@ -304,7 +304,7 @@ static void v_block_filter(ERContext *s, uint8_t *dst, int w, int h,
                            int stride, int is_luma)
 {
     int b_x, b_y, mvx_stride, mvy_stride;
-    uint8_t *cm = ff_cropTbl + MAX_NEG_CROP;
+    const uint8_t *cm = ff_cropTbl + MAX_NEG_CROP;
     set_mv_strides(s, &mvx_stride, &mvy_stride);
     mvx_stride >>= is_luma;
     mvy_stride *= mvx_stride;
@@ -832,8 +832,10 @@ void ff_er_add_slice(ERContext *s, int startx, int starty,
         int prev_status = s->error_status_table[s->mb_index2xy[start_i - 1]];
 
         prev_status &= ~ VP_START;
-        if (prev_status != (ER_MV_END | ER_DC_END | ER_AC_END))
+        if (prev_status != (ER_MV_END | ER_DC_END | ER_AC_END)) {
+            s->error_occurred = 1;
             s->error_count = INT_MAX;
+        }
     }
 }
 

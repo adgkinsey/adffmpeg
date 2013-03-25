@@ -408,7 +408,10 @@ static int update_frame_pool(AVCodecContext *avctx, AVFrame *frame)
             av_buffer_pool_uninit(&pool->pools[i]);
             pool->linesize[i] = picture.linesize[i];
             if (size[i]) {
-                pool->pools[i] = av_buffer_pool_init(size[i] + 16, NULL);
+                pool->pools[i] = av_buffer_pool_init(size[i] + 16,
+                                                     CONFIG_MEMORY_POISONING ?
+                                                        NULL :
+                                                        av_buffer_allocz);
                 if (!pool->pools[i]) {
                     ret = AVERROR(ENOMEM);
                     goto fail;
@@ -478,8 +481,10 @@ static int audio_get_buffer(AVCodecContext *avctx, AVFrame *frame)
             av_freep(&frame->extended_buf);
             return AVERROR(ENOMEM);
         }
-    } else
+    } else {
         frame->extended_data = frame->data;
+        av_assert0(frame->nb_extended_buf == 0);
+    }
 
     for (i = 0; i < FFMIN(planes, AV_NUM_DATA_POINTERS); i++) {
         frame->buf[i] = av_buffer_pool_get(pool->pools[0]);
@@ -755,11 +760,13 @@ do {                                                                    \
         if (avctx->codec_type == AVMEDIA_TYPE_VIDEO) {
             const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
 
-            if (!desc) {
+            planes = av_pix_fmt_count_planes(frame->format);
+            if (!planes)
+                planes = 1;
+            if (!desc || planes <= 0) {
                 ret = AVERROR(EINVAL);
                 goto fail;
             }
-            planes = (desc->flags & PIX_FMT_PLANAR) ? desc->nb_components : 1;
 
             for (i = 0; i < planes; i++) {
                 int v_shift    = (i == 1 || i == 2) ? desc->log2_chroma_h : 0;
@@ -1078,9 +1085,9 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
     if ((ret = av_opt_set_dict(avctx, &tmp)) < 0)
         goto free_and_end;
 
-    //We only call avcodec_set_dimensions() for non h264 codecs so as not to overwrite previously setup dimensions
-    if (!( avctx->coded_width && avctx->coded_height && avctx->width && avctx->height && avctx->codec_id == AV_CODEC_ID_H264)){
-
+    // only call avcodec_set_dimensions() for non H.264/VP6F codecs so as not to overwrite previously setup dimensions
+    if (!(avctx->coded_width && avctx->coded_height && avctx->width && avctx->height &&
+          (avctx->codec_id == AV_CODEC_ID_H264 || avctx->codec_id == AV_CODEC_ID_VP6F))) {
     if (avctx->coded_width && avctx->coded_height)
         avcodec_set_dimensions(avctx, avctx->coded_width, avctx->coded_height);
     else if (avctx->width && avctx->height)
@@ -2049,6 +2056,7 @@ int attribute_align_arg avcodec_decode_audio4(AVCodecContext *avctx,
         avctx->pkt = &tmp;
         ret = avctx->codec->decode(avctx, frame, got_frame_ptr, &tmp);
         if (ret >= 0 && *got_frame_ptr) {
+            add_metadata_from_side_data(avctx, frame);
             avctx->frame_number++;
             frame->pkt_dts = avpkt->dts;
             av_frame_set_best_effort_timestamp(frame,
@@ -2068,7 +2076,6 @@ int attribute_align_arg avcodec_decode_audio4(AVCodecContext *avctx,
                 avci->to_free.extended_data = avci->to_free.data;
             }
         }
-        add_metadata_from_side_data(avctx, frame);
 
         side= av_packet_get_side_data(avctx->pkt, AV_PKT_DATA_SKIP_SAMPLES, &side_size);
         if(side && side_size>=10) {
@@ -2162,6 +2169,7 @@ static int recode_subtitle(AVCodecContext *avctx,
     ret = av_new_packet(&tmp, inl * UTF8_MAX_BYTES);
     if (ret < 0)
         goto end;
+    outpkt->buf  = tmp.buf;
     outpkt->data = tmp.data;
     outpkt->size = tmp.size;
     outb = outpkt->data;
@@ -2221,8 +2229,13 @@ int avcodec_decode_subtitle2(AVCodecContext *avctx, AVSubtitle *sub,
             ret = avctx->codec->decode(avctx, sub, got_sub_ptr, &pkt_recoded);
             av_assert1((ret >= 0) >= !!*got_sub_ptr &&
                        !!*got_sub_ptr >= !!sub->num_rects);
-            if (tmp.data != pkt_recoded.data)
-                av_free(pkt_recoded.data);
+            if (tmp.data != pkt_recoded.data) { // did we recode?
+                /* prevent from destroying side data from original packet */
+                pkt_recoded.side_data = NULL;
+                pkt_recoded.side_data_elems = 0;
+
+                av_free_packet(&pkt_recoded);
+            }
             sub->format = !(avctx->codec_descriptor->props & AV_CODEC_PROP_BITMAP_SUB);
             avctx->pkt = NULL;
         }
