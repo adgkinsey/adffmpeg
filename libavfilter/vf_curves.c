@@ -33,8 +33,24 @@ struct keypoint {
 
 #define NB_COMP 3
 
+enum preset {
+    PRESET_NONE,
+    PRESET_COLOR_NEGATIVE,
+    PRESET_CROSS_PROCESS,
+    PRESET_DARKER,
+    PRESET_INCREASE_CONTRAST,
+    PRESET_LIGHTER,
+    PRESET_LINEAR_CONTRAST,
+    PRESET_MEDIUM_CONTRAST,
+    PRESET_NEGATIVE,
+    PRESET_STRONG_CONTRAST,
+    PRESET_VINTAGE,
+    NB_PRESETS,
+};
+
 typedef struct {
     const AVClass *class;
+    enum preset preset;
     char *comp_points_str[NB_COMP];
     uint8_t graph[NB_COMP][256];
 } CurvesContext;
@@ -48,10 +64,72 @@ static const AVOption curves_options[] = {
     { "g",     "set green points coordinates", OFFSET(comp_points_str[1]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
     { "blue",  "set blue points coordinates",  OFFSET(comp_points_str[2]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
     { "b",     "set blue points coordinates",  OFFSET(comp_points_str[2]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
+    { "preset", "select a color curves preset", OFFSET(preset), AV_OPT_TYPE_INT, {.i64=PRESET_NONE}, PRESET_NONE, NB_PRESETS-1, FLAGS, "preset_name" },
+        { "color_negative",     NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_COLOR_NEGATIVE},       INT_MIN, INT_MAX, FLAGS, "preset_name" },
+        { "cross_process",      NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_CROSS_PROCESS},        INT_MIN, INT_MAX, FLAGS, "preset_name" },
+        { "darker",             NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_DARKER},               INT_MIN, INT_MAX, FLAGS, "preset_name" },
+        { "increase_contrast",  NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_INCREASE_CONTRAST},    INT_MIN, INT_MAX, FLAGS, "preset_name" },
+        { "lighter",            NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_LIGHTER},              INT_MIN, INT_MAX, FLAGS, "preset_name" },
+        { "linear_contrast",    NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_LINEAR_CONTRAST},      INT_MIN, INT_MAX, FLAGS, "preset_name" },
+        { "medium_contrast",    NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_MEDIUM_CONTRAST},      INT_MIN, INT_MAX, FLAGS, "preset_name" },
+        { "negative",           NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_NEGATIVE},             INT_MIN, INT_MAX, FLAGS, "preset_name" },
+        { "strong_contrast",    NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_STRONG_CONTRAST},      INT_MIN, INT_MAX, FLAGS, "preset_name" },
+        { "vintage",            NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_VINTAGE},              INT_MIN, INT_MAX, FLAGS, "preset_name" },
     { NULL }
 };
 
 AVFILTER_DEFINE_CLASS(curves);
+
+static const struct {
+    const char *r;
+    const char *g;
+    const char *b;
+} curves_presets[] = {
+    [PRESET_COLOR_NEGATIVE] = {
+        "0/1 0.129/1 0.466/0.498 0.725/0 1/0",
+        "0/1 0.109/1 0.301/0.498 0.517/0 1/0",
+        "0/1 0.098/1 0.235/0.498 0.423/0 1/0",
+    },
+    [PRESET_CROSS_PROCESS] = {
+        "0.25/0.156 0.501/0.501 0.686/0.745",
+        "0.25/0.188 0.38/0.501 0.745/0.815 1/0.815",
+        "0.231/0.094 0.709/0.874",
+    },
+    [PRESET_DARKER] = {
+        "0.5/0.4", "0.5/0.4", "0.5/0.4",
+    },
+    [PRESET_INCREASE_CONTRAST] = {
+        "0.149/0.066 0.831/0.905 0.905/0.98",
+        "0.149/0.066 0.831/0.905 0.905/0.98",
+        "0.149/0.066 0.831/0.905 0.905/0.98",
+    },
+    [PRESET_LIGHTER] = {
+        "0.4/0.5", "0.4/0.5", "0.4/0.5",
+    },
+    [PRESET_LINEAR_CONTRAST] = {
+        "0.305/0.286 0.694/0.713",
+        "0.305/0.286 0.694/0.713",
+        "0.305/0.286 0.694/0.713",
+    },
+    [PRESET_MEDIUM_CONTRAST] = {
+        "0.286/0.219 0.639/0.643",
+        "0.286/0.219 0.639/0.643",
+        "0.286/0.219 0.639/0.643",
+    },
+    [PRESET_NEGATIVE] = {
+        "0/1 1/0", "0/1 1/0", "0/1 1/0",
+    },
+    [PRESET_STRONG_CONTRAST] = {
+        "0.301/0.196 0.592/0.6 0.686/0.737",
+        "0.301/0.196 0.592/0.6 0.686/0.737",
+        "0.301/0.196 0.592/0.6 0.686/0.737",
+    },
+    [PRESET_VINTAGE] = {
+        "0/0.11 0.42/0.51 1/0.95",
+        "0.50/0.48",
+        "0/0.22 0.49/0.44 1/0.8",
+    }
+};
 
 static struct keypoint *make_point(double x, double y, struct keypoint *next)
 {
@@ -241,11 +319,19 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
     CurvesContext *curves = ctx->priv;
     struct keypoint *comp_points[NB_COMP] = {0};
 
-    curves->class = &curves_class;
-    av_opt_set_defaults(curves);
-
-    if ((ret = av_set_options_string(curves, args, "=", ":")) < 0)
-        return ret;
+    if (curves->preset != PRESET_NONE) {
+        char **pts = curves->comp_points_str;
+        if (pts[0] || pts[1] || pts[2]) {
+            av_log(ctx, AV_LOG_ERROR, "It is not possible to mix a preset "
+                   "with explicit points placements\n");
+            return AVERROR(EINVAL);
+        }
+        pts[0] = av_strdup(curves_presets[curves->preset].r);
+        pts[1] = av_strdup(curves_presets[curves->preset].g);
+        pts[2] = av_strdup(curves_presets[curves->preset].b);
+        if (!pts[0] || !pts[1] || !pts[2])
+            return AVERROR(ENOMEM);
+    }
 
     for (i = 0; i < NB_COMP; i++) {
         ret = parse_points_str(ctx, comp_points + i, curves->comp_points_str[i]);
@@ -281,7 +367,6 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
         }
     }
 
-    av_opt_free(curves);
     return 0;
 }
 
@@ -351,6 +436,8 @@ static const AVFilterPad curves_outputs[] = {
      { NULL }
 };
 
+static const char *const shorthand[] = { "preset", NULL };
+
 AVFilter avfilter_vf_curves = {
     .name          = "curves",
     .description   = NULL_IF_CONFIG_SMALL("Adjust components curves."),
@@ -360,4 +447,5 @@ AVFilter avfilter_vf_curves = {
     .inputs        = curves_inputs,
     .outputs       = curves_outputs,
     .priv_class    = &curves_class,
+    .shorthand     = shorthand,
 };

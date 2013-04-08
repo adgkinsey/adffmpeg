@@ -21,6 +21,7 @@
 
 #include "avfilter.h"
 #include "config.h"
+#include "opencl_allkernels.h"
 
 
 #define REGISTER_FILTER(X, x, y)                                        \
@@ -53,6 +54,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(ANULL,          anull,          af);
     REGISTER_FILTER(APAD,           apad,           af);
     REGISTER_FILTER(APERMS,         aperms,         af);
+    REGISTER_FILTER(APHASER,        aphaser,        af);
     REGISTER_FILTER(ARESAMPLE,      aresample,      af);
     REGISTER_FILTER(ASELECT,        aselect,        af);
     REGISTER_FILTER(ASENDCMD,       asendcmd,       af);
@@ -199,4 +201,5 @@ void avfilter_register_all(void)
     REGISTER_FILTER_UNCONDITIONAL(vsink_buffer);
     REGISTER_FILTER_UNCONDITIONAL(af_afifo);
     REGISTER_FILTER_UNCONDITIONAL(vf_fifo);
+    ff_opencl_register_filter_kernel_code_all();
 }

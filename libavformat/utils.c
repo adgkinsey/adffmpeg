@@ -222,6 +222,10 @@ AVOutputFormat *av_guess_format(const char *short_name, const char *filename,
 
 enum AVCodecID av_guess_codec(AVOutputFormat *fmt, const char *short_name,
                             const char *filename, const char *mime_type, enum AVMediaType type){
+    if (!strcmp(fmt->name, "segment") || !strcmp(fmt->name, "ssegment")) {
+        fmt = av_guess_format(NULL, filename, NULL);
+    }
+
     if(type == AVMEDIA_TYPE_VIDEO){
         enum AVCodecID codec_id= AV_CODEC_ID_NONE;
 
@@ -1738,7 +1742,7 @@ int ff_add_index_entry(AVIndexEntry **index_entries,
     if(index<0){
         index= (*nb_index_entries)++;
         ie= &entries[index];
-        assert(index==0 || ie[-1].timestamp < timestamp);
+        av_assert0(index==0 || ie[-1].timestamp < timestamp);
     }else{
         ie= &entries[index];
         if(ie->timestamp != timestamp){
@@ -1854,7 +1858,7 @@ int ff_seek_frame_binary(AVFormatContext *s, int stream_index, int64_t target_ts
         }
 
         index= av_index_search_timestamp(st, target_ts, flags & ~AVSEEK_FLAG_BACKWARD);
-        assert(index < st->nb_index_entries);
+        av_assert0(index < st->nb_index_entries);
         if(index >= 0){
             e= &st->index_entries[index];
             assert(e->timestamp >= target_ts);
@@ -2014,6 +2018,8 @@ static int seek_frame_byte(AVFormatContext *s, int stream_index, int64_t pos, in
 
     avio_seek(s->pb, pos, SEEK_SET);
 
+    s->io_repositioned = 1;
+
     return 0;
 }
 
@@ -2037,7 +2043,7 @@ static int seek_frame_generic(AVFormatContext *s,
         int nonkey=0;
 
         if(st->nb_index_entries){
-            assert(st->index_entries);
+            av_assert0(st->index_entries);
             ie= &st->index_entries[st->nb_index_entries-1];
             if ((ret = avio_seek(s->pb, ie->pos, SEEK_SET)) < 0)
                 return ret;
@@ -2304,7 +2310,7 @@ static void fill_all_stream_timings(AVFormatContext *ic)
 static void estimate_timings_from_bit_rate(AVFormatContext *ic)
 {
     int64_t filesize, duration;
-    int bit_rate, i;
+    int bit_rate, i, show_warning = 0;
     AVStream *st;
 
     /* if bit_rate is already set, we believe it */
@@ -2325,12 +2331,17 @@ static void estimate_timings_from_bit_rate(AVFormatContext *ic)
         if (filesize > 0) {
             for(i = 0; i < ic->nb_streams; i++) {
                 st = ic->streams[i];
-                duration= av_rescale(8*filesize, st->time_base.den, ic->bit_rate*(int64_t)st->time_base.num);
-                if (st->duration == AV_NOPTS_VALUE)
+                if (   st->time_base.num <= INT64_MAX / ic->bit_rate
+                    && st->duration == AV_NOPTS_VALUE) {
+                    duration= av_rescale(8*filesize, st->time_base.den, ic->bit_rate*(int64_t)st->time_base.num);
                     st->duration = duration;
+                    show_warning = 1;
+                }
             }
         }
     }
+    if (show_warning)
+        av_log(ic, AV_LOG_WARNING, "Estimating duration from bitrate, this may be inaccurate\n");
 }
 
 #define DURATION_MAX_READ_SIZE 250000LL
@@ -2438,7 +2449,6 @@ static void estimate_timings(AVFormatContext *ic, int64_t old_offset)
         fill_all_stream_timings(ic);
         ic->duration_estimation_method = AVFMT_DURATION_FROM_STREAM;
     } else {
-        av_log(ic, AV_LOG_WARNING, "Estimating duration from bitrate, this may be inaccurate\n");
         /* less precise: use bitrate info */
         estimate_timings_from_bit_rate(ic);
         ic->duration_estimation_method = AVFMT_DURATION_FROM_BITRATE;
@@ -3264,6 +3274,7 @@ void ff_free_stream(AVFormatContext *s, AVStream *st){
     if (st->attached_pic.data)
         av_free_packet(&st->attached_pic);
     av_dict_free(&st->metadata);
+    av_freep(&st->probe_data.buf);
     av_freep(&st->index_entries);
     av_freep(&st->codec->extradata);
     av_freep(&st->codec->subtitle_header);
@@ -3272,7 +3283,6 @@ void ff_free_stream(AVFormatContext *s, AVStream *st){
     if (st->info)
         av_freep(&st->info->duration_error);
     av_freep(&st->info);
-    av_freep(&st->probe_data.buf);
     av_freep(&s->streams[ --s->nb_streams ]);
 }
 
@@ -4274,6 +4284,22 @@ AVRational av_guess_sample_aspect_ratio(AVFormatContext *format, AVStream *strea
         return stream_sample_aspect_ratio;
     else
         return frame_sample_aspect_ratio;
+}
+
+AVRational av_guess_frame_rate(AVFormatContext *format, AVStream *st, AVFrame *frame)
+{
+    AVRational fr = st->r_frame_rate;
+
+    if (st->codec->ticks_per_frame > 1) {
+        AVRational codec_fr = av_inv_q(st->codec->time_base);
+        AVRational   avg_fr = st->avg_frame_rate;
+        codec_fr.den *= st->codec->ticks_per_frame;
+        if (   codec_fr.num > 0 && codec_fr.den > 0 && av_q2d(codec_fr) < av_q2d(fr)*0.7
+            && fabs(1.0 - av_q2d(av_div_q(avg_fr, fr))) > 0.1)
+            fr = codec_fr;
+    }
+
+    return fr;
 }
 
 int avformat_match_stream_specifier(AVFormatContext *s, AVStream *st,

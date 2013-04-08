@@ -133,6 +133,7 @@ Component options:
   --disable-network        disable network support [no]
   --disable-dct            disable DCT code
   --disable-dwt            disable DWT code
+  --disable-error-resilience disable error resilience code
   --disable-lsp            disable LSP code
   --disable-lzo            disable LZO decoder code
   --disable-mdct           disable MDCT code
@@ -233,6 +234,7 @@ External library support:
   --enable-libxvid         enable Xvid encoding via xvidcore,
                            native MPEG-4/Xvid encoder exists [no]
   --enable-openal          enable OpenAL 1.1 capture support [no]
+  --enable-opencl          enable OpenCL code
   --enable-openssl         enable openssl [no]
   --enable-x11grab         enable X11 grabbing [no]
   --enable-zlib            enable zlib [autodetect]
@@ -315,7 +317,6 @@ Optimization options (experts only):
   --disable-fast-unaligned consider unaligned accesses slow
 
 Developer options (useful when working on FFmpeg itself):
-  --enable-coverage        build with test coverage instrumentation
   --disable-debug          disable debugging symbols
   --enable-debug=LEVEL     set the debug level [$debuglevel]
   --disable-optimizations  disable compiler optimizations
@@ -657,6 +658,12 @@ print_config(){
                 } else if (file ~ /\\.mak\$/) {
                     n = -v ? \"\" : \"!\";
                     printf(\"%s%s=yes\\n\", n, c) >>file;
+                } else if (file ~ /\\.texi\$/) {
+                    pre = -v ? \"\" : \"@c \";
+                    yesno = \$2;
+                    c2 = tolower(c);
+                    gsub(/_/, \"-\", c2);
+                    printf(\"%s@set %s %s\\n\", pre, c2, yesno) >>file;
                 }
             }
         }"
@@ -1180,6 +1187,7 @@ EXTERNAL_LIBRARY_LIST="
     libxvid
     libparreader
     openal
+    opencl
     openssl
     x11grab
     zlib
@@ -1228,6 +1236,7 @@ CONFIG_LIST="
     $PROGRAM_LIST
     dct
     dwt
+    error_resilience
     fast_unaligned
     fft
     ftrapv
@@ -1260,6 +1269,12 @@ THREADS_LIST='
     pthreads
     w32threads
     os2threads
+'
+
+ATOMICS_LIST='
+    atomics_gcc
+    atomics_win32
+    atomics_suncc
 '
 
 ARCH_LIST='
@@ -1372,6 +1387,7 @@ HAVE_LIST="
     $HAVE_LIST_CMDLINE
     $HAVE_LIST_PUB
     $THREADS_LIST
+    $ATOMICS_LIST
     $MATH_FUNCS
     access
     aligned_malloc
@@ -1382,6 +1398,8 @@ HAVE_LIST="
     asm_mod_q
     asm_mod_y
     asm_types_h
+    atomic_cas_ptr
+    atomics_native
     attribute_may_alias
     attribute_packed
     cdio_paranoia_h
@@ -1512,7 +1530,6 @@ CONFIG_EXTRA="
     ac3dsp
     audio_frame_queue
     dsputil
-    error_resilience
     frame_thread_encoder
     gcrypt
     golomb
@@ -1544,7 +1561,6 @@ CMDLINE_SELECT="
     $HAVE_LIST_CMDLINE
     $THREADS_LIST
     asm
-    coverage
     cross_compile
     debug
     extra_warnings
@@ -1679,7 +1695,7 @@ mdct_select="fft"
 rdft_select="fft"
 mpegaudio_select="mpegaudiodsp"
 mpegaudiodsp_select="dct"
-mpegvideo_select="dsputil error_resilience h264chroma hpeldsp videodsp"
+mpegvideo_select="dsputil h264chroma hpeldsp videodsp"
 mpegvideoenc_select="mpegvideo"
 
 # decoders / encoders
@@ -1701,7 +1717,7 @@ atrac3_decoder_select="mdct"
 bink_decoder_select="dsputil hpeldsp"
 binkaudio_dct_decoder_select="mdct rdft dct sinewin"
 binkaudio_rdft_decoder_select="mdct rdft sinewin"
-cavs_decoder_select="dsputil golomb h264chroma mpegvideo videodsp"
+cavs_decoder_select="dsputil golomb h264chroma videodsp"
 cllc_decoder_select="dsputil"
 comfortnoise_encoder_select="lpc"
 cook_decoder_select="dsputil mdct sinewin"
@@ -1717,7 +1733,7 @@ eac3_decoder_select="ac3_decoder"
 eac3_encoder_select="ac3_encoder"
 eamad_decoder_select="aandcttables dsputil mpegvideo"
 eatgq_decoder_select="aandcttables"
-eatqi_decoder_select="aandcttables mpegvideo"
+eatqi_decoder_select="aandcttables error_resilience mpegvideo"
 exr_decoder_select="zlib"
 ffv1_decoder_select="dsputil golomb rangecoder"
 ffv1_encoder_select="rangecoder"
@@ -1740,6 +1756,7 @@ h263_encoder_select="aandcttables mpegvideoenc"
 h263i_decoder_select="h263_decoder"
 h263p_encoder_select="h263_encoder"
 h264_decoder_select="golomb h264chroma h264dsp h264pred h264qpel videodsp"
+h264_decoder_suggest="error_resilience"
 huffyuv_decoder_select="dsputil"
 huffyuv_encoder_select="huffman"
 iac_decoder_select="fft mdct sinewin"
@@ -1771,7 +1788,7 @@ mp3on4float_decoder_select="mpegaudio"
 mpc7_decoder_select="dsputil mpegaudiodsp"
 mpc8_decoder_select="dsputil mpegaudiodsp"
 mpeg_xvmc_decoder_deps="X11_extensions_XvMClib_h"
-mpeg_xvmc_decoder_select="mpegvideo_decoder"
+mpeg_xvmc_decoder_select="mpeg2video_decoder"
 mpeg1video_decoder_select="error_resilience mpegvideo"
 mpeg1video_encoder_select="aandcttables mpegvideoenc"
 mpeg2video_decoder_select="error_resilience mpegvideo"
@@ -1779,7 +1796,6 @@ mpeg2video_encoder_select="aandcttables mpegvideoenc"
 mpeg4_decoder_select="h263_decoder mpeg4video_parser"
 mpeg4_encoder_select="h263_encoder"
 msmpeg4v1_decoder_select="h263_decoder"
-msmpeg4v1_encoder_select="h263_encoder"
 msmpeg4v2_decoder_select="h263_decoder"
 msmpeg4v2_encoder_select="h263_encoder"
 msmpeg4v3_decoder_select="h263_decoder"
@@ -1805,14 +1821,14 @@ rv40_decoder_select="error_resilience golomb h264chroma h264pred h264qpel mpegvi
 shorten_decoder_select="golomb"
 sipr_decoder_select="lsp"
 snow_decoder_select="dsputil dwt h264qpel hpeldsp rangecoder"
-snow_encoder_select="aandcttables dsputil dwt h264qpel hpeldsp error_resilience mpegvideoenc rangecoder"
+snow_encoder_select="aandcttables dsputil dwt h264qpel hpeldsp mpegvideoenc rangecoder"
 sonic_decoder_select="golomb"
 sonic_encoder_select="golomb"
 sonic_ls_encoder_select="golomb"
 svq1_decoder_select="hpeldsp"
 svq1_encoder_select="aandcttables dsputil hpeldsp mpegvideoenc"
-svq3_decoder_select="dsputil error_resilience golomb h264chroma h264dsp h264pred h264qpel mpegvideo videodsp"
-svq3_decoder_suggest="zlib"
+svq3_decoder_select="dsputil golomb h264chroma h264dsp h264pred h264qpel mpegvideo videodsp"
+svq3_decoder_suggest="error_resilience zlib"
 tak_decoder_select="dsputil"
 theora_decoder_select="vp3_decoder"
 tiff_decoder_suggest="zlib"
@@ -1878,7 +1894,7 @@ h264_vdpau_decoder_select="h264_decoder"
 h264_vdpau_hwaccel_deps="vdpau"
 h264_vdpau_hwaccel_select="h264_decoder"
 mpeg_vdpau_decoder_deps="vdpau"
-mpeg_vdpau_decoder_select="mpegvideo_decoder"
+mpeg_vdpau_decoder_select="mpeg2video_decoder"
 mpeg1_vdpau_decoder_deps="vdpau"
 mpeg1_vdpau_decoder_select="mpeg1video_decoder"
 mpeg1_vdpau_hwaccel_deps="vdpau"
@@ -1914,7 +1930,7 @@ wmv3_vdpau_decoder_select="vc1_vdpau_decoder"
 wmv3_vdpau_hwaccel_select="vc1_vdpau_hwaccel"
 
 # parsers
-h264_parser_select="golomb h264chroma h264dsp h264pred h264qpel mpegvideo videodsp"
+h264_parser_select="golomb h264chroma h264dsp h264pred h264qpel videodsp"
 mpeg4video_parser_select="error_resilience mpegvideo"
 mpegvideo_parser_select="error_resilience mpegvideo"
 vc1_parser_select="mpegvideo"
@@ -1991,13 +2007,12 @@ mov_demuxer_suggest="zlib"
 mov_muxer_select="rtpenc_chain"
 mp3_demuxer_select="mpegaudio_parser"
 mp4_muxer_select="mov_muxer"
-mpegts_muxer_select="adts_muxer latm_muxer mpegvideo"
+mpegts_muxer_select="adts_muxer latm_muxer"
 mpegtsraw_demuxer_select="mpegts_demuxer"
 mxf_d10_muxer_select="mxf_muxer"
 ogg_demuxer_select="golomb"
 psp_muxer_select="mov_muxer"
 rtp_demuxer_select="sdp_demuxer"
-rtp_muxer_select="mpegvideo"
 rtpdec_select="asf_demuxer rm_demuxer rtp_protocol mpegts_demuxer mov_demuxer"
 rtsp_demuxer_select="http_protocol rtpdec"
 rtsp_muxer_select="rtp_muxer http_protocol rtp_protocol rtpenc_chain"
@@ -2455,13 +2470,13 @@ sysinclude_default="${sysroot}/usr/include"
 case "$toolchain" in
     clang-asan)
         cc_default="clang"
-        add_cflags  -faddress-sanitizer
-        add_ldflags -faddress-sanitizer
+        add_cflags  -fsanitize=address
+        add_ldflags -fsanitize=address
     ;;
     clang-tsan)
         cc_default="clang"
-        add_cflags  -fthread-sanitizer
-        add_ldflags -fthread-sanitizer
+        add_cflags  -fsanitize=thread -pie
+        add_ldflags -fsanitize=thread -pie
     ;;
     msvc)
         cc_default="c99wrap cl"
@@ -2469,6 +2484,10 @@ case "$toolchain" in
         nm_default="dumpbin -symbols"
         ar_default="lib"
         target_os_default="win32"
+    ;;
+    gcov)
+        add_cflags  -fprofile-arcs -ftest-coverage
+        add_ldflags -fprofile-arcs -ftest-coverage
     ;;
     ?*)
         die "Unknown toolchain $toolchain"
@@ -3833,6 +3852,7 @@ check_func  strerror_r
 check_func  sched_getaffinity
 check_builtin sync_val_compare_and_swap "" "int *ptr; int oldval, newval; __sync_val_compare_and_swap(ptr, oldval, newval)"
 check_builtin machine_rw_barrier mbarrier.h "__machine_rw_barrier()"
+check_builtin atomic_cas_ptr atomic.h "void **ptr; void *oldval, *newval; atomic_cas_ptr(ptr, oldval, newval)"
 check_builtin MemoryBarrier windows.h "MemoryBarrier()"
 check_func  sysconf
 check_func  sysctl
@@ -3912,6 +3932,10 @@ done
 if enabled pthreads; then
   check_func pthread_cancel
 fi
+
+enabled sync_val_compare_and_swap && enable atomics_gcc
+enabled machine_rw_barrier && enabled atomic_cas_ptr && enable atomics_suncc
+enabled MemoryBarrier && enable atomics_win32
 
 check_lib math.h sin -lm && LIBM="-lm"
 disabled crystalhd || check_lib libcrystalhd/libcrystalhd_if.h DtsCrystalHDVersion -lcrystalhd || disable crystalhd
@@ -3993,6 +4017,7 @@ enabled openal     && { { for al_libs in "${OPENAL_LIBS}" "-lopenal" "-lOpenAL32
                         die "ERROR: openal not found"; } &&
                       { check_cpp_condition "AL/al.h" "defined(AL_VERSION_1_1)" ||
                         die "ERROR: openal must be installed and version must be 1.1 or compatible"; }
+enabled opencl     && require2 opencl CL/cl.h clEnqueueNDRangeKernel -lOpenCL
 enabled openssl    && { check_lib openssl/ssl.h SSL_library_init -lssl -lcrypto ||
                         check_lib openssl/ssl.h SSL_library_init -lssl32 -leay32 ||
                         check_lib openssl/ssl.h SSL_library_init -lssl -lcrypto -lws2_32 -lgdi32 ||
@@ -4101,7 +4126,6 @@ enabled vdpau &&
 disabled iconv || check_func_headers iconv.h iconv || check_lib2 iconv.h iconv -liconv || disable iconv
 
 enabled debug && add_cflags -g"$debuglevel" && add_asflags -g"$debuglevel"
-enabled coverage && add_cflags "-fprofile-arcs -ftest-coverage" && add_ldflags "-fprofile-arcs -ftest-coverage"
 test -n "$valgrind" && target_exec="$valgrind --error-exitcode=1 --malloc-fill=0x2a --track-origins=yes --leak-check=full --gen-suppressions=all --suppressions=$source_path/tests/fate-valgrind.supp"
 
 # add some useful compiler flags if supported
@@ -4252,8 +4276,9 @@ case $target_os in
     ;;
 esac
 
-enabled_any $THREADS_LIST      && enable threads
 enable frame_thread_encoder
+enabled_any $THREADS_LIST      && enable threads
+enabled_any $ATOMICS_LIST      && enable atomics_native
 
 enabled asm || { arch=c; disable $ARCH_LIST $ARCH_EXT_LIST; }
 
@@ -4362,6 +4387,7 @@ echo "network support           ${network-no}"
 echo "threading support         ${thread_type-no}"
 echo "safe bitstream reader     ${safe_bitstream_reader-no}"
 echo "SDL support               ${sdl-no}"
+echo "opencl enabled            ${opencl-no}"
 echo "texi2html enabled         ${texi2html-no}"
 echo "perl enabled              ${perl-no}"
 echo "pod2man enabled           ${pod2man-no}"
@@ -4394,13 +4420,13 @@ fi
 
 echo "License: $license"
 
-echo "Creating config.mak and config.h..."
+echo "Creating config.mak, config.h, and doc/config.texi..."
 
 test -e Makefile || $ln_s "$source_path/Makefile" .
 
 enabled stripping || strip="echo skipping strip"
 
-config_files="$TMPH config.mak"
+config_files="$TMPH config.mak doc/config.texi"
 
 cat > config.mak <<EOF
 # Automatically generated by configure - do not modify!
@@ -4551,6 +4577,9 @@ if enabled yasm; then
     append config_files $TMPASM
     printf '' >$TMPASM
 fi
+
+mkdir -p doc
+echo "@c auto-generated by configure" > doc/config.texi
 
 print_config ARCH_   "$config_files" $ARCH_LIST
 print_config HAVE_   "$config_files" $HAVE_LIST

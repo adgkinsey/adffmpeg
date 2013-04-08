@@ -60,8 +60,8 @@ enum BlendMode {
     BLEND_NB
 };
 
-static const char *const var_names[] = {   "X",   "Y",   "W",   "H",   "SW",   "SH",   "T",     "A",        "B",   "TOP",   "BOTTOM",        NULL };
-enum                                   { VAR_X, VAR_Y, VAR_W, VAR_H, VAR_SW, VAR_SH, VAR_T,   VAR_A,      VAR_B, VAR_TOP, VAR_BOTTOM, VAR_VARS_NB };
+static const char *const var_names[] = {   "X",   "Y",   "W",   "H",   "SW",   "SH",   "T",   "N",   "A",   "B",   "TOP",   "BOTTOM",        NULL };
+enum                                   { VAR_X, VAR_Y, VAR_W, VAR_H, VAR_SW, VAR_SH, VAR_T, VAR_N, VAR_A, VAR_B, VAR_TOP, VAR_BOTTOM, VAR_VARS_NB };
 
 typedef struct FilterParams {
     enum BlendMode mode;
@@ -81,6 +81,7 @@ typedef struct {
     struct FFBufQueue queue_bottom;
     int hsub, vsub;             ///< chroma subsampling values
     int frame_requested;
+    int framenum;
     char *all_expr;
     enum BlendMode all_mode;
     double all_opacity;
@@ -224,12 +225,6 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
     BlendContext *b = ctx->priv;
     int ret, plane;
 
-    b->class = &blend_class;
-    av_opt_set_defaults(b);
-
-    if ((ret = av_set_options_string(b, args, "=", ":")) < 0)
-        return ret;
-
     for (plane = 0; plane < FF_ARRAY_ELEMS(b->params); plane++) {
         FilterParams *param = &b->params[plane];
 
@@ -286,7 +281,7 @@ static int query_formats(AVFilterContext *ctx)
 {
     static const enum AVPixelFormat pix_fmts[] = {
         AV_PIX_FMT_YUVA444P, AV_PIX_FMT_YUVA422P, AV_PIX_FMT_YUVA420P,
-        AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV420P,
+        AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUVJ420P, AV_PIX_FMT_YUVJ422P,AV_PIX_FMT_YUVJ444P,
         AV_PIX_FMT_GBRP, AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE
     };
 
@@ -387,6 +382,7 @@ static void blend_frame(AVFilterContext *ctx,
         uint8_t *bottom = bottom_buf->data[plane];
 
         param = &b->params[plane];
+        param->values[VAR_N]  = b->framenum++;
         param->values[VAR_T]  = dst_buf->pts == AV_NOPTS_VALUE ? NAN : dst_buf->pts * av_q2d(inlink->time_base);
         param->values[VAR_W]  = outw;
         param->values[VAR_H]  = outh;
@@ -458,6 +454,8 @@ static const AVFilterPad blend_outputs[] = {
     { NULL }
 };
 
+static const char *const shorthand[] = { NULL };
+
 AVFilter avfilter_vf_blend = {
     .name          = "blend",
     .description   = NULL_IF_CONFIG_SMALL("Blend two video frames into each other."),
@@ -468,4 +466,5 @@ AVFilter avfilter_vf_blend = {
     .inputs        = blend_inputs,
     .outputs       = blend_outputs,
     .priv_class    = &blend_class,
+    .shorthand     = shorthand,
 };

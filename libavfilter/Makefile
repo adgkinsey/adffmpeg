@@ -40,6 +40,7 @@ OBJS = allfilters.o                                                     \
        formats.o                                                        \
        graphdump.o                                                      \
        graphparser.o                                                    \
+       opencl_allkernels.o                                              \
        transform.o                                                      \
        video.o                                                          \
 
@@ -57,6 +58,7 @@ OBJS-$(CONFIG_AMIX_FILTER)                   += af_amix.o
 OBJS-$(CONFIG_ANULL_FILTER)                  += af_anull.o
 OBJS-$(CONFIG_APAD_FILTER)                   += af_apad.o
 OBJS-$(CONFIG_APERMS_FILTER)                 += f_perms.o
+OBJS-$(CONFIG_APHASER_FILTER)                += af_aphaser.o
 OBJS-$(CONFIG_ARESAMPLE_FILTER)              += af_aresample.o
 OBJS-$(CONFIG_ASELECT_FILTER)                += f_select.o
 OBJS-$(CONFIG_ASENDCMD_FILTER)               += f_sendcmd.o
@@ -139,6 +141,7 @@ OBJS-$(CONFIG_NOFORMAT_FILTER)               += vf_format.o
 OBJS-$(CONFIG_NOISE_FILTER)                  += vf_noise.o
 OBJS-$(CONFIG_NULL_FILTER)                   += vf_null.o
 OBJS-$(CONFIG_OCV_FILTER)                    += vf_libopencv.o
+OBJS-$(CONFIG_OPENCL)                        += deshake_opencl.o
 OBJS-$(CONFIG_OVERLAY_FILTER)                += vf_overlay.o
 OBJS-$(CONFIG_PAD_FILTER)                    += vf_pad.o
 OBJS-$(CONFIG_PERMS_FILTER)                  += f_perms.o
@@ -218,6 +221,8 @@ OBJS-$(CONFIG_SHOWWAVES_FILTER)              += avf_showwaves.o
 # multimedia sources
 OBJS-$(CONFIG_AMOVIE_FILTER)                 += src_movie.o
 OBJS-$(CONFIG_MOVIE_FILTER)                  += src_movie.o
+
+SKIPHEADERS-$(CONFIG_OPENCL)                 += deshake_kernel.h
 
 TOOLS     = graph2dot
 TESTPROGS = drawutils filtfmts formats

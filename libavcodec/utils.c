@@ -651,8 +651,6 @@ int ff_init_buffer_info(AVCodecContext *avctx, AVFrame *frame)
                            avctx->channels);
                     return AVERROR(ENOSYS);
                 }
-
-                frame->channel_layout = av_get_default_channel_layout(avctx->channels);
             }
         }
         av_frame_set_channels(frame, avctx->channels);
@@ -761,7 +759,9 @@ do {                                                                    \
             const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
 
             planes = av_pix_fmt_count_planes(frame->format);
-            if (!planes)
+            /* workaround for AVHWAccel plane count of 0, buf[0] is used as
+               check for allocated buffers: make libavcodec happy */
+            if (desc && desc->flags & PIX_FMT_HWACCEL)
                 planes = 1;
             if (!desc || planes <= 0) {
                 ret = AVERROR(EINVAL);
@@ -2185,7 +2185,7 @@ static int recode_subtitle(AVCodecContext *avctx,
         goto end;
     }
     outpkt->size -= outl;
-    outpkt->data[outpkt->size - 1] = '\0';
+    memset(outpkt->data + outpkt->size, 0, outl);
 
 end:
     if (cd != (iconv_t)-1)
@@ -2229,6 +2229,14 @@ int avcodec_decode_subtitle2(AVCodecContext *avctx, AVSubtitle *sub,
             ret = avctx->codec->decode(avctx, sub, got_sub_ptr, &pkt_recoded);
             av_assert1((ret >= 0) >= !!*got_sub_ptr &&
                        !!*got_sub_ptr >= !!sub->num_rects);
+
+            if (sub->num_rects && !sub->end_display_time && avpkt->duration &&
+                avctx->pkt_timebase.num) {
+                AVRational ms = { 1, 1000 };
+                sub->end_display_time = av_rescale_q(avpkt->duration,
+                                                     avctx->pkt_timebase, ms);
+            }
+
             if (tmp.data != pkt_recoded.data) { // did we recode?
                 /* prevent from destroying side data from original packet */
                 pkt_recoded.side_data = NULL;
@@ -3097,4 +3105,37 @@ int avpriv_bprint_to_extradata(AVCodecContext *avctx, struct AVBPrint *buf)
      * zeros. */
     avctx->extradata_size = buf->len;
     return 0;
+}
+
+const uint8_t *avpriv_find_start_code(const uint8_t *av_restrict p,
+                                      const uint8_t *end,
+                                      uint32_t *av_restrict state)
+{
+    int i;
+
+    assert(p <= end);
+    if (p >= end)
+        return end;
+
+    for (i = 0; i < 3; i++) {
+        uint32_t tmp = *state << 8;
+        *state = tmp + *(p++);
+        if (tmp == 0x100 || p == end)
+            return p;
+    }
+
+    while (p < end) {
+        if      (p[-1] > 1      ) p += 3;
+        else if (p[-2]          ) p += 2;
+        else if (p[-3]|(p[-1]-1)) p++;
+        else {
+            p++;
+            break;
+        }
+    }
+
+    p = FFMIN(p, end) - 4;
+    *state = AV_RB32(p);
+
+    return p + 4;
 }

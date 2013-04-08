@@ -40,7 +40,6 @@
 
 #define NOISE_UNIFORM  1
 #define NOISE_TEMPORAL 2
-#define NOISE_QUALITY  4
 #define NOISE_AVERAGED 8
 #define NOISE_PATTERN  16
 
@@ -76,7 +75,6 @@ typedef struct {
     {#name"f", "set component #"#x" flags", OFFSET(param.flags), AV_OPT_TYPE_FLAGS, {.i64=0}, 0, 31, FLAGS, #name"_flags"},      \
     {"a", "averaged noise", 0, AV_OPT_TYPE_CONST, {.i64=NOISE_AVERAGED}, 0, 0, FLAGS, #name"_flags"},                            \
     {"p", "(semi)regular pattern", 0, AV_OPT_TYPE_CONST, {.i64=NOISE_PATTERN},  0, 0, FLAGS, #name"_flags"},                     \
-    {"q", "high quality",   0, AV_OPT_TYPE_CONST, {.i64=NOISE_QUALITY},  0, 0, FLAGS, #name"_flags"},                            \
     {"t", "temporal noise", 0, AV_OPT_TYPE_CONST, {.i64=NOISE_TEMPORAL}, 0, 0, FLAGS, #name"_flags"},                            \
     {"u", "uniform noise",  0, AV_OPT_TYPE_CONST, {.i64=NOISE_UNIFORM},  0, 0, FLAGS, #name"_flags"},
 
@@ -128,8 +126,8 @@ static int init_noise(NoiseContext *n, int comp)
         } else {
             double x1, x2, w, y1;
             do {
-                x1 = 2.0 * av_lfg_get(lfg) / (float)RAND_MAX - 1.0;
-                x2 = 2.0 * av_lfg_get(lfg) / (float)RAND_MAX - 1.0;
+                x1 = 2.0 * av_lfg_get(lfg) / (float)UINT_MAX - 1.0;
+                x2 = 2.0 * av_lfg_get(lfg) / (float)UINT_MAX - 1.0;
                 w = x1 * x1 + x2 * x2;
             } while (w >= 1.0);
 
@@ -168,12 +166,6 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     NoiseContext *n = ctx->priv;
     int ret, i;
-
-    n->class = &noise_class;
-    av_opt_set_defaults(n);
-
-    if ((ret = av_set_options_string(n, args, "=", ":")) < 0)
-        return ret;
 
     for (i = 0; i < 4; i++) {
         if (n->all.seed >= 0)
@@ -280,9 +272,6 @@ static void noise(uint8_t *dst, const uint8_t *src,
         else
             shift = n->rand_shift[y];
 
-        if (!(flags & NOISE_QUALITY))
-            shift &= ~7;
-
         if (flags & NOISE_AVERAGED) {
             line_noise_avg(dst, src, width, n->param[comp].prev_shift[y]);
             n->param[comp].prev_shift[y][n->param[comp].shiftptr] = noise + shift;
@@ -355,6 +344,8 @@ static const AVFilterPad noise_outputs[] = {
     { NULL }
 };
 
+static const char *const shorthand[] = { NULL };
+
 AVFilter avfilter_vf_noise = {
     .name          = "noise",
     .description   = NULL_IF_CONFIG_SMALL("Add noise."),
@@ -365,4 +356,5 @@ AVFilter avfilter_vf_noise = {
     .inputs        = noise_inputs,
     .outputs       = noise_outputs,
     .priv_class    = &noise_class,
+    .shorthand     = shorthand,
 };

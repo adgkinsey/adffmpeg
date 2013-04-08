@@ -406,7 +406,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
         out_buf = ff_get_audio_buffer(inlink, nb_samples);
         if (!out_buf)
             return AVERROR(ENOMEM);
-        out_buf->pts = buf->pts;
+        av_frame_copy_props(out_buf, buf);
     }
 
     for (ch = 0; ch < av_frame_get_channels(buf); ch++)
@@ -614,12 +614,12 @@ DEFINE_BIQUAD_FILTER(allpass, "Apply a two-pole all-pass filter.");
 #endif  /* CONFIG_ALLPASS_FILTER */
 #if CONFIG_BIQUAD_FILTER
 static const AVOption biquad_options[] = {
-    {"a0", NULL, OFFSET(a0), AV_OPT_TYPE_DOUBLE, {.dbl=1}, INT16_MAX, INT16_MAX, FLAGS},
-    {"a1", NULL, OFFSET(a1), AV_OPT_TYPE_DOUBLE, {.dbl=1}, INT16_MAX, INT16_MAX, FLAGS},
-    {"a2", NULL, OFFSET(a2), AV_OPT_TYPE_DOUBLE, {.dbl=1}, INT16_MAX, INT16_MAX, FLAGS},
-    {"b0", NULL, OFFSET(b0), AV_OPT_TYPE_DOUBLE, {.dbl=1}, INT16_MAX, INT16_MAX, FLAGS},
-    {"b1", NULL, OFFSET(b1), AV_OPT_TYPE_DOUBLE, {.dbl=1}, INT16_MAX, INT16_MAX, FLAGS},
-    {"b2", NULL, OFFSET(b2), AV_OPT_TYPE_DOUBLE, {.dbl=1}, INT16_MAX, INT16_MAX, FLAGS},
+    {"a0", NULL, OFFSET(a0), AV_OPT_TYPE_DOUBLE, {.dbl=1}, INT16_MIN, INT16_MAX, FLAGS},
+    {"a1", NULL, OFFSET(a1), AV_OPT_TYPE_DOUBLE, {.dbl=1}, INT16_MIN, INT16_MAX, FLAGS},
+    {"a2", NULL, OFFSET(a2), AV_OPT_TYPE_DOUBLE, {.dbl=1}, INT16_MIN, INT16_MAX, FLAGS},
+    {"b0", NULL, OFFSET(b0), AV_OPT_TYPE_DOUBLE, {.dbl=1}, INT16_MIN, INT16_MAX, FLAGS},
+    {"b1", NULL, OFFSET(b1), AV_OPT_TYPE_DOUBLE, {.dbl=1}, INT16_MIN, INT16_MAX, FLAGS},
+    {"b2", NULL, OFFSET(b2), AV_OPT_TYPE_DOUBLE, {.dbl=1}, INT16_MIN, INT16_MAX, FLAGS},
     {NULL},
 };
 

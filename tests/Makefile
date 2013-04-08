@@ -147,7 +147,7 @@ $(FATE_EXTERN):
 	@echo "$@ requires external samples and SAMPLES not specified"; false
 endif
 
-FATE_UTILS = base64 tiny_psnr
+FATE_UTILS = base64 tiny_psnr tiny_ssim
 
 TOOL = ffmpeg
 
@@ -155,10 +155,24 @@ fate:: $(FATE)
 
 $(FATE) $(FATE_TESTS-no): $(FATE_UTILS:%=tests/%$(HOSTEXESUF))
 	@echo "TEST    $(@:fate-%=%)"
-	$(Q)$(SRC_PATH)/tests/fate-run.sh $@ "$(SAMPLES)" "$(TARGET_EXEC)" "$(TARGET_PATH)" '$(CMD)' '$(CMP)' '$(REF)' '$(FUZZ)' '$(THREADS)' '$(THREAD_TYPE)' '$(CPUFLAGS)' '$(CMP_SHIFT)' '$(CMP_TARGET)' '$(SIZE_TOLERANCE)' '$(CMP_UNIT)'
+	$(Q)$(SRC_PATH)/tests/fate-run.sh $@ "$(SAMPLES)" "$(TARGET_EXEC)" "$(TARGET_PATH)" '$(CMD)' '$(CMP)' '$(REF)' '$(FUZZ)' '$(THREADS)' '$(THREAD_TYPE)' '$(CPUFLAGS)' '$(CMP_SHIFT)' '$(CMP_TARGET)' '$(SIZE_TOLERANCE)' '$(CMP_UNIT)' '$(GEN)'
 
 fate-list:
 	@printf '%s\n' $(sort $(FATE))
+
+coverage.info: TAG = LCOV
+coverage.info:
+	$(M)lcov -d $(CURDIR) -b $(SRC_PATH) --capture | sed -e 's#/./#/#g' > $@
+	$(M)lcov --remove $@ "/usr*" -o $@
+
+lcov:  TAG = GENHTML
+lcov: coverage.info
+	$(M)genhtml -o $(CURDIR)/lcov $<
+
+lcov-reset: TAG = LCOV
+lcov-reset:
+	$(M)lcov -d $(CURDIR) --zerocounters
+	$(Q)$(RM) -f coverage.info
 
 clean:: testclean
 
@@ -169,4 +183,5 @@ testclean:
 
 -include $(wildcard tests/*.d)
 
-.PHONY: fate*
+.PHONY: fate* lcov lcov-reset
+.INTERMEDIATE: coverage.info

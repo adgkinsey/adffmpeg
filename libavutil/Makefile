@@ -52,6 +52,8 @@ HEADERS = adler32.h                                                     \
 
 HEADERS-$(CONFIG_LZO)                   += lzo.h
 
+HEADERS-$(CONFIG_OPENCL)                += opencl.h
+
 ARCH_HEADERS = bswap.h                                                  \
                intmath.h                                                \
                intreadwrite.h                                           \
@@ -106,14 +108,16 @@ OBJS = adler32.o                                                        \
        xtea.o                                                           \
 
 OBJS-$(CONFIG_LZO)                      += lzo.o
+OBJS-$(CONFIG_OPENCL)                   += opencl.o
 
 OBJS += $(COMPAT_OBJS:%=../compat/%)
 
 SKIPHEADERS          = old_pix_fmts.h
 
-SKIPHEADERS-$(HAVE_MACHINE_RW_BARRIER)          += atomic_suncc.h
-SKIPHEADERS-$(HAVE_MEMORYBARRIER)               += atomic_win32.h
-SKIPHEADERS-$(HAVE_SYNC_VAL_COMPARE_AND_SWAP)   += atomic_gcc.h
+SKIPHEADERS-$(HAVE_ATOMICS_SUNCC)      += atomic_suncc.h
+SKIPHEADERS-$(HAVE_ATOMICS_WIN32)      += atomic_win32.h
+SKIPHEADERS-$(HAVE_ATOMICS_GCC)        += atomic_gcc.h
+SKIPHEADERS-$(CONFIG_OPENCL)           += opencl.h
 
 TESTPROGS = adler32                                                     \
             aes                                                         \

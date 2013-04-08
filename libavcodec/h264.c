@@ -196,7 +196,6 @@ static void unref_picture(H264Context *h, Picture *pic)
     if (!pic->f.data[0])
         return;
 
-    pic->period_since_free = 0;
     ff_thread_release_buffer(h->avctx, &pic->tf);
     av_buffer_unref(&pic->hwaccel_priv_buf);
 
@@ -276,7 +275,6 @@ static int ref_picture(H264Context *h, Picture *dst, Picture *src)
     dst->needs_realloc           = src->needs_realloc;
     dst->reference               = src->reference;
     dst->sync                    = src->sync;
-    dst->period_since_free       = src->period_since_free;
 
     return 0;
 fail:
@@ -395,10 +393,6 @@ fail:
 
 static inline int pic_is_unused(H264Context *h, Picture *pic)
 {
-    if (   (h->avctx->active_thread_type & FF_THREAD_FRAME)
-        && pic->f.qscale_table //check if the frame has anything allocated
-        && pic->period_since_free < h->avctx->thread_count)
-        return 0;
     if (pic->f.data[0] == NULL)
         return 1;
     if (pic->needs_realloc && !(pic->reference & DELAYED_PIC_REF))
@@ -1351,45 +1345,45 @@ static int context_init(H264Context *h)
     h->ref_cache[1][scan8[13] + 1] = PART_NOT_AVAILABLE;
 
     if (CONFIG_ERROR_RESILIENCE) {
-    /* init ER */
-    er->avctx          = h->avctx;
-    er->dsp            = &h->dsp;
-    er->decode_mb      = h264_er_decode_mb;
-    er->opaque         = h;
-    er->quarter_sample = 1;
+        /* init ER */
+        er->avctx          = h->avctx;
+        er->dsp            = &h->dsp;
+        er->decode_mb      = h264_er_decode_mb;
+        er->opaque         = h;
+        er->quarter_sample = 1;
 
-    er->mb_num      = h->mb_num;
-    er->mb_width    = h->mb_width;
-    er->mb_height   = h->mb_height;
-    er->mb_stride   = h->mb_stride;
-    er->b8_stride   = h->mb_width * 2 + 1;
+        er->mb_num      = h->mb_num;
+        er->mb_width    = h->mb_width;
+        er->mb_height   = h->mb_height;
+        er->mb_stride   = h->mb_stride;
+        er->b8_stride   = h->mb_width * 2 + 1;
 
-    FF_ALLOCZ_OR_GOTO(h->avctx, er->mb_index2xy, (h->mb_num + 1) * sizeof(int),
-                      fail); // error ressilience code looks cleaner with this
-    for (y = 0; y < h->mb_height; y++)
-        for (x = 0; x < h->mb_width; x++)
-            er->mb_index2xy[x + y * h->mb_width] = x + y * h->mb_stride;
+        FF_ALLOCZ_OR_GOTO(h->avctx, er->mb_index2xy, (h->mb_num + 1) * sizeof(int),
+                          fail); // error ressilience code looks cleaner with this
+        for (y = 0; y < h->mb_height; y++)
+            for (x = 0; x < h->mb_width; x++)
+                er->mb_index2xy[x + y * h->mb_width] = x + y * h->mb_stride;
 
-    er->mb_index2xy[h->mb_height * h->mb_width] = (h->mb_height - 1) *
-                                                   h->mb_stride + h->mb_width;
+        er->mb_index2xy[h->mb_height * h->mb_width] = (h->mb_height - 1) *
+                                                       h->mb_stride + h->mb_width;
 
-    FF_ALLOCZ_OR_GOTO(h->avctx, er->error_status_table,
-                      mb_array_size * sizeof(uint8_t), fail);
+        FF_ALLOCZ_OR_GOTO(h->avctx, er->error_status_table,
+                          mb_array_size * sizeof(uint8_t), fail);
 
-    FF_ALLOC_OR_GOTO(h->avctx, er->mbintra_table, mb_array_size, fail);
-    memset(er->mbintra_table, 1, mb_array_size);
+        FF_ALLOC_OR_GOTO(h->avctx, er->mbintra_table, mb_array_size, fail);
+        memset(er->mbintra_table, 1, mb_array_size);
 
-    FF_ALLOCZ_OR_GOTO(h->avctx, er->mbskip_table, mb_array_size + 2, fail);
+        FF_ALLOCZ_OR_GOTO(h->avctx, er->mbskip_table, mb_array_size + 2, fail);
 
-    FF_ALLOC_OR_GOTO(h->avctx, er->er_temp_buffer, h->mb_height * h->mb_stride,
-                     fail);
+        FF_ALLOC_OR_GOTO(h->avctx, er->er_temp_buffer, h->mb_height * h->mb_stride,
+                         fail);
 
-    FF_ALLOCZ_OR_GOTO(h->avctx, h->dc_val_base, yc_size * sizeof(int16_t), fail);
-    er->dc_val[0] = h->dc_val_base + h->mb_width * 2 + 2;
-    er->dc_val[1] = h->dc_val_base + y_size + h->mb_stride + 1;
-    er->dc_val[2] = er->dc_val[1] + c_size;
-    for (i = 0; i < yc_size; i++)
-        h->dc_val_base[i] = 1024;
+        FF_ALLOCZ_OR_GOTO(h->avctx, h->dc_val_base, yc_size * sizeof(int16_t), fail);
+        er->dc_val[0] = h->dc_val_base + h->mb_width * 2 + 2;
+        er->dc_val[1] = h->dc_val_base + y_size + h->mb_stride + 1;
+        er->dc_val[2] = er->dc_val[1] + c_size;
+        for (i = 0; i < yc_size; i++)
+            h->dc_val_base[i] = 1024;
     }
 
     return 0;
@@ -1727,7 +1721,6 @@ static int decode_update_thread_context(AVCodecContext *dst,
     h->low_delay            = h1->low_delay;
 
     for (i = 0; h->DPB && i < MAX_PICTURE_COUNT; i++) {
-        h->DPB[i].period_since_free ++;
         unref_picture(h, &h->DPB[i]);
         if (h1->DPB[i].f.data[0] &&
             (ret = ref_picture(h, &h->DPB[i], &h1->DPB[i])) < 0)
@@ -1779,9 +1772,7 @@ static int decode_update_thread_context(AVCodecContext *dst,
     copy_picture_range(h->delayed_pic, h1->delayed_pic,
                        MAX_DELAYED_PIC_COUNT + 2, h, h1);
 
-    h->last_slice_type = h1->last_slice_type;
     h->sync            = h1->sync;
-    memcpy(h->last_ref_count, h1->last_ref_count, sizeof(h->last_ref_count));
 
     if (context_reinitialized)
         h264_set_parameter_from_sps(h);
@@ -1870,11 +1861,6 @@ static int h264_frame_start(H264Context *h)
         h->block_offset[48 + 16 + i] =
         h->block_offset[48 + 32 + i] = (4 * ((scan8[i] - scan8[0]) & 7) << pixel_shift) + 8 * h->uvlinesize * ((scan8[i] - scan8[0]) >> 3);
     }
-
-    /* Some macroblocks can be accessed before they're available in case
-     * of lost slices, MBAFF or threading. */
-    memset(h->slice_table, -1,
-           (h->mb_height * h->mb_stride - 1) * sizeof(*h->slice_table));
 
     // s->decode = (h->flags & CODEC_FLAG_PSNR) || !s->encoding ||
     //             h->cur_pic.reference /* || h->contains_intra */ || 1;
@@ -2077,7 +2063,7 @@ static void decode_postinit(H264Context *h, int setup_finished)
         h->sync |= 2;
     }
 
-    if (setup_finished)
+    if (setup_finished && !h->avctx->hwaccel)
         ff_thread_finish_setup(h->avctx);
 }
 
@@ -3196,7 +3182,6 @@ static int decode_slice_header(H264Context *h, H264Context *h0)
     unsigned int pps_id;
     int num_ref_idx_active_override_flag, ret;
     unsigned int slice_type, tmp, i, j;
-    int default_ref_list_done = 0;
     int last_pic_structure, last_pic_droppable;
     int must_reinit;
     int needs_reinit = 0;
@@ -3235,12 +3220,6 @@ static int decode_slice_header(H264Context *h, H264Context *h0)
         h->slice_type_fixed = 0;
 
     slice_type = golomb_to_pict_type[slice_type];
-    if (slice_type == AV_PICTURE_TYPE_I ||
-        (h0->current_slice != 0 &&
-         slice_type == h0->last_slice_type &&
-         !memcmp(h0->last_ref_count, h0->ref_count, sizeof(h0->ref_count)))) {
-        default_ref_list_done = 1;
-    }
     h->slice_type     = slice_type;
     h->slice_type_nos = slice_type & 3;
 
@@ -3570,6 +3549,16 @@ static int decode_slice_header(H264Context *h, H264Context *h0)
         } else {
             release_unused_pictures(h, 0);
         }
+        /* Some macroblocks can be accessed before they're available in case
+        * of lost slices, MBAFF or threading. */
+        if (FIELD_PICTURE(h)) {
+            for(i = (h->picture_structure == PICT_BOTTOM_FIELD); i<h->mb_height; i++)
+                memset(h->slice_table + i*h->mb_stride, -1, (h->mb_stride - (i+1==h->mb_height)) * sizeof(*h->slice_table));
+        } else {
+            memset(h->slice_table, -1,
+                (h->mb_height * h->mb_stride - 1) * sizeof(*h->slice_table));
+        }
+        h0->last_slice_type = -1;
     }
     if (h != h0 && (ret = clone_slice(h, h0)) < 0)
         return ret;
@@ -3662,9 +3651,12 @@ static int decode_slice_header(H264Context *h, H264Context *h0)
         h->list_count = 0;
         h->ref_count[0] = h->ref_count[1] = 0;
     }
-
-    if (!default_ref_list_done)
+    if (slice_type != AV_PICTURE_TYPE_I &&
+        (h0->current_slice == 0 ||
+         slice_type != h0->last_slice_type ||
+         memcmp(h0->last_ref_count, h0->ref_count, sizeof(h0->ref_count)))) {
         ff_h264_fill_default_ref_list(h);
+    }
 
     if (h->slice_type_nos != AV_PICTURE_TYPE_I &&
         ff_h264_decode_ref_pic_list_reordering(h) < 0) {
