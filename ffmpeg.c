@@ -64,7 +64,6 @@
 
 # include "libavfilter/avcodec.h"
 # include "libavfilter/avfilter.h"
-# include "libavfilter/avfiltergraph.h"
 # include "libavfilter/buffersrc.h"
 # include "libavfilter/buffersink.h"
 
@@ -129,6 +128,7 @@ static int64_t subtitle_size = 0;
 static int64_t extra_size = 0;
 static int nb_frames_dup = 0;
 static int nb_frames_drop = 0;
+static int64_t decode_error_stat[2];
 
 static int current_time;
 AVIOContext *progress_avio = NULL;
@@ -499,7 +499,6 @@ static void exit_program(void)
 
     uninit_opts();
 
-    avfilter_uninit();
     avformat_network_deinit();
 
     if (received_sigterm) {
@@ -1043,10 +1042,8 @@ static int reap_filters(void)
                                                AV_BUFFERSINK_FLAG_NO_REQUEST);
             if (ret < 0) {
                 if (ret != AVERROR(EAGAIN) && ret != AVERROR_EOF) {
-                    char buf[256];
-                    av_strerror(ret, buf, sizeof(buf));
                     av_log(NULL, AV_LOG_WARNING,
-                           "Error in av_buffersink_get_buffer_ref(): %s\n", buf);
+                           "Error in av_buffersink_get_frame_flags(): %s\n", av_err2str(ret));
                 }
                 break;
             }
@@ -1071,7 +1068,7 @@ static int reap_filters(void)
             switch (ost->filter->filter->inputs[0]->type) {
             case AVMEDIA_TYPE_VIDEO:
                 filtered_frame->pts = frame_pts;
-                if (!ost->frame_aspect_ratio)
+                if (!ost->frame_aspect_ratio.num)
                     ost->st->codec->sample_aspect_ratio = filtered_frame->sample_aspect_ratio;
 
                 do_video_out(of->ctx, ost, filtered_frame);
@@ -1506,6 +1503,9 @@ static int decode_audio(InputStream *ist, AVPacket *pkt, int *got_output)
         ret = AVERROR_INVALIDDATA;
     }
 
+    if (*got_output || ret<0 || pkt->size)
+        decode_error_stat[ret<0] ++;
+
     if (!*got_output || ret < 0) {
         if (!pkt->size) {
             for (i = 0; i < ist->nb_filters; i++)
@@ -1640,6 +1640,10 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output)
     ret = avcodec_decode_video2(ist->st->codec,
                                 decoded_frame, got_output, pkt);
     update_benchmark("decode_video %d.%d", ist->file_index, ist->st->index);
+
+    if (*got_output || ret<0 || pkt->size)
+        decode_error_stat[ret<0] ++;
+
     if (!*got_output || ret < 0) {
         if (!pkt->size) {
             for (i = 0; i < ist->nb_filters; i++)
@@ -1711,12 +1715,12 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output)
                 break;
         } else
             f = decoded_frame;
-        if(av_buffersrc_add_frame_flags(ist->filters[i]->filter, f,
-                                        AV_BUFFERSRC_FLAG_PUSH)<0) {
-            av_log(NULL, AV_LOG_FATAL, "Failed to inject frame into filter network\n");
+        ret = av_buffersrc_add_frame_flags(ist->filters[i]->filter, f, AV_BUFFERSRC_FLAG_PUSH);
+        if (ret < 0) {
+            av_log(NULL, AV_LOG_FATAL,
+                   "Failed to inject frame into filter network: %s\n", av_err2str(ret));
             exit(1);
         }
-
     }
 
     av_frame_unref(ist->filter_frame);
@@ -1730,6 +1734,10 @@ static int transcode_subtitles(InputStream *ist, AVPacket *pkt, int *got_output)
     AVSubtitle subtitle;
     int i, ret = avcodec_decode_subtitle2(ist->st->codec,
                                           &subtitle, got_output, pkt);
+
+    if (*got_output || ret<0 || pkt->size)
+        decode_error_stat[ret<0] ++;
+
     if (ret < 0 || !*got_output) {
         if (!pkt->size)
             sub2video_flush(ist);
@@ -2300,8 +2308,8 @@ static int transcode_init(void)
                 codec->width  = ost->filter->filter->inputs[0]->w;
                 codec->height = ost->filter->filter->inputs[0]->h;
                 codec->sample_aspect_ratio = ost->st->sample_aspect_ratio =
-                    ost->frame_aspect_ratio ? // overridden by the -aspect cli option
-                    av_d2q(ost->frame_aspect_ratio * codec->height/codec->width, 255) :
+                    ost->frame_aspect_ratio.num ? // overridden by the -aspect cli option
+                    av_mul_q(ost->frame_aspect_ratio, (AVRational){ codec->height, codec->width }) :
                     ost->filter->filter->inputs[0]->sample_aspect_ratio;
                 if (!strncmp(ost->enc->name, "libx264", 7) &&
                     codec->pix_fmt == AV_PIX_FMT_NONE &&
@@ -3349,6 +3357,10 @@ int main(int argc, char **argv)
     if (do_benchmark) {
         printf("bench: utime=%0.3fs\n", ti / 1000000.0);
     }
+    av_log(NULL, AV_LOG_DEBUG, "%"PRIu64" frames successfully decoded, %"PRIu64" decoding errors\n",
+           decode_error_stat[0], decode_error_stat[1]);
+    if (2*decode_error_stat[0] < decode_error_stat[1])
+        exit(254);
 
     exit(received_nb_signals ? 255 : 0);
     return 0;

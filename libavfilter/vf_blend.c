@@ -220,7 +220,7 @@ static void blend_expr(const uint8_t *top, int top_linesize,
     }
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     BlendContext *b = ctx->priv;
     int ret, plane;
@@ -281,7 +281,8 @@ static int query_formats(AVFilterContext *ctx)
 {
     static const enum AVPixelFormat pix_fmts[] = {
         AV_PIX_FMT_YUVA444P, AV_PIX_FMT_YUVA422P, AV_PIX_FMT_YUVA420P,
-        AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUVJ420P, AV_PIX_FMT_YUVJ422P,AV_PIX_FMT_YUVJ444P,
+        AV_PIX_FMT_YUVJ444P, AV_PIX_FMT_YUVJ440P, AV_PIX_FMT_YUVJ422P,AV_PIX_FMT_YUVJ420P,
+        AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUV440P, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV410P,
         AV_PIX_FMT_GBRP, AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE
     };
 
@@ -338,7 +339,6 @@ static av_cold void uninit(AVFilterContext *ctx)
     BlendContext *b = ctx->priv;
     int i;
 
-    av_opt_free(b);
     ff_bufqueue_discard_all(&b->queue_top);
     ff_bufqueue_discard_all(&b->queue_bottom);
 
@@ -454,8 +454,6 @@ static const AVFilterPad blend_outputs[] = {
     { NULL }
 };
 
-static const char *const shorthand[] = { NULL };
-
 AVFilter avfilter_vf_blend = {
     .name          = "blend",
     .description   = NULL_IF_CONFIG_SMALL("Blend two video frames into each other."),
@@ -466,5 +464,4 @@ AVFilter avfilter_vf_blend = {
     .inputs        = blend_inputs,
     .outputs       = blend_outputs,
     .priv_class    = &blend_class,
-    .shorthand     = shorthand,
 };

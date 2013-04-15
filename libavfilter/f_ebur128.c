@@ -403,17 +403,10 @@ static struct hist_entry *get_histogram(void)
     return h;
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
-    int ret;
     EBUR128Context *ebur128 = ctx->priv;
     AVFilterPad pad;
-
-    ebur128->class = &ebur128_class;
-    av_opt_set_defaults(ebur128);
-
-    if ((ret = av_set_options_string(ebur128, args, "=", ":")) < 0)
-        return ret;
 
     if (ebur128->loglevel != AV_LOG_INFO &&
         ebur128->loglevel != AV_LOG_VERBOSE) {
@@ -780,7 +773,6 @@ static av_cold void uninit(AVFilterContext *ctx)
     for (i = 0; i < ctx->nb_outputs; i++)
         av_freep(&ctx->output_pads[i].name);
     av_frame_free(&ebur128->outpicref);
-    av_opt_free(ebur128);
 }
 
 static const AVFilterPad ebur128_inputs[] = {
@@ -804,4 +796,5 @@ AVFilter avfilter_af_ebur128 = {
     .inputs        = ebur128_inputs,
     .outputs       = NULL,
     .priv_class    = &ebur128_class,
+    .flags         = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
 };

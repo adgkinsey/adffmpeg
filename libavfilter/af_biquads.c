@@ -116,15 +116,9 @@ typedef struct {
                    double b0, double b1, double b2, double a1, double a2);
 } BiquadsContext;
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     BiquadsContext *p = ctx->priv;
-    int ret;
-
-    av_opt_set_defaults(p);
-
-    if ((ret = av_set_options_string(p, args, "=", ":")) < 0)
-        return ret;
 
     if (p->filter_type != biquad) {
         if (p->frequency <= 0 || p->width <= 0) {
@@ -427,7 +421,6 @@ static av_cold void uninit(AVFilterContext *ctx)
     BiquadsContext *p = ctx->priv;
 
     av_freep(&p->cache);
-    av_opt_free(p);
 }
 
 static const AVFilterPad inputs[] = {
@@ -453,12 +446,12 @@ static const AVFilterPad outputs[] = {
 
 #define DEFINE_BIQUAD_FILTER(name_, description_)                       \
 AVFILTER_DEFINE_CLASS(name_);                                           \
-static av_cold int name_##_init(AVFilterContext *ctx, const char *args) \
+static av_cold int name_##_init(AVFilterContext *ctx) \
 {                                                                       \
     BiquadsContext *p = ctx->priv;                                      \
     p->class = &name_##_class;                                          \
     p->filter_type = name_;                                             \
-    return init(ctx, args);                                             \
+    return init(ctx);                                             \
 }                                                                       \
                                                          \
 AVFilter avfilter_af_##name_ = {                         \

@@ -82,7 +82,7 @@ static const AVOption smartblur_options[] = {
 
 AVFILTER_DEFINE_CLASS(smartblur);
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     SmartblurContext *sblur = ctx->priv;
 
@@ -99,7 +99,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
 
     av_log(ctx, AV_LOG_VERBOSE,
            "luma_radius:%f luma_strength:%f luma_threshold:%d "
-           "chroma_radius:%f chroma_strength:%f chroma_threshold:%d ",
+           "chroma_radius:%f chroma_strength:%f chroma_threshold:%d\n",
            sblur->luma.radius, sblur->luma.strength, sblur->luma.threshold,
            sblur->chroma.radius, sblur->chroma.strength, sblur->chroma.threshold);
 
@@ -289,12 +289,6 @@ static const AVFilterPad smartblur_outputs[] = {
     { NULL }
 };
 
-static const char *const shorthand[] = {
-    "luma_radius", "luma_strength", "luma_threshold",
-    "chroma_radius", "chroma_strength", "chroma_threshold",
-    NULL
-};
-
 AVFilter avfilter_vf_smartblur = {
     .name        = "smartblur",
     .description = NULL_IF_CONFIG_SMALL("Blur the input video without impacting the outlines."),
@@ -307,5 +301,4 @@ AVFilter avfilter_vf_smartblur = {
     .inputs        = smartblur_inputs,
     .outputs       = smartblur_outputs,
     .priv_class    = &smartblur_class,
-    .shorthand     = shorthand,
 };

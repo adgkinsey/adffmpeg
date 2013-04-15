@@ -76,7 +76,7 @@ static const AVOption aphaser_options[] = {
 
 AVFILTER_DEFINE_CLASS(aphaser);
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     AudioPhaserContext *p = ctx->priv;
 
@@ -186,6 +186,7 @@ static void phaser_## name ##p(AudioPhaserContext *p,                  \
 {                                                                      \
     int i, c, delay_pos, modulation_pos;                               \
                                                                        \
+    av_assert0(channels > 0);                                          \
     for (c = 0; c < channels; c++) {                                   \
         type *s = (type *)src[c];                                      \
         type *d = (type *)dst[c];                                      \
@@ -344,8 +345,6 @@ static const AVFilterPad aphaser_outputs[] = {
     { NULL }
 };
 
-static const char *const shorthand[] = { "in_gain", "out_gain", "delay", "decay", "speed", "type", NULL };
-
 AVFilter avfilter_af_aphaser = {
     .name          = "aphaser",
     .description   = NULL_IF_CONFIG_SMALL("Add a phasing effect to the audio."),
@@ -356,5 +355,4 @@ AVFilter avfilter_af_aphaser = {
     .inputs        = aphaser_inputs,
     .outputs       = aphaser_outputs,
     .priv_class    = &aphaser_class,
-    .shorthand     = shorthand,
 };

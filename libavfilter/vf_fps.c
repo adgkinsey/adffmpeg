@@ -70,7 +70,7 @@ static const AVOption fps_options[] = {
 
 AVFILTER_DEFINE_CLASS(fps);
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     FPSContext *s = ctx->priv;
 
@@ -273,19 +273,16 @@ static const AVFilterPad avfilter_vf_fps_outputs[] = {
     { NULL }
 };
 
-static const char *const shorthand[] = { "fps", "round", NULL };
-
 AVFilter avfilter_vf_fps = {
     .name        = "fps",
-    .description = NULL_IF_CONFIG_SMALL("Force constant framerate"),
+    .description = NULL_IF_CONFIG_SMALL("Force constant framerate."),
 
     .init      = init,
     .uninit    = uninit,
 
     .priv_size = sizeof(FPSContext),
+    .priv_class = &fps_class,
 
     .inputs    = avfilter_vf_fps_inputs,
     .outputs   = avfilter_vf_fps_outputs,
-    .priv_class = &fps_class,
-    .shorthand = shorthand,
 };

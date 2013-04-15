@@ -37,7 +37,6 @@
 #include "libavcodec/avcodec.h"
 
 #include "libavfilter/avfilter.h"
-#include "libavfilter/avfiltergraph.h"
 
 #include "libavutil/avutil.h"
 #include "libavutil/dict.h"
@@ -331,7 +330,7 @@ typedef struct OutputStream {
     int force_fps;
     int top_field_first;
 
-    float frame_aspect_ratio;
+    AVRational frame_aspect_ratio;
 
     /* forced key frames */
     int64_t *forced_kf_pts;

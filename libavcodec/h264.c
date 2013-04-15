@@ -1476,10 +1476,9 @@ av_cold int ff_h264_decode_init(AVCodecContext *avctx)
 
     h->dequant_coeff_pps = -1;
 
-    if (CONFIG_ERROR_RESILIENCE) {
-        /* needed so that IDCT permutation is known early */
+    /* needed so that IDCT permutation is known early */
+    if (CONFIG_ERROR_RESILIENCE)
         ff_dsputil_init(&h->dsp, h->avctx);
-    }
     ff_videodsp_init(&h->vdsp, 8);
 
     memset(h->pps.scaling_matrix4, 16, 6 * 16 * sizeof(uint8_t));
@@ -1676,6 +1675,10 @@ static int decode_update_thread_context(AVCodecContext *dst,
 
         memset(&h->er, 0, sizeof(h->er));
         memset(&h->me, 0, sizeof(h->me));
+        memset(&h->mb, 0, sizeof(h->mb));
+        memset(&h->mb_luma_dc, 0, sizeof(h->mb_luma_dc));
+        memset(&h->mb_padding, 0, sizeof(h->mb_padding));
+
         h->avctx = dst;
         h->DPB   = NULL;
         h->qscale_table_pool = NULL;
@@ -2956,9 +2959,9 @@ static int h264_set_parameter_from_sps(H264Context *h)
             ff_h264qpel_init(&h->h264qpel, h->sps.bit_depth_luma);
             ff_h264_pred_init(&h->hpc, h->avctx->codec_id, h->sps.bit_depth_luma,
                               h->sps.chroma_format_idc);
-            if (CONFIG_ERROR_RESILIENCE) {
+
+            if (CONFIG_ERROR_RESILIENCE)
                 ff_dsputil_init(&h->dsp, h->avctx);
-            }
             ff_videodsp_init(&h->vdsp, h->sps.bit_depth_luma);
         } else {
             av_log(h->avctx, AV_LOG_ERROR, "Unsupported bit depth: %d\n",
@@ -3040,7 +3043,7 @@ static enum AVPixelFormat get_pixel_format(H264Context *h, int force_callback)
             for (i=0; fmt[i] != AV_PIX_FMT_NONE; i++)
                 if (fmt[i] == h->avctx->pix_fmt && !force_callback)
                     return fmt[i];
-            return h->avctx->get_format(h->avctx, fmt);
+            return ff_thread_get_format(h->avctx, fmt);
         }
         break;
     default:
@@ -4248,7 +4251,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg)
                     avctx->codec_id != AV_CODEC_ID_H264 ||
                     (CONFIG_GRAY && (h->flags & CODEC_FLAG_GRAY));
 
-    if (!(h->avctx->active_thread_type & FF_THREAD_SLICE)) {
+    if (!(h->avctx->active_thread_type & FF_THREAD_SLICE) && h->picture_structure == PICT_FRAME) {
         const int start_i  = av_clip(h->resync_mb_x + h->resync_mb_y * h->mb_width, 0, h->mb_num - 1);
         if (start_i) {
             int prev_status = h->er.error_status_table[h->er.mb_index2xy[start_i - 1]];

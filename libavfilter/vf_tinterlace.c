@@ -266,6 +266,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
     case MODE_PAD: /* expand each frame to double height, but pad alternate
                     * lines with black; framerate unchanged */
         out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+        if (!out)
+            return AVERROR(ENOMEM);
         av_frame_copy_props(out, cur);
         out->height = outlink->h;
 
@@ -383,8 +385,6 @@ static const AVFilterPad tinterlace_outputs[] = {
     { NULL }
 };
 
-static const char *const shorthand[] = { "mode", NULL };
-
 AVFilter avfilter_vf_tinterlace = {
     .name          = "tinterlace",
     .description   = NULL_IF_CONFIG_SMALL("Perform temporal field interlacing."),
@@ -394,5 +394,4 @@ AVFilter avfilter_vf_tinterlace = {
     .inputs        = tinterlace_inputs,
     .outputs       = tinterlace_outputs,
     .priv_class    = &tinterlace_class,
-    .shorthand     = shorthand,
 };

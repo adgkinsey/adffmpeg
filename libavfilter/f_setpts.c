@@ -27,6 +27,7 @@
 #include "libavutil/eval.h"
 #include "libavutil/internal.h"
 #include "libavutil/mathematics.h"
+#include "libavutil/opt.h"
 #include "libavutil/time.h"
 #include "avfilter.h"
 #include "internal.h"
@@ -78,19 +79,21 @@ enum var_name {
 };
 
 typedef struct {
+    const AVClass *class;
+    char *expr_str;
     AVExpr *expr;
     double var_values[VAR_VARS_NB];
     enum AVMediaType type;
 } SetPTSContext;
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     SetPTSContext *setpts = ctx->priv;
     int ret;
 
-    if ((ret = av_expr_parse(&setpts->expr, args ? args : "PTS",
+    if ((ret = av_expr_parse(&setpts->expr, setpts->expr_str,
                              var_names, NULL, NULL, NULL, NULL, 0, ctx)) < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Error while parsing expression '%s'\n", args);
+        av_log(ctx, AV_LOG_ERROR, "Error while parsing expression '%s'\n", setpts->expr_str);
         return ret;
     }
 
@@ -205,6 +208,21 @@ static av_cold void uninit(AVFilterContext *ctx)
 }
 
 #if CONFIG_ASETPTS_FILTER
+
+#define OFFSET(x) offsetof(SetPTSContext, x)
+#define AFLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
+static const AVOption aoptions[] = {
+    { "expr", "Expression determining the frame timestamp", OFFSET(expr_str), AV_OPT_TYPE_STRING, { .str = "PTS" }, .flags = AFLAGS },
+    { NULL },
+};
+
+static const AVClass asetpts_class = {
+    .class_name = "asetpts",
+    .item_name  = av_default_item_name,
+    .option     = aoptions,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
 static const AVFilterPad avfilter_af_asetpts_inputs[] = {
     {
         .name             = "default",
@@ -230,12 +248,28 @@ AVFilter avfilter_af_asetpts = {
     .init      = init,
     .uninit    = uninit,
     .priv_size = sizeof(SetPTSContext),
+    .priv_class= &asetpts_class,
     .inputs    = avfilter_af_asetpts_inputs,
     .outputs   = avfilter_af_asetpts_outputs,
 };
 #endif /* CONFIG_ASETPTS_FILTER */
 
 #if CONFIG_SETPTS_FILTER
+
+#define OFFSET(x) offsetof(SetPTSContext, x)
+#define FLAGS AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
+static const AVOption options[] = {
+    { "expr", "Expression determining the frame timestamp", OFFSET(expr_str), AV_OPT_TYPE_STRING, { .str = "PTS" }, .flags = FLAGS },
+    { NULL },
+};
+
+static const AVClass setpts_class = {
+    .class_name = "setpts",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
 static const AVFilterPad avfilter_vf_setpts_inputs[] = {
     {
         .name             = "default",
@@ -262,6 +296,7 @@ AVFilter avfilter_vf_setpts = {
     .uninit    = uninit,
 
     .priv_size = sizeof(SetPTSContext),
+    .priv_class = &setpts_class,
 
     .inputs    = avfilter_vf_setpts_inputs,
     .outputs   = avfilter_vf_setpts_outputs,

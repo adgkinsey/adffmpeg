@@ -49,16 +49,12 @@ static const AVOption channelsplit_options[] = {
 
 AVFILTER_DEFINE_CLASS(channelsplit);
 
-static int init(AVFilterContext *ctx, const char *arg)
+static int init(AVFilterContext *ctx)
 {
     ChannelSplitContext *s = ctx->priv;
     int nb_channels;
     int ret = 0, i;
 
-    s->class = &channelsplit_class;
-    av_opt_set_defaults(s);
-    if ((ret = av_set_options_string(s, arg, "=", ":")) < 0)
-        return ret;
     if (!(s->channel_layout = av_get_channel_layout(s->channel_layout_str))) {
         av_log(ctx, AV_LOG_ERROR, "Error parsing channel layout '%s'.\n",
                s->channel_layout_str);
@@ -78,7 +74,6 @@ static int init(AVFilterContext *ctx, const char *arg)
     }
 
 fail:
-    av_opt_free(s);
     return ret;
 }
 
@@ -142,13 +137,15 @@ static const AVFilterPad avfilter_af_channelsplit_inputs[] = {
 
 AVFilter avfilter_af_channelsplit = {
     .name           = "channelsplit",
-    .description    = NULL_IF_CONFIG_SMALL("Split audio into per-channel streams"),
+    .description    = NULL_IF_CONFIG_SMALL("Split audio into per-channel streams."),
     .priv_size      = sizeof(ChannelSplitContext),
+    .priv_class     = &channelsplit_class,
 
     .init           = init,
     .query_formats  = query_formats,
 
     .inputs  = avfilter_af_channelsplit_inputs,
     .outputs = NULL,
-    .priv_class = &channelsplit_class,
+
+    .flags   = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
 };

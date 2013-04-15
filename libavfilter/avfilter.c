@@ -386,34 +386,26 @@ int avfilter_process_command(AVFilterContext *filter, const char *cmd, const cha
     return AVERROR(ENOSYS);
 }
 
-#define MAX_REGISTERED_AVFILTERS_NB 256
-
-static AVFilter *registered_avfilters[MAX_REGISTERED_AVFILTERS_NB + 1];
-
-static int next_registered_avfilter_idx = 0;
+static AVFilter *first_filter;
 
 AVFilter *avfilter_get_by_name(const char *name)
 {
-    int i;
+    AVFilter *f = NULL;
 
-    for (i = 0; registered_avfilters[i]; i++)
-        if (!strcmp(registered_avfilters[i]->name, name))
-            return registered_avfilters[i];
+    if (!name)
+        return NULL;
+
+    while ((f = avfilter_next(f)))
+        if (!strcmp(f->name, name))
+            return f;
 
     return NULL;
 }
 
 int avfilter_register(AVFilter *filter)
 {
+    AVFilter **f = &first_filter;
     int i;
-
-    if (next_registered_avfilter_idx == MAX_REGISTERED_AVFILTERS_NB) {
-        av_log(NULL, AV_LOG_ERROR,
-               "Maximum number of registered filters %d reached, "
-               "impossible to register filter with name '%s'\n",
-               MAX_REGISTERED_AVFILTERS_NB, filter->name);
-        return AVERROR(ENOMEM);
-    }
 
     for(i=0; filter->inputs && filter->inputs[i].name; i++) {
         const AVFilterPad *input = &filter->inputs[i];
@@ -421,22 +413,31 @@ int avfilter_register(AVFilter *filter)
                     || (!input->start_frame && !input->end_frame));
     }
 
-    registered_avfilters[next_registered_avfilter_idx++] = filter;
+    while (*f)
+        f = &(*f)->next;
+    *f = filter;
+    filter->next = NULL;
+
     return 0;
 }
 
+const AVFilter *avfilter_next(const AVFilter *prev)
+{
+    return prev ? prev->next : first_filter;
+}
+
+#if FF_API_OLD_FILTER_REGISTER
 AVFilter **av_filter_next(AVFilter **filter)
 {
-    return filter ? ++filter : &registered_avfilters[0];
+    return filter ? &(*filter)->next : &first_filter;
 }
 
 void avfilter_uninit(void)
 {
-    memset(registered_avfilters, 0, sizeof(registered_avfilters));
-    next_registered_avfilter_idx = 0;
 }
+#endif
 
-static int pad_count(const AVFilterPad *pads)
+int avfilter_pad_count(const AVFilterPad *pads)
 {
     int count;
 
@@ -456,28 +457,29 @@ static const char *default_filter_name(void *filter_ctx)
 static void *filter_child_next(void *obj, void *prev)
 {
     AVFilterContext *ctx = obj;
-    if (!prev && ctx->filter && ctx->filter->priv_class)
+    if (!prev && ctx->filter && ctx->filter->priv_class && ctx->priv)
         return ctx->priv;
     return NULL;
 }
 
 static const AVClass *filter_child_class_next(const AVClass *prev)
 {
-    AVFilter **filter_ptr = NULL;
+    AVFilter *f = NULL;
 
     /* find the filter that corresponds to prev */
-    while (prev && *(filter_ptr = av_filter_next(filter_ptr)))
-        if ((*filter_ptr)->priv_class == prev)
+    while (prev && (f = avfilter_next(f)))
+        if (f->priv_class == prev)
             break;
 
     /* could not find filter corresponding to prev */
-    if (prev && !(*filter_ptr))
+    if (prev && !f)
         return NULL;
 
     /* find next filter with specific options */
-    while (*(filter_ptr = av_filter_next(filter_ptr)))
-        if ((*filter_ptr)->priv_class)
-            return (*filter_ptr)->priv_class;
+    while ((f = avfilter_next(f)))
+        if (f->priv_class)
+            return f->priv_class;
+
     return NULL;
 }
 
@@ -490,22 +492,16 @@ static const AVClass avfilter_class = {
     .child_class_next = filter_child_class_next,
 };
 
-const AVClass *avfilter_get_class(void)
-{
-    return &avfilter_class;
-}
-
-int avfilter_open(AVFilterContext **filter_ctx, AVFilter *filter, const char *inst_name)
+AVFilterContext *ff_filter_alloc(const AVFilter *filter, const char *inst_name)
 {
     AVFilterContext *ret;
-    *filter_ctx = NULL;
 
     if (!filter)
-        return AVERROR(EINVAL);
+        return NULL;
 
     ret = av_mallocz(sizeof(AVFilterContext));
     if (!ret)
-        return AVERROR(ENOMEM);
+        return NULL;
 
     ret->av_class = &avfilter_class;
     ret->filter   = filter;
@@ -516,7 +512,12 @@ int avfilter_open(AVFilterContext **filter_ctx, AVFilter *filter, const char *in
             goto err;
     }
 
-    ret->nb_inputs = pad_count(filter->inputs);
+    if (filter->priv_class) {
+        *(const AVClass**)ret->priv = filter->priv_class;
+        av_opt_set_defaults(ret->priv);
+    }
+
+    ret->nb_inputs = avfilter_pad_count(filter->inputs);
     if (ret->nb_inputs ) {
         ret->input_pads   = av_malloc(sizeof(AVFilterPad) * ret->nb_inputs);
         if (!ret->input_pads)
@@ -527,7 +528,7 @@ int avfilter_open(AVFilterContext **filter_ctx, AVFilter *filter, const char *in
             goto err;
     }
 
-    ret->nb_outputs = pad_count(filter->outputs);
+    ret->nb_outputs = avfilter_pad_count(filter->outputs);
     if (ret->nb_outputs) {
         ret->output_pads  = av_malloc(sizeof(AVFilterPad) * ret->nb_outputs);
         if (!ret->output_pads)
@@ -542,8 +543,7 @@ int avfilter_open(AVFilterContext **filter_ctx, AVFilter *filter, const char *in
     ret->input_count  = ret->nb_inputs;
 #endif
 
-    *filter_ctx = ret;
-    return 0;
+    return ret;
 
 err:
     av_freep(&ret->inputs);
@@ -554,8 +554,16 @@ err:
     ret->nb_outputs = 0;
     av_freep(&ret->priv);
     av_free(ret);
-    return AVERROR(ENOMEM);
+    return NULL;
 }
+
+#if FF_API_AVFILTER_OPEN
+int avfilter_open(AVFilterContext **filter_ctx, AVFilter *filter, const char *inst_name)
+{
+    *filter_ctx = ff_filter_alloc(filter, inst_name);
+    return *filter_ctx ? 0 : AVERROR(ENOMEM);
+}
+#endif
 
 void avfilter_free(AVFilterContext *filter)
 {
@@ -565,10 +573,11 @@ void avfilter_free(AVFilterContext *filter)
     if (!filter)
         return;
 
+    if (filter->graph)
+        ff_filter_graph_remove_filter(filter->graph, filter);
+
     if (filter->filter->uninit)
         filter->filter->uninit(filter);
-    if (filter->filter->shorthand)
-        av_opt_free(filter->priv);
 
     for (i = 0; i < filter->nb_inputs; i++) {
         if ((link = filter->inputs[i])) {
@@ -597,6 +606,9 @@ void avfilter_free(AVFilterContext *filter)
         avfilter_link_free(&link);
     }
 
+    if (filter->filter->priv_class)
+        av_opt_free(filter->priv);
+
     av_freep(&filter->name);
     av_freep(&filter->input_pads);
     av_freep(&filter->output_pads);
@@ -609,34 +621,225 @@ void avfilter_free(AVFilterContext *filter)
     av_free(filter);
 }
 
+static int process_options(AVFilterContext *ctx, AVDictionary **options,
+                           const char *args)
+{
+    const AVOption *o = NULL;
+    int ret, count = 0;
+    char *av_uninit(parsed_key), *av_uninit(value);
+    const char *key;
+    int offset= -1;
+
+    if (!args)
+        return 0;
+
+    while (*args) {
+        const char *shorthand = NULL;
+
+        o = av_opt_next(ctx->priv, o);
+        if (o) {
+            if (o->type == AV_OPT_TYPE_CONST || o->offset == offset)
+                continue;
+            offset = o->offset;
+            shorthand = o->name;
+        }
+
+        ret = av_opt_get_key_value(&args, "=", ":",
+                                   shorthand ? AV_OPT_FLAG_IMPLICIT_KEY : 0,
+                                   &parsed_key, &value);
+        if (ret < 0) {
+            if (ret == AVERROR(EINVAL))
+                av_log(ctx, AV_LOG_ERROR, "No option name near '%s'\n", args);
+            else
+                av_log(ctx, AV_LOG_ERROR, "Unable to parse '%s': %s\n", args,
+                       av_err2str(ret));
+            return ret;
+        }
+        if (*args)
+            args++;
+        if (parsed_key) {
+            key = parsed_key;
+            while ((o = av_opt_next(ctx->priv, o))); /* discard all remaining shorthand */
+        } else {
+            key = shorthand;
+        }
+
+        av_log(ctx, AV_LOG_DEBUG, "Setting '%s' to value '%s'\n", key, value);
+        av_dict_set(options, key, value, 0);
+        if ((ret = av_opt_set(ctx->priv, key, value, 0)) < 0) {
+            if (!av_opt_find(ctx->priv, key, NULL, 0, AV_OPT_SEARCH_CHILDREN | AV_OPT_SEARCH_FAKE_OBJ)) {
+            if (ret == AVERROR_OPTION_NOT_FOUND)
+                av_log(ctx, AV_LOG_ERROR, "Option '%s' not found\n", key);
+            av_free(value);
+            av_free(parsed_key);
+            return ret;
+            }
+        }
+
+        av_free(value);
+        av_free(parsed_key);
+        count++;
+    }
+    return count;
+}
+
+#if FF_API_AVFILTER_INIT_FILTER
 int avfilter_init_filter(AVFilterContext *filter, const char *args, void *opaque)
 {
-    int ret=0;
+    return avfilter_init_str(filter, args);
+}
+#endif
 
-    if (filter->filter->shorthand) {
-        av_assert0(filter->priv);
-        av_assert0(filter->filter->priv_class);
-        *(const AVClass **)filter->priv = filter->filter->priv_class;
-        av_opt_set_defaults(filter->priv);
-        ret = av_opt_set_from_string(filter->priv, args,
-                                     filter->filter->shorthand, "=", ":");
-        if (ret < 0)
+int avfilter_init_dict(AVFilterContext *ctx, AVDictionary **options)
+{
+    int ret = 0;
+
+    if (ctx->filter->priv_class) {
+        ret = av_opt_set_dict(ctx->priv, options);
+        if (ret < 0) {
+            av_log(ctx, AV_LOG_ERROR, "Error applying options to the filter.\n");
             return ret;
-        args = NULL;
+        }
     }
-    if (filter->filter->init_opaque)
-        ret = filter->filter->init_opaque(filter, args, opaque);
-    else if (filter->filter->init)
-        ret = filter->filter->init(filter, args);
+
+    if (ctx->filter->init_opaque)
+        ret = ctx->filter->init_opaque(ctx, NULL);
+    else if (ctx->filter->init)
+        ret = ctx->filter->init(ctx);
+    else if (ctx->filter->init_dict)
+        ret = ctx->filter->init_dict(ctx, options);
+
     return ret;
 }
 
-const char *avfilter_pad_get_name(AVFilterPad *pads, int pad_idx)
+int avfilter_init_str(AVFilterContext *filter, const char *args)
+{
+    AVDictionary *options = NULL;
+    AVDictionaryEntry *e;
+    int ret=0;
+
+    if (args && *args) {
+        if (!filter->filter->priv_class) {
+            av_log(filter, AV_LOG_ERROR, "This filter does not take any "
+                   "options, but options were provided: %s.\n", args);
+            return AVERROR(EINVAL);
+        }
+
+#if FF_API_OLD_FILTER_OPTS
+            if (   !strcmp(filter->filter->name, "format")     ||
+                   !strcmp(filter->filter->name, "noformat")   ||
+                   !strcmp(filter->filter->name, "frei0r")     ||
+                   !strcmp(filter->filter->name, "frei0r_src") ||
+                   !strcmp(filter->filter->name, "ocv")        ||
+                   !strcmp(filter->filter->name, "pan")        ||
+                   !strcmp(filter->filter->name, "pp")         ||
+                   !strcmp(filter->filter->name, "aevalsrc")) {
+            /* a hack for compatibility with the old syntax
+             * replace colons with |s */
+            char *copy = av_strdup(args);
+            char *p    = copy;
+            int nb_leading = 0; // number of leading colons to skip
+            int deprecated = 0;
+
+            if (!copy) {
+                ret = AVERROR(ENOMEM);
+                goto fail;
+            }
+
+            if (!strcmp(filter->filter->name, "frei0r") ||
+                !strcmp(filter->filter->name, "ocv"))
+                nb_leading = 1;
+            else if (!strcmp(filter->filter->name, "frei0r_src"))
+                nb_leading = 3;
+
+            while (nb_leading--) {
+                p = strchr(p, ':');
+                if (!p) {
+                    p = copy + strlen(copy);
+                    break;
+                }
+                p++;
+            }
+
+            deprecated = strchr(p, ':') != NULL;
+
+            if (!strcmp(filter->filter->name, "aevalsrc")) {
+                deprecated = 0;
+                while ((p = strchr(p, ':')) && p[1] != ':') {
+                    const char *epos = strchr(p + 1, '=');
+                    const char *spos = strchr(p + 1, ':');
+                    const int next_token_is_opt = epos && (!spos || epos < spos);
+                    if (next_token_is_opt) {
+                        p++;
+                        break;
+                    }
+                    /* next token does not contain a '=', assume a channel expression */
+                    deprecated = 1;
+                    *p++ = '|';
+                }
+                if (p && *p == ':') { // double sep '::' found
+                    deprecated = 1;
+                    memmove(p, p + 1, strlen(p));
+                }
+            } else
+            while ((p = strchr(p, ':')))
+                *p++ = '|';
+
+            if (deprecated)
+                av_log(filter, AV_LOG_WARNING, "This syntax is deprecated. Use "
+                       "'|' to separate the list items.\n");
+
+            av_log(filter, AV_LOG_DEBUG, "compat: called with args=[%s]\n", copy);
+            ret = process_options(filter, &options, copy);
+            av_freep(&copy);
+
+            if (ret < 0)
+                goto fail;
+#endif
+        } else {
+#if CONFIG_MP_FILTER
+            if (!strcmp(filter->filter->name, "mp")) {
+                char *escaped;
+
+                if (!strncmp(args, "filter=", 7))
+                    args += 7;
+                ret = av_escape(&escaped, args, ":=", AV_ESCAPE_MODE_BACKSLASH, 0);
+                if (ret < 0) {
+                    av_log(filter, AV_LOG_ERROR, "Unable to escape MPlayer filters arg '%s'\n", args);
+                    goto fail;
+                }
+                ret = process_options(filter, &options, escaped);
+                av_free(escaped);
+            } else
+#endif
+            ret = process_options(filter, &options, args);
+            if (ret < 0)
+                goto fail;
+        }
+    }
+
+    ret = avfilter_init_dict(filter, &options);
+    if (ret < 0)
+        goto fail;
+
+    if ((e = av_dict_get(options, "", NULL, AV_DICT_IGNORE_SUFFIX))) {
+        av_log(filter, AV_LOG_ERROR, "No such option: %s.\n", e->key);
+        ret = AVERROR_OPTION_NOT_FOUND;
+        goto fail;
+    }
+
+fail:
+    av_dict_free(&options);
+
+    return ret;
+}
+
+const char *avfilter_pad_get_name(const AVFilterPad *pads, int pad_idx)
 {
     return pads[pad_idx].name;
 }
 
-enum AVMediaType avfilter_pad_get_type(AVFilterPad *pads, int pad_idx)
+enum AVMediaType avfilter_pad_get_type(const AVFilterPad *pads, int pad_idx)
 {
     return pads[pad_idx].type;
 }
@@ -786,4 +989,9 @@ int ff_filter_frame(AVFilterLink *link, AVFrame *frame)
     } else {
         return ff_filter_frame_framed(link, frame);
     }
+}
+
+const AVClass *avfilter_get_class(void)
+{
+    return &avfilter_class;
 }

@@ -60,7 +60,9 @@ typedef struct {
 #define OFFSET(x) offsetof(SetTBContext, x)
 #define DEFINE_OPTIONS(filt_name, filt_type)                                               \
 static const AVOption filt_name##_options[] = {                                            \
-    { "tb", "set timebase expression", OFFSET(tb_expr), AV_OPT_TYPE_STRING, {.str="intb"}, \
+    { "expr", "set expression determining the output timebase", OFFSET(tb_expr), AV_OPT_TYPE_STRING, {.str="intb"}, \
+           .flags=AV_OPT_FLAG_##filt_type##_PARAM|AV_OPT_FLAG_FILTERING_PARAM },           \
+    { "tb",   "set expression determining the output timebase", OFFSET(tb_expr), AV_OPT_TYPE_STRING, {.str="intb"}, \
            .flags=AV_OPT_FLAG_##filt_type##_PARAM|AV_OPT_FLAG_FILTERING_PARAM },           \
     { NULL }                                                                               \
 }
@@ -118,8 +120,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
     return ff_filter_frame(outlink, frame);
 }
 
-static const char *const shorthand[] = { "tb", NULL };
-
 #if CONFIG_SETTB_FILTER
 
 DEFINE_OPTIONS(settb, VIDEO);
@@ -149,11 +149,10 @@ AVFilter avfilter_vf_settb = {
     .description = NULL_IF_CONFIG_SMALL("Set timebase for the video output link."),
 
     .priv_size = sizeof(SetTBContext),
+    .priv_class = &settb_class,
 
     .inputs    = avfilter_vf_settb_inputs,
     .outputs   = avfilter_vf_settb_outputs,
-    .priv_class = &settb_class,
-    .shorthand  = shorthand,
 };
 #endif
 
@@ -189,6 +188,5 @@ AVFilter avfilter_af_asettb = {
     .inputs    = avfilter_af_asettb_inputs,
     .outputs   = avfilter_af_asettb_outputs,
     .priv_class = &asettb_class,
-    .shorthand  = shorthand,
 };
 #endif

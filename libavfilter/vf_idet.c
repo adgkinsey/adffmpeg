@@ -273,7 +273,7 @@ static int query_formats(AVFilterContext *ctx)
     return 0;
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     IDETContext *idet = ctx->priv;
 
@@ -304,8 +304,6 @@ static const AVFilterPad idet_outputs[] = {
     { NULL }
 };
 
-static const char *const shorthand[] = { "intl_thres", "prog_thres", NULL };
-
 AVFilter avfilter_vf_idet = {
     .name          = "idet",
     .description   = NULL_IF_CONFIG_SMALL("Interlace detect Filter."),
@@ -317,5 +315,4 @@ AVFilter avfilter_vf_idet = {
     .inputs        = idet_inputs,
     .outputs       = idet_outputs,
     .priv_class    = &idet_class,
-    .shorthand     = shorthand,
 };

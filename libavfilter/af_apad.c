@@ -56,7 +56,7 @@ static const AVOption apad_options[] = {
 
 AVFILTER_DEFINE_CLASS(apad);
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     APadContext *apad = ctx->priv;
 
@@ -144,8 +144,6 @@ static const AVFilterPad apad_outputs[] = {
     { NULL },
 };
 
-static const char *const shorthand[] = { NULL };
-
 AVFilter avfilter_af_apad = {
     .name          = "apad",
     .description   = NULL_IF_CONFIG_SMALL("Pad audio with silence."),
@@ -154,5 +152,4 @@ AVFilter avfilter_af_apad = {
     .inputs        = apad_inputs,
     .outputs       = apad_outputs,
     .priv_class    = &apad_class,
-    .shorthand     = shorthand,
 };

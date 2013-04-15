@@ -88,7 +88,7 @@ static double alpha(void *priv, double x, double y) { return getpix(priv, x, y, 
 static const char *const var_names[] = {   "X",   "Y",   "W",   "H",   "N",   "SW",   "SH",   "T",        NULL };
 enum                                   { VAR_X, VAR_Y, VAR_W, VAR_H, VAR_N, VAR_SW, VAR_SH, VAR_T, VAR_VARS_NB };
 
-static av_cold int geq_init(AVFilterContext *ctx, const char *args)
+static av_cold int geq_init(AVFilterContext *ctx)
 {
     GEQContext *geq = ctx->priv;
     int plane, ret = 0;
@@ -228,8 +228,6 @@ static const AVFilterPad geq_outputs[] = {
     { NULL }
 };
 
-static const char *const shorthand[] = { "lum_expr", "cb_expr", "cr_expr", "alpha_expr", NULL };
-
 AVFilter avfilter_vf_geq = {
     .name          = "geq",
     .description   = NULL_IF_CONFIG_SMALL("Apply generic equation to each pixel."),
@@ -240,5 +238,4 @@ AVFilter avfilter_vf_geq = {
     .inputs        = geq_inputs,
     .outputs       = geq_outputs,
     .priv_class    = &geq_class,
-    .shorthand     = shorthand,
 };

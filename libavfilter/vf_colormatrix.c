@@ -160,7 +160,7 @@ static void calc_coefficients(AVFilterContext *ctx)
 
 static const char *color_modes[] = {"bt709", "fcc", "bt601", "smpte240m"};
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     ColorMatrixContext *color = ctx->priv;
 
@@ -375,8 +375,6 @@ static const AVFilterPad colormatrix_outputs[] = {
     { NULL }
 };
 
-static const char *const shorthand[] = { "src", "dst", NULL };
-
 AVFilter avfilter_vf_colormatrix = {
     .name          = "colormatrix",
     .description   = NULL_IF_CONFIG_SMALL("Convert color matrix."),
@@ -387,5 +385,4 @@ AVFilter avfilter_vf_colormatrix = {
     .inputs        = colormatrix_inputs,
     .outputs       = colormatrix_outputs,
     .priv_class    = &colormatrix_class,
-    .shorthand     = shorthand,
 };

@@ -39,6 +39,28 @@
 
 #define AV_OPENCL_MAX_KERNEL_NAME_SIZE 150
 
+#define AV_OPENCL_MAX_DEVICE_NAME_SIZE 100
+
+#define AV_OPENCL_MAX_PLATFORM_NAME_SIZE 100
+
+typedef struct {
+    int device_type;
+    char device_name[AV_OPENCL_MAX_DEVICE_NAME_SIZE];
+    cl_device_id device_id;
+} AVOpenCLDeviceNode;
+
+typedef struct {
+    cl_platform_id platform_id;
+    char platform_name[AV_OPENCL_MAX_PLATFORM_NAME_SIZE];
+    int device_num;
+    AVOpenCLDeviceNode **device_node;
+} AVOpenCLPlatformNode;
+
+typedef struct {
+    int platform_num;
+    AVOpenCLPlatformNode **platform_node;
+} AVOpenCLDeviceList;
+
 typedef struct {
     cl_command_queue command_queue;
     cl_kernel kernel;
@@ -49,11 +71,67 @@ typedef struct {
     cl_platform_id platform_id;
     cl_device_type device_type;
     cl_context context;
-    cl_device_id *device_ids;
     cl_device_id  device_id;
     cl_command_queue command_queue;
     char *platform_name;
 } AVOpenCLExternalEnv;
+
+/**
+ * Get OpenCL device list.
+ *
+ * It must be freed with av_opencl_free_device_list().
+ *
+ * @param device_list pointer to OpenCL environment device list,
+ *                    should be released by av_opencl_free_device_list()
+ *
+ * @return  >=0 on success, a negative error code in case of failure
+ */
+int av_opencl_get_device_list(AVOpenCLDeviceList **device_list);
+
+/**
+  * Free OpenCL device list.
+  *
+  * @param device_list pointer to OpenCL environment device list
+  *                       created by av_opencl_get_device_list()
+  */
+void av_opencl_free_device_list(AVOpenCLDeviceList **device_list);
+
+/**
+ * Set option in the global OpenCL context.
+ *
+ * This options affect the operation performed by the next
+ * av_opencl_init() operation.
+ *
+ * The currently accepted options are:
+ * - build_options: set options to compile registered kernels code
+ * - platform: set index of platform in device list
+ * - device: set index of device in device list
+ *
+ * See reference "OpenCL Specification Version: 1.2 chapter 5.6.4".
+ *
+ * @param key                 option key
+ * @param val                 option value
+ * @return >=0 on success, a negative error code in case of failure
+ * @see av_opencl_get_option()
+ */
+int av_opencl_set_option(const char *key, const char *val);
+
+/**
+ * Get option value from the global OpenCL context.
+ *
+ * @param key        option key
+ * @param out_val  pointer to location where option value will be
+ *                         written, must be freed with av_freep()
+ * @return  >=0 on success, a negative error code in case of failure
+ * @see av_opencl_set_option()
+ */
+int av_opencl_get_option(const char *key, uint8_t **out_val);
+
+/**
+ * Free option values of the global OpenCL context.
+ *
+ */
+void av_opencl_free_option(void);
 
 /**
  * Allocate OpenCL external environment.
@@ -87,16 +165,11 @@ int av_opencl_register_kernel_code(const char *kernel_code);
  * Initialize the run time OpenCL environment and compile the kernel
  * code registered with av_opencl_register_kernel_code().
  *
- * Currently, the only accepted option is "build_options", used to set
- * options to compile registered kernels code. See reference "OpenCL
- * Specification Version: 1.2 chapter 5.6.4".
- *
- * @param options        dictionary of key/value options
  * @param ext_opencl_env external OpenCL environment, created by an
  *                       application program, ignored if set to NULL
  * @return >=0 on success, a negative error code in case of failure
  */
- int av_opencl_init(AVDictionary *options, AVOpenCLExternalEnv *ext_opencl_env);
+ int av_opencl_init(AVOpenCLExternalEnv *ext_opencl_env);
 
 /**
  * Create kernel object in the specified kernel environment.

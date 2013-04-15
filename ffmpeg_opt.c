@@ -28,7 +28,6 @@
 #include "libavcodec/avcodec.h"
 
 #include "libavfilter/avfilter.h"
-#include "libavfilter/avfiltergraph.h"
 
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
@@ -1203,7 +1202,7 @@ static OutputStream *new_video_stream(OptionsContext *o, AVFormatContext *oc, in
                 av_log(NULL, AV_LOG_FATAL, "Invalid aspect ratio: %s\n", frame_aspect_ratio);
                 exit(1);
             }
-            ost->frame_aspect_ratio = av_q2d(q);
+            ost->frame_aspect_ratio = q;
         }
 
         video_enc->bits_per_raw_sample = frame_bits_per_raw_sample;
@@ -2434,7 +2433,7 @@ void show_help_default(const char *opt, const char *arg)
         show_help_children(avformat_get_class(), flags);
         show_help_children(sws_get_class(), flags);
         show_help_children(swr_get_class(), AV_OPT_FLAG_AUDIO_PARAM);
-        show_help_children(avfilter_get_class(), AV_OPT_FLAG_FILTERING_PARAM);
+        show_help_children(avfilter_get_class(), AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM);
     }
 }
 
