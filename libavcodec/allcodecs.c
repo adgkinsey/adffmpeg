@@ -171,7 +171,8 @@ void avcodec_register_all(void)
     REGISTER_DECODER(INDEO4,            indeo4);
     REGISTER_DECODER(INDEO5,            indeo5);
     REGISTER_DECODER(INTERPLAY_VIDEO,   interplay_video);
-    REGISTER_ENCDEC (JPEG2000,          jpeg2000);
+    REGISTER_ENCDEC (J2K,               j2k);
+    REGISTER_DECODER(JPEG2000,          jpeg2000);
     REGISTER_ENCDEC (JPEGLS,            jpegls);
     REGISTER_DECODER(JV,                jv);
     REGISTER_DECODER(KGV1,              kgv1);
@@ -449,6 +450,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER(VIMA,              vima);
 
     /* subtitles */
+    REGISTER_ENCDEC (SSA,               ssa);
     REGISTER_ENCDEC (ASS,               ass);
     REGISTER_ENCDEC (DVBSUB,            dvbsub);
     REGISTER_ENCDEC (DVDSUB,            dvdsub);

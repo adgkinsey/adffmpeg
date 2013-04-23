@@ -93,23 +93,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 #define OFFSET(x) offsetof(SplitContext, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_VIDEO_PARAM
 static const AVOption options[] = {
-    { "outputs", "Number of outputs", OFFSET(nb_outputs), AV_OPT_TYPE_INT, { .i64 = 2 }, 1, INT_MAX, FLAGS },
+    { "outputs", "set number of outputs", OFFSET(nb_outputs), AV_OPT_TYPE_INT, { .i64 = 2 }, 1, INT_MAX, FLAGS },
     { NULL },
 };
 
-static const AVClass split_class = {
-    .class_name = "split",
-    .item_name  = av_default_item_name,
-    .option     = options,
-    .version    = LIBAVUTIL_VERSION_INT,
-};
+#define split_options options
+AVFILTER_DEFINE_CLASS(split);
 
-static const AVClass asplit_class = {
-    .class_name = "asplit",
-    .item_name  = av_default_item_name,
-    .option     = options,
-    .version    = LIBAVUTIL_VERSION_INT,
-};
+#define asplit_options options
+AVFILTER_DEFINE_CLASS(asplit);
 
 static const AVFilterPad avfilter_vf_split_inputs[] = {
     {

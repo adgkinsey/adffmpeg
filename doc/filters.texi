@@ -267,6 +267,39 @@ See the ``Quoting and escaping'' section in the ffmpeg-utils manual
 for more information about the escaping and quoting rules adopted by
 FFmpeg.
 
+@chapter Timeline editing
+
+Some filters support a generic @option{enable} option. For the filters
+supporting timeline editing, this option can be set to an expression which is
+evaluated before sending a frame to the filter. If the evaluation is non-zero,
+the filter will be enabled, otherwise the frame will be sent unchanged to the
+next filter in the filtergraph.
+
+The expression accepts the following values:
+@table @samp
+@item t
+timestamp expressed in seconds, NAN if the input timestamp is unknown
+
+@item n
+sequential number of the input frame, starting from 0
+
+@item pos
+the position in the file of the input frame, NAN if unknown
+@end table
+
+Additionally, these filters support an @option{enable} command that can be used
+to re-define the expression.
+
+Like any other filtering option, the @option{enable} option follows the same
+rules.
+
+For example, to enable a denoiser filter (@ref{hqdn3d}) from 10 seconds to 3
+minutes, and a @ref{curves} filter starting at 3 seconds:
+@example
+hqdn3d = enable='between(t,10,3*60)',
+curves = enable='gte(t,3)' : preset=cross_process
+@end example
+
 @c man end FILTERGRAPH DESCRIPTION
 
 @chapter Audio Filters
@@ -612,15 +645,26 @@ volume as the input audio, at the end of the fade-out transition
 the output audio will be silence. Default is 44100.
 
 @item start_time, st
-Specify time in seconds for starting to apply the fade
-effect. Default is 0.
+Specify time for starting to apply the fade effect. Default is 0.
+The accepted syntax is:
+@example
+[-]HH[:MM[:SS[.m...]]]
+[-]S+[.m...]
+@end example
+See also the function @code{av_parse_time()}.
 If set this option is used instead of @var{start_sample} one.
 
 @item duration, d
-Specify the number of seconds for which the fade effect has to last. At
-the end of the fade-in effect the output audio will have the same
+Specify the duration for which the fade effect has to last. Default is 0.
+The accepted syntax is:
+@example
+[-]HH[:MM[:SS[.m...]]]
+[-]S+[.m...]
+@end example
+See also the function @code{av_parse_time()}.
+At the end of the fade-in effect the output audio will have the same
 volume as the input audio, at the end of the fade-out transition
-the output audio will be silence. Default is 0.
+the output audio will be silence.
 If set this option is used instead of @var{nb_samples} one.
 
 @item curve
@@ -792,6 +836,40 @@ Pass the audio source unchanged to the output.
 Pad the end of a audio stream with silence, this can be used together with
 -shortest to extend audio streams to the same length as the video stream.
 
+@section aphaser
+Add a phasing effect to the input audio.
+
+A phaser filter creates series of peaks and troughs in the frequency spectrum.
+The position of the peaks and troughs are modulated so that they vary over time, creating a sweeping effect.
+
+A description of the accepted parameters follows.
+
+@table @option
+@item in_gain
+Set input gain. Default is 0.4.
+
+@item out_gain
+Set output gain. Default is 0.74
+
+@item delay
+Set delay in milliseconds. Default is 3.0.
+
+@item decay
+Set decay. Default is 0.4.
+
+@item speed
+Set modulation speed in Hz. Default is 0.5.
+
+@item type
+Set modulation type. Default is triangular.
+
+It accepts the following values:
+@table @samp
+@item triangular, t
+@item sinusoidal, s
+@end table
+@end table
+
 @anchor{aresample}
 @section aresample
 
@@ -855,6 +933,18 @@ disable padding for the last frame, use:
 asetnsamples=n=1234:p=0
 @end example
 
+@section asetrate
+
+Set the sample rate without altering the PCM data.
+This will result in a change of speed and pitch.
+
+The filter accepts the following options:
+
+@table @option
+@item sample_rate, r
+Set the output sample rate. Default is 44100 Hz.
+@end table
+
 @section ashowinfo
 
 Show a line containing various information for each input audio frame.
@@ -899,32 +989,6 @@ the data is treated as if all the planes were concatenated.
 @item plane_checksums
 A list of Adler-32 checksums for each data plane.
 @end table
-
-@section asplit
-
-Split input audio into several identical outputs.
-
-The filter accepts a single parameter which specifies the number of outputs. If
-unspecified, it defaults to 2.
-
-For example:
-@example
-[in] asplit [out0][out1]
-@end example
-
-will create two separate outputs from the same input.
-
-To create 3 or more outputs, you need to specify the number of
-outputs, like in:
-@example
-[in] asplit=3 [out0][out1][out2]
-@end example
-
-@example
-ffmpeg -i INPUT -filter_complex asplit=5 OUTPUT
-@end example
-will create 5 copies of the input audio.
-
 
 @section astreamsync
 
@@ -2043,6 +2107,101 @@ boxblur=luma_radius=min(h\,w)/10:luma_power=1:chroma_radius=min(cw\,ch)/10:chrom
 @end example
 @end itemize
 
+@section colorbalance
+Modify intensity of primary colors (red, green and blue) of input frames.
+
+The filter allows an input frame to be adjusted in the shadows, midtones or highlights
+regions for the red-cyan, green-magenta or blue-yellow balance.
+
+A positive adjustment value shifts the balance towards the primary color, a negative
+value towards the complementary color.
+
+The filter accepts the following options:
+
+@table @option
+@item rs
+@item gs
+@item bs
+Adjust red, green and blue shadows (darkest pixels).
+
+@item rm
+@item gm
+@item bm
+Adjust red, green and blue midtones (medium pixels).
+
+@item rh
+@item gh
+@item bh
+Adjust red, green and blue highlights (brightest pixels).
+
+Allowed ranges for options are @code{[-1.0, 1.0]}. Defaults are @code{0}.
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Add red color cast to shadows:
+@example
+colorbalance=rs=.3
+@end example
+@end itemize
+
+@section colorchannelmixer
+
+Adjust video input frames by re-mixing color channels.
+
+This filter modifies a color channel by adding the values associated to
+the other channels of the same pixels. For example if the value to
+modify is red, the output value will be:
+@example
+@var{red}=@var{red}*@var{rr} + @var{blue}*@var{rb} + @var{green}*@var{rg} + @var{alpha}*@var{ra}
+@end example
+
+The filter accepts the following options:
+
+@table @option
+@item rr
+@item rg
+@item rb
+@item ra
+Adjust contribution of input red, green, blue and alpha channels for output red channel.
+Default is @code{1} for @var{rr}, and @code{0} for @var{rg}, @var{rb} and @var{ra}.
+
+@item gr
+@item gg
+@item gb
+@item ga
+Adjust contribution of input red, green, blue and alpha channels for output green channel.
+Default is @code{1} for @var{gg}, and @code{0} for @var{gr}, @var{gb} and @var{ga}.
+
+@item br
+@item bg
+@item bb
+@item ba
+Adjust contribution of input red, green, blue and alpha channels for output blue channel.
+Default is @code{1} for @var{bb}, and @code{0} for @var{br}, @var{bg} and @var{ba}.
+
+@item ar
+@item ag
+@item ab
+@item aa
+Adjust contribution of input red, green, blue and alpha channels for output alpha channel.
+Default is @code{1} for @var{aa}, and @code{0} for @var{ar}, @var{ag} and @var{ab}.
+
+Allowed ranges for options are @code{[-2.0, 2.0]}.
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Convert source to grayscale:
+@example
+colorchannelmixer=.3:.4:.3:0:.3:.4:.3:0:.3:.4:.3
+@end example
+@end itemize
+
 @section colormatrix
 
 Convert color matrix.
@@ -2283,6 +2442,7 @@ indicates never reset and return the largest area encountered during
 playback.
 @end table
 
+@anchor{curves}
 @section curves
 
 Apply color adjustments using curves.
@@ -2387,6 +2547,12 @@ curves=preset=vintage
 Or simply:
 @example
 curves=vintage
+@end example
+
+@item
+Use a Photoshop preset and redefine the points of the green component:
+@example
+curves=psfile='MyCurvesPresets/purple.asv':green='0.45/0.53'
 @end example
 @end itemize
 
@@ -2864,6 +3030,9 @@ It can accept an argument: a strftime() format string.
 @item n, frame_num
 The frame number, starting from 0.
 
+@item pict_type
+A 1 character description of the current picture type.
+
 @item pts
 The timestamp of the current frame, in seconds, with microsecond accuracy.
 
@@ -2999,6 +3168,17 @@ Default is 25.
 @item alpha
 If set to 1, fade only alpha channel, if one exists on the input.
 Default value is 0.
+
+@item start_time, st
+Specify the timestamp (in seconds) of the frame to start to apply the fade
+effect. If both start_frame and start_time are specified, the fade will start at
+whichever comes last.  Default is 0.
+
+@item duration, d
+The number of seconds for which the fade effect has to last. At the end of the
+fade-in effect the output video will have the same intensity as the input video,
+at the end of the fade-out transition the output video will be completely black.
+If both duration and nb_frames are specified, duration is used. Default is 0.
 @end table
 
 @subsection Examples
@@ -3039,6 +3219,13 @@ Fade in alpha over first 25 frames of video:
 @example
 fade=in:0:25:alpha=1
 @end example
+
+@item
+Make first 5.5 seconds black, then fade in for 0.5 seconds:
+@example
+fade=t=in:st=5.5:d=0.5
+@end example
+
 @end itemize
 
 @section field
@@ -3863,6 +4050,7 @@ ffplay -i input -vf histogram
 
 @end itemize
 
+@anchor{hqdn3d}
 @section hqdn3d
 
 High precision/quality 3d denoise filter. This filter aims to reduce
@@ -4289,16 +4477,12 @@ the named filter.
 
 The list of the currently supported filters follows:
 @table @var
-@item detc
 @item dint
-@item divtc
-@item down3dright
 @item eq2
 @item eq
 @item fil
 @item fspp
 @item ilpack
-@item ivtc
 @item mcdeint
 @item ow
 @item perspective
@@ -4584,14 +4768,8 @@ on the main video. Default value is "0" for both expressions. In case
 the expression is invalid, it is set to a huge value (meaning that the
 overlay will not be displayed within the output visible area).
 
-@item enable
-Set the expression which enables the overlay. If the evaluation is
-different from 0, the overlay is displayed on top of the input
-frame. By default it is "1".
-
 @item eval
-Set when the expressions for @option{x}, @option{y}, and
-@option{enable} are evaluated.
+Set when the expressions for @option{x}, and @option{y} are evaluated.
 
 It accepts the following values:
 @table @samp
@@ -4637,8 +4815,8 @@ main input until the end of the stream. A value of 0 disables this
 behavior, which is enabled by default.
 @end table
 
-The @option{x}, @option{y}, and @option{enable} expressions can
-contain the following parameters.
+The @option{x}, and @option{y} expressions can contain the following
+parameters.
 
 @table @option
 @item main_w, W
@@ -4689,8 +4867,7 @@ This filter supports the following commands:
 @table @option
 @item x
 @item y
-@item enable
-Modify the x/y and enable overlay of the overlay input.
+Modify the x and y of the overlay input.
 The command accepts the same syntax of the corresponding option.
 
 If the specified expression is not valid, it is kept at its current
@@ -5348,8 +5525,8 @@ The parameter can be a floating point number string, an expression, or
 a string of the form @var{num}:@var{den}, where @var{num} and
 @var{den} are the numerator and denominator of the aspect ratio. If
 the parameter is not specified, it is assumed the value "0".
-In case the form "@var{num}:@var{den}" the @code{:} character should
-be escaped.
+In case the form "@var{num}:@var{den}" is used, the @code{:} character
+should be escaped.
 
 @item max
 Set the maximum integer value to use for expressing numerator and
@@ -5643,6 +5820,22 @@ mono output (right eye only)
 Default value is @samp{arcd}.
 @end table
 
+@subsection Examples
+
+@itemize
+@item
+Convert input video from side by side parallel to anaglyph yellow/blue dubois:
+@example
+stereo3d=sbsl:aybd
+@end example
+
+@item
+Convert input video from above bellow (left eye above, right eye below) to side by side crosseye.
+@example
+stereo3d=abl:sbsr
+@end example
+@end itemize
+
 @anchor{subtitles}
 @section subtitles
 
@@ -5682,29 +5875,6 @@ which is equivalent to:
 @example
 subtitles=filename=sub.srt
 @end example
-
-@section split
-
-Split input video into several identical outputs.
-
-The filter accepts a single parameter which specifies the number of outputs. If
-unspecified, it defaults to 2.
-
-For example
-@example
-ffmpeg -i INPUT -filter_complex split=5 OUTPUT
-@end example
-will create 5 copies of the input video.
-
-For example:
-@example
-[in] split [splitout1][splitout2];
-[splitout1] crop=100:100:0:0    [cropout];
-[splitout2] pad=200:200:100:100 [padout];
-@end example
-
-will create two separate outputs from the same input, one cropped and
-one padded.
 
 @section super2xsai
 
@@ -6725,40 +6895,6 @@ following one, the permission might not be received as expected in that
 following filter. Inserting a @ref{format} or @ref{aformat} filter before the
 perms/aperms filter can avoid this problem.
 
-@section aphaser
-Add a phasing effect to the input audio.
-
-A phaser filter creates series of peaks and troughs in the frequency spectrum.
-The position of the peaks and troughs are modulated so that they vary over time, creating a sweeping effect.
-
-A description of the accepted parameters follows.
-
-@table @option
-@item in_gain
-Set input gain. Default is 0.4.
-
-@item out_gain
-Set output gain. Default is 0.74
-
-@item delay
-Set delay in milliseconds. Default is 3.0.
-
-@item decay
-Set decay. Default is 0.4.
-
-@item speed
-Set modulation speed in Hz. Default is 0.5.
-
-@item type
-Set modulation type. Default is triangular.
-
-It accepts the following values:
-@table @samp
-@item triangular, t
-@item sinusoidal, s
-@end table
-@end table
-
 @section aselect, select
 Select frames to pass in output.
 
@@ -6767,10 +6903,20 @@ This filter accepts the following options:
 @table @option
 
 @item expr, e
-An expression, which is evaluated for each input frame. If the expression is
-evaluated to a non-zero value, the frame is selected and passed to the output,
-otherwise it is discarded.
+Set expression, which is evaluated for each input frame.
 
+If the expression is evaluated to zero, the frame is discarded.
+
+If the evaluation result is negative or NaN, the frame is sent to the
+first output; otherwise it is sent to the output with index
+@code{ceil(val)-1}, assuming that the input index starts from 0.
+
+For example a value of @code{1.2} corresponds to the output with index
+@code{ceil(1.2)-1 = 2-1 = 1}, that is the second output.
+
+@item outputs, n
+Set the number of outputs. The output to which to send the selected
+frame is based on the result of the evaluation. Default value is 1.
 @end table
 
 The expression can contain the following constants:
@@ -6924,6 +7070,12 @@ ffmpeg -i video.avi -vf select='gt(scene\,0.4)',scale=160:120,tile -frames:v 1 p
 
 Comparing @var{scene} against a value between 0.3 and 0.5 is generally a sane
 choice.
+
+@item
+Send even and odd frames to separate outputs, and compose them:
+@example
+select=n=2:e='mod(n, 2)+1' [odd][even]; [odd] pad=h=2*ih [tmp]; [tmp][even] overlay=y=h
+@end example
 @end itemize
 
 @section asendcmd, sendcmd
@@ -7387,6 +7539,54 @@ do not have exactly the same duration in the first file.
 
 @end itemize
 
+@section interleave, ainterleave
+
+Temporally interleave frames from several inputs.
+
+@code{interleave} works with video inputs, @code{ainterleave} with audio.
+
+These filters read frames from several inputs and send the oldest
+queued frame to the output.
+
+Input streams must have a well defined, monotonically increasing frame
+timestamp values.
+
+In order to submit one frame to output, these filters need to enqueue
+at least one frame for each input, so they cannot work in case one
+input is not yet terminated and will not receive incoming frames.
+
+For example consider the case when one input is a @code{select} filter
+which always drop input frames. The @code{interleave} filter will keep
+reading from that input, but it will never be able to send new frames
+to output until the input will send an end-of-stream signal.
+
+Also, depending on inputs synchronization, the filters will drop
+frames in case one input receives more frames than the other ones, and
+the queue is already filled.
+
+These filters accept the following options:
+
+@table @option
+@item nb_inputs, n
+Set the number of different inputs, it is 2 by default.
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Interleave frames belonging to different streams using @command{ffmpeg}:
+@example
+ffmpeg -i bambi.avi -i pr0n.mkv -filter_complex "[0:v][1:v] interleave" out.avi
+@end example
+
+@item
+Add flickering blur effect:
+@example
+select='if(gt(random(0), 0.2), 1, 2)':n=2 [tmp], boxblur=2:2, [tmp] interleave
+@end example
+@end itemize
+
 @section showspectrum
 
 Convert input audio to a video output, representing the audio frequency
@@ -7523,6 +7723,47 @@ Create a synthetic signal and show it with showwaves, forcing a
 frame rate of 30 frames per second:
 @example
 aevalsrc=sin(1*2*PI*t)*sin(880*2*PI*t):cos(2*PI*200*t),asplit[out0],showwaves=r=30[out1]
+@end example
+@end itemize
+
+@section split, asplit
+
+Split input into several identical outputs.
+
+@code{asplit} works with audio input, @code{split} with video.
+
+The filter accepts a single parameter which specifies the number of outputs. If
+unspecified, it defaults to 2.
+
+@subsection Examples
+
+@itemize
+@item
+Create two separate outputs from the same input:
+@example
+[in] split [out0][out1]
+@end example
+
+@item
+To create 3 or more outputs, you need to specify the number of
+outputs, like in:
+@example
+[in] asplit=3 [out0][out1][out2]
+@end example
+
+@item
+Create two separate outputs from the same input, one cropped and
+one padded:
+@example
+[in] split [splitout1][splitout2];
+[splitout1] crop=100:100:0:0    [cropout];
+[splitout2] pad=200:200:100:100 [padout];
+@end example
+
+@item
+Create 5 copies of the input audio with @command{ffmpeg}:
+@example
+ffmpeg -i INPUT -filter_complex asplit=5 OUTPUT
 @end example
 @end itemize
 

@@ -134,7 +134,7 @@ static int parse_command(Command *cmd, int cmd_count, int interval_count,
                 char flag_buf[64];
                 av_strlcpy(flag_buf, *buf, sizeof(flag_buf));
                 av_log(log_ctx, AV_LOG_ERROR,
-                       "Unknown flag '%s' in in interval #%d, command #%d\n",
+                       "Unknown flag '%s' in interval #%d, command #%d\n",
                        flag_buf, interval_count, cmd_count);
                 return AVERROR(EINVAL);
             }
@@ -166,7 +166,7 @@ static int parse_command(Command *cmd, int cmd_count, int interval_count,
     cmd->target = av_get_token(buf, COMMAND_DELIMS);
     if (!cmd->target || !cmd->target[0]) {
         av_log(log_ctx, AV_LOG_ERROR,
-               "No target specified in in interval #%d, command #%d\n",
+               "No target specified in interval #%d, command #%d\n",
                interval_count, cmd_count);
         ret = AVERROR(EINVAL);
         goto fail;
@@ -176,7 +176,7 @@ static int parse_command(Command *cmd, int cmd_count, int interval_count,
     cmd->command = av_get_token(buf, COMMAND_DELIMS);
     if (!cmd->command || !cmd->command[0]) {
         av_log(log_ctx, AV_LOG_ERROR,
-               "No command specified in in interval #%d, command #%d\n",
+               "No command specified in interval #%d, command #%d\n",
                interval_count, cmd_count);
         ret = AVERROR(EINVAL);
         goto fail;
@@ -510,11 +510,6 @@ end:
 #define sendcmd_options options
 AVFILTER_DEFINE_CLASS(sendcmd);
 
-static av_cold int sendcmd_init(AVFilterContext *ctx)
-{
-    return init(ctx);
-}
-
 static const AVFilterPad sendcmd_inputs[] = {
     {
         .name             = "default",
@@ -536,8 +531,7 @@ static const AVFilterPad sendcmd_outputs[] = {
 AVFilter avfilter_vf_sendcmd = {
     .name      = "sendcmd",
     .description = NULL_IF_CONFIG_SMALL("Send commands to filters."),
-
-    .init = sendcmd_init,
+    .init   = init,
     .uninit = uninit,
     .priv_size = sizeof(SendCmdContext),
     .inputs    = sendcmd_inputs,
@@ -551,11 +545,6 @@ AVFilter avfilter_vf_sendcmd = {
 
 #define asendcmd_options options
 AVFILTER_DEFINE_CLASS(asendcmd);
-
-static av_cold int asendcmd_init(AVFilterContext *ctx)
-{
-    return init(ctx);
-}
 
 static const AVFilterPad asendcmd_inputs[] = {
     {
@@ -578,8 +567,7 @@ static const AVFilterPad asendcmd_outputs[] = {
 AVFilter avfilter_af_asendcmd = {
     .name      = "asendcmd",
     .description = NULL_IF_CONFIG_SMALL("Send commands to filters."),
-
-    .init = asendcmd_init,
+    .init   = init,
     .uninit = uninit,
     .priv_size = sizeof(SendCmdContext),
     .inputs    = asendcmd_inputs,

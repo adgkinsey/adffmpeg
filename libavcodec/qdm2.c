@@ -1862,18 +1862,9 @@ static av_cold int qdm2_decode_init(AVCodecContext *avctx)
     if ((tmp * 2240) < avctx->bit_rate)  tmp_val = 4;
     s->cm_table_select = tmp_val;
 
-    if (s->sub_sampling == 0)
-        tmp = 7999;
-    else
-        tmp = ((-(s->sub_sampling -1)) & 8000) + 20000;
-    /*
-    0: 7999 -> 0
-    1: 20000 -> 2
-    2: 28000 -> 2
-    */
-    if (tmp < 8000)
+    if (avctx->bit_rate <= 8000)
         s->coeff_per_sb_select = 0;
-    else if (tmp <= 16000)
+    else if (avctx->bit_rate < 16000)
         s->coeff_per_sb_select = 1;
     else
         s->coeff_per_sb_select = 2;
@@ -1882,6 +1873,10 @@ static av_cold int qdm2_decode_init(AVCodecContext *avctx)
     if ((s->fft_order < 7) || (s->fft_order > 9)) {
         av_log(avctx, AV_LOG_ERROR, "Unknown FFT order (%d), contact the developers!\n", s->fft_order);
         return -1;
+    }
+    if (s->fft_size != (1 << (s->fft_order - 1))) {
+        av_log(avctx, AV_LOG_ERROR, "FFT size %d not power of 2.\n", s->fft_size);
+        return AVERROR_INVALIDDATA;
     }
 
     ff_rdft_init(&s->rdft_ctx, s->fft_order, IDFT_C2R);

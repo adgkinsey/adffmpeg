@@ -252,6 +252,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpic)
         av_frame_copy_props(outpic, inpic);
     }
 
+    hue->var_values[VAR_N]   = inlink->frame_count;
     hue->var_values[VAR_T]   = TS2T(inpic->pts, inlink->time_base);
     hue->var_values[VAR_PTS] = TS2D(inpic->pts);
 
@@ -280,8 +281,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpic)
            hue->var_values[VAR_T], (int)hue->var_values[VAR_N]);
 
     compute_sin_and_cos(hue);
-
-    hue->var_values[VAR_N] += 1;
 
     if (!direct) {
         av_image_copy_plane(outpic->data[0], outpic->linesize[0],
@@ -350,4 +349,5 @@ AVFilter avfilter_vf_hue = {
     .inputs          = hue_inputs,
     .outputs         = hue_outputs,
     .priv_class      = &hue_class,
+    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE,
 };

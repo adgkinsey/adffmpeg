@@ -235,7 +235,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpic)
                 dst[x + histeq->rgba_map[R]] = r;
                 dst[x + histeq->rgba_map[G]] = g;
                 dst[x + histeq->rgba_map[B]] = b;
-                oluma = (55 * r + 182 * g + 19 * b) >> 8;
+                oluma = av_clip_uint8((55 * r + 182 * g + 19 * b) >> 8);
                 histeq->out_histogram[oluma]++;
             }
         }
@@ -279,4 +279,5 @@ AVFilter avfilter_vf_histeq = {
     .inputs        = histeq_inputs,
     .outputs       = histeq_outputs,
     .priv_class    = &histeq_class,
+    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE,
 };

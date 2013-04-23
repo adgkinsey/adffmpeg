@@ -1453,7 +1453,11 @@ int show_filters(void *optctx, const char *opt, const char *arg)
     int i, j;
     const AVFilterPad *pad;
 
-    printf("Filters:\n");
+    printf("Filters:\n"
+           "  A = Audio input/output\n"
+           "  V = Video input/output\n"
+           "  N = Dynamic number and/or type of input/output\n"
+           "  | = Source or sink filter\n");
 #if CONFIG_AVFILTER
     while ((filter = avfilter_next(filter))) {
         descr_cur = descr;
@@ -1469,7 +1473,8 @@ int show_filters(void *optctx, const char *opt, const char *arg)
                 *(descr_cur++) = get_media_type_char(pad[j].type);
             }
             if (!j)
-                *(descr_cur++) = '|';
+                *(descr_cur++) = ((!i && (filter->flags & AVFILTER_FLAG_DYNAMIC_INPUTS)) ||
+                                  ( i && (filter->flags & AVFILTER_FLAG_DYNAMIC_OUTPUTS))) ? 'N' : '|';
         }
         *descr_cur = 0;
         printf("%-16s %-10s %s\n", filter->name, descr, filter->description);
@@ -1635,6 +1640,7 @@ static void show_help_muxer(const char *name)
         show_help_children(fmt->priv_class, AV_OPT_FLAG_ENCODING_PARAM);
 }
 
+#if CONFIG_AVFILTER
 static void show_help_filter(const char *name)
 {
 #if CONFIG_AVFILTER
@@ -1655,7 +1661,7 @@ static void show_help_filter(const char *name)
     printf("    Inputs:\n");
     count = avfilter_pad_count(f->inputs);
     for (i = 0; i < count; i++) {
-        printf("        %d %s (%s)\n", i, avfilter_pad_get_name(f->inputs, i),
+        printf("       #%d: %s (%s)\n", i, avfilter_pad_get_name(f->inputs, i),
                media_type_string(avfilter_pad_get_type(f->inputs, i)));
     }
     if (f->flags & AVFILTER_FLAG_DYNAMIC_INPUTS)
@@ -1666,7 +1672,7 @@ static void show_help_filter(const char *name)
     printf("    Outputs:\n");
     count = avfilter_pad_count(f->outputs);
     for (i = 0; i < count; i++) {
-        printf("        %d %s (%s)\n", i, avfilter_pad_get_name(f->outputs, i),
+        printf("       #%d: %s (%s)\n", i, avfilter_pad_get_name(f->outputs, i),
                media_type_string(avfilter_pad_get_type(f->outputs, i)));
     }
     if (f->flags & AVFILTER_FLAG_DYNAMIC_OUTPUTS)
@@ -1677,11 +1683,14 @@ static void show_help_filter(const char *name)
     if (f->priv_class)
         show_help_children(f->priv_class, AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM |
                                           AV_OPT_FLAG_AUDIO_PARAM);
+    if (f->flags & AVFILTER_FLAG_SUPPORT_TIMELINE)
+        printf("This filter has support for timeline through the 'enable' option.\n");
 #else
     av_log(NULL, AV_LOG_ERROR, "Build without libavfilter; "
            "can not to satisfy request\n");
 #endif
 }
+#endif
 
 int show_help(void *optctx, const char *opt, const char *arg)
 {
@@ -1703,8 +1712,10 @@ int show_help(void *optctx, const char *opt, const char *arg)
         show_help_demuxer(par);
     } else if (!strcmp(topic, "muxer")) {
         show_help_muxer(par);
+#if CONFIG_AVFILTER
     } else if (!strcmp(topic, "filter")) {
         show_help_filter(par);
+#endif
     } else {
         show_help_default(topic, par);
     }
