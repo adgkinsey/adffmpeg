@@ -707,7 +707,7 @@ afade=t=in:ss=0:d=15
 @item
 Fade out last 25 seconds of a 900 seconds audio:
 @example
-afade=t=out:ss=875:d=25
+afade=t=out:st=875:d=25
 @end example
 @end itemize
 
@@ -988,6 +988,51 @@ the data is treated as if all the planes were concatenated.
 
 @item plane_checksums
 A list of Adler-32 checksums for each data plane.
+@end table
+
+@section astats
+
+Display time domain statistical information about the audio channels.
+Statistics are calculated and displayed for each audio channel and,
+where applicable, an overall figure is also given.
+
+The filter accepts the following option:
+@table @option
+@item length
+Short window length in seconds, used for peak and trough RMS measurement.
+Default is @code{0.05} (50 miliseconds). Allowed range is @code{[0.1 - 10]}.
+@end table
+
+A description of each shown parameter follows:
+
+@table @option
+@item DC offset
+Mean amplitude displacement from zero.
+
+@item Min level
+Minimal sample level.
+
+@item Max level
+Maximal sample level.
+
+@item Peak level dB
+@item RMS level dB
+Standard peak and RMS level measured in dBFS.
+
+@item RMS peak dB
+@item RMS trough dB
+Peak and trough values for RMS level measured over a short window.
+
+@item Crest factor
+Standard ratio of peak to RMS level (note: not in dB).
+
+@item Flat factor
+Flatness (i.e. consecutive samples with the same value) of the signal at its peak levels
+(i.e. either @var{Min level} or @var{Max level}).
+
+@item Peak count
+Number of occasions (not the number of samples) that the signal attained either
+@var{Min level} or @var{Max level}.
 @end table
 
 @section astreamsync
@@ -2848,7 +2893,6 @@ a combination of the following values:
 @item monochrome
 @item linear_design
 @item no_autohint
-@item end table
 @end table
 
 Default value is "render".
@@ -3759,6 +3803,12 @@ the chrominance blue expression
 the chrominance red expression
 @item alpha_expr
 the alpha expression
+@item r
+the red expression
+@item g
+the green expression
+@item b
+the blue expression
 @end table
 
 If one of the chrominance expression is not defined, it falls back on the other
@@ -4089,12 +4139,12 @@ Specify the hue angle as a number of degrees. It accepts an expression,
 and defaults to "0".
 
 @item s
-Specify the saturation in the [-10,10] range. It accepts a float number and
+Specify the saturation in the [-10,10] range. It accepts an expression and
 defaults to "1".
 
 @item H
-Specify the hue angle as a number of radians. It accepts a float
-number or an expression, and defaults to "0".
+Specify the hue angle as a number of radians. It accepts an
+expression, and defaults to "0".
 @end table
 
 @option{h} and @option{H} are mutually exclusive, and can't be
@@ -4493,7 +4543,6 @@ The list of the currently supported filters follows:
 @item sab
 @item softpulldown
 @item spp
-@item tinterlace
 @item uspp
 @end table
 
@@ -4625,8 +4674,6 @@ Available values for component flags are:
 averaged temporal noise (smoother)
 @item p
 mix random noise with a (semi)regular pattern
-@item q
-higher quality (slightly better looking, slightly slower)
 @item t
 temporal noise (noise pattern changes between frames)
 @item u
@@ -5278,7 +5325,7 @@ Suppress a TV station logo, using an image file to determine which
 pixels comprise the logo. It works by filling in the pixels that
 comprise the logo with neighboring pixels.
 
-The filters accept the following options:
+The filter accepts the following options:
 
 @table @option
 @item filename, f
@@ -5313,13 +5360,11 @@ The filter accepts the following options:
 
 @table @option
 @item width, w
-Output video width.
-default value is @code{iw}. See below
-for the list of accepted constants.
+Set the output video width expression. Default value is @code{iw}. See
+below for the list of accepted constants.
 
 @item height, h
-Output video height.
-default value is @code{ih}.
+Set the output video height expression. Default value is @code{ih}.
 See below for the list of accepted constants.
 
 @item interl
@@ -6087,8 +6132,9 @@ This filter accepts the following options:
 @table @option
 
 @item dir
-The direction of the transpose.
+Specify the transposition direction.
 
+Can assume the following values:
 @table @samp
 @item 0, 4, cclock_flip
 Rotate by 90 degrees counterclockwise and vertically flip (default), that is:
@@ -6127,6 +6173,9 @@ For values between 4-7, the transposition is only done if the input
 video geometry is portrait and not landscape. These values are
 deprecated, the @code{passthrough} option should be used instead.
 
+Numerical values are deprecated, and should be dropped in favor of
+symbolic constants.
+
 @item passthrough
 Do not apply the transposition if the input geometry matches the one
 specified by the specified value. It accepts the following values:
@@ -6161,29 +6210,47 @@ It accepts the following parameters:
 
 @table @option
 @item luma_msize_x, lx
-@item chroma_msize_x, cx
-Set the luma/chroma matrix horizontal size. It must be an odd integer
-between 3 and 63, default value is 5.
+Set the luma matrix horizontal size. It must be an odd integer between
+3 and 63, default value is 5.
 
 @item luma_msize_y, ly
-@item chroma_msize_y, cy
-Set the luma/chroma matrix vertical size. It must be an odd integer
-between 3 and 63, default value is 5.
+Set the luma matrix vertical size. It must be an odd integer between 3
+and 63, default value is 5.
 
 @item luma_amount, la
-@item chroma_amount, ca
-Set the luma/chroma effect strength. It can be a float number,
-reasonable values lay between -1.5 and 1.5.
+Set the luma effect strength. It can be a float number, reasonable
+values lay between -1.5 and 1.5.
 
 Negative values will blur the input video, while positive values will
 sharpen it, a value of zero will disable the effect.
 
-Default value is 1.0 for @option{luma_amount}, 0.0 for
-@option{chroma_amount}.
+Default value is 1.0.
+
+@item chroma_msize_x, cx
+Set the chroma matrix horizontal size. It must be an odd integer
+between 3 and 63, default value is 5.
+
+@item chroma_msize_y, cy
+Set the chroma matrix vertical size. It must be an odd integer
+between 3 and 63, default value is 5.
+
+@item chroma_amount, ca
+Set the chroma effect strength. It can be a float number, reasonable
+values lay between -1.5 and 1.5.
+
+Negative values will blur the input video, while positive values will
+sharpen it, a value of zero will disable the effect.
+
+Default value is 0.0.
+
+@item opencl
+If set to 1, specify using OpenCL capabilities, only available if
+FFmpeg was configured with @code{--enable-opencl}. Default value is 0.
+
 @end table
 
-All parameters are optional and default to the
-equivalent of the string '5:5:1.0:5:5:0.0'.
+All parameters are optional and default to the equivalent of the
+string '5:5:1.0:5:5:0.0'.
 
 @subsection Examples
 
@@ -6201,10 +6268,229 @@ unsharp=7:7:-2:7:7:-2
 @end example
 @end itemize
 
+@anchor{vidstabdetect}
+@section vidstabdetect
+
+Analyze video stabilization/deshaking. Perform pass 1 of 2, see
+@ref{vidstabtransform} for pass 2.
+
+This filter generates a file with relative translation and rotation
+transform information about subsequent frames, which is then used by
+the @ref{vidstabtransform} filter.
+
+To enable compilation of this filter you need to configure FFmpeg with
+@code{--enable-libvidstab}.
+
+This filter accepts the following options:
+
+@table @option
+@item result
+Set the path to the file used to write the transforms information.
+Default value is @file{transforms.trf}.
+
+@item shakiness
+Set how shaky the video is and how quick the camera is. It accepts an
+integer in the range 1-10, a value of 1 means little shakiness, a
+value of 10 means strong shakiness. Default value is 5.
+
+@item accuracy
+Set the accuracy of the detection process. It must be a value in the
+range 1-15. A value of 1 means low accuracy, a value of 15 means high
+accuracy. Default value is 9.
+
+@item stepsize
+Set stepsize of the search process. The region around minimum is
+scanned with 1 pixel resolution. Default value is 6.
+
+@item mincontrast
+Set minimum contrast. Below this value a local measurement field is
+discarded. Must be a floating point value in the range 0-1. Default
+value is 0.3.
+
+@item tripod
+Set reference frame number for tripod mode.
+
+If enabled, the motion of the frames is compared to a reference frame
+in the filtered stream, identified by the specified number. The idea
+is to compensate all movements in a more-or-less static scene and keep
+the camera view absolutely still.
+
+If set to 0, it is disabled. The frames are counted starting from 1.
+
+@item show
+Show fields and transforms in the resulting frames. It accepts an
+integer in the range 0-2. Default value is 0, which disables any
+visualization.
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Use default values:
+@example
+vidstabdetect
+@end example
+
+@item
+Analyze strongly shaky movie and put the results in file
+@file{mytransforms.trf}:
+@example
+vidstabdetect=shakiness=10:accuracy=15:result="mytransforms.trf"
+@end example
+
+@item
+Visualize the result of internal transformations in the resulting
+video:
+@example
+vidstabdetect=show=1
+@end example
+
+@item
+Analyze a video with medium shakiness using @command{ffmpeg}:
+@example
+ffmpeg -i input -vf vidstabdetect=shakiness=5:show=1 dummy.avi
+@end example
+@end itemize
+
+@anchor{vidstabtransform}
+@section vidstabtransform
+
+Video stabilization/deshaking: pass 2 of 2,
+see @ref{vidstabdetect} for pass 1.
+
+Read a file with transform information for each frame and
+apply/compensate them. Together with the @ref{vidstabdetect}
+filter this can be used to deshake videos. See also
+@url{http://public.hronopik.de/vid.stab}. It is important to also use
+the unsharp filter, see below.
+
+To enable compilation of this filter you need to configure FFmpeg with
+@code{--enable-libvidstab}.
+
+This filter accepts the following options:
+
+@table @option
+
+@item input
+path to the file used to read the transforms (default: @file{transforms.trf})
+
+@item smoothing
+number of frames (value*2 + 1) used for lowpass filtering the camera movements
+(default: 10). For example a number of 10 means that 21 frames are used
+(10 in the past and 10 in the future) to smoothen the motion in the
+video. A larger values leads to a smoother video, but limits the
+acceleration of the camera (pan/tilt movements).
+
+@item maxshift
+maximal number of pixels to translate frames (default: -1 no limit)
+
+@item maxangle
+maximal angle in radians (degree*PI/180) to rotate frames (default: -1
+no limit)
+
+@item crop
+How to deal with borders that may be visible due to movement
+compensation. Available values are:
+
+@table @samp
+@item keep
+keep image information from previous frame (default)
+@item black
+fill the border black
+@end table
+
+@item invert
+@table @samp
+@item 0
+ keep transforms normal (default)
+@item 1
+ invert transforms
+@end table
+
+
+@item relative
+consider transforms as
+@table @samp
+@item 0
+ absolute
+@item 1
+ relative to previous frame (default)
+@end table
+
+
+@item zoom
+percentage to zoom (default: 0)
+@table @samp
+@item >0
+  zoom in
+@item <0
+  zoom out
+@end table
+
+@item optzoom
+if 1 then optimal zoom value is determined (default).
+Optimal zoom means no (or only little) border should be visible.
+Note that the value given at zoom is added to the one calculated
+here.
+
+@item interpol
+type of interpolation
+
+Available values are:
+@table @samp
+@item no
+no interpolation
+@item linear
+linear only horizontal
+@item bilinear
+linear in both directions (default)
+@item bicubic
+cubic in both directions (slow)
+@end table
+
+@item tripod
+virtual tripod mode means that the video is stabilized such that the
+camera stays stationary. Use also @code{tripod} option of
+@ref{vidstabdetect}.
+@table @samp
+@item 0
+off (default)
+@item 1
+virtual tripod mode: equivalent to @code{relative=0:smoothing=0}
+@end table
+
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+typical call with default default values:
+ (note the unsharp filter which is always recommended)
+@example
+ffmpeg -i inp.mpeg -vf vidstabtransform,unsharp=5:5:0.8:3:3:0.4 inp_stabilized.mpeg
+@end example
+
+@item
+zoom in a bit more and load transform data from a given file
+@example
+vidstabtransform=zoom=5:input="mytransforms.trf"
+@end example
+
+@item
+smoothen the video even more
+@example
+vidstabtransform=smoothing=30
+@end example
+
+@end itemize
+
 @section vflip
 
 Flip the input video vertically.
 
+For example, to vertically flip a video with @command{ffmpeg}:
 @example
 ffmpeg -i in.avi -vf "vflip" out.avi
 @end example
@@ -6856,7 +7142,208 @@ tools.
 
 Below is a description of the currently available multimedia filters.
 
-@section aperms, perms
+@section concat
+
+Concatenate audio and video streams, joining them together one after the
+other.
+
+The filter works on segments of synchronized video and audio streams. All
+segments must have the same number of streams of each type, and that will
+also be the number of streams at output.
+
+The filter accepts the following options:
+
+@table @option
+
+@item n
+Set the number of segments. Default is 2.
+
+@item v
+Set the number of output video streams, that is also the number of video
+streams in each segment. Default is 1.
+
+@item a
+Set the number of output audio streams, that is also the number of video
+streams in each segment. Default is 0.
+
+@item unsafe
+Activate unsafe mode: do not fail if segments have a different format.
+
+@end table
+
+The filter has @var{v}+@var{a} outputs: first @var{v} video outputs, then
+@var{a} audio outputs.
+
+There are @var{n}x(@var{v}+@var{a}) inputs: first the inputs for the first
+segment, in the same order as the outputs, then the inputs for the second
+segment, etc.
+
+Related streams do not always have exactly the same duration, for various
+reasons including codec frame size or sloppy authoring. For that reason,
+related synchronized streams (e.g. a video and its audio track) should be
+concatenated at once. The concat filter will use the duration of the longest
+stream in each segment (except the last one), and if necessary pad shorter
+audio streams with silence.
+
+For this filter to work correctly, all segments must start at timestamp 0.
+
+All corresponding streams must have the same parameters in all segments; the
+filtering system will automatically select a common pixel format for video
+streams, and a common sample format, sample rate and channel layout for
+audio streams, but other settings, such as resolution, must be converted
+explicitly by the user.
+
+Different frame rates are acceptable but will result in variable frame rate
+at output; be sure to configure the output file to handle it.
+
+@subsection Examples
+
+@itemize
+@item
+Concatenate an opening, an episode and an ending, all in bilingual version
+(video in stream 0, audio in streams 1 and 2):
+@example
+ffmpeg -i opening.mkv -i episode.mkv -i ending.mkv -filter_complex \
+  '[0:0] [0:1] [0:2] [1:0] [1:1] [1:2] [2:0] [2:1] [2:2]
+   concat=n=3:v=1:a=2 [v] [a1] [a2]' \
+  -map '[v]' -map '[a1]' -map '[a2]' output.mkv
+@end example
+
+@item
+Concatenate two parts, handling audio and video separately, using the
+(a)movie sources, and adjusting the resolution:
+@example
+movie=part1.mp4, scale=512:288 [v1] ; amovie=part1.mp4 [a1] ;
+movie=part2.mp4, scale=512:288 [v2] ; amovie=part2.mp4 [a2] ;
+[v1] [v2] concat [outv] ; [a1] [a2] concat=v=0:a=1 [outa]
+@end example
+Note that a desync will happen at the stitch if the audio and video streams
+do not have exactly the same duration in the first file.
+
+@end itemize
+
+@section ebur128
+
+EBU R128 scanner filter. This filter takes an audio stream as input and outputs
+it unchanged. By default, it logs a message at a frequency of 10Hz with the
+Momentary loudness (identified by @code{M}), Short-term loudness (@code{S}),
+Integrated loudness (@code{I}) and Loudness Range (@code{LRA}).
+
+The filter also has a video output (see the @var{video} option) with a real
+time graph to observe the loudness evolution. The graphic contains the logged
+message mentioned above, so it is not printed anymore when this option is set,
+unless the verbose logging is set. The main graphing area contains the
+short-term loudness (3 seconds of analysis), and the gauge on the right is for
+the momentary loudness (400 milliseconds).
+
+More information about the Loudness Recommendation EBU R128 on
+@url{http://tech.ebu.ch/loudness}.
+
+The filter accepts the following options:
+
+@table @option
+
+@item video
+Activate the video output. The audio stream is passed unchanged whether this
+option is set or no. The video stream will be the first output stream if
+activated. Default is @code{0}.
+
+@item size
+Set the video size. This option is for video only. Default and minimum
+resolution is @code{640x480}.
+
+@item meter
+Set the EBU scale meter. Default is @code{9}. Common values are @code{9} and
+@code{18}, respectively for EBU scale meter +9 and EBU scale meter +18. Any
+other integer value between this range is allowed.
+
+@item metadata
+Set metadata injection. If set to @code{1}, the audio input will be segmented
+into 100ms output frames, each of them containing various loudness information
+in metadata.  All the metadata keys are prefixed with @code{lavfi.r128.}.
+
+Default is @code{0}.
+
+@item framelog
+Force the frame logging level.
+
+Available values are:
+@table @samp
+@item info
+information logging level
+@item verbose
+verbose logging level
+@end table
+
+By default, the logging level is set to @var{info}. If the @option{video} or
+the @option{metadata} options are set, it switches to @var{verbose}.
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Real-time graph using @command{ffplay}, with a EBU scale meter +18:
+@example
+ffplay -f lavfi -i "amovie=input.mp3,ebur128=video=1:meter=18 [out0][out1]"
+@end example
+
+@item
+Run an analysis with @command{ffmpeg}:
+@example
+ffmpeg -nostats -i input.mp3 -filter_complex ebur128 -f null -
+@end example
+@end itemize
+
+@section interleave, ainterleave
+
+Temporally interleave frames from several inputs.
+
+@code{interleave} works with video inputs, @code{ainterleave} with audio.
+
+These filters read frames from several inputs and send the oldest
+queued frame to the output.
+
+Input streams must have a well defined, monotonically increasing frame
+timestamp values.
+
+In order to submit one frame to output, these filters need to enqueue
+at least one frame for each input, so they cannot work in case one
+input is not yet terminated and will not receive incoming frames.
+
+For example consider the case when one input is a @code{select} filter
+which always drop input frames. The @code{interleave} filter will keep
+reading from that input, but it will never be able to send new frames
+to output until the input will send an end-of-stream signal.
+
+Also, depending on inputs synchronization, the filters will drop
+frames in case one input receives more frames than the other ones, and
+the queue is already filled.
+
+These filters accept the following options:
+
+@table @option
+@item nb_inputs, n
+Set the number of different inputs, it is 2 by default.
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Interleave frames belonging to different streams using @command{ffmpeg}:
+@example
+ffmpeg -i bambi.avi -i pr0n.mkv -filter_complex "[0:v][1:v] interleave" out.avi
+@end example
+
+@item
+Add flickering blur effect:
+@example
+select='if(gt(random(0), 0.2), 1, 2)':n=2 [tmp], boxblur=2:2, [tmp] interleave
+@end example
+@end itemize
+
+@section perms, aperms
 
 Set read/write permissions for the output frames.
 
@@ -6895,7 +7382,8 @@ following one, the permission might not be received as expected in that
 following filter. Inserting a @ref{format} or @ref{aformat} filter before the
 perms/aperms filter can avoid this problem.
 
-@section aselect, select
+@section select, aselect
+
 Select frames to pass in output.
 
 This filter accepts the following options:
@@ -7078,15 +7566,15 @@ select=n=2:e='mod(n, 2)+1' [odd][even]; [odd] pad=h=2*ih [tmp]; [tmp][even] over
 @end example
 @end itemize
 
-@section asendcmd, sendcmd
+@section sendcmd, asendcmd
 
 Send commands to filters in the filtergraph.
 
 These filters read commands to be sent to other filters in the
 filtergraph.
 
-@code{asendcmd} must be inserted between two audio filters,
-@code{sendcmd} must be inserted between two video filters, but apart
+@code{sendcmd} must be inserted between two video filters,
+@code{asendcmd} must be inserted between two audio filters, but apart
 from that they act the same way.
 
 The specification of commands can be provided in the filter arguments
@@ -7210,11 +7698,11 @@ sendcmd=f=test.cmd,drawtext=fontfile=FreeSerif.ttf:text='',hue
 @end itemize
 
 @anchor{setpts}
-@section asetpts, setpts
+@section setpts, asetpts
 
 Change the PTS (presentation timestamp) of the input frames.
 
-@code{asetpts} works on audio frames, @code{setpts} on video frames.
+@code{setpts} works on video frames, @code{asetpts} on audio frames.
 
 This filter accepts the following options:
 
@@ -7333,79 +7821,6 @@ setpts='(RTCTIME - RTCSTART) / (TB * 1000000)'
 @end example
 @end itemize
 
-@section ebur128
-
-EBU R128 scanner filter. This filter takes an audio stream as input and outputs
-it unchanged. By default, it logs a message at a frequency of 10Hz with the
-Momentary loudness (identified by @code{M}), Short-term loudness (@code{S}),
-Integrated loudness (@code{I}) and Loudness Range (@code{LRA}).
-
-The filter also has a video output (see the @var{video} option) with a real
-time graph to observe the loudness evolution. The graphic contains the logged
-message mentioned above, so it is not printed anymore when this option is set,
-unless the verbose logging is set. The main graphing area contains the
-short-term loudness (3 seconds of analysis), and the gauge on the right is for
-the momentary loudness (400 milliseconds).
-
-More information about the Loudness Recommendation EBU R128 on
-@url{http://tech.ebu.ch/loudness}.
-
-The filter accepts the following options:
-
-@table @option
-
-@item video
-Activate the video output. The audio stream is passed unchanged whether this
-option is set or no. The video stream will be the first output stream if
-activated. Default is @code{0}.
-
-@item size
-Set the video size. This option is for video only. Default and minimum
-resolution is @code{640x480}.
-
-@item meter
-Set the EBU scale meter. Default is @code{9}. Common values are @code{9} and
-@code{18}, respectively for EBU scale meter +9 and EBU scale meter +18. Any
-other integer value between this range is allowed.
-
-@item metadata
-Set metadata injection. If set to @code{1}, the audio input will be segmented
-into 100ms output frames, each of them containing various loudness information
-in metadata.  All the metadata keys are prefixed with @code{lavfi.r128.}.
-
-Default is @code{0}.
-
-@item framelog
-Force the frame logging level.
-
-Available values are:
-@table @samp
-@item info
-information logging level
-@item verbose
-verbose logging level
-@end table
-
-By default, the logging level is set to @var{info}. If the @option{video} or
-the @option{metadata} options are set, it switches to @var{verbose}.
-@end table
-
-@subsection Examples
-
-@itemize
-@item
-Real-time graph using @command{ffplay}, with a EBU scale meter +18:
-@example
-ffplay -f lavfi -i "amovie=input.mp3,ebur128=video=1:meter=18 [out0][out1]"
-@end example
-
-@item
-Run an analysis with @command{ffmpeg}:
-@example
-ffmpeg -nostats -i input.mp3 -filter_complex ebur128 -f null -
-@end example
-@end itemize
-
 @section settb, asettb
 
 Set the timebase to use for the output frames timestamps.
@@ -7456,134 +7871,6 @@ settb=2*intb
 Set the default timebase value:
 @example
 settb=AVTB
-@end example
-@end itemize
-
-@section concat
-
-Concatenate audio and video streams, joining them together one after the
-other.
-
-The filter works on segments of synchronized video and audio streams. All
-segments must have the same number of streams of each type, and that will
-also be the number of streams at output.
-
-The filter accepts the following options:
-
-@table @option
-
-@item n
-Set the number of segments. Default is 2.
-
-@item v
-Set the number of output video streams, that is also the number of video
-streams in each segment. Default is 1.
-
-@item a
-Set the number of output audio streams, that is also the number of video
-streams in each segment. Default is 0.
-
-@item unsafe
-Activate unsafe mode: do not fail if segments have a different format.
-
-@end table
-
-The filter has @var{v}+@var{a} outputs: first @var{v} video outputs, then
-@var{a} audio outputs.
-
-There are @var{n}x(@var{v}+@var{a}) inputs: first the inputs for the first
-segment, in the same order as the outputs, then the inputs for the second
-segment, etc.
-
-Related streams do not always have exactly the same duration, for various
-reasons including codec frame size or sloppy authoring. For that reason,
-related synchronized streams (e.g. a video and its audio track) should be
-concatenated at once. The concat filter will use the duration of the longest
-stream in each segment (except the last one), and if necessary pad shorter
-audio streams with silence.
-
-For this filter to work correctly, all segments must start at timestamp 0.
-
-All corresponding streams must have the same parameters in all segments; the
-filtering system will automatically select a common pixel format for video
-streams, and a common sample format, sample rate and channel layout for
-audio streams, but other settings, such as resolution, must be converted
-explicitly by the user.
-
-Different frame rates are acceptable but will result in variable frame rate
-at output; be sure to configure the output file to handle it.
-
-@subsection Examples
-
-@itemize
-@item
-Concatenate an opening, an episode and an ending, all in bilingual version
-(video in stream 0, audio in streams 1 and 2):
-@example
-ffmpeg -i opening.mkv -i episode.mkv -i ending.mkv -filter_complex \
-  '[0:0] [0:1] [0:2] [1:0] [1:1] [1:2] [2:0] [2:1] [2:2]
-   concat=n=3:v=1:a=2 [v] [a1] [a2]' \
-  -map '[v]' -map '[a1]' -map '[a2]' output.mkv
-@end example
-
-@item
-Concatenate two parts, handling audio and video separately, using the
-(a)movie sources, and adjusting the resolution:
-@example
-movie=part1.mp4, scale=512:288 [v1] ; amovie=part1.mp4 [a1] ;
-movie=part2.mp4, scale=512:288 [v2] ; amovie=part2.mp4 [a2] ;
-[v1] [v2] concat [outv] ; [a1] [a2] concat=v=0:a=1 [outa]
-@end example
-Note that a desync will happen at the stitch if the audio and video streams
-do not have exactly the same duration in the first file.
-
-@end itemize
-
-@section interleave, ainterleave
-
-Temporally interleave frames from several inputs.
-
-@code{interleave} works with video inputs, @code{ainterleave} with audio.
-
-These filters read frames from several inputs and send the oldest
-queued frame to the output.
-
-Input streams must have a well defined, monotonically increasing frame
-timestamp values.
-
-In order to submit one frame to output, these filters need to enqueue
-at least one frame for each input, so they cannot work in case one
-input is not yet terminated and will not receive incoming frames.
-
-For example consider the case when one input is a @code{select} filter
-which always drop input frames. The @code{interleave} filter will keep
-reading from that input, but it will never be able to send new frames
-to output until the input will send an end-of-stream signal.
-
-Also, depending on inputs synchronization, the filters will drop
-frames in case one input receives more frames than the other ones, and
-the queue is already filled.
-
-These filters accept the following options:
-
-@table @option
-@item nb_inputs, n
-Set the number of different inputs, it is 2 by default.
-@end table
-
-@subsection Examples
-
-@itemize
-@item
-Interleave frames belonging to different streams using @command{ffmpeg}:
-@example
-ffmpeg -i bambi.avi -i pr0n.mkv -filter_complex "[0:v][1:v] interleave" out.avi
-@end example
-
-@item
-Add flickering blur effect:
-@example
-select='if(gt(random(0), 0.2), 1, 2)':n=2 [tmp], boxblur=2:2, [tmp] interleave
 @end example
 @end itemize
 

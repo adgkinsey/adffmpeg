@@ -393,6 +393,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
     for (i = 0; i < n->nb_planes; i++)
         noise(out->data[i], inpicref->data[i], out->linesize[i],
               inpicref->linesize[i], n->linesize[i], n->height[i], n, i);
+    emms_c();
 
     if (inpicref != out)
         av_frame_free(&inpicref);
@@ -446,7 +447,6 @@ static const AVFilterPad noise_inputs[] = {
     {
         .name             = "default",
         .type             = AVMEDIA_TYPE_VIDEO,
-        .get_video_buffer = ff_null_get_video_buffer,
         .filter_frame     = filter_frame,
         .config_props     = config_input,
     },

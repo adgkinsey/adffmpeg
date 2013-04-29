@@ -67,6 +67,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(ASETTB,         asettb,         af);
     REGISTER_FILTER(ASHOWINFO,      ashowinfo,      af);
     REGISTER_FILTER(ASPLIT,         asplit,         af);
+    REGISTER_FILTER(ASTATS,         astats,         af);
     REGISTER_FILTER(ASTREAMSYNC,    astreamsync,    af);
     REGISTER_FILTER(ASYNCTS,        asyncts,        af);
     REGISTER_FILTER(ATEMPO,         atempo,         af);
@@ -176,6 +177,8 @@ void avfilter_register_all(void)
     REGISTER_FILTER(TRANSPOSE,      transpose,      vf);
     REGISTER_FILTER(UNSHARP,        unsharp,        vf);
     REGISTER_FILTER(VFLIP,          vflip,          vf);
+    REGISTER_FILTER(VIDSTABDETECT,  vidstabdetect,  vf);
+    REGISTER_FILTER(VIDSTABTRANSFORM, vidstabtransform, vf);
     REGISTER_FILTER(YADIF,          yadif,          vf);
 
     REGISTER_FILTER(CELLAUTO,       cellauto,       vsrc);

@@ -69,6 +69,7 @@ OBJS-$(CONFIG_ASETRATE_FILTER)               += af_asetrate.o
 OBJS-$(CONFIG_ASETTB_FILTER)                 += f_settb.o
 OBJS-$(CONFIG_ASHOWINFO_FILTER)              += af_ashowinfo.o
 OBJS-$(CONFIG_ASPLIT_FILTER)                 += split.o
+OBJS-$(CONFIG_ASTATS_FILTER)                 += af_astats.o
 OBJS-$(CONFIG_ASTREAMSYNC_FILTER)            += af_astreamsync.o
 OBJS-$(CONFIG_ASYNCTS_FILTER)                += af_asyncts.o
 OBJS-$(CONFIG_ATEMPO_FILTER)                 += af_atempo.o
@@ -149,7 +150,7 @@ OBJS-$(CONFIG_NOFORMAT_FILTER)               += vf_format.o
 OBJS-$(CONFIG_NOISE_FILTER)                  += vf_noise.o
 OBJS-$(CONFIG_NULL_FILTER)                   += vf_null.o
 OBJS-$(CONFIG_OCV_FILTER)                    += vf_libopencv.o
-OBJS-$(CONFIG_OPENCL)                        += deshake_opencl.o
+OBJS-$(CONFIG_OPENCL)                        += deshake_opencl.o unsharp_opencl.o
 OBJS-$(CONFIG_OVERLAY_FILTER)                += vf_overlay.o
 OBJS-$(CONFIG_PAD_FILTER)                    += vf_pad.o
 OBJS-$(CONFIG_PERMS_FILTER)                  += f_perms.o
@@ -179,6 +180,8 @@ OBJS-$(CONFIG_TINTERLACE_FILTER)             += vf_tinterlace.o
 OBJS-$(CONFIG_TRANSPOSE_FILTER)              += vf_transpose.o
 OBJS-$(CONFIG_UNSHARP_FILTER)                += vf_unsharp.o
 OBJS-$(CONFIG_VFLIP_FILTER)                  += vf_vflip.o
+OBJS-$(CONFIG_VIDSTABDETECT_FILTER)          += vidstabutils.o vf_vidstabdetect.o
+OBJS-$(CONFIG_VIDSTABTRANSFORM_FILTER)       += vidstabutils.o vf_vidstabtransform.o
 OBJS-$(CONFIG_YADIF_FILTER)                  += vf_yadif.o
 
 OBJS-$(CONFIG_CELLAUTO_FILTER)               += vsrc_cellauto.o
@@ -213,7 +216,6 @@ OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_qp.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_sab.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_softpulldown.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_spp.o
-OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_tinterlace.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_uspp.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/pullup.o
 
@@ -226,6 +228,7 @@ OBJS-$(CONFIG_SHOWWAVES_FILTER)              += avf_showwaves.o
 OBJS-$(CONFIG_AMOVIE_FILTER)                 += src_movie.o
 OBJS-$(CONFIG_MOVIE_FILTER)                  += src_movie.o
 
+SKIPHEADERS-$(CONFIG_LIBVIDSTAB)             += vidstabutils.h
 SKIPHEADERS-$(CONFIG_OPENCL)                 += deshake_kernel.h
 
 TOOLS     = graph2dot
