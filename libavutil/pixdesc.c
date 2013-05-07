@@ -28,6 +28,7 @@
 #include "pixdesc.h"
 
 #include "intreadwrite.h"
+#include "avstring.h"
 
 void av_read_image_line(uint16_t *dst,
                         const uint8_t *data[4], const int linesize[4],
@@ -1653,6 +1654,45 @@ const AVPixFmtDescriptor av_pix_fmt_descriptors[AV_PIX_FMT_NB] = {
         },
         .flags = PIX_FMT_BE | PIX_FMT_PLANAR | PIX_FMT_RGB,
     },
+    [AV_PIX_FMT_GBRAP] = {
+        .name = "gbrap",
+        .nb_components = 4,
+        .log2_chroma_w = 0,
+        .log2_chroma_h = 0,
+        .comp = {
+            { 2, 0, 1, 0, 7 },        /* R */
+            { 0, 0, 1, 0, 7 },        /* G */
+            { 1, 0, 1, 0, 7 },        /* B */
+            { 3, 0, 1, 0, 7 },        /* A */
+        },
+        .flags = PIX_FMT_PLANAR | PIX_FMT_RGB | PIX_FMT_ALPHA,
+    },
+    [AV_PIX_FMT_GBRAP16LE] = {
+        .name = "gbrap16le",
+        .nb_components = 4,
+        .log2_chroma_w = 0,
+        .log2_chroma_h = 0,
+        .comp = {
+            { 2, 1, 1, 0, 15 },       /* R */
+            { 0, 1, 1, 0, 15 },       /* G */
+            { 1, 1, 1, 0, 15 },       /* B */
+            { 3, 1, 1, 0, 15 },       /* A */
+        },
+        .flags = PIX_FMT_PLANAR | PIX_FMT_RGB | PIX_FMT_ALPHA,
+    },
+    [AV_PIX_FMT_GBRAP16BE] = {
+        .name = "gbrap16be",
+        .nb_components = 4,
+        .log2_chroma_w = 0,
+        .log2_chroma_h = 0,
+        .comp = {
+            { 2, 1, 1, 0, 15 },       /* R */
+            { 0, 1, 1, 0, 15 },       /* G */
+            { 1, 1, 1, 0, 15 },       /* B */
+            { 3, 1, 1, 0, 15 },       /* A */
+        },
+        .flags = PIX_FMT_BE | PIX_FMT_PLANAR | PIX_FMT_RGB | PIX_FMT_ALPHA,
+    },
     [AV_PIX_FMT_VDPAU] = {
         .name = "vdpau",
         .log2_chroma_w = 1,
@@ -1867,4 +1907,23 @@ void ff_check_pixfmt_descriptors(void){
             av_write_image_line(tmp, data, linesize, d, 0, 0, j, 2);
         }
     }
+}
+
+
+enum AVPixelFormat av_pix_fmt_swap_endianness(enum AVPixelFormat pix_fmt)
+{
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(pix_fmt);
+    char name[16];
+    int i;
+
+    if (!desc || strlen(desc->name) < 2)
+        return AV_PIX_FMT_NONE;
+    av_strlcpy(name, desc->name, sizeof(name));
+    i = strlen(name) - 2;
+    if (strcmp(name + i, "be") && strcmp(name + i, "le"))
+        return AV_PIX_FMT_NONE;
+
+    name[i] ^= 'b' ^ 'l';
+
+    return get_pix_fmt_internal(name);
 }

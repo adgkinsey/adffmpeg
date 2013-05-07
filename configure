@@ -476,21 +476,21 @@ get_safe(){
 }
 
 pushvar(){
-    for var in $*; do
-        eval level=\${${var}_level:=0}
-        eval ${var}_${level}="\$$var"
-        eval ${var}_level=$(($level+1))
+    for pvar in $*; do
+        eval level=\${${pvar}_level:=0}
+        eval ${pvar}_${level}="\$$pvar"
+        eval ${pvar}_level=$(($level+1))
     done
 }
 
 popvar(){
-    for var in $*; do
-        eval level=\${${var}_level:-0}
+    for pvar in $*; do
+        eval level=\${${pvar}_level:-0}
         test $level = 0 && continue
         eval level=$(($level-1))
-        eval $var="\${${var}_${level}}"
-        eval ${var}_level=$level
-        eval unset ${var}_${level}
+        eval $pvar="\${${pvar}_${level}}"
+        eval ${pvar}_level=$level
+        eval unset ${pvar}_${level}
     done
 }
 
@@ -541,8 +541,13 @@ enable_deep(){
 }
 
 enable_deep_weak(){
-    do_enable_deep $*
-    enable_weak $*
+    for var; do
+        disabled $var && continue
+        pushvar var
+        do_enable_deep $var
+        popvar var
+        enable_weak $var
+    done
 }
 
 enabled(){
@@ -1410,7 +1415,7 @@ HAVE_LIST="
     attribute_packed
     cdio_paranoia_h
     cdio_paranoia_paranoia_h
-    cl_cl_h
+    CL_cl_h
     clock_gettime
     closesocket
     cmov
@@ -2494,6 +2499,8 @@ strip_default="${cross_prefix}${strip_default}"
 
 sysinclude_default="${sysroot}/usr/include"
 
+test -n "$valgrind" && toolchain="valgrind-memcheck"
+
 case "$toolchain" in
     clang-asan)
         cc_default="clang"
@@ -2504,6 +2511,10 @@ case "$toolchain" in
         cc_default="clang"
         add_cflags  -fsanitize=thread -pie
         add_ldflags -fsanitize=thread -pie
+    ;;
+    valgrind-memcheck)
+        target_exec_default=${valgrind:-"valgrind"}
+        target_exec_args="--error-exitcode=1 --malloc-fill=0x2a --track-origins=yes --leak-check=full --gen-suppressions=all --suppressions=$source_path/tests/fate-valgrind.supp"
     ;;
     msvc)
         cc_default="c99wrap cl"
@@ -2521,7 +2532,7 @@ case "$toolchain" in
     ;;
 esac
 
-set_default arch cc cxx pkg_config strip sysinclude target_os yasmexe
+set_default arch cc cxx pkg_config strip sysinclude target_exec target_os yasmexe
 enabled cross_compile || host_cc_default=$cc
 set_default host_cc
 
@@ -3861,6 +3872,7 @@ check_func  access
 check_func  clock_gettime || { check_func clock_gettime -lrt && add_extralibs -lrt; }
 check_func  fcntl
 check_func  fork
+check_func_headers stdlib.h getenv
 check_func  gethrtime
 check_func  getopt
 check_func  getrusage
@@ -4163,7 +4175,6 @@ enabled vdpau &&
 disabled iconv || check_func_headers iconv.h iconv || check_lib2 iconv.h iconv -liconv || disable iconv
 
 enabled debug && add_cflags -g"$debuglevel" && add_asflags -g"$debuglevel"
-test -n "$valgrind" && target_exec="$valgrind --error-exitcode=1 --malloc-fill=0x2a --track-origins=yes --leak-check=full --gen-suppressions=all --suppressions=$source_path/tests/fate-valgrind.supp"
 
 # add some useful compiler flags if supported
 check_cflags -Wdeclaration-after-statement
@@ -4552,7 +4563,7 @@ HOSTCC_DEPFLAGS=$HOSTCC_DEPFLAGS
 HOSTCC_C=$HOSTCC_C
 HOSTCC_O=$HOSTCC_O
 HOSTLD_O=$HOSTLD_O
-TARGET_EXEC=$target_exec
+TARGET_EXEC=$target_exec $target_exec_args
 TARGET_PATH=$target_path
 LIBS-ffplay=$sdl_libs
 CFLAGS-ffplay=$sdl_cflags
@@ -4614,6 +4625,13 @@ test -n "$malloc_prefix" &&
 if enabled yasm; then
     append config_files $TMPASM
     printf '' >$TMPASM
+fi
+
+enabled getenv || echo "#define getenv(x) NULL" >> $TMPH
+
+if enabled msvc && ! enabled shared; then
+    echo '#pragma comment(linker, "/include:"EXTERN_PREFIX"avpriv_strtod")' >> $TMPH
+    echo '#pragma comment(linker, "/include:"EXTERN_PREFIX"avpriv_snprintf")' >> $TMPH
 fi
 
 mkdir -p doc

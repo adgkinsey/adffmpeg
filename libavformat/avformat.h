@@ -337,8 +337,10 @@ typedef struct AVProbeData {
     int buf_size;       /**< Size of buf except extra allocated bytes */
 } AVProbeData;
 
-#define AVPROBE_SCORE_MAX 100               ///< maximum score, half of that is used for file-extension-based detection
 #define AVPROBE_SCORE_RETRY (AVPROBE_SCORE_MAX/4)
+#define AVPROBE_SCORE_EXTENSION  50 ///< score for file extension
+#define AVPROBE_SCORE_MAX       100 ///< maximum score
+
 #define AVPROBE_PADDING_SIZE 32             ///< extra allocated bytes at the end of the probe buffer
 
 /// Demuxer will use avio_open, no opened file should be provided by the caller.
@@ -354,8 +356,8 @@ typedef struct AVProbeData {
 #define AVFMT_VARIABLE_FPS  0x0400 /**< Format allows variable fps. */
 #define AVFMT_NODIMENSIONS  0x0800 /**< Format does not need width/height */
 #define AVFMT_NOSTREAMS     0x1000 /**< Format does not require any streams */
-#define AVFMT_NOBINSEARCH   0x2000 /**< Format does not allow to fallback to binary search via read_timestamp */
-#define AVFMT_NOGENSEARCH   0x4000 /**< Format does not allow to fallback to generic search */
+#define AVFMT_NOBINSEARCH   0x2000 /**< Format does not allow to fall back on binary search via read_timestamp */
+#define AVFMT_NOGENSEARCH   0x4000 /**< Format does not allow to fall back on generic search */
 #define AVFMT_NO_BYTE_SEEK  0x8000 /**< Format does not allow seeking by bytes */
 #define AVFMT_ALLOW_FLUSH  0x10000 /**< Format allows flushing. If not set, the muxer will not receive a NULL packet in the write_packet function. */
 #if LIBAVFORMAT_VERSION_MAJOR <= 54
@@ -1687,6 +1689,7 @@ int av_seek_frame(AVFormatContext *s, int stream_index, int64_t timestamp,
  * or if stream_index is -1, in AV_TIME_BASE units.
  * If flags contain AVSEEK_FLAG_ANY, then non-keyframes are treated as
  * keyframes (this may not be supported by all demuxers).
+ * If flags contain AVSEEK_FLAG_BACKWARD, it is ignored.
  *
  * @param stream_index index of the stream which is used as time base reference
  * @param min_ts smallest acceptable timestamp
@@ -1773,7 +1776,7 @@ void av_set_pts_info(AVStream *s, int pts_wrap_bits,
  *
  * @param s Media file handle, must be allocated with avformat_alloc_context().
  *          Its oformat field must be set to the desired output format;
- *          Its pb field must be set to an already openened AVIOContext.
+ *          Its pb field must be set to an already opened AVIOContext.
  * @param options  An AVDictionary filled with AVFormatContext and muxer-private options.
  *                 On return this parameter will be destroyed and replaced with a dict containing
  *                 options that were not found. May be NULL.

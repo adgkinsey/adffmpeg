@@ -275,6 +275,9 @@ static int ref_picture(H264Context *h, Picture *dst, Picture *src)
     dst->needs_realloc           = src->needs_realloc;
     dst->reference               = src->reference;
     dst->sync                    = src->sync;
+    dst->crop                    = src->crop;
+    dst->crop_left               = src->crop_left;
+    dst->crop_top                = src->crop_top;
 
     return 0;
 fail:
@@ -349,6 +352,9 @@ static int alloc_picture(H264Context *h, Picture *pic)
 
     h->linesize   = pic->f.linesize[0];
     h->uvlinesize = pic->f.linesize[1];
+    pic->crop     = h->sps.crop;
+    pic->crop_top = h->sps.crop_top;
+    pic->crop_left= h->sps.crop_left;
 
     if (h->avctx->hwaccel) {
         const AVHWAccel *hwaccel = h->avctx->hwaccel;
@@ -1472,6 +1478,7 @@ av_cold int ff_h264_decode_init(AVCodecContext *avctx)
     ff_h264_pred_init(&h->hpc, h->avctx->codec_id, 8, 1);
 
     h->dequant_coeff_pps = -1;
+    h->current_sps_id = -1;
 
     /* needed so that IDCT permutation is known early */
     if (CONFIG_ERROR_RESILIENCE)
@@ -3055,6 +3062,8 @@ static int init_dimensions(H264Context *h)
 {
     int width  = h->width  - (h->sps.crop_right + h->sps.crop_left);
     int height = h->height - (h->sps.crop_top   + h->sps.crop_bottom);
+    av_assert0(h->sps.crop_right + h->sps.crop_left < (unsigned)h->width);
+    av_assert0(h->sps.crop_top + h->sps.crop_bottom < (unsigned)h->height);
 
     /* handle container cropping */
     if (!h->sps.crop &&
@@ -3301,7 +3310,10 @@ static int decode_slice_header(H264Context *h, H264Context *h0)
                      || 16*h->sps.mb_height * (2 - h->sps.frame_mbs_only_flag) != h->avctx->coded_height
                      || h->avctx->bits_per_raw_sample != h->sps.bit_depth_luma
                      || h->cur_chroma_format_idc != h->sps.chroma_format_idc
-                     || av_cmp_q(h->sps.sar, h->avctx->sample_aspect_ratio)));
+                     || av_cmp_q(h->sps.sar, h->avctx->sample_aspect_ratio)
+                     || h->mb_width  != h->sps.mb_width
+                     || h->mb_height != h->sps.mb_height * (2 - h->sps.frame_mbs_only_flag)
+                    ));
     if (h0->avctx->pix_fmt != get_pixel_format(h0, 0))
         must_reinit = 1;
 
@@ -4841,21 +4853,22 @@ static int get_consumed_bytes(int pos, int buf_size)
     return pos;
 }
 
-static int output_frame(H264Context *h, AVFrame *dst, AVFrame *src)
+static int output_frame(H264Context *h, AVFrame *dst, Picture *srcp)
 {
+    AVFrame *src = &srcp->f;
     int i;
     int ret = av_frame_ref(dst, src);
     if (ret < 0)
         return ret;
 
-    if (!h->sps.crop)
+    if (!srcp->crop)
         return 0;
 
     for (i = 0; i < 3; i++) {
         int hshift = (i > 0) ? h->chroma_x_shift : 0;
         int vshift = (i > 0) ? h->chroma_y_shift : 0;
-        int off    = ((h->sps.crop_left >> hshift) << h->pixel_shift) +
-            (h->sps.crop_top  >> vshift) * dst->linesize[i];
+        int off    = ((srcp->crop_left >> hshift) << h->pixel_shift) +
+            (srcp->crop_top  >> vshift) * dst->linesize[i];
         dst->data[i] += off;
     }
     return 0;
@@ -4900,7 +4913,7 @@ static int decode_frame(AVCodecContext *avctx, void *data,
 
         if (out) {
             out->reference &= ~DELAYED_PIC_REF;
-            ret = output_frame(h, pict, &out->f);
+            ret = output_frame(h, pict, out);
             if (ret < 0)
                 return ret;
             *got_frame = 1;
@@ -4958,7 +4971,7 @@ not_extra:
         /* Wait for second field. */
         *got_frame = 0;
         if (h->next_output_pic && (h->next_output_pic->sync || h->sync>1)) {
-            ret = output_frame(h, pict, &h->next_output_pic->f);
+            ret = output_frame(h, pict, h->next_output_pic);
             if (ret < 0)
                 return ret;
             *got_frame = 1;

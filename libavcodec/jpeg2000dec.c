@@ -635,7 +635,14 @@ static int jpeg2000_decode_packet(Jpeg2000DecoderContext *s,
             Jpeg2000Cblk *cblk = prec->cblk + cblkno;
             if (s->buf_end - s->buf < cblk->lengthinc)
                 return AVERROR(EINVAL);
-            bytestream_get_buffer(&s->buf, cblk->data, cblk->lengthinc);
+            /* Code-block data can be empty. In that case initialize data
+             * with 0xFFFF. */
+            if (cblk->lengthinc > 0) {
+                bytestream_get_buffer(&s->buf, cblk->data, cblk->lengthinc);
+            } else {
+                cblk->data[0] = 0xFF;
+                cblk->data[1] = 0xFF;
+            }
             cblk->length   += cblk->lengthinc;
             cblk->lengthinc = 0;
         }
@@ -853,11 +860,14 @@ static int decode_cblk(Jpeg2000DecoderContext *s, Jpeg2000CodingStyle *codsty,
 {
     int passno = cblk->npasses, pass_t = 2, bpno = cblk->nonzerobits - 1, y;
 
-    for (y = 0; y < height + 2; y++)
-        memset(t1->flags[y], 0, (width + 2) * sizeof(width));
-
     for (y = 0; y < height; y++)
         memset(t1->data[y], 0, width * sizeof(width));
+
+    /* If code-block contains no compressed data: nothing to do. */
+    if (!cblk->length)
+        return 0;
+    for (y = 0; y < height + 2; y++)
+        memset(t1->flags[y], 0, (width + 2) * sizeof(width));
 
     ff_mqc_initdec(&t1->mqc, cblk->data);
     cblk->data[cblk->length]     = 0xff;
@@ -1269,6 +1279,8 @@ static int jpeg2000_decode_frame(AVCodecContext *avctx, void *data,
                    "couldn't find jpeg2k codestream atom\n");
             return -1;
         }
+    } else if (AV_RB16(s->buf) != JPEG2000_SOC && AV_RB32(s->buf + 4) == JP2_CODESTREAM) {
+        s->buf += 8;
     }
 
     if (bytestream_get_be16(&s->buf) != JPEG2000_SOC) {
@@ -1276,26 +1288,29 @@ static int jpeg2000_decode_frame(AVCodecContext *avctx, void *data,
         return -1;
     }
     if (ret = jpeg2000_read_main_headers(s))
-        return ret;
+        goto fail;
 
     /* get picture buffer */
     if ((ret = ff_thread_get_buffer(avctx, &frame, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "ff_thread_get_buffer() failed.\n");
-        return ret;
+        goto fail;
     }
     picture->pict_type = AV_PICTURE_TYPE_I;
     picture->key_frame = 1;
 
     if (ret = jpeg2000_read_bitstream_packets(s))
-        return ret;
+        goto fail;
     for (tileno = 0; tileno < s->numXtiles * s->numYtiles; tileno++)
         if (ret = jpeg2000_decode_tile(s, s->tile + tileno, picture))
-            return ret;
+            goto fail;
     jpeg2000_dec_cleanup(s);
 
     *got_frame = 1;
 
     return s->buf - s->buf_start;
+fail:
+    jpeg2000_dec_cleanup(s);
+    return ret;
 }
 
 #define OFFSET(x) offsetof(Jpeg2000DecoderContext, x)

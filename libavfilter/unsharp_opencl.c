@@ -51,7 +51,7 @@ static int compute_mask(int step, uint32_t *mask)
         ret = AVERROR(ENOMEM);
         goto end;
     }
-    counter = av_mallocz(counter_size);
+    counter = av_mallocz(sizeof(uint32_t *) * (2 * step + 1));
     if (!counter) {
         ret = AVERROR(ENOMEM);
         goto end;
@@ -189,7 +189,7 @@ int ff_opencl_apply_unsharp(AVFilterContext *ctx, AVFrame *in, AVFrame *out)
                                     unsharp->opencl_ctx.kernel_env.kernel, 1, NULL,
                                     &global_work_size, NULL, 0, NULL, NULL);
     if (status != CL_SUCCESS) {
-        av_log(ctx, AV_LOG_ERROR, "OpenCL run kernel error occurred: %d\n", status);
+        av_log(ctx, AV_LOG_ERROR, "OpenCL run kernel error occurred: %s\n", av_opencl_errstr(status));
         return AVERROR_EXTERNAL;
     }
     clFinish(unsharp->opencl_ctx.kernel_env.command_queue);

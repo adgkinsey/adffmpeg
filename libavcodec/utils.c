@@ -26,6 +26,7 @@
  */
 
 #include "config.h"
+#include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/bprint.h"
@@ -56,7 +57,7 @@
 
 volatile int ff_avcodec_locked;
 static int volatile entangled_thread_counter = 0;
-static int (*ff_lockmgr_cb)(void **mutex, enum AVLockOp op);
+static int (*lockmgr_cb)(void **mutex, enum AVLockOp op);
 static void *codec_mutex;
 static void *avformat_mutex;
 
@@ -133,7 +134,7 @@ AVCodec *av_codec_next(const AVCodec *c)
         return first_avcodec;
 }
 
-static void avcodec_init(void)
+static av_cold void avcodec_init(void)
 {
     static int initialized = 0;
 
@@ -155,7 +156,7 @@ int av_codec_is_decoder(const AVCodec *codec)
     return codec && codec->decode;
 }
 
-void avcodec_register(AVCodec *codec)
+av_cold void avcodec_register(AVCodec *codec)
 {
     AVCodec **p;
     avcodec_init();
@@ -721,7 +722,7 @@ static int get_buffer_internal(AVCodecContext *avctx, AVFrame *frame, int flags)
          * avcodec_default_get_buffer
          */
         if (frame->buf[0])
-            return 0;
+            goto end;
 
         priv = av_mallocz(sizeof(*priv));
         if (!priv) {
@@ -797,6 +798,7 @@ do {                                                                    \
 
         av_buffer_unref(&dummy_buf);
 
+end:
         frame->width  = avctx->width;
         frame->height = avctx->height;
 
@@ -982,6 +984,7 @@ void avcodec_free_frame(AVFrame **frame)
 
 MAKE_ACCESSORS(AVCodecContext, codec, AVRational, pkt_timebase)
 MAKE_ACCESSORS(AVCodecContext, codec, const AVCodecDescriptor *, codec_descriptor)
+MAKE_ACCESSORS(AVCodecContext, codec, int, lowres)
 
 static void avcodec_get_subtitle_defaults(AVSubtitle *sub)
 {
@@ -1963,6 +1966,7 @@ int attribute_align_arg avcodec_decode_video2(AVCodecContext *avctx, AVFrame *pi
             if (!avctx->refcounted_frames) {
                 avci->to_free = *picture;
                 avci->to_free.extended_data = avci->to_free.data;
+                memset(picture->buf, 0, sizeof(picture->buf));
             }
 
             avctx->frame_number++;
@@ -2084,6 +2088,9 @@ int attribute_align_arg avcodec_decode_audio4(AVCodecContext *avctx,
             if (!avctx->refcounted_frames) {
                 avci->to_free = *frame;
                 avci->to_free.extended_data = avci->to_free.data;
+                memset(frame->buf, 0, sizeof(frame->buf));
+                frame->extended_buf    = NULL;
+                frame->nb_extended_buf = 0;
             }
         }
 
@@ -2097,6 +2104,8 @@ int attribute_align_arg avcodec_decode_audio4(AVCodecContext *avctx,
             if(frame->nb_samples <= avctx->internal->skip_samples){
                 *got_frame_ptr = 0;
                 avctx->internal->skip_samples -= frame->nb_samples;
+                if (avctx->refcounted_frames)
+                    av_frame_unref(frame);
                 av_log(avctx, AV_LOG_DEBUG, "skip whole frame, skip left: %d\n",
                        avctx->internal->skip_samples);
             } else {
@@ -2982,19 +2991,19 @@ AVHWAccel *ff_find_hwaccel(enum AVCodecID codec_id, enum AVPixelFormat pix_fmt)
 
 int av_lockmgr_register(int (*cb)(void **mutex, enum AVLockOp op))
 {
-    if (ff_lockmgr_cb) {
-        if (ff_lockmgr_cb(&codec_mutex, AV_LOCK_DESTROY))
+    if (lockmgr_cb) {
+        if (lockmgr_cb(&codec_mutex, AV_LOCK_DESTROY))
             return -1;
-        if (ff_lockmgr_cb(&avformat_mutex, AV_LOCK_DESTROY))
+        if (lockmgr_cb(&avformat_mutex, AV_LOCK_DESTROY))
             return -1;
     }
 
-    ff_lockmgr_cb = cb;
+    lockmgr_cb = cb;
 
-    if (ff_lockmgr_cb) {
-        if (ff_lockmgr_cb(&codec_mutex, AV_LOCK_CREATE))
+    if (lockmgr_cb) {
+        if (lockmgr_cb(&codec_mutex, AV_LOCK_CREATE))
             return -1;
-        if (ff_lockmgr_cb(&avformat_mutex, AV_LOCK_CREATE))
+        if (lockmgr_cb(&avformat_mutex, AV_LOCK_CREATE))
             return -1;
     }
     return 0;
@@ -3002,8 +3011,8 @@ int av_lockmgr_register(int (*cb)(void **mutex, enum AVLockOp op))
 
 int ff_lock_avcodec(AVCodecContext *log_ctx)
 {
-    if (ff_lockmgr_cb) {
-        if ((*ff_lockmgr_cb)(&codec_mutex, AV_LOCK_OBTAIN))
+    if (lockmgr_cb) {
+        if ((*lockmgr_cb)(&codec_mutex, AV_LOCK_OBTAIN))
             return -1;
     }
     entangled_thread_counter++;
@@ -3023,8 +3032,8 @@ int ff_unlock_avcodec(void)
     av_assert0(ff_avcodec_locked);
     ff_avcodec_locked = 0;
     entangled_thread_counter--;
-    if (ff_lockmgr_cb) {
-        if ((*ff_lockmgr_cb)(&codec_mutex, AV_LOCK_RELEASE))
+    if (lockmgr_cb) {
+        if ((*lockmgr_cb)(&codec_mutex, AV_LOCK_RELEASE))
             return -1;
     }
     return 0;
@@ -3032,8 +3041,8 @@ int ff_unlock_avcodec(void)
 
 int avpriv_lock_avformat(void)
 {
-    if (ff_lockmgr_cb) {
-        if ((*ff_lockmgr_cb)(&avformat_mutex, AV_LOCK_OBTAIN))
+    if (lockmgr_cb) {
+        if ((*lockmgr_cb)(&avformat_mutex, AV_LOCK_OBTAIN))
             return -1;
     }
     return 0;
@@ -3041,8 +3050,8 @@ int avpriv_lock_avformat(void)
 
 int avpriv_unlock_avformat(void)
 {
-    if (ff_lockmgr_cb) {
-        if ((*ff_lockmgr_cb)(&avformat_mutex, AV_LOCK_RELEASE))
+    if (lockmgr_cb) {
+        if ((*lockmgr_cb)(&avformat_mutex, AV_LOCK_RELEASE))
             return -1;
     }
     return 0;

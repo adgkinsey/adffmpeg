@@ -452,7 +452,7 @@ static void exit_program(void)
     /* close files */
     for (i = 0; i < nb_output_files; i++) {
         AVFormatContext *s = output_files[i]->ctx;
-        if (!(s->oformat->flags & AVFMT_NOFILE) && s->pb)
+        if (s && !(s->oformat->flags & AVFMT_NOFILE) && s->pb)
             avio_close(s->pb);
         avformat_free_context(s);
         av_dict_free(&output_files[i]->opts);
@@ -548,17 +548,6 @@ static void write_frame(AVFormatContext *s, AVPacket *pkt, OutputStream *ost)
         (avctx->codec_type == AVMEDIA_TYPE_AUDIO && audio_sync_method < 0))
         pkt->pts = pkt->dts = AV_NOPTS_VALUE;
 
-    if ((avctx->codec_type == AVMEDIA_TYPE_AUDIO || avctx->codec_type == AVMEDIA_TYPE_VIDEO) && pkt->dts != AV_NOPTS_VALUE) {
-        int64_t max = ost->st->cur_dts + !(s->oformat->flags & AVFMT_TS_NONSTRICT);
-        if (ost->st->cur_dts && ost->st->cur_dts != AV_NOPTS_VALUE &&  max > pkt->dts) {
-            av_log(s, max - pkt->dts > 2 || avctx->codec_type == AVMEDIA_TYPE_VIDEO ? AV_LOG_WARNING : AV_LOG_DEBUG,
-                   "st:%d PTS: %"PRId64" DTS: %"PRId64" < %"PRId64" invalid, clipping\n", pkt->stream_index, pkt->pts, pkt->dts, max);
-            if(pkt->pts >= pkt->dts)
-                pkt->pts = FFMAX(pkt->pts, max);
-            pkt->dts = max;
-        }
-    }
-
     /*
      * Audio encoders may split the packets --  #frames in != #packets out.
      * But there is no reordering, so we can limit the number of output packets
@@ -609,6 +598,30 @@ static void write_frame(AVFormatContext *s, AVPacket *pkt, OutputStream *ost)
 
         bsfc = bsfc->next;
     }
+
+    if (!(s->oformat->flags & AVFMT_NOTIMESTAMPS) &&
+        (avctx->codec_type == AVMEDIA_TYPE_AUDIO || avctx->codec_type == AVMEDIA_TYPE_VIDEO) &&
+        pkt->dts != AV_NOPTS_VALUE &&
+        ost->last_mux_dts != AV_NOPTS_VALUE) {
+      int64_t max = ost->last_mux_dts + !(s->oformat->flags & AVFMT_TS_NONSTRICT);
+      if (pkt->dts < max) {
+        int loglevel = max - pkt->dts > 2 || avctx->codec_type == AVMEDIA_TYPE_VIDEO ? AV_LOG_WARNING : AV_LOG_DEBUG;
+        av_log(s, loglevel, "Non-monotonous DTS in output stream "
+               "%d:%d; previous: %"PRId64", current: %"PRId64"; ",
+               ost->file_index, ost->st->index, ost->last_mux_dts, pkt->dts);
+        if (exit_on_error) {
+            av_log(NULL, AV_LOG_FATAL, "aborting.\n");
+            exit(1);
+        }
+        av_log(s, loglevel, "changing to %"PRId64". This may result "
+               "in incorrect timestamps in the output file.\n",
+               max);
+        if(pkt->pts >= pkt->dts)
+            pkt->pts = FFMAX(pkt->pts, max);
+        pkt->dts = max;
+      }
+    }
+    ost->last_mux_dts = pkt->dts;
 
     pkt->stream_index = ost->index;
 
@@ -846,7 +859,11 @@ static void do_video_out(AVFormatContext *s,
 
     in_picture->pts = ost->sync_opts;
 
+#if 1
     if (!check_recording_time(ost))
+#else
+    if (ost->frame_number >= ost->max_frames)
+#endif
         return;
 
     if (s->oformat->flags & AVFMT_RAWPICTURE &&
@@ -1055,11 +1072,6 @@ static int reap_filters(void)
                                     av_rescale_q(of->start_time,
                                                 AV_TIME_BASE_Q,
                                                 ost->st->codec->time_base);
-
-                if (of->start_time && filtered_frame->pts < 0) {
-                    av_frame_unref(filtered_frame);
-                    continue;
-                }
             }
             //if (ost->source_index >= 0)
             //    *filtered_frame= *input_streams[ost->source_index]->decoded_frame; //for me_threshold
@@ -1451,16 +1463,6 @@ static void do_streamcopy(InputStream *ist, OutputStream *ost, const AVPacket *p
     ost->st->codec->frame_number++;
 }
 
-static void rate_emu_sleep(InputStream *ist)
-{
-    if (input_files[ist->file_index]->rate_emu) {
-        int64_t pts = av_rescale(ist->dts, 1000000, AV_TIME_BASE);
-        int64_t now = av_gettime() - ist->start;
-        if (pts > now)
-            av_usleep(pts - now);
-    }
-}
-
 int guess_input_channel_layout(InputStream *ist)
 {
     AVCodecContext *dec = ist->st->codec;
@@ -1526,8 +1528,6 @@ static int decode_audio(InputStream *ist, AVPacket *pkt, int *got_output)
     ist->next_dts += ((int64_t)AV_TIME_BASE * decoded_frame->nb_samples) /
                      avctx->sample_rate;
 #endif
-
-    rate_emu_sleep(ist);
 
     resample_changed = ist->resample_sample_fmt     != decoded_frame->format         ||
                        ist->resample_channels       != avctx->channels               ||
@@ -1675,8 +1675,6 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output)
 
     pkt->size = 0;
 
-    rate_emu_sleep(ist);
-
     if (ist->st->sample_aspect_ratio.num)
         decoded_frame->sample_aspect_ratio = ist->st->sample_aspect_ratio;
 
@@ -1764,8 +1762,6 @@ static int transcode_subtitles(InputStream *ist, AVPacket *pkt, int *got_output)
 
     if (!*got_output || !subtitle.num_rects)
         return ret;
-
-    rate_emu_sleep(ist);
 
     for (i = 0; i < nb_output_streams; i++) {
         OutputStream *ost = output_streams[i];
@@ -1883,7 +1879,6 @@ static int output_packet(InputStream *ist, const AVPacket *pkt)
 
     /* handle stream copy */
     if (!ist->decoding_needed) {
-        rate_emu_sleep(ist);
         ist->dts = ist->next_dts;
         switch (ist->st->codec->codec_type) {
         case AVMEDIA_TYPE_AUDIO:
@@ -2818,6 +2813,17 @@ static int get_input_packet_mt(InputFile *f, AVPacket *pkt)
 
 static int get_input_packet(InputFile *f, AVPacket *pkt)
 {
+    if (f->rate_emu) {
+        int i;
+        for (i = 0; i < f->nb_streams; i++) {
+            InputStream *ist = input_streams[f->ist_index + i];
+            int64_t pts = av_rescale(ist->dts, 1000000, AV_TIME_BASE);
+            int64_t now = av_gettime() - ist->start;
+            if (pts > now)
+                return AVERROR(EAGAIN);
+        }
+    }
+
 #if HAVE_PTHREADS
     if (nb_input_files > 1)
         return get_input_packet_mt(f, pkt);

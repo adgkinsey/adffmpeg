@@ -72,7 +72,9 @@ const char *swscale_license(void)
 #define RET 0xC3 // near return opcode for x86
 
 typedef struct FormatEntry {
-    int is_supported_in, is_supported_out;
+    uint8_t is_supported_in         :1;
+    uint8_t is_supported_out        :1;
+    uint8_t is_supported_endianness :1;
 } FormatEntry;
 
 static const FormatEntry format_entries[AV_PIX_FMT_NB] = {
@@ -196,8 +198,11 @@ static const FormatEntry format_entries[AV_PIX_FMT_NB] = {
     [AV_PIX_FMT_GBRP14BE]    = { 1, 1 },
     [AV_PIX_FMT_GBRP16LE]    = { 1, 0 },
     [AV_PIX_FMT_GBRP16BE]    = { 1, 0 },
-    [AV_PIX_FMT_XYZ12BE]     = { 1, 0 },
-    [AV_PIX_FMT_XYZ12LE]     = { 1, 0 },
+    [AV_PIX_FMT_XYZ12BE]     = { 1, 0, 1 },
+    [AV_PIX_FMT_XYZ12LE]     = { 1, 0, 1 },
+    [AV_PIX_FMT_GBRAP]       = { 0, 0 },
+    [AV_PIX_FMT_GBRAP16LE]   = { 0, 0 },
+    [AV_PIX_FMT_GBRAP16BE]   = { 0, 0 },
 };
 
 int sws_isSupportedInput(enum AVPixelFormat pix_fmt)
@@ -210,6 +215,12 @@ int sws_isSupportedOutput(enum AVPixelFormat pix_fmt)
 {
     return (unsigned)pix_fmt < AV_PIX_FMT_NB ?
            format_entries[pix_fmt].is_supported_out : 0;
+}
+
+int sws_isSupportedEndiannessConversion(enum AVPixelFormat pix_fmt)
+{
+    return (unsigned)pix_fmt < AV_PIX_FMT_NB ?
+           format_entries[pix_fmt].is_supported_endianness : 0;
 }
 
 extern const int32_t ff_yuv2rgb_coeffs[8][4];
@@ -238,11 +249,12 @@ static double getSplineCoeff(double a, double b, double c, double d,
                               dist - 1.0);
 }
 
-static int initFilter(int16_t **outFilter, int32_t **filterPos,
-                      int *outFilterSize, int xInc, int srcW, int dstW,
-                      int filterAlign, int one, int flags, int cpu_flags,
-                      SwsVector *srcFilter, SwsVector *dstFilter,
-                      double param[2])
+static av_cold int initFilter(int16_t **outFilter, int32_t **filterPos,
+                              int *outFilterSize, int xInc, int srcW,
+                              int dstW, int filterAlign, int one,
+                              int flags, int cpu_flags,
+                              SwsVector *srcFilter, SwsVector *dstFilter,
+                              double param[2])
 {
     int i;
     int filterSize;
@@ -629,9 +641,9 @@ fail:
 }
 
 #if HAVE_MMXEXT_INLINE
-static int init_hscaler_mmxext(int dstW, int xInc, uint8_t *filterCode,
-                               int16_t *filter, int32_t *filterPos,
-                               int numSplits)
+static av_cold int init_hscaler_mmxext(int dstW, int xInc, uint8_t *filterCode,
+                                       int16_t *filter, int32_t *filterPos,
+                                       int numSplits)
 {
     uint8_t *fragmentA;
     x86_reg imm8OfPShufW1A;
@@ -904,13 +916,20 @@ static void fill_xyztables(struct SwsContext *c)
         {13270, -6295, -2041},
         {-3969,  7682,   170},
         {  228,  -835,  4329} };
+    static int16_t xyzgamma_tab[4096], rgbgamma_tab[4096];
+
+    memcpy(c->xyz2rgb_matrix, xyz2rgb_matrix, sizeof(c->xyz2rgb_matrix));
+    c->xyzgamma = xyzgamma_tab;
+    c->rgbgamma = rgbgamma_tab;
+
+    if (rgbgamma_tab[4095])
+        return;
 
     /* set gamma vectors */
     for (i = 0; i < 4096; i++) {
-        c->xyzgamma[i] = lrint(pow(i / 4095.0, xyzgamma) * 4095.0);
-        c->rgbgamma[i] = lrint(pow(i / 4095.0, rgbgamma) * 4095.0);
+        xyzgamma_tab[i] = lrint(pow(i / 4095.0, xyzgamma) * 4095.0);
+        rgbgamma_tab[i] = lrint(pow(i / 4095.0, rgbgamma) * 4095.0);
     }
-    memcpy(c->xyz2rgb_matrix, xyz2rgb_matrix, sizeof(c->xyz2rgb_matrix));
 }
 
 int sws_setColorspaceDetails(struct SwsContext *c, const int inv_table[4],
@@ -1054,17 +1073,20 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
 
     handle_jpeg(&srcFormat);
     handle_jpeg(&dstFormat);
+    if(srcFormat!=c->srcFormat || dstFormat!=c->dstFormat)
+        av_log(c, AV_LOG_WARNING, "deprecated pixel format used, make sure you did set range correctly\n");
     handle_0alpha(&srcFormat);
     handle_0alpha(&dstFormat);
     handle_xyz(&srcFormat);
     handle_xyz(&dstFormat);
 
     if(srcFormat!=c->srcFormat || dstFormat!=c->dstFormat){
-        av_log(c, AV_LOG_WARNING, "deprecated pixel format used, make sure you did set range correctly\n");
         c->srcFormat= srcFormat;
         c->dstFormat= dstFormat;
     }
 
+    if (!(unscaled && sws_isSupportedEndiannessConversion(srcFormat) &&
+          av_pix_fmt_swap_endianness(srcFormat) == dstFormat)) {
     if (!sws_isSupportedInput(srcFormat)) {
         av_log(c, AV_LOG_ERROR, "%s is not supported as input pixel format\n",
                av_get_pix_fmt_name(srcFormat));
@@ -1074,6 +1096,7 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
         av_log(c, AV_LOG_ERROR, "%s is not supported as output pixel format\n",
                av_get_pix_fmt_name(dstFormat));
         return AVERROR(EINVAL);
+    }
     }
 
     i = flags & (SWS_POINT         |

@@ -56,7 +56,6 @@ DECLARE_ALIGNED(16, const double, ff_pd_1)[2] = { 1.0, 1.0 };
 DECLARE_ALIGNED(16, const double, ff_pd_2)[2] = { 2.0, 2.0 };
 
 
-#if HAVE_YASM
 void ff_put_pixels8_l2_mmxext(uint8_t *dst, uint8_t *src1, uint8_t *src2,
                               int dstStride, int src1Stride, int h);
 void ff_put_no_rnd_pixels8_l2_mmxext(uint8_t *dst, uint8_t *src1,
@@ -70,14 +69,6 @@ void ff_avg_pixels16_l2_mmxext(uint8_t *dst, uint8_t *src1, uint8_t *src2,
                                int dstStride, int src1Stride, int h);
 void ff_put_no_rnd_pixels16_l2_mmxext(uint8_t *dst, uint8_t *src1, uint8_t *src2,
                                       int dstStride, int src1Stride, int h);
-
-static void ff_put_pixels16_mmxext(uint8_t *block, const uint8_t *pixels,
-                                   ptrdiff_t line_size, int h)
-{
-    ff_put_pixels8_mmxext(block,     pixels,     line_size, h);
-    ff_put_pixels8_mmxext(block + 8, pixels + 8, line_size, h);
-}
-
 void ff_put_mpeg4_qpel16_h_lowpass_mmxext(uint8_t *dst, uint8_t *src,
                                          int dstStride, int srcStride, int h);
 void ff_avg_mpeg4_qpel16_h_lowpass_mmxext(uint8_t *dst, uint8_t *src,
@@ -106,7 +97,6 @@ void ff_put_no_rnd_mpeg4_qpel8_v_lowpass_mmxext(uint8_t *dst, uint8_t *src,
                                                 int dstStride, int srcStride);
 #define ff_put_no_rnd_pixels16_mmxext ff_put_pixels16_mmxext
 #define ff_put_no_rnd_pixels8_mmxext ff_put_pixels8_mmxext
-#endif /* HAVE_YASM */
 
 
 #if HAVE_INLINE_ASM
@@ -128,26 +118,6 @@ void ff_put_no_rnd_mpeg4_qpel8_v_lowpass_mmxext(uint8_t *dst, uint8_t *src,
 #undef PAVGB
 #undef OP_AVG
 
-#endif /* HAVE_INLINE_ASM */
-
-
-#if HAVE_YASM
-
-/***********************************/
-/* MMXEXT specific */
-
-//FIXME the following could be optimized too ...
-static void ff_avg_pixels16_mmxext(uint8_t *block, const uint8_t *pixels,
-                                   int line_size, int h)
-{
-    ff_avg_pixels8_mmxext(block,     pixels,     line_size, h);
-    ff_avg_pixels8_mmxext(block + 8, pixels + 8, line_size, h);
-}
-
-#endif /* HAVE_YASM */
-
-
-#if HAVE_INLINE_ASM
 /***********************************/
 /* standard MMX */
 
@@ -283,68 +253,6 @@ void ff_add_pixels_clamped_mmx(const int16_t *block, uint8_t *pixels,
         pix += line_size * 2;
         p   += 16;
     } while (--i);
-}
-
-static void put_pixels8_mmx(uint8_t *block, const uint8_t *pixels,
-                            ptrdiff_t line_size, int h)
-{
-    __asm__ volatile (
-        "lea   (%3, %3), %%"REG_a"      \n\t"
-        ".p2align     3                 \n\t"
-        "1:                             \n\t"
-        "movq  (%1    ), %%mm0          \n\t"
-        "movq  (%1, %3), %%mm1          \n\t"
-        "movq     %%mm0, (%2)           \n\t"
-        "movq     %%mm1, (%2, %3)       \n\t"
-        "add  %%"REG_a", %1             \n\t"
-        "add  %%"REG_a", %2             \n\t"
-        "movq  (%1    ), %%mm0          \n\t"
-        "movq  (%1, %3), %%mm1          \n\t"
-        "movq     %%mm0, (%2)           \n\t"
-        "movq     %%mm1, (%2, %3)       \n\t"
-        "add  %%"REG_a", %1             \n\t"
-        "add  %%"REG_a", %2             \n\t"
-        "subl        $4, %0             \n\t"
-        "jnz         1b                 \n\t"
-        : "+g"(h), "+r"(pixels),  "+r"(block)
-        : "r"((x86_reg)line_size)
-        : "%"REG_a, "memory"
-        );
-}
-
-static void put_pixels16_mmx(uint8_t *block, const uint8_t *pixels,
-                             ptrdiff_t line_size, int h)
-{
-    __asm__ volatile (
-        "lea   (%3, %3), %%"REG_a"      \n\t"
-        ".p2align     3                 \n\t"
-        "1:                             \n\t"
-        "movq  (%1    ), %%mm0          \n\t"
-        "movq 8(%1    ), %%mm4          \n\t"
-        "movq  (%1, %3), %%mm1          \n\t"
-        "movq 8(%1, %3), %%mm5          \n\t"
-        "movq     %%mm0,  (%2)          \n\t"
-        "movq     %%mm4, 8(%2)          \n\t"
-        "movq     %%mm1,  (%2, %3)      \n\t"
-        "movq     %%mm5, 8(%2, %3)      \n\t"
-        "add  %%"REG_a", %1             \n\t"
-        "add  %%"REG_a", %2             \n\t"
-        "movq  (%1    ), %%mm0          \n\t"
-        "movq 8(%1    ), %%mm4          \n\t"
-        "movq  (%1, %3), %%mm1          \n\t"
-        "movq 8(%1, %3), %%mm5          \n\t"
-        "movq     %%mm0,  (%2)          \n\t"
-        "movq     %%mm4, 8(%2)          \n\t"
-        "movq     %%mm1,  (%2, %3)      \n\t"
-        "movq     %%mm5, 8(%2, %3)      \n\t"
-        "add  %%"REG_a", %1             \n\t"
-        "add  %%"REG_a", %2             \n\t"
-        "subl        $4, %0             \n\t"
-        "jnz         1b                 \n\t"
-        : "+g"(h), "+r"(pixels),  "+r"(block)
-        : "r"((x86_reg)line_size)
-        : "%"REG_a, "memory"
-        );
 }
 
 #define CLEAR_BLOCKS(name, n)                           \
@@ -588,6 +496,20 @@ static void draw_edges_mmx(uint8_t *buf, int wrap, int width, int height,
 
 
 #if HAVE_YASM
+static void ff_avg_pixels16_mmxext(uint8_t *block, const uint8_t *pixels,
+                                   int line_size, int h)
+{
+    ff_avg_pixels8_mmxext(block,     pixels,     line_size, h);
+    ff_avg_pixels8_mmxext(block + 8, pixels + 8, line_size, h);
+}
+
+static void ff_put_pixels16_mmxext(uint8_t *block, const uint8_t *pixels,
+                                   ptrdiff_t line_size, int h)
+{
+    ff_put_pixels8_mmxext(block,     pixels,     line_size, h);
+    ff_put_pixels8_mmxext(block + 8, pixels + 8, line_size, h);
+}
+
 #define QPEL_OP(OPNAME, ROUNDER, RND, MMX)                              \
 static void OPNAME ## qpel8_mc00_ ## MMX (uint8_t *dst, uint8_t *src,   \
                                           ptrdiff_t stride)             \
@@ -1123,7 +1045,6 @@ static av_always_inline void gmc(uint8_t *dst, uint8_t *src,
     }
 }
 
-
 #if CONFIG_VIDEODSP
 #if HAVE_YASM
 #if ARCH_X86_32
@@ -1156,34 +1077,6 @@ static void gmc_mmx(uint8_t *dst, uint8_t *src,
 #endif
 #endif
 
-/* CAVS-specific */
-void ff_put_cavs_qpel8_mc00_mmx(uint8_t *dst, uint8_t *src, ptrdiff_t stride)
-{
-    put_pixels8_mmx(dst, src, stride, 8);
-}
-
-void ff_avg_cavs_qpel8_mc00_mmx(uint8_t *dst, uint8_t *src, ptrdiff_t stride)
-{
-    avg_pixels8_mmx(dst, src, stride, 8);
-}
-
-void ff_put_cavs_qpel16_mc00_mmx(uint8_t *dst, uint8_t *src, ptrdiff_t stride)
-{
-    put_pixels16_mmx(dst, src, stride, 16);
-}
-
-void ff_avg_cavs_qpel16_mc00_mmx(uint8_t *dst, uint8_t *src, ptrdiff_t stride)
-{
-    avg_pixels16_mmx(dst, src, stride, 16);
-}
-
-/* VC-1-specific */
-void ff_put_vc1_mspel_mc00_mmx(uint8_t *dst, const uint8_t *src,
-                               ptrdiff_t stride, int rnd)
-{
-    put_pixels8_mmx(dst, src, stride, 8);
-}
-
 #if CONFIG_DIRAC_DECODER
 #define DIRAC_PIXOP(OPNAME2, OPNAME, EXT)\
 void ff_ ## OPNAME2 ## _dirac_pixels8_ ## EXT(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
@@ -1211,8 +1104,8 @@ void ff_ ## OPNAME2 ## _dirac_pixels32_ ## EXT(uint8_t *dst, const uint8_t *src[
 }
 
 #if HAVE_MMX_INLINE
-DIRAC_PIXOP(put, put, mmx)
-DIRAC_PIXOP(avg, avg, mmx)
+DIRAC_PIXOP(put, ff_put, mmx)
+DIRAC_PIXOP(avg, ff_avg, mmx)
 #endif
 
 #if HAVE_YASM
@@ -1362,7 +1255,7 @@ void ff_vector_clip_int32_sse4    (int32_t *dst, const int32_t *src,
 static av_cold void dsputil_init_mmx(DSPContext *c, AVCodecContext *avctx,
                                      int mm_flags)
 {
-#if HAVE_INLINE_ASM
+#if HAVE_MMX_INLINE
     const int high_bit_depth = avctx->bits_per_raw_sample > 8;
 
     c->put_pixels_clamped        = ff_put_pixels_clamped_mmx;
@@ -1380,16 +1273,16 @@ static av_cold void dsputil_init_mmx(DSPContext *c, AVCodecContext *avctx,
 #endif
 
     c->add_bytes = add_bytes_mmx;
-#endif /* HAVE_INLINE_ASM */
+#endif /* HAVE_MMX_INLINE */
 
-#if HAVE_YASM
+#if HAVE_MMX_EXTERNAL
     if (CONFIG_H263_DECODER || CONFIG_H263_ENCODER) {
         c->h263_v_loop_filter = ff_h263_v_loop_filter_mmx;
         c->h263_h_loop_filter = ff_h263_h_loop_filter_mmx;
     }
 
     c->vector_clip_int32 = ff_vector_clip_int32_mmx;
-#endif /* HAVE_YASM */
+#endif /* HAVE_MMX_EXTERNAL */
 }
 
 static av_cold void dsputil_init_mmxext(DSPContext *c, AVCodecContext *avctx,
@@ -1422,7 +1315,7 @@ static av_cold void dsputil_init_mmxext(DSPContext *c, AVCodecContext *avctx,
 static av_cold void dsputil_init_sse(DSPContext *c, AVCodecContext *avctx,
                                      int mm_flags)
 {
-#if HAVE_INLINE_ASM
+#if HAVE_SSE_INLINE
     const int high_bit_depth = avctx->bits_per_raw_sample > 8;
 
     if (!high_bit_depth) {
@@ -1434,7 +1327,7 @@ static av_cold void dsputil_init_sse(DSPContext *c, AVCodecContext *avctx,
     }
 
     c->vector_clipf = vector_clipf_sse;
-#endif /* HAVE_INLINE_ASM */
+#endif /* HAVE_SSE_INLINE */
 
 #if HAVE_YASM
 #if HAVE_INLINE_ASM && CONFIG_VIDEODSP

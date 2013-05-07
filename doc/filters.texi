@@ -293,11 +293,11 @@ to re-define the expression.
 Like any other filtering option, the @option{enable} option follows the same
 rules.
 
-For example, to enable a denoiser filter (@ref{hqdn3d}) from 10 seconds to 3
+For example, to enable a blur filter (@ref{smartblur}) from 10 seconds to 3
 minutes, and a @ref{curves} filter starting at 3 seconds:
 @example
-hqdn3d = enable='between(t,10,3*60)',
-curves = enable='gte(t,3)' : preset=cross_process
+smartblur = enable='between(t,10,3*60)',
+curves    = enable='gte(t,3)' : preset=cross_process
 @end example
 
 @c man end FILTERGRAPH DESCRIPTION
@@ -1265,6 +1265,70 @@ silence if an audio stream starts after the video stream or to trim any samples
 with a negative pts due to encoder delay.
 
 @end table
+
+@section atrim
+Trim the input so that the output contains one continuous subpart of the input.
+
+This filter accepts the following options:
+@table @option
+@item start
+Timestamp (in seconds) of the start of the kept section. I.e. the audio sample
+with the timestamp @var{start} will be the first sample in the output.
+
+@item end
+Timestamp (in seconds) of the first audio sample that will be dropped. I.e. the
+audio sample immediately preceding the one with the timestamp @var{end} will be
+the last sample in the output.
+
+@item start_pts
+Same as @var{start}, except this option sets the start timestamp in samples
+instead of seconds.
+
+@item end_pts
+Same as @var{end}, except this option sets the end timestamp in samples instead
+of seconds.
+
+@item duration
+Maximum duration of the output in seconds.
+
+@item start_sample
+Number of the first sample that should be passed to output.
+
+@item end_sample
+Number of the first sample that should be dropped.
+@end table
+
+Note that the first two sets of the start/end options and the @option{duration}
+option look at the frame timestamp, while the _sample options simply count the
+samples that pass through the filter. So start/end_pts and start/end_sample will
+give different results when the timestamps are wrong, inexact or do not start at
+zero. Also note that this filter does not modify the timestamps. If you wish
+that the output timestamps start at zero, insert the asetpts filter after the
+atrim filter.
+
+If multiple start or end options are set, this filter tries to be greedy and
+keep all samples that match at least one of the specified constraints. To keep
+only the part that matches all the constraints at once, chain multiple atrim
+filters.
+
+The defaults are such that all the input is kept. So it is possible to set e.g.
+just the end values to keep everything before the specified time.
+
+Examples:
+@itemize
+@item
+drop everything except the second minute of input
+@example
+ffmpeg -i INPUT -af atrim=60:120
+@end example
+
+@item
+keep only the first 1000 samples
+@example
+ffmpeg -i INPUT -af atrim=end_sample=1000
+@end example
+
+@end itemize
 
 @section channelsplit
 Split each channel in input audio stream into a separate output stream.
@@ -3186,6 +3250,44 @@ Example:
 @example
 edgedetect=low=0.1:high=0.4
 @end example
+
+@section extractplanes
+
+Extract color channel components from input video stream into
+separate grayscale video streams.
+
+The filter accepts the following option:
+
+@table @option
+@item planes
+Set plane(s) to extract.
+
+Available values for planes are:
+@table @samp
+@item y
+@item u
+@item v
+@item a
+@item r
+@item g
+@item b
+@end table
+
+Choosing planes not available in the input will result in an error.
+That means you cannot select @code{r}, @code{g}, @code{b} planes
+with @code{y}, @code{u}, @code{v} planes at same time.
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Extract luma, u and v color channel component from input video frame
+into 3 grayscale outputs:
+@example
+ffmpeg -i video.avi -filter_complex 'extractplanes=y+u+v[y][u][v]' -map '[y]' y.avi -map '[u]' u.avi -map '[v]' v.avi
+@end example
+@end itemize
 
 @section fade
 
@@ -5445,7 +5547,7 @@ scale=w=200:h=100
 
 This is equivalent to:
 @example
-scale=w=200:h=100
+scale=200:100
 @end example
 
 or:
@@ -5698,6 +5800,7 @@ Adler-32 checksum (printed in hexadecimal) of each plane of the input frame,
 expressed in the form "[@var{c0} @var{c1} @var{c2} @var{c3}]"
 @end table
 
+@anchor{smartblur}
 @section smartblur
 
 Blur the input video without impacting the outlines.
@@ -5784,6 +5887,12 @@ above-below with half height resolution
 @item ab2r
 above-below with half height resolution
 (right eye above, left eye below)
+
+@item al
+alternating frames (left eye first, right eye second)
+
+@item ar
+alternating frames (right eye first, left eye second)
 
 Default value is @samp{sbsl}.
 @end table
@@ -6201,6 +6310,69 @@ The command above can also be specified as:
 @example
 transpose=1:portrait
 @end example
+
+@section trim
+Trim the input so that the output contains one continuous subpart of the input.
+
+This filter accepts the following options:
+@table @option
+@item start
+Timestamp (in seconds) of the start of the kept section. I.e. the frame with the
+timestamp @var{start} will be the first frame in the output.
+
+@item end
+Timestamp (in seconds) of the first frame that will be dropped. I.e. the frame
+immediately preceding the one with the timestamp @var{end} will be the last
+frame in the output.
+
+@item start_pts
+Same as @var{start}, except this option sets the start timestamp in timebase
+units instead of seconds.
+
+@item end_pts
+Same as @var{end}, except this option sets the end timestamp in timebase units
+instead of seconds.
+
+@item duration
+Maximum duration of the output in seconds.
+
+@item start_frame
+Number of the first frame that should be passed to output.
+
+@item end_frame
+Number of the first frame that should be dropped.
+@end table
+
+Note that the first two sets of the start/end options and the @option{duration}
+option look at the frame timestamp, while the _frame variants simply count the
+frames that pass through the filter. Also note that this filter does not modify
+the timestamps. If you wish that the output timestamps start at zero, insert a
+setpts filter after the trim filter.
+
+If multiple start or end options are set, this filter tries to be greedy and
+keep all the frames that match at least one of the specified constraints. To keep
+only the part that matches all the constraints at once, chain multiple trim
+filters.
+
+The defaults are such that all the input is kept. So it is possible to set e.g.
+just the end values to keep everything before the specified time.
+
+Examples:
+@itemize
+@item
+drop everything except the second minute of input
+@example
+ffmpeg -i INPUT -vf trim=60:120
+@end example
+
+@item
+keep only the first second
+@example
+ffmpeg -i INPUT -vf trim=duration=1
+@end example
+
+@end itemize
+
 
 @section unsharp
 
@@ -7109,6 +7281,16 @@ the @code{geq} filter:
 nullsrc=s=256x256, geq=random(1)*255:128:128
 @end example
 
+@subsection Commands
+
+The @code{color} source supports the following commands:
+
+@table @option
+@item c, color
+Set the color of the created image. Accepts the same syntax of the
+corresponding @option{color} option.
+@end table
+
 @c man end VIDEO SOURCES
 
 @chapter Video Sinks
@@ -7724,16 +7906,17 @@ frame rate, only defined for constant frame-rate video
 the presentation timestamp in input
 
 @item N
-the count of the input frame, starting from 0.
+the count of the input frame for video or the number of consumed samples,
+not including the current frame for audio, starting from 0.
 
 @item NB_CONSUMED_SAMPLES
 the number of consumed samples, not including the current frame (only
 audio)
 
-@item NB_SAMPLES
+@item NB_SAMPLES, S
 the number of samples in the current frame (only audio)
 
-@item SAMPLE_RATE
+@item SAMPLE_RATE, SR
 audio sample rate
 
 @item STARTPTS
@@ -7819,6 +8002,13 @@ Generate timestamps from a "live source" and rebase onto the current timebase:
 @example
 setpts='(RTCTIME - RTCSTART) / (TB * 1000000)'
 @end example
+
+@item
+Generate timestamps by counting samples:
+@example
+asetpts=N/SR/TB
+@end example
+
 @end itemize
 
 @section settb, asettb

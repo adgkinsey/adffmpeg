@@ -68,9 +68,6 @@ include $(SRC_PATH)/tests/fate/vcodec.mak
 include $(SRC_PATH)/tests/fate/avformat.mak
 include $(SRC_PATH)/tests/fate/seek.mak
 
-#FIXME should be removed
-include $(SRC_PATH)/tests/fate/avfilter.mak
-
 include $(SRC_PATH)/tests/fate/aac.mak
 include $(SRC_PATH)/tests/fate/ac3.mak
 include $(SRC_PATH)/tests/fate/adpcm.mak
@@ -169,12 +166,13 @@ fate-list:
 
 coverage.info: TAG = LCOV
 coverage.info:
-	$(M)lcov -d $(CURDIR) -b $(SRC_PATH) --capture | sed -e 's#/./#/#g' > $@
-	$(M)lcov --remove $@ "/usr*" -o $@
+	$(M)lcov -q -d $(CURDIR) -b $(SRC_PATH) --capture | \
+	    sed "s,$(CURDIR)/\./,$(CURDIR)/," > $@
+	$(M)lcov -q --remove $@ "/usr*" -o $@
 
 lcov:  TAG = GENHTML
 lcov: coverage.info
-	$(M)genhtml -o $(CURDIR)/lcov $<
+	$(M)genhtml -q -o $(CURDIR)/lcov $<
 
 lcov-reset: TAG = LCOV
 lcov-reset:

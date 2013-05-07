@@ -20,14 +20,14 @@
 
 #include "config.h"
 #include "libavutil/attributes.h"
-#include "libavcodec/h264qpel.h"
-
-#if HAVE_ALTIVEC
 #include "libavutil/cpu.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/ppc/types_altivec.h"
 #include "libavutil/ppc/util_altivec.h"
+#include "libavcodec/h264qpel.h"
 #include "dsputil_altivec.h"
+
+#if HAVE_ALTIVEC
 
 #define PUT_OP_U8_ALTIVEC(d, s, dst) d = s
 #define AVG_OP_U8_ALTIVEC(d, s, dst) d = vec_avg(dst, s)
@@ -39,7 +39,7 @@
 #define PREFIX_h264_qpel16_v_lowpass_num       altivec_put_h264_qpel16_v_lowpass_num
 #define PREFIX_h264_qpel16_hv_lowpass_altivec  put_h264_qpel16_hv_lowpass_altivec
 #define PREFIX_h264_qpel16_hv_lowpass_num      altivec_put_h264_qpel16_hv_lowpass_num
-#include "h264_qpel_template.c"
+#include "h264qpel_template.c"
 #undef OP_U8_ALTIVEC
 #undef PREFIX_h264_qpel16_h_lowpass_altivec
 #undef PREFIX_h264_qpel16_h_lowpass_num
@@ -55,7 +55,7 @@
 #define PREFIX_h264_qpel16_v_lowpass_num       altivec_avg_h264_qpel16_v_lowpass_num
 #define PREFIX_h264_qpel16_hv_lowpass_altivec  avg_h264_qpel16_hv_lowpass_altivec
 #define PREFIX_h264_qpel16_hv_lowpass_num      altivec_avg_h264_qpel16_hv_lowpass_num
-#include "h264_qpel_template.c"
+#include "h264qpel_template.c"
 #undef OP_U8_ALTIVEC
 #undef PREFIX_h264_qpel16_h_lowpass_altivec
 #undef PREFIX_h264_qpel16_h_lowpass_num

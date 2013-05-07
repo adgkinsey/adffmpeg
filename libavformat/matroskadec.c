@@ -1060,7 +1060,7 @@ static int matroska_probe(AVProbeData *p)
     }
 
     // probably valid EBML header but no recognized doctype
-    return AVPROBE_SCORE_MAX/2;
+    return AVPROBE_SCORE_EXTENSION;
 }
 
 static MatroskaTrack *matroska_find_track_by_num(MatroskaDemuxContext *matroska,
@@ -2420,7 +2420,6 @@ static int matroska_parse_cluster_incremental(MatroskaDemuxContext *matroska)
         }
     }
 
-    if (res < 0)  matroska->done = 1;
     return res;
 }
 

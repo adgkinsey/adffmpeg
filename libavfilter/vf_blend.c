@@ -80,6 +80,7 @@ typedef struct {
     struct FFBufQueue queue_top;
     struct FFBufQueue queue_bottom;
     int hsub, vsub;             ///< chroma subsampling values
+    int nb_planes;
     int frame_requested;
     char *all_expr;
     enum BlendMode all_mode;
@@ -294,13 +295,15 @@ static int config_output(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *toplink = ctx->inputs[TOP];
     AVFilterLink *bottomlink = ctx->inputs[BOTTOM];
+    BlendContext *b = ctx->priv;
+    const AVPixFmtDescriptor *pix_desc = av_pix_fmt_desc_get(toplink->format);
 
     if (toplink->format != bottomlink->format) {
         av_log(ctx, AV_LOG_ERROR, "inputs must be of same pixel format\n");
         return AVERROR(EINVAL);
     }
-    if (toplink->w                        != bottomlink->w ||
-        toplink->h                        != bottomlink->h ||
+    if (toplink->w                       != bottomlink->w ||
+        toplink->h                       != bottomlink->h ||
         toplink->sample_aspect_ratio.num != bottomlink->sample_aspect_ratio.num ||
         toplink->sample_aspect_ratio.den != bottomlink->sample_aspect_ratio.den) {
         av_log(ctx, AV_LOG_ERROR, "First input link %s parameters "
@@ -316,20 +319,15 @@ static int config_output(AVFilterLink *outlink)
     }
 
     outlink->w = toplink->w;
-    outlink->h = bottomlink->h;
+    outlink->h = toplink->h;
     outlink->time_base = toplink->time_base;
     outlink->sample_aspect_ratio = toplink->sample_aspect_ratio;
     outlink->frame_rate = toplink->frame_rate;
-    return 0;
-}
-
-static int config_input_top(AVFilterLink *inlink)
-{
-    BlendContext *b = inlink->dst->priv;
-    const AVPixFmtDescriptor *pix_desc = av_pix_fmt_desc_get(inlink->format);
 
     b->hsub = pix_desc->log2_chroma_w;
     b->vsub = pix_desc->log2_chroma_h;
+    b->nb_planes = av_pix_fmt_count_planes(toplink->format);
+
     return 0;
 }
 
@@ -371,7 +369,7 @@ static void blend_frame(AVFilterContext *ctx,
     FilterParams *param;
     int plane;
 
-    for (plane = 0; dst_buf->data[plane]; plane++) {
+    for (plane = 0; plane < b->nb_planes; plane++) {
         int hsub = plane == 1 || plane == 2 ? b->hsub : 0;
         int vsub = plane == 1 || plane == 2 ? b->vsub : 0;
         int outw = dst_buf->width  >> hsub;
@@ -422,7 +420,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
 
         b->frame_requested = 0;
         blend_frame(ctx, top_buf, bottom_buf, out_buf);
-        ret = ff_filter_frame(ctx->outputs[0], out_buf);
+        ret = ff_filter_frame(outlink, out_buf);
         av_frame_free(&top_buf);
         av_frame_free(&bottom_buf);
     }
@@ -433,7 +431,6 @@ static const AVFilterPad blend_inputs[] = {
     {
         .name             = "top",
         .type             = AVMEDIA_TYPE_VIDEO,
-        .config_props     = config_input_top,
         .filter_frame     = filter_frame,
     },{
         .name             = "bottom",

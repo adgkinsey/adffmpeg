@@ -2051,8 +2051,10 @@ typedef struct AVCodecContext {
     /**
      * This callback is called at the beginning of each frame to get data
      * buffer(s) for it. There may be one contiguous buffer for all the data or
-     * there may be a buffer per each data plane or anything in between. Each
-     * buffer must be reference-counted using the AVBuffer API.
+     * there may be a buffer per each data plane or anything in between. What
+     * this means is, you may set however many entries in buf[] you feel necessary.
+     * Each buffer must be reference-counted using the AVBuffer API (see description
+     * of buf[] below).
      *
      * The following fields will be set in the frame before this callback is
      * called:
@@ -2073,8 +2075,11 @@ typedef struct AVCodecContext {
      *     extended_data must be allocated with av_malloc() and will be freed in
      *     av_frame_unref().
      *   * otherwise exended_data must point to data
-     * - buf[] must contain references to the buffers that contain the frame
-     *   data.
+     * - buf[] must contain one or more pointers to AVBufferRef structures. Each of
+     *   the frame's data and extended_data pointers must be contained in these. That
+     *   is, one AVBufferRef for each allocated chunk of memory, not necessarily one
+     *   AVBufferRef per data[] entry. See: av_buffer_create(), av_buffer_alloc(),
+     *   and av_buffer_ref().
      * - extended_buf and nb_extended_buf must be allocated with av_malloc() by
      *   this callback and filled with the extra buffers if there are more
      *   buffers than buf[] can hold. extended_buf will be freed in
@@ -2561,12 +2566,16 @@ typedef struct AVCodecContext {
      */
     int bits_per_raw_sample;
 
+#if FF_API_LOWRES
     /**
      * low resolution decoding, 1-> 1/2 size, 2->1/4 size
      * - encoding: unused
      * - decoding: Set by user.
+     * Code outside libavcodec should access this field using:
+     * av_codec_{get,set}_lowres(avctx)
      */
      int lowres;
+#endif
 
     /**
      * the picture in the bitstream
@@ -2816,6 +2825,17 @@ typedef struct AVCodecContext {
      */
     const AVCodecDescriptor *codec_descriptor;
 
+#if !FF_API_LOWRES
+    /**
+     * low resolution decoding, 1-> 1/2 size, 2->1/4 size
+     * - encoding: unused
+     * - decoding: Set by user.
+     * Code outside libavcodec should access this field using:
+     * av_codec_{get,set}_lowres(avctx)
+     */
+     int lowres;
+#endif
+
     /**
      * Current statistics for PTS correction.
      * - decoding: maintained and used by libavcodec, not intended to be used by user apps
@@ -2843,6 +2863,7 @@ typedef struct AVCodecContext {
 #define FF_SUB_CHARENC_MODE_DO_NOTHING  -1  ///< do nothing (demuxer outputs a stream supposed to be already in UTF-8, or the codec is bitmap for instance)
 #define FF_SUB_CHARENC_MODE_AUTOMATIC    0  ///< libavcodec will select the mode itself
 #define FF_SUB_CHARENC_MODE_PRE_DECODER  1  ///< the AVPacket data needs to be recoded to UTF-8 before being fed to the decoder, requires iconv
+
 } AVCodecContext;
 
 AVRational av_codec_get_pkt_timebase         (const AVCodecContext *avctx);
@@ -2850,6 +2871,9 @@ void       av_codec_set_pkt_timebase         (AVCodecContext *avctx, AVRational 
 
 const AVCodecDescriptor *av_codec_get_codec_descriptor(const AVCodecContext *avctx);
 void                     av_codec_set_codec_descriptor(AVCodecContext *avctx, const AVCodecDescriptor *desc);
+
+int  av_codec_get_lowres(const AVCodecContext *avctx);
+void av_codec_set_lowres(AVCodecContext *avctx, int val);
 
 /**
  * AVProfile.
@@ -3893,6 +3917,8 @@ typedef struct AVCodecParserContext {
      * For all other types, this is in units of AVCodecContext.time_base.
      */
     int duration;
+
+    enum AVFieldOrder field_order;
 } AVCodecParserContext;
 
 typedef struct AVCodecParser {

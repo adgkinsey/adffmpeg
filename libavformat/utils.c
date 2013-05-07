@@ -376,10 +376,10 @@ AVInputFormat *av_probe_input_format3(AVProbeData *pd, int is_opened, int *score
         if (fmt1->read_probe) {
             score = fmt1->read_probe(&lpd);
             if(fmt1->extensions && av_match_ext(lpd.filename, fmt1->extensions))
-                score = FFMAX(score, nodat ? AVPROBE_SCORE_MAX/4-1 : 1);
+                score = FFMAX(score, nodat ? AVPROBE_SCORE_EXTENSION / 2 - 1 : 1);
         } else if (fmt1->extensions) {
             if (av_match_ext(lpd.filename, fmt1->extensions)) {
-                score = 50;
+                score = AVPROBE_SCORE_EXTENSION;
             }
         }
         if (score > score_max) {
@@ -389,7 +389,7 @@ AVInputFormat *av_probe_input_format3(AVProbeData *pd, int is_opened, int *score
             fmt = NULL;
     }
     if(nodat)
-        score_max = FFMIN(AVPROBE_SCORE_MAX/4-1, score_max);
+        score_max = FFMIN(AVPROBE_SCORE_EXTENSION / 2 - 1, score_max);
     *score_ret= score_max;
 
     return fmt;
@@ -876,7 +876,7 @@ int ff_get_audio_frame_size(AVCodecContext *enc, int size, int mux)
     if ((frame_size = av_get_audio_frame_duration(enc, size)) > 0)
         return frame_size;
 
-    /* fallback to using frame_size if muxing */
+    /* Fall back on using frame_size if muxing. */
     if (enc->frame_size > 1)
         return enc->frame_size;
 
@@ -2135,7 +2135,19 @@ static int seek_frame_internal(AVFormatContext *s, int stream_index,
 
 int av_seek_frame(AVFormatContext *s, int stream_index, int64_t timestamp, int flags)
 {
-    int ret = seek_frame_internal(s, stream_index, timestamp, flags);
+    int ret;
+
+    if (s->iformat->read_seek2 && !s->iformat->read_seek) {
+        int64_t min_ts = INT64_MIN, max_ts = INT64_MAX;
+        if ((flags & AVSEEK_FLAG_BACKWARD))
+            max_ts = timestamp;
+        else
+            min_ts = timestamp;
+        return avformat_seek_file(s, stream_index, min_ts, timestamp, max_ts,
+                                  flags & ~AVSEEK_FLAG_BACKWARD);
+    }
+
+    ret = seek_frame_internal(s, stream_index, timestamp, flags);
 
     if (ret >= 0)
         ret = avformat_queue_attached_pictures(s);
@@ -2152,6 +2164,7 @@ int avformat_seek_file(AVFormatContext *s, int stream_index, int64_t min_ts, int
 
     if(s->seek2any>0)
         flags |= AVSEEK_FLAG_ANY;
+    flags &= ~AVSEEK_FLAG_BACKWARD;
 
     if (s->iformat->read_seek2) {
         int ret;
@@ -2179,8 +2192,8 @@ int avformat_seek_file(AVFormatContext *s, int stream_index, int64_t min_ts, int
         //try to seek via read_timestamp()
     }
 
-    //Fallback to old API if new is not implemented but old is
-    //Note the old has somewhat different semantics
+    // Fall back on old API if new is not implemented but old is.
+    // Note the old API has somewhat different semantics.
     if (s->iformat->read_seek || 1) {
         int dir = (ts - (uint64_t)min_ts > (uint64_t)max_ts - ts ? AVSEEK_FLAG_BACKWARD : 0);
         int ret = av_seek_frame(s, stream_index, ts, flags | dir);

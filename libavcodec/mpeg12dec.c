@@ -26,6 +26,7 @@
  */
 
 //#define DEBUG
+#include "libavutil/attributes.h"
 #include "libavutil/internal.h"
 #include "internal.h"
 #include "avcodec.h"
@@ -1098,6 +1099,7 @@ static const enum AVPixelFormat mpeg1_hwaccel_pixfmt_list_420[] = {
 #endif
 #if CONFIG_MPEG1_VDPAU_HWACCEL
     AV_PIX_FMT_VDPAU_MPEG1,
+    AV_PIX_FMT_VDPAU,
 #endif
     AV_PIX_FMT_YUV420P,
     AV_PIX_FMT_NONE
@@ -1110,6 +1112,7 @@ static const enum AVPixelFormat mpeg2_hwaccel_pixfmt_list_420[] = {
 #endif
 #if CONFIG_MPEG2_VDPAU_HWACCEL
     AV_PIX_FMT_VDPAU_MPEG2,
+    AV_PIX_FMT_VDPAU,
 #endif
 #if CONFIG_MPEG2_DXVA2_HWACCEL
     AV_PIX_FMT_DXVA2_VLD,
@@ -2470,7 +2473,7 @@ static void flush(AVCodecContext *avctx)
     ff_mpeg_flush(avctx);
 }
 
-static int mpeg_decode_end(AVCodecContext *avctx)
+static av_cold int mpeg_decode_end(AVCodecContext *avctx)
 {
     Mpeg1Context *s = avctx->priv_data;
 
