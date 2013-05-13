@@ -83,7 +83,7 @@ FATE_TRIM += fate-filter-trim-mixed
 fate-filter-trim-mixed: CMD = framecrc -i $(SRC) -vf trim=start=0.2:end=0.4:start_frame=1:end_frame=3
 
 FATE_TRIM += fate-filter-trim-time
-fate-filter-trim-time: CMD = framecrc -i $(SRC) -vf trim=0:0.075
+fate-filter-trim-time: CMD = framecrc -i $(SRC) -vf trim=0:0.09
 
 FATE_FILTER_VSYNTH-$(CONFIG_TRIM_FILTER) += $(FATE_TRIM)
 
@@ -91,7 +91,7 @@ FATE_FILTER_VSYNTH-$(CONFIG_UNSHARP_FILTER) += fate-filter-unsharp
 fate-filter-unsharp: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf unsharp=11:11:-1.5:11:11:-1.5
 
 FATE_FILTER-$(call ALLYES, SMJPEG_DEMUXER MJPEG_DECODER PERMS_FILTER HQDN3D_FILTER) += fate-filter-hqdn3d-sample
-fate-filter-hqdn3d-sample: CMD = framecrc -idct simple -i $(SAMPLES)/smjpeg/scenwin.mjpg -vf perms=random,hqdn3d -an
+fate-filter-hqdn3d-sample: CMD = framecrc -idct simple -i $(SAMPLES)/smjpeg/scenwin.mjpg -filter_complex_script $(SRC_PATH)/tests/filtergraphs/hqdn3d -an
 
 FATE_FILTER-$(call ALLYES, UTVIDEO_DECODER AVI_DEMUXER PERMS_FILTER CURVES_FILTER) += fate-filter-curves
 fate-filter-curves: CMD = framecrc -i $(SAMPLES)/utvideo/utvideo_rgb_median.avi -vf perms=random,curves=vintage
@@ -214,6 +214,9 @@ fate-filter-pixfmts-il:    CMD = pixfmts "luma_mode=d:chroma_mode=d:alpha_mode=d
 
 FATE_FILTER_PIXFMTS-$(CONFIG_KERNDEINT_FILTER) += fate-filter-pixfmts-kerndeint
 fate-filter-pixfmts-kerndeint: CMD = pixfmts "" "tinterlace=interleave_top,"
+
+FATE_FILTER_PIXFMTS-$(CONFIG_LUT_FILTER) += fate-filter-pixfmts-lut
+fate-filter-pixfmts-lut: CMD = pixfmts "c0=2*val:c1=2*val:c2=val/2:c3=negval+40"
 
 FATE_FILTER_PIXFMTS-$(CONFIG_NULL_FILTER) += fate-filter-pixfmts-null
 fate-filter-pixfmts-null:  CMD = pixfmts

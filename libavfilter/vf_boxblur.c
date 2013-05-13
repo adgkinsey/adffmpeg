@@ -302,7 +302,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterLink *outlink = inlink->dst->outputs[0];
     AVFrame *out;
     int plane;
-    int cw = inlink->w >> boxblur->hsub, ch = in->height >> boxblur->vsub;
+    int cw = FF_CEIL_RSHIFT(inlink->w, boxblur->hsub), ch = FF_CEIL_RSHIFT(in->height, boxblur->vsub);
     int w[4] = { inlink->w, cw, cw, inlink->w };
     int h[4] = { in->height, ch, ch, in->height };
 
@@ -383,5 +383,5 @@ AVFilter avfilter_vf_boxblur = {
 
     .inputs    = avfilter_vf_boxblur_inputs,
     .outputs   = avfilter_vf_boxblur_outputs,
-    .flags     = AVFILTER_FLAG_SUPPORT_TIMELINE,
+    .flags     = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
 };

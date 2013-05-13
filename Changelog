@@ -39,6 +39,12 @@ version <next>:
   transcoding audio
 - Matroska muxer can now put the index at the beginning of the file.
 - extractplanes filter
+- avectorscope filter
+- ADPCM DTK decoder
+- ADP demuxer
+- RSD demuxer
+- RedSpark demuxer
+- ADPCM IMA Radical decoder
 
 
 version 1.2:

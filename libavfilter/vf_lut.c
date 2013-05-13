@@ -110,7 +110,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 #define YUV_FORMATS                                         \
     AV_PIX_FMT_YUV444P,  AV_PIX_FMT_YUV422P,  AV_PIX_FMT_YUV420P,    \
     AV_PIX_FMT_YUV411P,  AV_PIX_FMT_YUV410P,  AV_PIX_FMT_YUV440P,    \
-    AV_PIX_FMT_YUVA420P,                                       \
+    AV_PIX_FMT_YUVA420P, AV_PIX_FMT_YUVA422P, AV_PIX_FMT_YUVA444P,   \
     AV_PIX_FMT_YUVJ444P, AV_PIX_FMT_YUVJ422P, AV_PIX_FMT_YUVJ420P,   \
     AV_PIX_FMT_YUVJ440P
 
@@ -195,6 +195,8 @@ static int config_props(AVFilterLink *inlink)
     case AV_PIX_FMT_YUV440P:
     case AV_PIX_FMT_YUV444P:
     case AV_PIX_FMT_YUVA420P:
+    case AV_PIX_FMT_YUVA422P:
+    case AV_PIX_FMT_YUVA444P:
         min[Y] = min[U] = min[V] = 16;
         max[Y] = 235;
         max[U] = max[V] = 240;
@@ -303,13 +305,14 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         for (plane = 0; plane < 4 && in->data[plane]; plane++) {
             int vsub = plane == 1 || plane == 2 ? lut->vsub : 0;
             int hsub = plane == 1 || plane == 2 ? lut->hsub : 0;
+            int h = FF_CEIL_RSHIFT(inlink->h, vsub);
+            int w = FF_CEIL_RSHIFT(inlink->w, hsub);
 
             inrow  = in ->data[plane];
             outrow = out->data[plane];
 
-            for (i = 0; i < (in->height + (1<<vsub) - 1)>>vsub; i ++) {
+            for (i = 0; i < h; i++) {
                 const uint8_t *tab = lut->lut[plane];
-                int w = (inlink->w + (1<<hsub) - 1)>>hsub;
                 for (j = 0; j < w; j++)
                     outrow[j] = tab[inrow[j]];
                 inrow  += in ->linesize[plane];
@@ -351,7 +354,7 @@ static const AVFilterPad outputs[] = {
                                                                         \
         .inputs        = inputs,                                        \
         .outputs       = outputs,                                       \
-        .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE,                \
+        .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,        \
     }
 
 #if CONFIG_LUT_FILTER

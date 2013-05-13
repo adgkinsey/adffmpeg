@@ -316,12 +316,24 @@ static int formats_declared(AVFilterContext *f)
     return 1;
 }
 
+/**
+ * Perform one round of query_formats() and merging formats lists on the
+ * filter graph.
+ * @return  >=0 if all links formats lists could be queried and merged;
+ *          AVERROR(EAGAIN) some progress was made in the queries or merging
+ *          and a later call may succeed;
+ *          AVERROR(EIO) (may be changed) plus a log message if no progress
+ *          was made and the negotiation is stuck;
+ *          a negative error code if some other error happened
+ */
 static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
 {
     int i, j, ret;
     int scaler_count = 0, resampler_count = 0;
-    int count_queried = 0, count_merged = 0, count_already_merged = 0,
-        count_delayed = 0;
+    int count_queried = 0;        /* successful calls to query_formats() */
+    int count_merged = 0;         /* successful merge of formats lists */
+    int count_already_merged = 0; /* lists already merged */
+    int count_delayed = 0;        /* lists that need to be merged later */
 
     for (i = 0; i < graph->nb_filters; i++) {
         AVFilterContext *f = graph->filters[i];
@@ -333,7 +345,8 @@ static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
             ret = ff_default_query_formats(f);
         if (ret < 0 && ret != AVERROR(EAGAIN))
             return ret;
-        count_queried++;
+        /* note: EAGAIN could indicate a partial success, not counted yet */
+        count_queried += ret >= 0;
     }
 
     /* go through and merge as many format lists as possible */
@@ -463,6 +476,11 @@ static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
     if (count_delayed) {
         AVBPrint bp;
 
+        /* if count_queried > 0, one filter at least did set its formats,
+           that will give additional information to its neighbour;
+           if count_merged > 0, one pair of formats lists at least was merged,
+           that will give additional information to all connected filters;
+           in both cases, progress was made and a new round must be done */
         if (count_queried || count_merged)
             return AVERROR(EAGAIN);
         av_bprint_init(&bp, 0, AV_BPRINT_SIZE_AUTOMATIC);
@@ -1063,24 +1081,24 @@ int avfilter_graph_send_command(AVFilterGraph *graph, const char *target, const 
 {
     int i, r = AVERROR(ENOSYS);
 
-    if(!graph)
+    if (!graph)
         return r;
 
-    if((flags & AVFILTER_CMD_FLAG_ONE) && !(flags & AVFILTER_CMD_FLAG_FAST)) {
-        r=avfilter_graph_send_command(graph, target, cmd, arg, res, res_len, flags | AVFILTER_CMD_FLAG_FAST);
-        if(r != AVERROR(ENOSYS))
+    if ((flags & AVFILTER_CMD_FLAG_ONE) && !(flags & AVFILTER_CMD_FLAG_FAST)) {
+        r = avfilter_graph_send_command(graph, target, cmd, arg, res, res_len, flags | AVFILTER_CMD_FLAG_FAST);
+        if (r != AVERROR(ENOSYS))
             return r;
     }
 
-    if(res_len && res)
-        res[0]= 0;
+    if (res_len && res)
+        res[0] = 0;
 
     for (i = 0; i < graph->nb_filters; i++) {
         AVFilterContext *filter = graph->filters[i];
-        if(!strcmp(target, "all") || (filter->name && !strcmp(target, filter->name)) || !strcmp(target, filter->filter->name)){
+        if (!strcmp(target, "all") || (filter->name && !strcmp(target, filter->name)) || !strcmp(target, filter->filter->name)) {
             r = avfilter_process_command(filter, cmd, arg, res, res_len, flags);
-            if(r != AVERROR(ENOSYS)) {
-                if((flags & AVFILTER_CMD_FLAG_ONE) || r<0)
+            if (r != AVERROR(ENOSYS)) {
+                if ((flags & AVFILTER_CMD_FLAG_ONE) || r < 0)
                     return r;
             }
         }

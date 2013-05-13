@@ -1265,8 +1265,6 @@ static int jpeg2000_decode_frame(AVCodecContext *avctx, void *data,
     // reduction factor, i.e number of resolution levels to skip
     s->reduction_factor = s->lowres;
 
-    ff_jpeg2000_init_tier1_luts();
-
     if (s->buf_end - s->buf < 2)
         return AVERROR(EINVAL);
 
@@ -1288,29 +1286,34 @@ static int jpeg2000_decode_frame(AVCodecContext *avctx, void *data,
         return -1;
     }
     if (ret = jpeg2000_read_main_headers(s))
-        goto fail;
+        goto end;
 
     /* get picture buffer */
     if ((ret = ff_thread_get_buffer(avctx, &frame, 0)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "ff_thread_get_buffer() failed.\n");
-        goto fail;
+        goto end;
     }
     picture->pict_type = AV_PICTURE_TYPE_I;
     picture->key_frame = 1;
 
     if (ret = jpeg2000_read_bitstream_packets(s))
-        goto fail;
+        goto end;
     for (tileno = 0; tileno < s->numXtiles * s->numYtiles; tileno++)
         if (ret = jpeg2000_decode_tile(s, s->tile + tileno, picture))
-            goto fail;
+            goto end;
     jpeg2000_dec_cleanup(s);
 
     *got_frame = 1;
 
     return s->buf - s->buf_start;
-fail:
+end:
     jpeg2000_dec_cleanup(s);
     return ret;
+}
+
+static void jpeg2000_init_static_data(AVCodec *codec)
+{
+    ff_jpeg2000_init_tier1_luts();
 }
 
 #define OFFSET(x) offsetof(Jpeg2000DecoderContext, x)
@@ -1339,16 +1342,17 @@ static const AVClass class = {
 };
 
 AVCodec ff_jpeg2000_decoder = {
-    .name           = "jpeg2000",
-    .long_name      = NULL_IF_CONFIG_SMALL("JPEG 2000"),
-    .type           = AVMEDIA_TYPE_VIDEO,
-    .id             = AV_CODEC_ID_JPEG2000,
-    .capabilities   = CODEC_CAP_FRAME_THREADS,
-    .priv_data_size = sizeof(Jpeg2000DecoderContext),
-    .decode         = jpeg2000_decode_frame,
-    .priv_class     = &class,
-    .pix_fmts       = (enum PixelFormat[]) { AV_PIX_FMT_XYZ12,
-                                             AV_PIX_FMT_GRAY8,
-                                             -1 },
-    .profiles       = NULL_IF_CONFIG_SMALL(profiles)
+    .name             = "jpeg2000",
+    .long_name        = NULL_IF_CONFIG_SMALL("JPEG 2000"),
+    .type             = AVMEDIA_TYPE_VIDEO,
+    .id               = AV_CODEC_ID_JPEG2000,
+    .capabilities     = CODEC_CAP_FRAME_THREADS,
+    .priv_data_size   = sizeof(Jpeg2000DecoderContext),
+    .init_static_data = jpeg2000_init_static_data,
+    .decode           = jpeg2000_decode_frame,
+    .priv_class       = &class,
+    .pix_fmts         = (enum PixelFormat[]) { AV_PIX_FMT_XYZ12,
+                                               AV_PIX_FMT_GRAY8,
+                                               -1 },
+    .profiles         = NULL_IF_CONFIG_SMALL(profiles)
 };

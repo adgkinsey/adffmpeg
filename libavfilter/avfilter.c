@@ -453,6 +453,9 @@ int avfilter_register(AVFilter *filter)
     AVFilter **f = &first_filter;
     int i;
 
+    /* the filter must select generic or internal exclusively */
+    av_assert0((filter->flags & AVFILTER_FLAG_SUPPORT_TIMELINE) != AVFILTER_FLAG_SUPPORT_TIMELINE);
+
     for(i=0; filter->inputs && filter->inputs[i].name; i++) {
         const AVFilterPad *input = &filter->inputs[i];
         av_assert0(     !input->filter_frame
@@ -510,7 +513,7 @@ static void *filter_child_next(void *obj, void *prev)
 
 static const AVClass *filter_child_class_next(const AVClass *prev)
 {
-    AVFilter *f = NULL;
+    const AVFilter *f = NULL;
 
     /* find the filter that corresponds to prev */
     while (prev && (f = avfilter_next(f)))
@@ -993,9 +996,11 @@ static int ff_filter_frame_framed(AVFilterLink *link, AVFrame *frame)
         dstctx->var_values[VAR_N] = link->frame_count;
         dstctx->var_values[VAR_T] = pts == AV_NOPTS_VALUE ? NAN : pts * av_q2d(link->time_base);
         dstctx->var_values[VAR_POS] = pos == -1 ? NAN : pos;
-        if (!av_expr_eval(dstctx->enable, dstctx->var_values, NULL))
-            filter_frame = dst->passthrough_filter_frame ? dst->passthrough_filter_frame
-                                                         : default_filter_frame;
+
+        dstctx->is_disabled = !av_expr_eval(dstctx->enable, dstctx->var_values, NULL);
+        if (dstctx->is_disabled &&
+            (dstctx->filter->flags & AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC))
+            filter_frame = default_filter_frame;
     }
     ret = filter_frame(link, out);
     link->frame_count++;

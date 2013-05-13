@@ -15,6 +15,7 @@ bgr565be            fca6f07daf23d9dd84381dd4c9afd959
 bgr565le            f524e9f16bdd68b247dbcb621e543fc0
 bgr8                68a3a395043dc57335ad1f8e891229c5
 bgra                3eaf5489b8aa13a3388aad3751b597bf
+gbrap               76ddf2bedea40c8743f4117b786d4773
 gbrp                7b83ae32c1f76bd634e50f4797a74e92
 gbrp10be            77dae432c42fad019c286753b0e4b0a8
 gbrp10le            7d3e7341423b1206e8a6a3a02b48b5d7
@@ -45,6 +46,8 @@ rgb565be            5168b66e69c25351948085e5fc51bb3a
 rgb565le            301a4d41f0db3aaed341d812ed0d7927
 rgb8                8e5786e83099bc89d2e38a76e6dfcc52
 rgba                de6a65b8c01bdad84e575202ca8b66a0
+rgba64be            fdc6467660a45d6e9dad59339be2ec4c
+rgba64le            b208b8fdd403c1a24bbef0473a89d978
 uyvy422             479105bc4c7fbb4a33ca8745aa8c2de8
 xyz12be             e9be06091b6dd0b67598eaf8bd86a78e
 xyz12le             05a9bbd16d81183ef3db04447648e3b1

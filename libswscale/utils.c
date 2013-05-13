@@ -138,8 +138,8 @@ static const FormatEntry format_entries[AV_PIX_FMT_NB] = {
     [AV_PIX_FMT_YUVA444P16LE]= { 1, 1 },
     [AV_PIX_FMT_RGB48BE]     = { 1, 1 },
     [AV_PIX_FMT_RGB48LE]     = { 1, 1 },
-    [AV_PIX_FMT_RGBA64BE]    = { 1, 0 },
-    [AV_PIX_FMT_RGBA64LE]    = { 1, 0 },
+    [AV_PIX_FMT_RGBA64BE]    = { 1, 1 },
+    [AV_PIX_FMT_RGBA64LE]    = { 1, 1 },
     [AV_PIX_FMT_RGB565BE]    = { 1, 1 },
     [AV_PIX_FMT_RGB565LE]    = { 1, 1 },
     [AV_PIX_FMT_RGB555BE]    = { 1, 1 },
@@ -200,9 +200,9 @@ static const FormatEntry format_entries[AV_PIX_FMT_NB] = {
     [AV_PIX_FMT_GBRP16BE]    = { 1, 0 },
     [AV_PIX_FMT_XYZ12BE]     = { 1, 0, 1 },
     [AV_PIX_FMT_XYZ12LE]     = { 1, 0, 1 },
-    [AV_PIX_FMT_GBRAP]       = { 0, 0 },
-    [AV_PIX_FMT_GBRAP16LE]   = { 0, 0 },
-    [AV_PIX_FMT_GBRAP16BE]   = { 0, 0 },
+    [AV_PIX_FMT_GBRAP]       = { 1, 1 },
+    [AV_PIX_FMT_GBRAP16LE]   = { 1, 0 },
+    [AV_PIX_FMT_GBRAP16BE]   = { 1, 0 },
 };
 
 int sws_isSupportedInput(enum AVPixelFormat pix_fmt)
@@ -1228,11 +1228,11 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
          (flags & SWS_FAST_BILINEAR)))
         c->chrSrcHSubSample = 1;
 
-    // Note the -((-x)>>y) is so that we always round toward +inf.
-    c->chrSrcW = -((-srcW) >> c->chrSrcHSubSample);
-    c->chrSrcH = -((-srcH) >> c->chrSrcVSubSample);
-    c->chrDstW = -((-dstW) >> c->chrDstHSubSample);
-    c->chrDstH = -((-dstH) >> c->chrDstVSubSample);
+    // Note the FF_CEIL_RSHIFT is so that we always round toward +inf.
+    c->chrSrcW = FF_CEIL_RSHIFT(srcW, c->chrSrcHSubSample);
+    c->chrSrcH = FF_CEIL_RSHIFT(srcH, c->chrSrcVSubSample);
+    c->chrDstW = FF_CEIL_RSHIFT(dstW, c->chrDstHSubSample);
+    c->chrDstH = FF_CEIL_RSHIFT(dstH, c->chrDstVSubSample);
 
     FF_ALLOC_OR_GOTO(c, c->formatConvBuffer, FFALIGN(srcW*2+78, 16) * 2, fail);
 

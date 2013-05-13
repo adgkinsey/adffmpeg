@@ -101,7 +101,7 @@ OBJS-$(CONFIG_SINE_FILTER)                   += asrc_sine.o
 OBJS-$(CONFIG_ANULLSINK_FILTER)              += asink_anullsink.o
 
 OBJS-$(CONFIG_ASS_FILTER)                    += vf_subtitles.o
-OBJS-$(CONFIG_ALPHAEXTRACT_FILTER)           += vf_alphaextract.o
+OBJS-$(CONFIG_ALPHAEXTRACT_FILTER)           += vf_extractplanes.o
 OBJS-$(CONFIG_ALPHAMERGE_FILTER)             += vf_alphamerge.o
 OBJS-$(CONFIG_BBOX_FILTER)                   += bbox.o vf_bbox.o
 OBJS-$(CONFIG_BLACKDETECT_FILTER)            += vf_blackdetect.o
@@ -223,6 +223,7 @@ OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_uspp.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/pullup.o
 
 # multimedia filters
+OBJS-$(CONFIG_AVECTORSCOPE_FILTER)           += avf_avectorscope.o
 OBJS-$(CONFIG_CONCAT_FILTER)                 += avf_concat.o
 OBJS-$(CONFIG_SHOWSPECTRUM_FILTER)           += avf_showspectrum.o
 OBJS-$(CONFIG_SHOWWAVES_FILTER)              += avf_showwaves.o
@@ -232,7 +233,7 @@ OBJS-$(CONFIG_AMOVIE_FILTER)                 += src_movie.o
 OBJS-$(CONFIG_MOVIE_FILTER)                  += src_movie.o
 
 SKIPHEADERS-$(CONFIG_LIBVIDSTAB)             += vidstabutils.h
-SKIPHEADERS-$(CONFIG_OPENCL)                 += opencl_internal.h deshake_kernel.h unsharp_kernel.h
+SKIPHEADERS-$(CONFIG_OPENCL)                 += opencl_internal.h deshake_opencl_kernel.h unsharp_opencl_kernel.h
 
 TOOLS     = graph2dot
 TESTPROGS = drawutils filtfmts formats

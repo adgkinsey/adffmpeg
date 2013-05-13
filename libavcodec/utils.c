@@ -179,8 +179,8 @@ void avcodec_set_dimensions(AVCodecContext *s, int width, int height)
 {
     s->coded_width  = width;
     s->coded_height = height;
-    s->width        = -((-width ) >> s->lowres);
-    s->height       = -((-height) >> s->lowres);
+    s->width        = FF_CEIL_RSHIFT(width,  s->lowres);
+    s->height       = FF_CEIL_RSHIFT(height, s->lowres);
 }
 
 #if (ARCH_ARM && HAVE_NEON) || ARCH_PPC || HAVE_MMX
@@ -203,6 +203,7 @@ void avcodec_align_dimensions2(AVCodecContext *s, int *width, int *height,
     case AV_PIX_FMT_YUV422P:
     case AV_PIX_FMT_YUV440P:
     case AV_PIX_FMT_YUV444P:
+    case AV_PIX_FMT_GBRAP:
     case AV_PIX_FMT_GBRP:
     case AV_PIX_FMT_GRAY8:
     case AV_PIX_FMT_GRAY16BE:
@@ -572,8 +573,9 @@ void avpriv_color_frame(AVFrame *frame, const int c[4])
     for (p = 0; p<desc->nb_components; p++) {
         uint8_t *dst = frame->data[p];
         int is_chroma = p == 1 || p == 2;
-        int bytes = -((-frame->width) >> (is_chroma ? desc->log2_chroma_w : 0));
-        for (y = 0; y<-((-frame->height) >> (is_chroma ? desc->log2_chroma_h : 0)); y++){
+        int bytes  = is_chroma ? FF_CEIL_RSHIFT(frame->width,  desc->log2_chroma_w) : frame->width;
+        int height = is_chroma ? FF_CEIL_RSHIFT(frame->height, desc->log2_chroma_h) : frame->height;
+        for (y = 0; y < height; y++) {
             if (desc->comp[0].depth_minus1 >= 8) {
                 for (x = 0; x<bytes; x++)
                     ((uint16_t*)dst)[x] = c[p];
@@ -622,8 +624,8 @@ int ff_init_buffer_info(AVCodecContext *avctx, AVFrame *frame)
 
     switch (avctx->codec->type) {
     case AVMEDIA_TYPE_VIDEO:
-        frame->width  = FFMAX(avctx->width , -((-avctx->coded_width )>>avctx->lowres));
-        frame->height = FFMAX(avctx->height, -((-avctx->coded_height)>>avctx->lowres));
+        frame->width  = FFMAX(avctx->width,  FF_CEIL_RSHIFT(avctx->coded_width,  avctx->lowres));
+        frame->height = FFMAX(avctx->height, FF_CEIL_RSHIFT(avctx->coded_height, avctx->lowres));
         if (frame->format < 0)
             frame->format              = avctx->pix_fmt;
         if (!frame->sample_aspect_ratio.num)
@@ -2085,13 +2087,6 @@ int attribute_align_arg avcodec_decode_audio4(AVCodecContext *avctx,
                 av_frame_set_channels(frame, avctx->channels);
             if (!frame->sample_rate)
                 frame->sample_rate = avctx->sample_rate;
-            if (!avctx->refcounted_frames) {
-                avci->to_free = *frame;
-                avci->to_free.extended_data = avci->to_free.data;
-                memset(frame->buf, 0, sizeof(frame->buf));
-                frame->extended_buf    = NULL;
-                frame->nb_extended_buf = 0;
-            }
         }
 
         side= av_packet_get_side_data(avctx->pkt, AV_PKT_DATA_SKIP_SAMPLES, &side_size);
@@ -2104,8 +2099,6 @@ int attribute_align_arg avcodec_decode_audio4(AVCodecContext *avctx,
             if(frame->nb_samples <= avctx->internal->skip_samples){
                 *got_frame_ptr = 0;
                 avctx->internal->skip_samples -= frame->nb_samples;
-                if (avctx->refcounted_frames)
-                    av_frame_unref(frame);
                 av_log(avctx, AV_LOG_DEBUG, "skip whole frame, skip left: %d\n",
                        avctx->internal->skip_samples);
             } else {
@@ -2138,7 +2131,15 @@ int attribute_align_arg avcodec_decode_audio4(AVCodecContext *avctx,
                 ret = avpkt->size;
         }
 
-        if (ret < 0 && frame->data[0])
+        if (ret >= 0 && *got_frame_ptr) {
+            if (!avctx->refcounted_frames) {
+                avci->to_free = *frame;
+                avci->to_free.extended_data = avci->to_free.data;
+                memset(frame->buf, 0, sizeof(frame->buf));
+                frame->extended_buf    = NULL;
+                frame->nb_extended_buf = 0;
+            }
+        } else if (frame->data[0])
             av_frame_unref(frame);
     }
 
@@ -2834,6 +2835,8 @@ int av_get_audio_frame_duration(AVCodecContext *avctx, int frame_bytes)
             switch (id) {
             case AV_CODEC_ID_ADPCM_AFC:
                 return frame_bytes / (9 * ch) * 16;
+            case AV_CODEC_ID_ADPCM_DTK:
+                return frame_bytes / (16 * ch) * 28;
             case AV_CODEC_ID_ADPCM_4XM:
             case AV_CODEC_ID_ADPCM_IMA_ISS:
                 return (frame_bytes - 4 * ch) * 2 / ch;
@@ -2880,6 +2883,8 @@ int av_get_audio_frame_duration(AVCodecContext *avctx, int frame_bytes)
                     return blocks * (((ba - 16) * 2 / 3 * 4) / ch);
                 case AV_CODEC_ID_ADPCM_IMA_DK4:
                     return blocks * (1 + (ba - 4 * ch) * 2 / ch);
+                case AV_CODEC_ID_ADPCM_IMA_RAD:
+                    return blocks * ((ba - 4 * ch) * 2 / ch);
                 case AV_CODEC_ID_ADPCM_MS:
                     return blocks * (2 + (ba - 7 * ch) * 2 / ch);
                 }

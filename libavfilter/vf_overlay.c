@@ -88,7 +88,6 @@ enum var_name {
 typedef struct {
     const AVClass *class;
     int x, y;                   ///< position of overlayed picture
-    int enable;                 ///< tells if blending is enabled
 
     int allow_packed_rgb;
     uint8_t frame_requested;
@@ -151,12 +150,11 @@ static void eval_expr(AVFilterContext *ctx)
 {
     OverlayContext  *over = ctx->priv;
 
-    /* TODO: reindent */
-        over->var_values[VAR_X] = av_expr_eval(over->x_pexpr, over->var_values, NULL);
-        over->var_values[VAR_Y] = av_expr_eval(over->y_pexpr, over->var_values, NULL);
-        over->var_values[VAR_X] = av_expr_eval(over->x_pexpr, over->var_values, NULL);
-        over->x = normalize_xy(over->var_values[VAR_X], over->hsub);
-        over->y = normalize_xy(over->var_values[VAR_Y], over->vsub);
+    over->var_values[VAR_X] = av_expr_eval(over->x_pexpr, over->var_values, NULL);
+    over->var_values[VAR_Y] = av_expr_eval(over->y_pexpr, over->var_values, NULL);
+    over->var_values[VAR_X] = av_expr_eval(over->x_pexpr, over->var_values, NULL);
+    over->x = normalize_xy(over->var_values[VAR_X], over->hsub);
+    over->y = normalize_xy(over->var_values[VAR_Y], over->vsub);
 }
 
 static int set_expr(AVExpr **pexpr, const char *expr, const char *option, void *log_ctx)
@@ -479,10 +477,10 @@ static void blend_image(AVFilterContext *ctx,
         for (i = 0; i < 3; i++) {
             int hsub = i ? over->hsub : 0;
             int vsub = i ? over->vsub : 0;
-            int src_wp = FFALIGN(src_w, 1<<hsub) >> hsub;
-            int src_hp = FFALIGN(src_h, 1<<vsub) >> vsub;
-            int dst_wp = FFALIGN(dst_w, 1<<hsub) >> hsub;
-            int dst_hp = FFALIGN(dst_h, 1<<vsub) >> vsub;
+            int src_wp = FF_CEIL_RSHIFT(src_w, hsub);
+            int src_hp = FF_CEIL_RSHIFT(src_h, vsub);
+            int dst_wp = FF_CEIL_RSHIFT(dst_w, hsub);
+            int dst_hp = FF_CEIL_RSHIFT(dst_h, vsub);
             int yp = y>>vsub;
             int xp = x>>hsub;
             uint8_t *s, *sp, *d, *dp, *a, *ap;
@@ -598,7 +596,7 @@ static int try_filter_frame(AVFilterContext *ctx, AVFrame *mainpic)
                    over->var_values[VAR_X], over->x,
                    over->var_values[VAR_Y], over->y);
         }
-        if (over->enable)
+        if (!ctx->is_disabled)
             blend_image(ctx, mainpic, over->overpicref, over->x, over->y);
 
     }
@@ -664,20 +662,6 @@ static int filter_frame_over(AVFilterLink *inlink, AVFrame *inpicref)
     return ret == AVERROR(EAGAIN) ? 0 : ret;
 }
 
-#define DEF_FILTER_FRAME(name, mode, enable_value)                              \
-static int filter_frame_##name##_##mode(AVFilterLink *inlink, AVFrame *frame)   \
-{                                                                               \
-    AVFilterContext *ctx = inlink->dst;                                         \
-    OverlayContext *over = ctx->priv;                                           \
-    over->enable = enable_value;                                                \
-    return filter_frame_##name(inlink, frame);                                  \
-}
-
-DEF_FILTER_FRAME(main, enabled,  1);
-DEF_FILTER_FRAME(main, disabled, 0);
-DEF_FILTER_FRAME(over, enabled,  1);
-DEF_FILTER_FRAME(over, disabled, 0);
-
 static int request_frame(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
@@ -735,16 +719,14 @@ static const AVFilterPad avfilter_vf_overlay_inputs[] = {
         .type         = AVMEDIA_TYPE_VIDEO,
         .get_video_buffer = ff_null_get_video_buffer,
         .config_props = config_input_main,
-        .filter_frame             = filter_frame_main_enabled,
-        .passthrough_filter_frame = filter_frame_main_disabled,
+        .filter_frame = filter_frame_main,
         .needs_writable = 1,
     },
     {
         .name         = "overlay",
         .type         = AVMEDIA_TYPE_VIDEO,
         .config_props = config_input_overlay,
-        .filter_frame             = filter_frame_over_enabled,
-        .passthrough_filter_frame = filter_frame_over_disabled,
+        .filter_frame = filter_frame_over,
     },
     { NULL }
 };
@@ -774,5 +756,5 @@ AVFilter avfilter_vf_overlay = {
 
     .inputs    = avfilter_vf_overlay_inputs,
     .outputs   = avfilter_vf_overlay_outputs,
-    .flags     = AVFILTER_FLAG_SUPPORT_TIMELINE,
+    .flags     = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
 };

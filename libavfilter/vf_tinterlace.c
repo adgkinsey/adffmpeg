@@ -130,7 +130,7 @@ static int config_out_props(AVFilterLink *outlink)
 
         /* fill black picture with black */
         for (i = 0; i < 4 && tinterlace->black_data[i]; i++) {
-            int h = i == 1 || i == 2 ? outlink->h >> desc->log2_chroma_h : outlink->h;
+            int h = i == 1 || i == 2 ? FF_CEIL_RSHIFT(outlink->h, desc->log2_chroma_h) : outlink->h;
             memset(tinterlace->black_data[i], black[i],
                    tinterlace->black_linesize[i] * h);
         }
@@ -175,7 +175,7 @@ void copy_picture_field(uint8_t *dst[4], int dst_linesize[4],
     int h, i;
 
     for (plane = 0; plane < desc->nb_components; plane++) {
-        int lines = plane == 1 || plane == 2 ? -((-src_h) >> vsub) : src_h;
+        int lines = plane == 1 || plane == 2 ? FF_CEIL_RSHIFT(src_h, vsub) : src_h;
         int linesize = av_image_get_linesize(format, w, plane);
         uint8_t *dstp = dst[plane];
         const uint8_t *srcp = src[plane];

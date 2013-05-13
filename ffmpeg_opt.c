@@ -1334,6 +1334,9 @@ static OutputStream *new_audio_stream(OptionsContext *o, AVFormatContext *oc, in
 
         MATCH_PER_STREAM_OPT(audio_sample_rate, i, audio_enc->sample_rate, oc, st);
 
+        MATCH_PER_STREAM_OPT(apad, str, ost->apad, oc, st);
+        ost->apad = av_strdup(ost->apad);
+
         ost->avfilter = get_ost_filters(o, oc, ost);
         if (!ost->avfilter)
             exit(1);
@@ -1719,7 +1722,6 @@ static int open_output_file(OptionsContext *o, const char *filename)
     } else {
         for (i = 0; i < o->nb_stream_maps; i++) {
             StreamMap *map = &o->stream_maps[i];
-            int src_idx = input_files[map->file_index]->ist_index + map->stream_index;
 
             if (map->disabled)
                 continue;
@@ -1747,6 +1749,8 @@ loop_end:
                 }
                 init_output_filter(ofilter, o, oc);
             } else {
+                int src_idx = input_files[map->file_index]->ist_index + map->stream_index;
+
                 ist = input_streams[input_files[map->file_index]->ist_index + map->stream_index];
                 if(o->subtitle_disable && ist->st->codec->codec_type == AVMEDIA_TYPE_SUBTITLE)
                     continue;
@@ -2641,6 +2645,9 @@ const OptionDef options[] = {
     { "shortest",       OPT_BOOL | OPT_EXPERT | OPT_OFFSET |
                         OPT_OUTPUT,                                  { .off = OFFSET(shortest) },
         "finish encoding within shortest input" },
+    { "apad",           OPT_STRING | HAS_ARG | OPT_SPEC |
+                        OPT_OUTPUT,                                  { .off = OFFSET(apad) },
+        "audio pad", "" },
     { "dts_delta_threshold", HAS_ARG | OPT_FLOAT | OPT_EXPERT,       { &dts_delta_threshold },
         "timestamp discontinuity delta threshold", "threshold" },
     { "dts_error_threshold", HAS_ARG | OPT_FLOAT | OPT_EXPERT,       { &dts_error_threshold },

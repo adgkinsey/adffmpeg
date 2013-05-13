@@ -256,6 +256,9 @@ static av_always_inline void hyscale(SwsContext *c, int16_t *dst, int dstWidth,
     } else if (c->readLumPlanar && !isAlpha) {
         c->readLumPlanar(formatConvBuffer, src_in, srcW, c->input_rgb2yuv_table);
         src = formatConvBuffer;
+    } else if (c->readAlpPlanar && isAlpha) {
+        c->readAlpPlanar(formatConvBuffer, src_in, srcW, NULL);
+        src = formatConvBuffer;
     }
 
     if (!c->hyscale_fast) {
@@ -370,8 +373,8 @@ static int swScale(SwsContext *c, const uint8_t *src[],
     yuv2packed2_fn yuv2packed2       = c->yuv2packed2;
     yuv2packedX_fn yuv2packedX       = c->yuv2packedX;
     yuv2anyX_fn yuv2anyX             = c->yuv2anyX;
-    const int chrSrcSliceY           =     srcSliceY  >> c->chrSrcVSubSample;
-    const int chrSrcSliceH           = -((-srcSliceH) >> c->chrSrcVSubSample);
+    const int chrSrcSliceY           =                srcSliceY >> c->chrSrcVSubSample;
+    const int chrSrcSliceH           = FF_CEIL_RSHIFT(srcSliceH,   c->chrSrcVSubSample);
     int should_dither                = is9_OR_10BPS(c->srcFormat) ||
                                        is16BPS(c->srcFormat);
     int lastDstY;
@@ -488,7 +491,7 @@ static int swScale(SwsContext *c, const uint8_t *src[],
 
         // Do we have enough lines in this slice to output the dstY line
         enough_lines = lastLumSrcY2 < srcSliceY + srcSliceH &&
-                       lastChrSrcY < -((-srcSliceY - srcSliceH) >> c->chrSrcVSubSample);
+                       lastChrSrcY < FF_CEIL_RSHIFT(srcSliceY + srcSliceH, c->chrSrcVSubSample);
 
         if (!enough_lines) {
             lastLumSrcY = srcSliceY + srcSliceH - 1;
@@ -989,7 +992,7 @@ int attribute_align_arg sws_scale(struct SwsContext *c,
 
         base = srcStride[0] < 0 ? rgb0_tmp - srcStride[0] * (srcSliceH-1) : rgb0_tmp;
 
-        xyz12Torgb48(c, base, src2[0], srcStride[0]/2, srcSliceH);
+        xyz12Torgb48(c, (uint16_t*)base, (const uint16_t*)src2[0], srcStride[0]/2, srcSliceH);
         src2[0] = base;
     }
 

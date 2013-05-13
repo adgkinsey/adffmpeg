@@ -114,9 +114,9 @@ static int apply_unsharp_c(AVFilterContext *ctx, AVFrame *in, AVFrame *out)
     int i, plane_w[3], plane_h[3];
     UnsharpFilterParam *fp[3];
     plane_w[0] = inlink->w;
-    plane_w[1] = plane_w[2] = SHIFTUP(inlink->w, unsharp->hsub);
+    plane_w[1] = plane_w[2] = FF_CEIL_RSHIFT(inlink->w, unsharp->hsub);
     plane_h[0] = inlink->h;
-    plane_h[1] = plane_h[2] = SHIFTUP(inlink->h, unsharp->vsub);
+    plane_h[1] = plane_h[2] = FF_CEIL_RSHIFT(inlink->h, unsharp->vsub);
     fp[0] = &unsharp->luma;
     fp[1] = fp[2] = &unsharp->chroma;
     for (i = 0; i < 3; i++) {
@@ -207,7 +207,7 @@ static int config_props(AVFilterLink *link)
     ret = init_filter_param(link->dst, &unsharp->luma,   "luma",   link->w);
     if (ret < 0)
         return ret;
-    ret = init_filter_param(link->dst, &unsharp->chroma, "chroma", SHIFTUP(link->w, unsharp->hsub));
+    ret = init_filter_param(link->dst, &unsharp->chroma, "chroma", FF_CEIL_RSHIFT(link->w, unsharp->hsub));
     if (ret < 0)
         return ret;
 
@@ -267,18 +267,18 @@ end:
 #define MIN_SIZE 3
 #define MAX_SIZE 63
 static const AVOption unsharp_options[] = {
-    { "luma_msize_x",   "luma matrix horizontal size",   OFFSET(lmsize_x), AV_OPT_TYPE_INT,   { .i64 = 5 }, MIN_SIZE, MAX_SIZE, FLAGS },
-    { "lx",             "luma matrix horizontal size",   OFFSET(lmsize_x), AV_OPT_TYPE_INT,   { .i64 = 5 }, MIN_SIZE, MAX_SIZE, FLAGS },
-    { "luma_msize_y",   "luma matrix vertical size",     OFFSET(lmsize_y), AV_OPT_TYPE_INT,   { .i64 = 5 }, MIN_SIZE, MAX_SIZE, FLAGS },
-    { "ly",             "luma matrix vertical size",     OFFSET(lmsize_y), AV_OPT_TYPE_INT,   { .i64 = 5 }, MIN_SIZE, MAX_SIZE, FLAGS },
-    { "luma_amount",    "luma effect strength",          OFFSET(lamount),  AV_OPT_TYPE_FLOAT, { .dbl = 1 },       -2,        5, FLAGS },
-    { "la",             "luma effect strength",          OFFSET(lamount),  AV_OPT_TYPE_FLOAT, { .dbl = 1 },       -2,        5, FLAGS },
-    { "chroma_msize_x", "chroma matrix horizontal size", OFFSET(cmsize_x), AV_OPT_TYPE_INT,   { .i64 = 5 }, MIN_SIZE, MAX_SIZE, FLAGS },
-    { "cx",             "chroma matrix horizontal size", OFFSET(cmsize_x), AV_OPT_TYPE_INT,   { .i64 = 5 }, MIN_SIZE, MAX_SIZE, FLAGS },
-    { "chroma_msize_y", "chroma matrix vertical size",   OFFSET(cmsize_y), AV_OPT_TYPE_INT,   { .i64 = 5 }, MIN_SIZE, MAX_SIZE, FLAGS },
-    { "cy",             "chroma matrix vertical size",   OFFSET(cmsize_y), AV_OPT_TYPE_INT,   { .i64 = 5 }, MIN_SIZE, MAX_SIZE, FLAGS },
-    { "chroma_amount",  "chroma effect strength",        OFFSET(camount),  AV_OPT_TYPE_FLOAT, { .dbl = 0 },       -2,        5, FLAGS },
-    { "ca",             "chroma effect strength",        OFFSET(camount),  AV_OPT_TYPE_FLOAT, { .dbl = 0 },       -2,        5, FLAGS },
+    { "luma_msize_x",   "set luma matrix horizontal size",   OFFSET(lmsize_x), AV_OPT_TYPE_INT,   { .i64 = 5 }, MIN_SIZE, MAX_SIZE, FLAGS },
+    { "lx",             "set luma matrix horizontal size",   OFFSET(lmsize_x), AV_OPT_TYPE_INT,   { .i64 = 5 }, MIN_SIZE, MAX_SIZE, FLAGS },
+    { "luma_msize_y",   "set luma matrix vertical size",     OFFSET(lmsize_y), AV_OPT_TYPE_INT,   { .i64 = 5 }, MIN_SIZE, MAX_SIZE, FLAGS },
+    { "ly",             "set luma matrix vertical size",     OFFSET(lmsize_y), AV_OPT_TYPE_INT,   { .i64 = 5 }, MIN_SIZE, MAX_SIZE, FLAGS },
+    { "luma_amount",    "set luma effect strength",          OFFSET(lamount),  AV_OPT_TYPE_FLOAT, { .dbl = 1 },       -2,        5, FLAGS },
+    { "la",             "set luma effect strength",          OFFSET(lamount),  AV_OPT_TYPE_FLOAT, { .dbl = 1 },       -2,        5, FLAGS },
+    { "chroma_msize_x", "set chroma matrix horizontal size", OFFSET(cmsize_x), AV_OPT_TYPE_INT,   { .i64 = 5 }, MIN_SIZE, MAX_SIZE, FLAGS },
+    { "cx",             "set chroma matrix horizontal size", OFFSET(cmsize_x), AV_OPT_TYPE_INT,   { .i64 = 5 }, MIN_SIZE, MAX_SIZE, FLAGS },
+    { "chroma_msize_y", "set chroma matrix vertical size",   OFFSET(cmsize_y), AV_OPT_TYPE_INT,   { .i64 = 5 }, MIN_SIZE, MAX_SIZE, FLAGS },
+    { "cy",             "set chroma matrix vertical size",   OFFSET(cmsize_y), AV_OPT_TYPE_INT,   { .i64 = 5 }, MIN_SIZE, MAX_SIZE, FLAGS },
+    { "chroma_amount",  "set chroma effect strength",        OFFSET(camount),  AV_OPT_TYPE_FLOAT, { .dbl = 0 },       -2,        5, FLAGS },
+    { "ca",             "set chroma effect strength",        OFFSET(camount),  AV_OPT_TYPE_FLOAT, { .dbl = 0 },       -2,        5, FLAGS },
     { "opencl",         "use OpenCL filtering capabilities", OFFSET(opencl), AV_OPT_TYPE_INT, { .i64 = 0 },        0,        1, FLAGS },
     { NULL },
 };
@@ -316,5 +316,5 @@ AVFilter avfilter_vf_unsharp = {
 
     .inputs    = avfilter_vf_unsharp_inputs,
     .outputs   = avfilter_vf_unsharp_outputs,
-    .flags     = AVFILTER_FLAG_SUPPORT_TIMELINE,
+    .flags     = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
 };

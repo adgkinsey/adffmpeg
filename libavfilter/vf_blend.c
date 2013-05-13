@@ -283,7 +283,7 @@ static int query_formats(AVFilterContext *ctx)
         AV_PIX_FMT_YUVA444P, AV_PIX_FMT_YUVA422P, AV_PIX_FMT_YUVA420P,
         AV_PIX_FMT_YUVJ444P, AV_PIX_FMT_YUVJ440P, AV_PIX_FMT_YUVJ422P,AV_PIX_FMT_YUVJ420P,
         AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUV440P, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV410P,
-        AV_PIX_FMT_GBRP, AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE
+        AV_PIX_FMT_GBRP, AV_PIX_FMT_GBRAP, AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE
     };
 
     ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
@@ -372,8 +372,8 @@ static void blend_frame(AVFilterContext *ctx,
     for (plane = 0; plane < b->nb_planes; plane++) {
         int hsub = plane == 1 || plane == 2 ? b->hsub : 0;
         int vsub = plane == 1 || plane == 2 ? b->vsub : 0;
-        int outw = dst_buf->width  >> hsub;
-        int outh = dst_buf->height >> vsub;
+        int outw = FF_CEIL_RSHIFT(dst_buf->width,  hsub);
+        int outh = FF_CEIL_RSHIFT(dst_buf->height, vsub);
         uint8_t *dst    = dst_buf->data[plane];
         uint8_t *top    = top_buf->data[plane];
         uint8_t *bottom = bottom_buf->data[plane];
