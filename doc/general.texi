@@ -324,7 +324,7 @@ library:
 @item raw Shorten               @tab   @tab X
 @item raw TAK                   @tab   @tab X
 @item raw TrueHD                @tab X @tab X
-@item raw VC-1                  @tab   @tab X
+@item raw VC-1                  @tab X @tab X
 @item raw PCM A-law             @tab X @tab X
 @item raw PCM mu-law            @tab X @tab X
 @item raw PCM signed 8 bit      @tab X @tab X
@@ -488,6 +488,7 @@ following image formats are supported:
 @item AMV Video              @tab  X  @tab  X
     @tab Used in Chinese MP3 players.
 @item ANSI/ASCII art         @tab     @tab  X
+@item Apple Intermediate Codec @tab     @tab  X
 @item Apple MJPEG-B          @tab     @tab  X
 @item Apple ProRes           @tab  X  @tab  X
 @item Apple QuickDraw        @tab     @tab  X
@@ -570,6 +571,8 @@ following image formats are supported:
     @tab Sorenson H.263 used in Flash
 @item Forward Uncompressed   @tab     @tab  X
 @item Fraps                  @tab     @tab  X
+@item Go2Webinar             @tab     @tab  X
+    @tab fourcc: G2M4
 @item H.261                  @tab  X  @tab  X
 @item H.263 / H.263-1996     @tab  X  @tab  X
 @item H.263+ / H.263-1998 / H.263 version 2  @tab  X  @tab  X
@@ -836,7 +839,6 @@ following image formats are supported:
 @item MLP (Meridian Lossless Packing)  @tab     @tab  X
     @tab Used in DVD-Audio discs.
 @item Monkey's Audio         @tab     @tab  X
-    @tab Only versions 3.97-3.99 are supported.
 @item MP1 (MPEG audio layer 1)  @tab     @tab IX
 @item MP2 (MPEG audio layer 2)  @tab IX  @tab IX
     @tab libtwolame can be used alternatively for encoding.
@@ -891,7 +893,7 @@ following image formats are supported:
 @item Sierra VMD audio       @tab     @tab  X
     @tab Used in Sierra VMD files.
 @item Smacker audio          @tab     @tab  X
-@item SMPTE 302M AES3 audio  @tab     @tab  X
+@item SMPTE 302M AES3 audio  @tab  X  @tab  X
 @item Sonic                  @tab  X  @tab  X
     @tab experimental codec
 @item Sonic lossless         @tab  X  @tab  X
@@ -899,7 +901,7 @@ following image formats are supported:
 @item Speex                  @tab  E  @tab  E
     @tab supported through external library libspeex
 @item TAK (Tom's lossless Audio Kompressor)  @tab     @tab  X
-@item True Audio (TTA)       @tab     @tab  X
+@item True Audio (TTA)       @tab  X  @tab  X
 @item TrueHD                 @tab     @tab  X
     @tab Used in HD-DVD and Blu-Ray discs.
 @item TwinVQ (VQF flavor)    @tab     @tab  X
@@ -999,7 +1001,7 @@ performance on systems without hardware floating point support).
 @item OSS               @tab X      @tab X
 @item Pulseaudio        @tab X      @tab
 @item SDL               @tab        @tab X
-@item Video4Linux2      @tab X      @tab
+@item Video4Linux2      @tab X      @tab X
 @item VfW capture       @tab X      @tab
 @item X11 grabbing      @tab X      @tab
 @end multitable

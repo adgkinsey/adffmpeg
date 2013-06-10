@@ -412,6 +412,119 @@ Selected by Encoder (default)
 
 @end table
 
+@section libmp3lame
+
+LAME (Lame Ain't an MP3 Encoder) MP3 encoder wrapper
+
+Requires the presence of the libmp3lame headers and library during
+configuration. You need to explicitly configure the build with
+@code{--enable-libmp3lame}.
+
+@subsection Option Mapping
+
+The following options are supported by the libmp3lame wrapper,
+the LAME-equivalent options follow the FFmpeg ones.
+
+@multitable @columnfractions .2 .2
+@item FFmpeg            @tab LAME
+@item b                 @tab b
+FFmpeg @code{b} option is expressed in bits/s, lame @code{bitrate}
+in kilobits/s.
+@item q                 @tab V
+Quality setting for VBR.
+@item compression_level @tab q
+Algorithm quality. Valid options are integers from 0-9.
+@item reservoir         @tab N.A.
+Enable use of bit reservoir. LAME has this enabled by default.
+@item joint_stereo      @tab -m j
+Enables the encoder to use (on a frame by frame basis) either L/R
+stereo or mid/side stereo.
+@end multitable
+
+@section libtwolame
+
+TwoLAME MP2 encoder wrapper
+
+Requires the presence of the libtwolame headers and library during
+configuration. You need to explicitly configure the build with
+@code{--enable-libtwolame}.
+
+@subsection Options Mapping
+
+The following options are supported by the libtwolame wrapper. The
+TwoLAME-equivalent options follow the FFmpeg ones and are in
+parentheses.
+
+@table @option
+@item b
+(b) Set bitrate in bits/s. Note that FFmpeg @code{b} option is
+expressed in bits/s, twolame @code{b} in kilobits/s. The default
+value is 128k.
+
+@item q
+(V) Set quality for experimental VBR support. Maximum value range is
+from -50 to 50, useful range is from -10 to 10.
+
+@item mode
+(mode) Set MPEG mode. Possible values:
+
+@table @samp
+@item auto
+Choose mode automatically based on the input. This is the default.
+@item stereo
+Stereo
+@item joint_stereo
+Joint stereo
+@item dual_channel
+Dual channel
+@item mono
+Mono
+@end table
+
+@item psymodel
+(psyc-mode) Set psychoacoustic model to use in encoding. The argument
+must be an integer between -1 and 4, inclusive. The higher the value,
+the better the quality. The default value is 3.
+
+@item energy_levels
+(energy) Enable energy levels extensions when set to 1. The default
+value is 0 (disabled).
+
+@item error_protection
+(protect) Enable CRC error protection when set to 1. The default value
+is 0 (disabled).
+
+@item copyright
+(copyright) Set MPEG audio copyright flag when set to 1. The default
+value is 0 (disabled).
+
+@item original
+(original) Set MPEG audio original flag when set to 1. The default
+value is 0 (disabled).
+
+@end table
+
+@section libvo-aacenc
+
+VisualOn AAC encoder
+
+Requires the presence of the libvo-aacenc headers and library during
+configuration. You need to explicitly configure the build with
+@code{--enable-libvo-aacenc --enable-version3}.
+
+@subsection Options
+
+The VisualOn AAC encoder only support encoding AAC-LC and up to 2
+channels. It is also CBR-only. It is considered to be worse than the
+native experimental FFmpeg AAC encoder.
+
+@table @option
+
+@item b
+Bitrate.
+
+@end table
+
 @c man end AUDIO ENCODERS
 
 @chapter Video Encoders
@@ -807,6 +920,7 @@ Select the ProRes profile to encode
 @item lt
 @item standard
 @item hq
+@item 4444
 @end table
 
 @item quant_mat @var{integer}
@@ -835,6 +949,11 @@ should be good in almost all situations.
 Override the 4-byte vendor ID.
 A custom vendor ID like @var{apl0} would claim the stream was produced by
 the Apple encoder.
+
+@item alpha_bits @var{integer}
+Specify number of bits for alpha component.
+Possible values are @var{0}, @var{8} and @var{16}.
+Use @var{0} to disable alpha plane coding.
 
 @end table
 

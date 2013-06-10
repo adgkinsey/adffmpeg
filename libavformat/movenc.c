@@ -62,6 +62,7 @@ static const AVOption options[] = {
     { "frag_size", "Maximum fragment size", offsetof(MOVMuxContext, max_fragment_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM},
     { "ism_lookahead", "Number of lookahead entries for ISM files", offsetof(MOVMuxContext, ism_lookahead), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM},
     { "use_editlist", "use edit list", offsetof(MOVMuxContext, use_editlist), AV_OPT_TYPE_INT, {.i64 = -1}, -1, 1, AV_OPT_FLAG_ENCODING_PARAM},
+    { "video_track_timescale", "set timescale of all video tracks", offsetof(MOVMuxContext, video_track_timescale), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM},
     { NULL },
 };
 
@@ -2505,9 +2506,11 @@ static int mov_write_tfhd_tag(AVIOContext *pb, MOVTrack *track,
 
     /* Don't set a default sample size, the silverlight player refuses
      * to play files with that set. Don't set a default sample duration,
-     * WMP freaks out if it is set. */
+     * WMP freaks out if it is set. Don't set a base data offset, PIFF
+     * file format says it MUST NOT be set. */
     if (track->mode == MODE_ISM)
-        flags &= ~(MOV_TFHD_DEFAULT_SIZE | MOV_TFHD_DEFAULT_DURATION);
+        flags &= ~(MOV_TFHD_DEFAULT_SIZE | MOV_TFHD_DEFAULT_DURATION |
+                   MOV_TFHD_BASE_DATA_OFFSET);
 
     avio_wb32(pb, 0); /* size placeholder */
     ffio_wfourcc(pb, "tfhd");
@@ -3082,9 +3085,14 @@ static int mov_flush_fragment(AVFormatContext *s)
             MOVFragmentInfo *info;
             avio_flush(s->pb);
             track->nb_frag_info++;
-            track->frag_info = av_realloc(track->frag_info,
-                                          sizeof(*track->frag_info) *
-                                          track->nb_frag_info);
+            if (track->nb_frag_info >= track->frag_info_capacity) {
+                unsigned new_capacity = track->nb_frag_info + MOV_FRAG_INFO_ALLOC_INCREMENT;
+                if (av_reallocp_array(&track->frag_info,
+                                      new_capacity,
+                                      sizeof(*track->frag_info)))
+                    return AVERROR(ENOMEM);
+                track->frag_info_capacity = new_capacity;
+            }
             info = &track->frag_info[track->nb_frag_info - 1];
             info->offset   = avio_tell(s->pb);
             info->time     = mov->tracks[i].frag_start;
@@ -3205,10 +3213,12 @@ int ff_mov_write_packet(AVFormatContext *s, AVPacket *pkt)
         memcpy(trk->vos_data, pkt->data, size);
     }
 
-    if (!(trk->entry % MOV_INDEX_CLUSTER_SIZE)) {
-        trk->cluster = av_realloc_f(trk->cluster, sizeof(*trk->cluster), (trk->entry + MOV_INDEX_CLUSTER_SIZE));
-        if (!trk->cluster)
-            return -1;
+    if (trk->entry >= trk->cluster_capacity) {
+        unsigned new_capacity = 2*(trk->entry + MOV_INDEX_CLUSTER_SIZE);
+        if (av_reallocp_array(&trk->cluster, new_capacity,
+                              sizeof(*trk->cluster)))
+            return AVERROR(ENOMEM);
+        trk->cluster_capacity = new_capacity;
     }
 
     trk->cluster[trk->entry].pos = avio_tell(pb) - size;
@@ -3622,9 +3632,13 @@ static int mov_write_header(AVFormatContext *s)
                 }
                 track->height = track->tag>>24 == 'n' ? 486 : 576;
             }
-            track->timescale = st->codec->time_base.den;
-            while(track->timescale < 10000)
-                track->timescale *= 2;
+            if (mov->video_track_timescale) {
+                track->timescale = mov->video_track_timescale;
+            } else {
+                track->timescale = st->codec->time_base.den;
+                while(track->timescale < 10000)
+                    track->timescale *= 2;
+            }
             if (track->mode == MODE_MOV && track->timescale > 100000)
                 av_log(s, AV_LOG_WARNING,
                        "WARNING codec timebase is very high. If duration is too long,\n"

@@ -20,6 +20,7 @@
 
 #include "libavutil/avutil.h"
 #include "network.h"
+#include "url.h"
 #include "libavcodec/internal.h"
 #include "libavutil/mem.h"
 #include "url.h"
@@ -29,9 +30,9 @@
 #if HAVE_PTHREADS
 #include <pthread.h>
 #elif HAVE_OS2THREADS
-#include "libavcodec/os2threads.h"
+#include "compat/os2threads.h"
 #else
-#include "libavcodec/w32pthreads.h"
+#include "compat/w32pthreads.h"
 #endif
 #endif
 
@@ -211,4 +212,95 @@ int ff_is_multicast_address(struct sockaddr *addr)
 #endif
 
     return 0;
+}
+
+static int ff_poll_interrupt(struct pollfd *p, nfds_t nfds, int timeout,
+                             AVIOInterruptCB *cb)
+{
+    int runs = timeout / POLLING_TIME;
+    int ret = 0;
+
+    do {
+        if (ff_check_interrupt(cb))
+            return AVERROR_EXIT;
+        ret = poll(p, nfds, POLLING_TIME);
+        if (ret != 0)
+            break;
+    } while (timeout <= 0 || runs-- > 0);
+
+    if (!ret)
+        return AVERROR(ETIMEDOUT);
+    if (ret < 0)
+        return AVERROR(errno);
+    return ret;
+}
+
+int ff_listen_bind(int fd, const struct sockaddr *addr,
+                   socklen_t addrlen, int timeout, URLContext *h)
+{
+    int ret;
+    int reuse = 1;
+    struct pollfd lp = { fd, POLLIN, 0 };
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse))) {
+        av_log(NULL, AV_LOG_WARNING, "setsockopt(SO_REUSEADDR) failed\n");
+    }
+    ret = bind(fd, addr, addrlen);
+    if (ret)
+        return ff_neterrno();
+
+    ret = listen(fd, 1);
+    if (ret)
+        return ff_neterrno();
+
+    ret = ff_poll_interrupt(&lp, 1, timeout, &h->interrupt_callback);
+    if (ret < 0)
+        return ret;
+
+    ret = accept(fd, NULL, NULL);
+    if (ret < 0)
+        return ff_neterrno();
+
+    closesocket(fd);
+
+    ff_socket_nonblock(ret, 1);
+    return ret;
+}
+
+int ff_listen_connect(int fd, const struct sockaddr *addr,
+                      socklen_t addrlen, int timeout, URLContext *h)
+{
+    struct pollfd p = {fd, POLLOUT, 0};
+    int ret;
+    socklen_t optlen;
+
+    ff_socket_nonblock(fd, 1);
+
+    while ((ret = connect(fd, addr, addrlen))) {
+        ret = ff_neterrno();
+        switch (ret) {
+        case AVERROR(EINTR):
+            if (ff_check_interrupt(&h->interrupt_callback))
+                return AVERROR_EXIT;
+            continue;
+        case AVERROR(EINPROGRESS):
+        case AVERROR(EAGAIN):
+            ret = ff_poll_interrupt(&p, 1, timeout, &h->interrupt_callback);
+            if (ret < 0)
+                return ret;
+            optlen = sizeof(ret);
+            if (getsockopt (fd, SOL_SOCKET, SO_ERROR, &ret, &optlen))
+                ret = AVUNERROR(ff_neterrno());
+            if (ret != 0) {
+                char errbuf[100];
+                ret = AVERROR(ret);
+                av_strerror(ret, errbuf, sizeof(errbuf));
+                av_log(h, AV_LOG_ERROR,
+                       "Connection to %s failed: %s\n",
+                       h->filename, errbuf);
+            }
+        default:
+            return ret;
+        }
+    }
+    return ret;
 }

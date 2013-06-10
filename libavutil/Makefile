@@ -34,6 +34,7 @@ HEADERS = adler32.h                                                     \
           mathematics.h                                                 \
           md5.h                                                         \
           mem.h                                                         \
+          murmur3.h                                                     \
           dict.h                                                        \
           old_pix_fmts.h                                                \
           opt.h                                                         \
@@ -44,6 +45,7 @@ HEADERS = adler32.h                                                     \
           rational.h                                                    \
           samplefmt.h                                                   \
           sha.h                                                         \
+          sha512.h                                                      \
           time.h                                                        \
           timecode.h                                                    \
           timestamp.h                                                   \
@@ -80,6 +82,7 @@ OBJS = adler32.o                                                        \
        file.o                                                           \
        float_dsp.o                                                      \
        frame.o                                                          \
+       hash.o                                                           \
        hmac.o                                                           \
        imgutils.o                                                       \
        intfloat_readwrite.o                                             \
@@ -91,6 +94,7 @@ OBJS = adler32.o                                                        \
        mathematics.o                                                    \
        md5.o                                                            \
        mem.o                                                            \
+       murmur3.o                                                        \
        dict.o                                                           \
        opt.o                                                            \
        parseutils.o                                                     \
@@ -100,6 +104,7 @@ OBJS = adler32.o                                                        \
        rc4.o                                                            \
        samplefmt.o                                                      \
        sha.o                                                            \
+       sha512.o                                                         \
        time.o                                                           \
        timecode.o                                                       \
        tree.o                                                           \
@@ -137,17 +142,19 @@ TESTPROGS = adler32                                                     \
             lfg                                                         \
             lls                                                         \
             md5                                                         \
+            murmur3                                                     \
             opt                                                         \
             pca                                                         \
             parseutils                                                  \
             random_seed                                                 \
             rational                                                    \
             sha                                                         \
+            sha512                                                      \
             tree                                                        \
             xtea                                                        \
 
 TESTPROGS-$(HAVE_LZO1X_999_COMPRESS) += lzo
 
-TOOLS = ffadler ffeval ffescape
+TOOLS = ffhash ffeval ffescape
 
 $(SUBDIR)lzo-test$(EXESUF): ELIBS = -llzo2
