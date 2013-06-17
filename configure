@@ -232,6 +232,7 @@ External library support:
   --enable-libvorbis       enable Vorbis en/decoding via libvorbis,
                            native implementation exists [no]
   --enable-libvpx          enable VP8 and VP9 de/encoding via libvpx [no]
+  --enable-libwavpack      enable wavpack encoding via libwavpack [no]
   --enable-libx264         enable H.264 encoding via x264 [no]
   --enable-libxavs         enable AVS encoding via xavs [no]
   --enable-libxvid         enable Xvid encoding via xvidcore,
@@ -1195,6 +1196,7 @@ EXTERNAL_LIBRARY_LIST="
     libvo_amrwbenc
     libvorbis
     libvpx
+    libwavpack
     libx264
     libxavs
     libxvid
@@ -2013,6 +2015,7 @@ libvpx_vp8_decoder_deps="libvpx"
 libvpx_vp8_encoder_deps="libvpx"
 libvpx_vp9_decoder_deps="libvpx"
 libvpx_vp9_encoder_deps="libvpx"
+libwavpack_encoder_deps="libwavpack"
 libx264_encoder_deps="libx264"
 libx264rgb_encoder_deps="libx264"
 libxavs_encoder_deps="libxavs"
@@ -2178,6 +2181,7 @@ sab_filter_deps="gpl swscale"
 scale_filter_deps="swscale"
 smartblur_filter_deps="gpl swscale"
 showspectrum_filter_deps="avcodec rdft"
+spp_filter_deps="gpl avcodec fft"
 stereo3d_filter_deps="gpl"
 subtitles_filter_deps="avformat avcodec libass"
 super2xsai_filter_deps="gpl"
@@ -3482,7 +3486,6 @@ case $target_os in
         objformat="win32"
         ranlib=:
         enable dos_paths
-        disable pic
         ;;
     win32|win64)
         if enabled shared; then
@@ -3507,7 +3510,6 @@ case $target_os in
         objformat="win32"
         ranlib=:
         enable dos_paths
-        disable pic
         ;;
     cygwin*)
         target_os=cygwin
@@ -3522,7 +3524,6 @@ case $target_os in
         SHFLAGS='-shared -Wl,--out-implib,$(SUBDIR)lib$(FULLNAME).dll.a'
         objformat="win32"
         enable dos_paths
-        disable pic
         ;;
     *-dos|freedos|opendos)
         network_extralibs="-lsocket"
@@ -3699,6 +3700,7 @@ die_license_disabled_gpl() {
     enabled $1 || { enabled $2 && die "$2 is incompatible with the gpl and --enable-$1 is not specified."; }
 }
 
+die_license_disabled gpl frei0r
 die_license_disabled gpl libcdio
 die_license_disabled gpl libutvideo
 die_license_disabled gpl libvidstab
@@ -3725,7 +3727,13 @@ enable_weak_pic() {
     disabled pic && return
     enable pic
     add_cppflags -DPIC
-    add_cflags   -fPIC
+    case "$target_os" in
+    mingw*|cygwin*)
+        ;;
+    *)
+        add_cflags -fPIC
+        ;;
+    esac
     add_asflags  -fPIC
 }
 
@@ -3801,7 +3809,7 @@ EOF
     check_inline_asm asm_mod_q '"add r0, %Q0, %R0" :: "r"((long long)0)'
     check_inline_asm asm_mod_y '"vmul.i32 d0, d0, %y0" :: "x"(0)'
 
-    enabled_all armv6t2 shared !pic && enable_weak_pic
+    [ $target_os != win32 ] && enabled_all armv6t2 shared !pic && enable_weak_pic
 
 elif enabled mips; then
 
@@ -4159,6 +4167,7 @@ enabled libvpx     && {
                                 die "ERROR: libvpx encoder version must be >=0.9.7"; }
     enabled libvpx_vp9_decoder && { check_lib2 "vpx/vpx_decoder.h vpx/vp8dx.h" "vpx_codec_vp9_dx" -lvpx || disable libvpx_vp9_decoder;  }
     enabled libvpx_vp9_encoder && { check_lib2 "vpx/vpx_encoder.h vpx/vp8cx.h" "vpx_codec_vp9_cx" -lvpx || disable libvpx_vp9_encoder; } }
+enabled libwavpack && require libwavpack wavpack/wavpack.h WavpackOpenFileOutput  -lwavpack
 enabled libx264    && require  libx264 x264.h x264_encoder_encode -lx264 &&
                       { check_cpp_condition x264.h "X264_BUILD >= 118" ||
                         die "ERROR: libx264 must be installed and version must be >= 0.118."; }

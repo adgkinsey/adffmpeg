@@ -160,6 +160,7 @@ static int tag_tree_decode(Jpeg2000DecoderContext *s, Jpeg2000TgtNode *node,
 static int get_siz(Jpeg2000DecoderContext *s)
 {
     int i;
+    int ncomponents;
 
     if (bytestream2_get_bytes_left(&s->g) < 36)
         return AVERROR(EINVAL);
@@ -173,12 +174,14 @@ static int get_siz(Jpeg2000DecoderContext *s)
     s->tile_height    = bytestream2_get_be32u(&s->g); // YTSiz
     s->tile_offset_x  = bytestream2_get_be32u(&s->g); // XT0Siz
     s->tile_offset_y  = bytestream2_get_be32u(&s->g); // YT0Siz
-    s->ncomponents    = bytestream2_get_be16u(&s->g); // CSiz
+    ncomponents       = bytestream2_get_be16u(&s->g); // CSiz
 
-    if (s->ncomponents <= 0 || s->ncomponents > 4) {
-        av_log(s->avctx, AV_LOG_ERROR, "unsupported/invalid ncomponents: %d\n", s->ncomponents);
+    if (ncomponents <= 0 || ncomponents > 4) {
+        av_log(s->avctx, AV_LOG_ERROR, "unsupported/invalid ncomponents: %d\n", ncomponents);
         return AVERROR(EINVAL);
     }
+    s->ncomponents = ncomponents;
+
     if (s->tile_width<=0 || s->tile_height<=0)
         return AVERROR(EINVAL);
 
@@ -351,6 +354,11 @@ static int get_coc(Jpeg2000DecoderContext *s, Jpeg2000CodingStyle *c,
 
     compno = bytestream2_get_byteu(&s->g);
 
+    if (compno >= s->ncomponents) {
+        av_log(s->avctx, AV_LOG_ERROR, "Invalid compno %d\n", compno);
+        return AVERROR_INVALIDDATA;
+    }
+
     c      += compno;
     c->csty = bytestream2_get_byteu(&s->g);
 
@@ -461,6 +469,10 @@ static int get_sot(Jpeg2000DecoderContext *s, int n)
     /* Read TNSot but not used */
     bytestream2_get_byteu(&s->g);               // TNsot
 
+    if (Psot > bytestream2_get_bytes_left(&s->g) + n + 2) {
+        av_log(s->avctx, AV_LOG_ERROR, "Psot %d too big\n", Psot);
+        return AVERROR_INVALIDDATA;
+    }
     if (TPsot >= FF_ARRAY_ELEMS(s->tile[s->curtileno].tile_part)) {
         av_log(s->avctx, AV_LOG_ERROR, "TPsot %d too big\n", TPsot);
         return AVERROR_PATCHWELCOME;
@@ -621,10 +633,16 @@ static int jpeg2000_decode_packet(Jpeg2000DecoderContext *s,
             else if (incl < 0)
                 return incl;
 
-            if (!cblk->npasses)
-                cblk->nonzerobits = expn[bandno] + numgbits - 1 -
+            if (!cblk->npasses) {
+                int v = expn[bandno] + numgbits - 1 -
                                     tag_tree_decode(s, prec->zerobits + cblkno,
                                                     100);
+                if (v < 0) {
+                    av_log(s->avctx, AV_LOG_ERROR, "nonzerobits %d invalid\n", v);
+                    return AVERROR_INVALIDDATA;
+                }
+                cblk->nonzerobits = v;
+            }
             if ((newpasses = getnpasses(s)) < 0)
                 return newpasses;
             if ((llen = getlblockinc(s)) < 0)
@@ -1233,9 +1251,9 @@ static int jpeg2000_read_main_headers(Jpeg2000DecoderContext *s)
         if (marker == JPEG2000_EOC)
             break;
 
-        if (bytestream2_get_bytes_left(&s->g) < 2)
+        len = bytestream2_get_be16(&s->g);
+        if (len < 2 || bytestream2_get_bytes_left(&s->g) < len - 2)
             return AVERROR(EINVAL);
-        len = bytestream2_get_be16u(&s->g);
         switch (marker) {
         case JPEG2000_SIZ:
             ret = get_siz(s);

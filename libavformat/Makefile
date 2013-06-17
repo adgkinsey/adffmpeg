@@ -11,6 +11,7 @@ OBJS = allformats.o         \
        avio.o               \
        aviobuf.o            \
        cutils.o             \
+       format.o		    \
        id3v1.o              \
        id3v2.o              \
        metadata.o           \
@@ -20,6 +21,7 @@ OBJS = allformats.o         \
        riff.o               \
        sdp.o                \
        seek.o               \
+       url.o                \
        utils.o              \
 
 OBJS-$(CONFIG_NETWORK)                   += network.o
