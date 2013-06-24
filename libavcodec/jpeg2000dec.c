@@ -671,17 +671,11 @@ static int jpeg2000_decode_packet(Jpeg2000DecoderContext *s,
         for (cblkno = 0; cblkno < nb_code_blocks; cblkno++) {
             Jpeg2000Cblk *cblk = prec->cblk + cblkno;
             if (   bytestream2_get_bytes_left(&s->g) < cblk->lengthinc
-                || sizeof(cblk->data) < cblk->lengthinc
+                || sizeof(cblk->data) < cblk->length + cblk->lengthinc + 2
             )
                 return AVERROR(EINVAL);
-            /* Code-block data can be empty. In that case initialize data
-             * with 0xFFFF. */
-            if (cblk->lengthinc > 0) {
-                bytestream2_get_bufferu(&s->g, cblk->data, cblk->lengthinc);
-            } else {
-                cblk->data[0] = 0xFF;
-                cblk->data[1] = 0xFF;
-            }
+
+            bytestream2_get_bufferu(&s->g, cblk->data + cblk->length, cblk->lengthinc);
             cblk->length   += cblk->lengthinc;
             cblk->lengthinc = 0;
         }
@@ -1243,6 +1237,10 @@ static int jpeg2000_read_main_headers(Jpeg2000DecoderContext *s)
 
             tile = s->tile + s->curtileno;
             tp = tile->tile_part + tile->tp_idx;
+            if (tp->tp_end < s->g.buffer) {
+                av_log(s->avctx, AV_LOG_ERROR, "Invalid tpend\n");
+                return AVERROR_INVALIDDATA;
+            }
             bytestream2_init(&tp->tpg, s->g.buffer, tp->tp_end - s->g.buffer);
             bytestream2_skip(&s->g, tp->tp_end - s->g.buffer);
 

@@ -2945,7 +2945,7 @@ probe_cc(){
         # -Qdiag-error to make icl error when presented with certain unknown arguments
         _flags='-nologo -Qdiag-error:4044,10157'
         # -Qvec- -Qsimd- to prevent miscompilation, -GS for consistency with msvc which enables it by default
-        _cflags='-D_USE_MATH_DEFINES -Dinline=__inline -FIstdlib.h -Dstrtoll=_strtoi64 -Qms0 -Qvec- -Qsimd- -GS'
+        _cflags='-D_USE_MATH_DEFINES -FIstdlib.h -Dstrtoll=_strtoi64 -Qms0 -Qvec- -Qsimd- -GS'
         if [ $pfx = hostcc ]; then
             append _cflags -Dsnprintf=_snprintf
         fi
@@ -3633,6 +3633,8 @@ elif check_header _mingw.h; then
             __MINGW64_VERSION_MAJOR < 3"; then
         add_compat msvcrt/snprintf.o
         add_cflags "-include $source_path/compat/msvcrt/snprintf.h"
+    else
+        add_cppflags -D__USE_MINGW_ANSI_STDIO=1
     fi
 elif check_func_headers stdlib.h _get_doserrno; then
     libc_type=msvcrt
@@ -4092,7 +4094,7 @@ if enabled pthreads; then
 fi
 
 enabled sync_val_compare_and_swap && enable atomics_gcc
-enabled machine_rw_barrier && enabled atomic_cas_ptr && enable atomics_suncc
+enabled_all atomic_cas_ptr machine_rw_barrier && enable atomics_suncc
 enabled MemoryBarrier && enable atomics_win32
 
 check_lib math.h sin -lm && LIBM="-lm"
@@ -4428,14 +4430,14 @@ elif enabled tms470; then
     add_cflags -pds=824 -pds=837
 elif enabled pathscale; then
     add_cflags -fstrict-overflow -OPT:wrap_around_unsafe_opt=OFF
-elif enabled msvc; then
+elif enabled_any msvc icl; then
     enabled x86_32 && disable aligned_stack
-elif enabled icl; then
-    enabled x86_32 && disable aligned_stack
-    # basically -fstrict-aliasing for icl that doesn't work (correctly) on 13.x+
-    check_cpp_condition "windows.h" "__ICL < 1300" && add_cflags -Qansi-alias
-    # icl will pass the inline asm tests but inline asm is currently not supported (build will fail)
-    disable inline_asm
+    if enabled icl; then
+        # basically -fstrict-aliasing for icl that doesn't work (correctly) on 13.x+
+        check_cpp_condition "windows.h" "__ICL < 1300" && add_cflags -Qansi-alias
+        # icl will pass the inline asm tests but inline asm is currently not supported (build will fail)
+        disable inline_asm
+    fi
 fi
 
 case $target_os in

@@ -197,7 +197,7 @@ static av_cold int movie_common_init(AVFilterContext *ctx)
     char name[16];
     AVStream *st;
 
-    if (!*movie->file_name) {
+    if (!movie->file_name) {
         av_log(ctx, AV_LOG_ERROR, "No filename provided!\n");
         return AVERROR(EINVAL);
     }
@@ -322,7 +322,6 @@ static av_cold void movie_uninit(AVFilterContext *ctx)
         if (movie->st[i].st)
             avcodec_close(movie->st[i].st->codec);
     }
-    av_freep(&movie->file_name);
     av_freep(&movie->st);
     av_freep(&movie->out_index);
     av_frame_free(&movie->frame);
@@ -563,17 +562,12 @@ static int movie_request_frame(AVFilterLink *outlink)
 
 AVFILTER_DEFINE_CLASS(movie);
 
-static av_cold int movie_init(AVFilterContext *ctx)
-{
-    return movie_common_init(ctx);
-}
-
 AVFilter avfilter_avsrc_movie = {
     .name          = "movie",
     .description   = NULL_IF_CONFIG_SMALL("Read from a movie source."),
     .priv_size     = sizeof(MovieContext),
     .priv_class    = &movie_class,
-    .init          = movie_init,
+    .init          = movie_common_init,
     .uninit        = movie_uninit,
     .query_formats = movie_query_formats,
 
@@ -589,16 +583,11 @@ AVFilter avfilter_avsrc_movie = {
 #define amovie_options movie_options
 AVFILTER_DEFINE_CLASS(amovie);
 
-static av_cold int amovie_init(AVFilterContext *ctx)
-{
-    return movie_common_init(ctx);
-}
-
 AVFilter avfilter_avsrc_amovie = {
     .name          = "amovie",
     .description   = NULL_IF_CONFIG_SMALL("Read audio from a movie source."),
     .priv_size     = sizeof(MovieContext),
-    .init          = amovie_init,
+    .init          = movie_common_init,
     .uninit        = movie_uninit,
     .query_formats = movie_query_formats,
 
