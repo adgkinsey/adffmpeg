@@ -488,7 +488,7 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
         return ADFFMPEG_AD_ERROR_READ_6_BYTE_SEPARATOR;
 
     if (size == 0)  {
-        if(url_feof(pb))
+        if(pb->eof_reached)
             errorVal = AVERROR_EOF;
         else {
             av_log(s, AV_LOG_ERROR, "%s: Reading separator, error code %d\n",
