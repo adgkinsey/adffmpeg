@@ -1625,12 +1625,18 @@ static void pat_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
         if (sid == 0x0000) {
             /* NIT info */
         } else {
+            MpegTSFilter *fil = ts->pids[pmt_pid];
             program = av_new_program(ts->stream, sid);
             program->program_num = sid;
             program->pmt_pid = pmt_pid;
-            if (ts->pids[pmt_pid])
-                mpegts_close_filter(ts, ts->pids[pmt_pid]);
-            mpegts_open_section_filter(ts, pmt_pid, pmt_cb, ts, 1);
+            if (fil)
+                if (   fil->type != MPEGTS_SECTION
+                    || fil->pid != pmt_pid
+                    || fil->u.section_filter.section_cb != pmt_cb)
+                    mpegts_close_filter(ts, ts->pids[pmt_pid]);
+
+            if (!ts->pids[pmt_pid])
+                mpegts_open_section_filter(ts, pmt_pid, pmt_cb, ts, 1);
             add_pat_entry(ts, sid);
             add_pid_to_pmt(ts, sid, 0); //add pat pid to program
             add_pid_to_pmt(ts, sid, pmt_pid);
@@ -1986,6 +1992,15 @@ static int parse_pcr(int64_t *ppcr_high, int *ppcr_low,
     return 0;
 }
 
+static void seek_back(AVFormatContext *s, AVIOContext *pb, int64_t pos) {
+
+    /* NOTE: We attempt to seek on non-seekable files as well, as the
+     * probe buffer usually is big enough. Only warn if the seek failed
+     * on files where the seek should work. */
+    if (avio_seek(pb, pos, SEEK_SET) < 0)
+        av_log(s, pb->seekable ? AV_LOG_ERROR : AV_LOG_INFO, "Unable to seek back to the start\n");
+}
+
 static int mpegts_read_header(AVFormatContext *s)
 {
     MpegTSContext *ts = s->priv_data;
@@ -1993,6 +2008,8 @@ static int mpegts_read_header(AVFormatContext *s)
     uint8_t buf[8*1024]={0};
     int len;
     int64_t pos;
+
+    ffio_ensure_seekback(pb, s->probesize);
 
     /* read the first 8192 bytes to get packet size */
     pos = avio_tell(pb);
@@ -2009,11 +2026,7 @@ static int mpegts_read_header(AVFormatContext *s)
         /* normal demux */
 
         /* first do a scan to get all the services */
-        /* NOTE: We attempt to seek on non-seekable files as well, as the
-         * probe buffer usually is big enough. Only warn if the seek failed
-         * on files where the seek should work. */
-        if (avio_seek(pb, pos, SEEK_SET) < 0)
-            av_log(s, pb->seekable ? AV_LOG_ERROR : AV_LOG_INFO, "Unable to seek back to the start\n");
+        seek_back(s, pb, pos);
 
         mpegts_open_section_filter(ts, SDT_PID, sdt_cb, ts, 1);
 
@@ -2050,7 +2063,7 @@ static int mpegts_read_header(AVFormatContext *s)
         for(;;) {
             ret = read_packet(s, packet, ts->raw_packet_size);
             if (ret < 0)
-                return -1;
+                goto fail;
             pid = AV_RB16(packet + 1) & 0x1fff;
             if ((pcr_pid == -1 || pcr_pid == pid) &&
                 parse_pcr(&pcr_h, &pcr_l, packet) == 0) {
@@ -2075,7 +2088,7 @@ static int mpegts_read_header(AVFormatContext *s)
                 st->start_time / 1000000.0, pcrs[0] / 27e6, ts->pcr_incr);
     }
 
-    avio_seek(pb, pos, SEEK_SET);
+    seek_back(s, pb, pos);
     return 0;
  fail:
     return -1;

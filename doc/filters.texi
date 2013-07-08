@@ -2101,6 +2101,13 @@ Value of pixel component at current location for first video frame (top layer).
 @item BOTTOM, B
 Value of pixel component at current location for second video frame (bottom layer).
 @end table
+
+@item shortest
+Force termination when the shortest input terminates. Default is @code{0}.
+@item repeatlast
+Continue applying the last bottom frame after the end of the stream. A value of
+@code{0} disable the filter after the last frame of the bottom layer is reached.
+Default is @code{1}.
 @end table
 
 @subsection Examples
@@ -2780,8 +2787,8 @@ Specify the thickness of the fuzzy edge of the rectangle (added to
 
 @item show
 When set to 1, a green rectangle is drawn on the screen to simplify
-finding the right @var{x}, @var{y}, @var{w}, @var{h} parameters, and
-@var{band} is set to 4. The default value is 0.
+finding the right @var{x}, @var{y}, @var{w}, and @var{h} parameters.
+The default value is 0.
 
 @end table
 
@@ -2886,11 +2893,11 @@ This filter accepts the following options:
 @table @option
 @item x
 @item y
-Specify the top left corner coordinates of the box. Default to 0.
+The expressions which specify the top left corner coordinates of the box. Default to 0.
 
 @item width, w
 @item height, h
-Specify the width and height of the box, if 0 they are interpreted as
+The expressions which specify the width and height of the box, if 0 they are interpreted as
 the input width and height. Default to 0.
 
 @item color, c
@@ -2900,7 +2907,44 @@ value @code{invert} is used, the box edge color is the same as the
 video with inverted luma.
 
 @item thickness, t
-Set the thickness of the box edge. Default value is @code{3}.
+The expression which sets the thickness of the box edge. Default value is @code{3}.
+
+See below for the list of accepted constants.
+@end table
+
+The parameters for @var{x}, @var{y}, @var{w} and @var{h} and @var{t} are expressions containing the
+following constants:
+
+@table @option
+@item dar
+The input display aspect ratio, it is the same as (@var{w} / @var{h}) * @var{sar}.
+
+@item hsub
+@item vsub
+horizontal and vertical chroma subsample values. For example for the
+pixel format "yuv422p" @var{hsub} is 2 and @var{vsub} is 1.
+
+@item in_h, ih
+@item in_w, iw
+The input width and height.
+
+@item sar
+The input sample aspect ratio.
+
+@item x
+@item y
+The x and y offset coordinates where the box is drawn.
+
+@item w
+@item h
+The width and height of the drawn box.
+
+@item t
+The thickness of the drawn box.
+
+These constants allow the @var{x}, @var{y}, @var{w}, @var{h} and @var{t} expressions to refer to
+each other, so you may for example specify @code{y=x/dar} or @code{h=w/dar}.
+
 @end table
 
 @subsection Examples
@@ -2928,6 +2972,12 @@ Fill the box with pink color:
 @example
 drawbox=x=10:y=10:w=100:h=100:color=pink@@0.5:t=max
 @end example
+
+@item
+Draw a 2-pixel red 2.40:1 mask:
+@example
+drawbox=x=-t:y=0.5*(ih-iw/2.4)-t:w=iw+t*2:h=iw/2.4+t*2:t=2:c=red
+@end example
 @end itemize
 
 @section drawgrid
@@ -2939,11 +2989,11 @@ This filter accepts the following options:
 @table @option
 @item x
 @item y
-Specify the coordinates of some point of grid intersection (meant to configure offset). Both default to 0.
+The expressions which specify the coordinates of some point of grid intersection (meant to configure offset). Both default to 0.
 
 @item width, w
 @item height, h
-Specify the width and height of the grid cell, if 0 they are interpreted as the
+The expressions which specify the width and height of the grid cell, if 0 they are interpreted as the
 input width and height, respectively, minus @code{thickness}, so image gets
 framed. Default to 0.
 
@@ -2956,7 +3006,44 @@ Note that you can append opacity value (in range of 0.0 - 1.0)
 to color name after @@ sign.
 
 @item thickness, t
-Set the thickness of the grid line. Default value is @code{1}.
+The expression which sets the thickness of the grid line. Default value is @code{1}.
+
+See below for the list of accepted constants.
+@end table
+
+The parameters for @var{x}, @var{y}, @var{w} and @var{h} and @var{t} are expressions containing the
+following constants:
+
+@table @option
+@item dar
+The input display aspect ratio, it is the same as (@var{w} / @var{h}) * @var{sar}.
+
+@item hsub
+@item vsub
+horizontal and vertical chroma subsample values. For example for the
+pixel format "yuv422p" @var{hsub} is 2 and @var{vsub} is 1.
+
+@item in_h, ih
+@item in_w, iw
+The input grid cell width and height.
+
+@item sar
+The input sample aspect ratio.
+
+@item x
+@item y
+The x and y coordinates of some point of grid intersection (meant to configure offset).
+
+@item w
+@item h
+The width and height of the drawn cell.
+
+@item t
+The thickness of the drawn cell.
+
+These constants allow the @var{x}, @var{y}, @var{w}, @var{h} and @var{t} expressions to refer to
+each other, so you may for example specify @code{y=x/dar} or @code{h=w/dar}.
+
 @end table
 
 @subsection Examples
@@ -2966,6 +3053,12 @@ Set the thickness of the grid line. Default value is @code{1}.
 Draw a grid with cell 100x100 pixels, thickness 2 pixels, with color red and an opacity of 50%:
 @example
 drawgrid=width=100:height=100:thickness=2:color=red@@0.5
+@end example
+
+@item
+Draw a white 3x3 grid with an opacity of 50%:
+@example
+drawgrid=w=iw/3:h=ih/3:t=2:c=white@@0.5
 @end example
 @end itemize
 
@@ -3539,7 +3632,7 @@ Default value is @var{auto}.
 
 @item mode
 Set the matching mode or strategy to use. @option{pc} mode is the safest in the
-sense that it wont risk creating jerkiness due to duplicate frames when
+sense that it won't risk creating jerkiness due to duplicate frames when
 possible, but if there are bad edits or blended fields it will end up
 outputting combed frames when a good match might actually exist. On the other
 hand, @option{pcn_ub} mode is the most risky in terms of creating jerkiness,
@@ -5252,7 +5345,7 @@ color space. Default value is 0. This option is deprecated, use
 @item repeatlast
 If set to 1, force the filter to draw the last overlay frame over the
 main input until the end of the stream. A value of 0 disables this
-behavior, which is enabled by default.
+behavior. Default value is 1.
 @end table
 
 The @option{x}, and @option{y} expressions can contain the following

@@ -11,7 +11,7 @@ OBJS = allformats.o         \
        avio.o               \
        aviobuf.o            \
        cutils.o             \
-       format.o		    \
+       format.o             \
        id3v1.o              \
        id3v2.o              \
        metadata.o           \
@@ -421,6 +421,7 @@ OBJS-$(CONFIG_DM_PROTOCOL)               += dsenc.o ds.o
 OBJS-$(CONFIG_NETVU_PROTOCOL)            += netvu.o
 
 # external libraries
+OBJS-$(CONFIG_LIBGME_DEMUXER)            += libgme.o
 OBJS-$(CONFIG_LIBMODPLUG_DEMUXER)        += libmodplug.o
 OBJS-$(CONFIG_LIBNUT_DEMUXER)            += libnut.o
 OBJS-$(CONFIG_LIBNUT_MUXER)              += libnut.o
@@ -464,10 +465,11 @@ OBJS-$(CONFIG_UDP_PROTOCOL)              += udp.o
 
 SKIPHEADERS-$(CONFIG_FFRTMPCRYPT_PROTOCOL) += rtmpdh.h
 SKIPHEADERS-$(CONFIG_NETWORK)            += network.h rtsp.h
-TESTPROGS = noproxy                                                     \
-            seek                                                        \
+TESTPROGS = seek                                                        \
             srtp                                                        \
             url                                                         \
+
+TESTPROGS-$(CONFIG_NETWORK)              += noproxy
 
 TOOLS     = aviocat                                                     \
             ismindex                                                    \

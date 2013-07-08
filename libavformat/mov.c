@@ -877,7 +877,7 @@ static int mov_read_mvhd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     c->duration = (version == 1) ? avio_rb64(pb) : avio_rb32(pb); /* duration */
     // set the AVCodecContext duration because the duration of individual tracks
     // may be inaccurate
-    if (c->time_scale > 0)
+    if (c->time_scale > 0 && !c->trex_data)
         c->fc->duration = av_rescale(c->duration, AV_TIME_BASE, c->time_scale);
     avio_rb32(pb); /* preferred scale */
 
@@ -1551,6 +1551,7 @@ int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
     case AV_CODEC_ID_ILBC:
     case AV_CODEC_ID_MACE3:
     case AV_CODEC_ID_MACE6:
+    case AV_CODEC_ID_QDM2:
         st->codec->block_align = sc->bytes_per_frame;
         break;
     case AV_CODEC_ID_ALAC:
@@ -3413,7 +3414,7 @@ static const AVOption options[] = {
     {NULL}
 };
 
-static const AVClass class = {
+static const AVClass mov_class = {
     .class_name = "mov,mp4,m4a,3gp,3g2,mj2",
     .item_name  = av_default_item_name,
     .option     = options,
@@ -3429,6 +3430,6 @@ AVInputFormat ff_mov_demuxer = {
     .read_packet    = mov_read_packet,
     .read_close     = mov_read_close,
     .read_seek      = mov_read_seek,
-    .priv_class     = &class,
+    .priv_class     = &mov_class,
     .flags          = AVFMT_NO_BYTE_SEEK,
 };

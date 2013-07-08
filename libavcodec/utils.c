@@ -26,6 +26,7 @@
  */
 
 #include "config.h"
+#include "libavutil/atomic.h"
 #include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
@@ -161,10 +162,9 @@ av_cold void avcodec_register(AVCodec *codec)
     AVCodec **p;
     avcodec_init();
     p = &first_avcodec;
-    while (*p != NULL)
-        p = &(*p)->next;
-    *p          = codec;
     codec->next = NULL;
+    while(avpriv_atomic_ptr_cas((void * volatile *)p, NULL, codec))
+        p = &(*p)->next;
 
     if (codec->init_static_data)
         codec->init_static_data(codec);
@@ -1395,8 +1395,13 @@ free_and_end:
 
 int ff_alloc_packet2(AVCodecContext *avctx, AVPacket *avpkt, int size)
 {
-    if (size < 0 || avpkt->size < 0 || size > INT_MAX - FF_INPUT_BUFFER_PADDING_SIZE) {
-        av_log(avctx, AV_LOG_ERROR, "Size %d invalid\n", size);
+    if (avpkt->size < 0) {
+        av_log(avctx, AV_LOG_ERROR, "Invalid negative user packet size %d\n", avpkt->size);
+        return AVERROR(EINVAL);
+    }
+    if (size < 0 || size > INT_MAX - FF_INPUT_BUFFER_PADDING_SIZE) {
+        av_log(avctx, AV_LOG_ERROR, "Invalid minimum required packet size %d (max allowed is %d)\n",
+               size, INT_MAX - FF_INPUT_BUFFER_PADDING_SIZE);
         return AVERROR(EINVAL);
     }
 
@@ -1915,6 +1920,8 @@ int attribute_align_arg avcodec_decode_video2(AVCodecContext *avctx, AVFrame *pi
     // copy to ensure we do not change avpkt
     AVPacket tmp = *avpkt;
 
+    if (!avctx->codec)
+        return AVERROR(EINVAL);
     if (avctx->codec->type != AVMEDIA_TYPE_VIDEO) {
         av_log(avctx, AV_LOG_ERROR, "Invalid media type for video\n");
         return AVERROR(EINVAL);
@@ -2054,6 +2061,8 @@ int attribute_align_arg avcodec_decode_audio4(AVCodecContext *avctx,
         av_log(avctx, AV_LOG_ERROR, "invalid packet: NULL data, size != 0\n");
         return AVERROR(EINVAL);
     }
+    if (!avctx->codec)
+        return AVERROR(EINVAL);
     if (avctx->codec->type != AVMEDIA_TYPE_AUDIO) {
         av_log(avctx, AV_LOG_ERROR, "Invalid media type for audio\n");
         return AVERROR(EINVAL);
@@ -2890,7 +2899,9 @@ int av_get_audio_frame_duration(AVCodecContext *avctx, int frame_bytes)
                 int blocks = frame_bytes / ba;
                 switch (avctx->codec_id) {
                 case AV_CODEC_ID_ADPCM_IMA_WAV:
-                    return blocks * (1 + (ba - 4 * ch) / (4 * ch) * 8);
+                    if (bps < 2 || bps > 5)
+                        return 0;
+                    return blocks * (1 + (ba - 4 * ch) / (bps * ch) * 8);
                 case AV_CODEC_ID_ADPCM_IMA_DK3:
                     return blocks * (((ba - 16) * 2 / 3 * 4) / ch);
                 case AV_CODEC_ID_ADPCM_IMA_DK4:
@@ -2984,10 +2995,9 @@ static AVHWAccel *first_hwaccel = NULL;
 void av_register_hwaccel(AVHWAccel *hwaccel)
 {
     AVHWAccel **p = &first_hwaccel;
-    while (*p)
-        p = &(*p)->next;
-    *p = hwaccel;
     hwaccel->next = NULL;
+    while(avpriv_atomic_ptr_cas((void * volatile *)p, NULL, hwaccel))
+        p = &(*p)->next;
 }
 
 AVHWAccel *av_hwaccel_next(AVHWAccel *hwaccel)

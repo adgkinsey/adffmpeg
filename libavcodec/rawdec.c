@@ -48,7 +48,7 @@ static const AVOption options[]={
 {NULL}
 };
 
-static const AVClass class = {
+static const AVClass rawdec_class = {
     .class_name = "rawdec",
     .option     = options,
     .version    = LIBAVUTIL_VERSION_INT,
@@ -133,12 +133,17 @@ static av_cold int raw_init_decoder(AVCodecContext *avctx)
             memset(context->palette->data, 0, AVPALETTE_SIZE);
     }
 
-    context->frame_size = avpicture_get_size(avctx->pix_fmt, avctx->width,
-                                             avctx->height);
     if ((avctx->bits_per_coded_sample == 4 || avctx->bits_per_coded_sample == 2) &&
         avctx->pix_fmt == AV_PIX_FMT_PAL8 &&
-       (!avctx->codec_tag || avctx->codec_tag == MKTAG('r','a','w',' ')))
+       (!avctx->codec_tag || avctx->codec_tag == MKTAG('r','a','w',' '))) {
         context->is_2_4_bpp = 1;
+        context->frame_size = avpicture_get_size(avctx->pix_fmt,
+                                                 FFALIGN(avctx->width, 16),
+                                                 avctx->height);
+    } else {
+        context->frame_size = avpicture_get_size(avctx->pix_fmt, avctx->width,
+                                                 avctx->height);
+    }
 
     if ((avctx->extradata_size >= 9 &&
          !memcmp(avctx->extradata + avctx->extradata_size - 9, "BottomUp", 9)) ||
@@ -351,5 +356,5 @@ AVCodec ff_rawvideo_decoder = {
     .close          = raw_close_decoder,
     .decode         = raw_decode,
     .long_name      = NULL_IF_CONFIG_SMALL("raw video"),
-    .priv_class     = &class,
+    .priv_class     = &rawdec_class,
 };
