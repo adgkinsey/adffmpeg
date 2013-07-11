@@ -343,7 +343,7 @@ static int64_t getLastFrameTime(int fc, ParFrameInfo *fi, ParDisplaySettings *di
         int streamId = fi->channel;
         int ii = 1;
         
-        disp->cameraNum = fi->channel | 0xFFFF;
+        disp->cameraNum = fi->channel & 0xFFFF;
         disp->fileSeqNo = -1;
         disp->fileLock = 1;    // Don't seek beyond the file
         do  {
@@ -438,7 +438,7 @@ static AVStream* createStream(AVFormatContext * avf)
                 parReader_getStreamDate(fi, textbuf, sizeof(textbuf));
                 av_dict_set(&st->metadata, "date", textbuf, 0);
 
-                snprintf(textbuf, sizeof(textbuf), "%d", fi->channel | 0xFFFF);
+                snprintf(textbuf, sizeof(textbuf), "%d", fi->channel & 0xFFFF);
                 av_dict_set(&st->metadata, "track", textbuf, 0);
                 
                 av_dict_set(&st->metadata, "type", "camera", 0);
