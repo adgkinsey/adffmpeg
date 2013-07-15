@@ -53,7 +53,7 @@ OBJS-$(CONFIG_SHARED)                    += log2_tab.o
 
 # muxers/demuxers
 OBJS-$(CONFIG_A64_MUXER)                 += a64.o rawenc.o
-OBJS-$(CONFIG_AAC_DEMUXER)               += aacdec.o apetag.o rawdec.o
+OBJS-$(CONFIG_AAC_DEMUXER)               += aacdec.o apetag.o img2.o rawdec.o
 OBJS-$(CONFIG_AC3_DEMUXER)               += ac3dec.o rawdec.o
 OBJS-$(CONFIG_AC3_MUXER)                 += rawenc.o
 OBJS-$(CONFIG_ACT_DEMUXER)               += act.o
@@ -135,6 +135,7 @@ OBJS-$(CONFIG_FFMETADATA_MUXER)          += ffmetaenc.o
 OBJS-$(CONFIG_FILMSTRIP_DEMUXER)         += filmstripdec.o
 OBJS-$(CONFIG_FILMSTRIP_MUXER)           += filmstripenc.o
 OBJS-$(CONFIG_FLAC_DEMUXER)              += flacdec.o rawdec.o \
+                                            flacdec_picture.o \
                                             oggparsevorbis.o \
                                             vorbiscomment.o
 OBJS-$(CONFIG_FLAC_MUXER)                += flacenc.o flacenc_header.o \
@@ -256,7 +257,8 @@ OBJS-$(CONFIG_OGG_DEMUXER)               += oggdec.o         \
                                             oggparsespeex.o  \
                                             oggparsetheora.o \
                                             oggparsevorbis.o \
-                                            vorbiscomment.o
+                                            vorbiscomment.o  \
+                                            flacdec_picture.o
 OBJS-$(CONFIG_OGG_MUXER)                 += oggenc.o \
                                             vorbiscomment.o
 OBJS-$(CONFIG_OMA_DEMUXER)               += omadec.o pcm.o oma.o
@@ -373,7 +375,7 @@ OBJS-$(CONFIG_MKVTIMESTAMP_V2_MUXER)     += mkvtimestamp_v2.o
 OBJS-$(CONFIG_TMV_DEMUXER)               += tmv.o
 OBJS-$(CONFIG_TRUEHD_DEMUXER)            += rawdec.o
 OBJS-$(CONFIG_TRUEHD_MUXER)              += rawenc.o
-OBJS-$(CONFIG_TTA_DEMUXER)               += tta.o apetag.o
+OBJS-$(CONFIG_TTA_DEMUXER)               += tta.o apetag.o img2.o
 OBJS-$(CONFIG_TTY_DEMUXER)               += tty.o sauce.o
 OBJS-$(CONFIG_TXD_DEMUXER)               += txd.o
 OBJS-$(CONFIG_VC1_DEMUXER)               += rawdec.o

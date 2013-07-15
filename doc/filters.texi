@@ -347,6 +347,66 @@ aconvert=u8:auto
 @end example
 @end itemize
 
+@section aecho
+
+Apply echoing to the input audio.
+
+Echoes are reflected sound and can occur naturally amongst mountains
+(and sometimes large buildings) when talking or shouting; digital echo
+effects emulate this behaviour and are often used to help fill out the
+sound of a single instrument or vocal. The time difference between the
+original signal and the reflection is the @code{delay}, and the
+loudness of the reflected signal is the @code{decay}.
+Multiple echoes can have different delays and decays.
+
+A description of the accepted parameters follows.
+
+@table @option
+@item in_gain
+Set input gain of reflected signal. Default is @code{0.6}.
+
+@item out_gain
+Set output gain of reflected signal. Default is @code{0.3}.
+
+@item delays
+Set list of time intervals in milliseconds between original signal and reflections
+separated by '|'. Allowed range for each @code{delay} is @code{(0 - 90000.0]}.
+Default is @code{1000}.
+
+@item decays
+Set list of loudnesses of reflected signals separated by '|'.
+Allowed range for each @code{decay} is @code{(0 - 1.0]}.
+Default is @code{0.5}.
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Make it sound as if there are twice as many instruments as are actually playing:
+@example
+aecho=0.8:0.88:60:0.4
+@end example
+
+@item
+If delay is very short, then it sound like a (metallic) robot playing music:
+@example
+aecho=0.8:0.88:6:0.4
+@end example
+
+@item
+A longer delay will sound like an open air concert in the mountains:
+@example
+aecho=0.8:0.9:1000:0.3
+@end example
+
+@item
+Same as above but with one more mountain:
+@example
+aecho=0.8:0.9:1000|1800:0.3|0.25
+@end example
+@end itemize
+
 @section afade
 
 Apply fade-in/out effect to input audio.
@@ -889,11 +949,11 @@ Trim the input so that the output contains one continuous subpart of the input.
 This filter accepts the following options:
 @table @option
 @item start
-Timestamp (in seconds) of the start of the kept section. I.e. the audio sample
+Specify time of the start of the kept section, i.e. the audio sample
 with the timestamp @var{start} will be the first sample in the output.
 
 @item end
-Timestamp (in seconds) of the first audio sample that will be dropped. I.e. the
+Specify time of the first audio sample that will be dropped, i.e. the
 audio sample immediately preceding the one with the timestamp @var{end} will be
 the last sample in the output.
 
@@ -906,7 +966,7 @@ Same as @var{end}, except this option sets the end timestamp in samples instead
 of seconds.
 
 @item duration
-Maximum duration of the output in seconds.
+Specify maximum duration of the output.
 
 @item start_sample
 Number of the first sample that should be passed to output.
@@ -914,6 +974,10 @@ Number of the first sample that should be passed to output.
 @item end_sample
 Number of the first sample that should be dropped.
 @end table
+
+@option{start}, @option{end}, @option{duration} are expressed as time
+duration specifications, check the "Time duration" section in the
+ffmpeg-utils manual.
 
 Note that the first two sets of the start/end options and the @option{duration}
 option look at the frame timestamp, while the _sample options simply count the
@@ -2790,6 +2854,11 @@ When set to 1, a green rectangle is drawn on the screen to simplify
 finding the right @var{x}, @var{y}, @var{w}, and @var{h} parameters.
 The default value is 0.
 
+The rectangle is drawn on the outermost pixels which will be (partly)
+replaced with interpolated values. The values of the next pixels
+immediately outside this rectangle in each direction will be used to
+compute the interpolated pixel values inside the rectangle.
+
 @end table
 
 @subsection Examples
@@ -3327,6 +3396,9 @@ It can accept an argument: a strftime() format string.
 @item localtime
 The time at which the filter is running, expressed in the local time zone.
 It can accept an argument: a strftime() format string.
+
+@item metadata
+Frame metadata. It must take one argument specifying metadata key.
 
 @item n, frame_num
 The frame number, starting from 0.
@@ -5023,7 +5095,6 @@ The list of the currently supported filters follows:
 @item fil
 @item fspp
 @item ilpack
-@item perspective
 @item phase
 @item pp7
 @item pullup
@@ -5650,6 +5721,44 @@ pad="2*iw:2*ih:ow-iw:oh-ih"
 @end example
 @end itemize
 
+@section perspective
+
+Correct perspective of video not recorded perpendicular to the screen.
+
+A description of the accepted parameters follows.
+
+@table @option
+@item x0
+@item y0
+@item x1
+@item y1
+@item x2
+@item y2
+@item x3
+@item y3
+Set coordinates expression for top left, top right, bottom left and bottom right corners.
+Default values are @code{0:0:W:0:0:H:W:H} with which perspective will remain unchanged.
+
+The expressions can use the following variables:
+
+@table @option
+@item W
+@item H
+the width and height of video frame.
+@end table
+
+@item interpolation
+Set interpolation for perspective correction.
+
+It accepts the following values:
+@table @samp
+@item linear
+@item cubic
+@end table
+
+Default value is @samp{linear}.
+@end table
+
 @section pixdesctest
 
 Pixel format descriptor test filter, mainly useful for internal
@@ -5836,6 +5945,74 @@ automatically depending on available CPU time:
 pp=hb|y/vb|a
 @end example
 @end itemize
+
+@section psnr
+
+Obtain the average, maximum and minimum PSNR (Peak Signal to Noise
+Ratio) between two input videos.
+
+This filter takes in input two input videos, the first input is
+considered the "main" source and is passed unchanged to the
+output. The second input is used as a "reference" video for computing
+the PSNR.
+
+Both video inputs must have the same resolution and pixel format for
+this filter to work correctly. Also it assumes that both inputs
+have the same number of frames, which are compared one by one.
+
+The obtained average PSNR is printed through the logging system.
+
+The filter stores the accumulated MSE (mean squared error) of each
+frame, and at the end of the processing it is averaged across all frames
+equally, and the following formula is applied to obtain the PSNR:
+
+@example
+PSNR = 10*log10(MAX^2/MSE)
+@end example
+
+Where MAX is the average of the maximum values of each component of the
+image.
+
+The description of the accepted parameters follows.
+
+@table @option
+@item stats_file, f
+If specified the filter will use the named file to save the PSNR of
+each individual frame.
+@end table
+
+The file printed if @var{stats_file} is selected, contains a sequence of
+key/value pairs of the form @var{key}:@var{value} for each compared
+couple of frames.
+
+A description of each shown parameter follows:
+
+@table @option
+@item n
+sequential number of the input frame, starting from 1
+
+@item mse_avg
+Mean Square Error pixel-by-pixel average difference of the compared
+frames, averaged over all the image components.
+
+@item mse_y, mse_u, mse_v, mse_r, mse_g, mse_g, mse_a
+Mean Square Error pixel-by-pixel average difference of the compared
+frames for the component specified by the suffix.
+
+@item psnr_y, psnr_u, psnr_v, psnr_r, psnr_g, psnr_b, psnr_a
+Peak Signal to Noise ratio of the compared frames for the component
+specified by the suffix.
+@end table
+
+For example:
+@example
+movie=ref_movie.mpg, setpts=PTS-STARTPTS [main];
+[main][ref] psnr="stats_file=stats.log" [out]
+@end example
+
+On this example the input file being processed is compared with the
+reference file @file{ref_movie.mpg}. The PSNR of each individual frame
+is stored in @file{stats.log}.
 
 @section removelogo
 
@@ -6935,11 +7112,11 @@ Trim the input so that the output contains one continuous subpart of the input.
 This filter accepts the following options:
 @table @option
 @item start
-Timestamp (in seconds) of the start of the kept section. I.e. the frame with the
+Specify time of the start of the kept section, i.e. the frame with the
 timestamp @var{start} will be the first frame in the output.
 
 @item end
-Timestamp (in seconds) of the first frame that will be dropped. I.e. the frame
+Specify time of the first frame that will be dropped, i.e. the frame
 immediately preceding the one with the timestamp @var{end} will be the last
 frame in the output.
 
@@ -6952,7 +7129,7 @@ Same as @var{end}, except this option sets the end timestamp in timebase units
 instead of seconds.
 
 @item duration
-Maximum duration of the output in seconds.
+Specify maximum duration of the output.
 
 @item start_frame
 Number of the first frame that should be passed to output.
@@ -6960,6 +7137,10 @@ Number of the first frame that should be passed to output.
 @item end_frame
 Number of the first frame that should be dropped.
 @end table
+
+@option{start}, @option{end}, @option{duration} are expressed as time
+duration specifications, check the "Time duration" section in the
+ffmpeg-utils manual.
 
 Note that the first two sets of the start/end options and the @option{duration}
 option look at the frame timestamp, while the _frame variants simply count the

@@ -305,7 +305,6 @@ static int workaround_bugs = 1;
 static int fast = 0;
 static int genpts = 0;
 static int lowres = 0;
-static int idct = FF_IDCT_AUTO;
 static int error_concealment = 3;
 static int decoder_reorder_pts = -1;
 static int autoexit;
@@ -2297,10 +2296,11 @@ static int audio_decode_frame(VideoState *is)
 
             audio_clock0 = is->audio_clock;
             /* update the audio clock with the pts */
-            if (is->frame->pts != AV_NOPTS_VALUE) {
+            if (is->frame->pts != AV_NOPTS_VALUE)
                 is->audio_clock = is->frame->pts * av_q2d(tb) + (double) is->frame->nb_samples / is->frame->sample_rate;
-                is->audio_clock_serial = is->audio_pkt_temp_serial;
-            }
+            else
+                is->audio_clock = NAN;
+            is->audio_clock_serial = is->audio_pkt_temp_serial;
 #ifdef DEBUG
             {
                 static double last_clock;
@@ -2374,8 +2374,10 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len)
     bytes_per_sec = is->audio_tgt.freq * is->audio_tgt.channels * av_get_bytes_per_sample(is->audio_tgt.fmt);
     is->audio_write_buf_size = is->audio_buf_size - is->audio_buf_index;
     /* Let's assume the audio driver that is used by SDL has two periods. */
-    set_clock_at(&is->audclk, is->audio_clock - (double)(2 * is->audio_hw_buf_size + is->audio_write_buf_size) / bytes_per_sec, is->audio_clock_serial, audio_callback_time / 1000000.0);
-    sync_clock_to_slave(&is->extclk, &is->audclk);
+    if (!isnan(is->audio_clock)) {
+        set_clock_at(&is->audclk, is->audio_clock - (double)(2 * is->audio_hw_buf_size + is->audio_write_buf_size) / bytes_per_sec, is->audio_clock_serial, audio_callback_time / 1000000.0);
+        sync_clock_to_slave(&is->extclk, &is->audclk);
+    }
 }
 
 static int audio_open(void *opaque, int64_t wanted_channel_layout, int wanted_nb_channels, int wanted_sample_rate, struct AudioParams *audio_hw_params)
@@ -2477,7 +2479,6 @@ static int stream_component_open(VideoState *is, int stream_index)
                 codec->max_lowres);
         avctx->lowres= codec->max_lowres;
     }
-    avctx->idct_algo         = idct;
     avctx->error_concealment = error_concealment;
 
     if(avctx->lowres) avctx->flags |= CODEC_FLAG_EMU_EDGE;
@@ -2682,6 +2683,7 @@ static int read_thread(void *arg)
     int st_index[AVMEDIA_TYPE_NB];
     AVPacket pkt1, *pkt = &pkt1;
     int eof = 0;
+    int64_t stream_start_time;
     int pkt_in_play_range = 0;
     AVDictionaryEntry *t;
     AVDictionary **opts;
@@ -2923,8 +2925,9 @@ static int read_thread(void *arg)
             continue;
         }
         /* check if packet is in play range specified by user, then queue, otherwise discard */
+        stream_start_time = ic->streams[pkt->stream_index]->start_time;
         pkt_in_play_range = duration == AV_NOPTS_VALUE ||
-                (pkt->pts - ic->streams[pkt->stream_index]->start_time) *
+                (pkt->pts - (stream_start_time != AV_NOPTS_VALUE ? stream_start_time : 0)) *
                 av_q2d(ic->streams[pkt->stream_index]->time_base) -
                 (double)(start_time != AV_NOPTS_VALUE ? start_time : 0) / 1000000
                 <= ((double)duration / 1000000);
@@ -3397,7 +3400,6 @@ static const OptionDef options[] = {
     { "genpts", OPT_BOOL | OPT_EXPERT, { &genpts }, "generate pts", "" },
     { "drp", OPT_INT | HAS_ARG | OPT_EXPERT, { &decoder_reorder_pts }, "let decoder reorder pts 0=off 1=on -1=auto", ""},
     { "lowres", OPT_INT | HAS_ARG | OPT_EXPERT, { &lowres }, "", "" },
-    { "idct", OPT_INT | HAS_ARG | OPT_EXPERT, { &idct }, "set idct algo",  "algo" },
     { "ec", OPT_INT | HAS_ARG | OPT_EXPERT, { &error_concealment }, "set error concealment options",  "bit_mask" },
     { "sync", HAS_ARG | OPT_EXPERT, { .func_arg = opt_sync }, "set audio-video sync. type (type=audio/video/ext)", "type" },
     { "autoexit", OPT_BOOL | OPT_EXPERT, { &autoexit }, "exit at the end", "" },

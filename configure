@@ -1467,6 +1467,7 @@ HAVE_LIST="
     ibm_asm
     inet_aton
     io_h
+    inline_asm_labels
     isatty
     jack_port_get_latency_range
     kbhit
@@ -1501,6 +1502,7 @@ HAVE_LIST="
     pthread_cancel
     rdtsc
     rsync_contimeout
+    sarestart
     sched_getaffinity
     sdl
     SetConsoleTextAttribute
@@ -2179,6 +2181,7 @@ mpdecimate_filter_deps="gpl avcodec"
 mptestsrc_filter_deps="gpl"
 negate_filter_deps="lut_filter"
 noise_filter_deps="gpl"
+perspective_filter_deps="gpl"
 resample_filter_deps="avresample"
 ocv_filter_deps="libopencv"
 owdenoise_filter_deps="gpl"
@@ -2219,7 +2222,7 @@ ffmpeg_select="aformat_filter anull_filter atrim_filter format_filter
 ffplay_deps="avcodec avformat swscale swresample sdl"
 ffplay_select="rdft crop_filter"
 ffprobe_deps="avcodec avformat"
-ffserver_deps="avformat ffm_muxer fork rtp_protocol rtsp_demuxer"
+ffserver_deps="avformat ffm_muxer fork rtp_protocol rtsp_demuxer sarestart"
 ffserver_extralibs='$ldl'
 
 # documentation
@@ -3793,6 +3796,8 @@ unsigned int endian = 'B' << 24 | 'I' << 16 | 'G' << 8 | 'E';
 EOF
 od -t x1 $TMPO | grep -q '42 *49 *47 *45' && enable bigendian
 
+check_inline_asm inline_asm_labels '"1:\n"'
+
 if enabled alpha; then
 
     check_cflags -mieee
@@ -3936,7 +3941,7 @@ EOF
 
         check_yasm "pextrd [eax], xmm0, 1" && enable yasm ||
             die "yasm not found, use --disable-yasm for a crippled build"
-        check_yasm "vextractf128 xmm0, ymm0, 0"      || disable avx_external
+        check_yasm "vextractf128 xmm0, ymm0, 0"      || disable avx_external avresample
         check_yasm "vfmaddps ymm0, ymm1, ymm2, ymm3" || disable fma4_external
         check_yasm "CPU amdnop" && enabled i686 && enable cpunop
     fi
@@ -4034,6 +4039,7 @@ check_builtin sync_val_compare_and_swap "" "int *ptr; int oldval, newval; __sync
 check_builtin machine_rw_barrier mbarrier.h "__machine_rw_barrier()"
 check_builtin atomic_cas_ptr atomic.h "void **ptr; void *oldval, *newval; atomic_cas_ptr(ptr, oldval, newval)"
 check_builtin MemoryBarrier windows.h "MemoryBarrier()"
+check_builtin sarestart signal.h "SA_RESTART"
 check_func  sysconf
 check_func  sysctl
 check_func  usleep
