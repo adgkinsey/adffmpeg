@@ -361,7 +361,7 @@ AVStream * ad_get_audio_stream(AVFormatContext *s, struct NetVuAudioData* audioH
  * \param s Pointer to AVFormatContext
  * \return Pointer to the data stream on success, NULL on failure
  */
-static AVStream * ad_get_data_stream(AVFormatContext *s, enum CodecID codecId)
+static AVStream * ad_get_data_stream(AVFormatContext *s, enum AVCodecID codecId)
 {
     int i, found = FALSE;
     AVStream *st = NULL;
@@ -392,7 +392,7 @@ static AVStream * ad_get_data_stream(AVFormatContext *s, enum CodecID codecId)
 }
 
 //static AVStream *ad_get_stream(AVFormatContext *s, enum AVMediaType media, 
-//                               enum CodecID codecId, void *data)
+//                               enum AVCodecID codecId, void *data)
 //{
 //    switch (media)  {
 //        case(AVMEDIA_TYPE_VIDEO):
@@ -600,7 +600,7 @@ static void ad_parseText(AVFormatContext *s, struct ADFrameData *frameData)
 }
 #endif
 
-int initADData(int data_type, enum AVMediaType *mediaType, enum CodecID *codecId, void **payload)
+int initADData(int data_type, enum AVMediaType *mediaType, enum AVCodecID *codecId, void **payload)
 {
     switch(data_type)  {
         case(AD_DATATYPE_JPEG):
@@ -990,7 +990,7 @@ static int addSideData(AVFormatContext *s, AVPacket *pkt,
 }
     
 int ad_read_packet(AVFormatContext *s, AVPacket *pkt, int channel, 
-                   enum AVMediaType media, enum CodecID codecId, 
+                   enum AVMediaType media, enum AVCodecID codecId, 
                    void *data, char *text)
 {
     AdContext *adContext          = s->priv_data;

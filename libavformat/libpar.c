@@ -32,6 +32,7 @@
 #include "libavutil/avstring.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/parseutils.h"
+#include "libavutil/time.h"
 #include "libpar.h"
 #include "adpic.h"
 

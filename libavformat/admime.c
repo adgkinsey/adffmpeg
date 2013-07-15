@@ -702,7 +702,7 @@ static int admime_read_packet(AVFormatContext *s, AVPacket *pkt)
     long                    extra = 0;
     int                     errorVal = ADFFMPEG_AD_ERROR_UNKNOWN;
     enum AVMediaType        mediaType = AVMEDIA_TYPE_UNKNOWN;
-    enum CodecID            codecId   = CODEC_ID_NONE;
+    enum AVCodecID          codecId   = CODEC_ID_NONE;
     int                     imgLoaded = FALSE;
     uint8_t                 buf[TEMP_BUFFER_SIZE];
     int                     bufSize = TEMP_BUFFER_SIZE;
