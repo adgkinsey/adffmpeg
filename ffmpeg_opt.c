@@ -93,6 +93,7 @@ static int video_discard      = 0;
 static int intra_dc_precision = 8;
 static int do_psnr            = 0;
 static int input_sync;
+static int override_ffserver  = 0;
 
 static int64_t recording_time = INT64_MAX;
 
@@ -1509,9 +1510,6 @@ static int read_ffserver_streams(OptionsContext *o, AVFormatContext *s, const ch
             choose_pixel_fmt(st, codec, st->codec->pix_fmt);
     }
 
-    /* ffserver seeking with date=... needs a date reference */
-    err = parse_option(o, "metadata", "creation_time=now", options);
-
     avformat_close_input(&ic);
     return err;
 }
@@ -1639,7 +1637,17 @@ static int open_output_file(OptionsContext *o, const char *filename)
         }
     }
 
+    /* ffserver seeking with date=... needs a date reference */
     if (!strcmp(file_oformat->name, "ffm") &&
+        av_strstart(filename, "http:", NULL)) {
+        int err = parse_option(o, "metadata", "creation_time=now", options);
+        if (err < 0) {
+            print_error(filename, err);
+            exit_program(1);
+        }
+    }
+
+    if (!strcmp(file_oformat->name, "ffm") && !override_ffserver &&
         av_strstart(filename, "http:", NULL)) {
         int j;
         /* special case for files sent to ffserver: we get the stream
@@ -1846,6 +1854,10 @@ loop_end:
                    filename);
             exit_program(1);
         }
+
+        // gop_timecode is injected by generic code but not always used
+        if (!strcmp(e->key, "gop_timecode"))
+            continue;
 
         av_log(NULL, AV_LOG_WARNING, "Codec AVOption %s (%s) specified for "
                "output file #%d (%s) has not been used for any stream. The most "
@@ -2829,6 +2841,8 @@ const OptionDef options[] = {
         "set the maximum demux-decode delay", "seconds" },
     { "muxpreload", OPT_FLOAT | HAS_ARG | OPT_EXPERT | OPT_OFFSET | OPT_OUTPUT, { .off = OFFSET(mux_preload) },
         "set the initial demux-decode delay", "seconds" },
+    { "override_ffserver", OPT_BOOL | OPT_EXPERT | OPT_OUTPUT, { &override_ffserver },
+        "override the options from ffserver", "" },
 
     { "bsf", HAS_ARG | OPT_STRING | OPT_SPEC | OPT_EXPERT | OPT_OUTPUT, { .off = OFFSET(bitstream_filters) },
         "A comma-separated list of bitstream filters", "bitstream_filters" },
