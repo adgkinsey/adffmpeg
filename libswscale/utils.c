@@ -252,12 +252,21 @@ static double getSplineCoeff(double a, double b, double c, double d,
                               dist - 1.0);
 }
 
+static av_cold int get_local_pos(SwsContext *s, int chr_subsample, int pos, int dir)
+{
+    if (pos < 0) {
+        pos = (128 << chr_subsample) - 128;
+    }
+    pos += 128; // relative to ideal left edge
+    return pos >> chr_subsample;
+}
+
 static av_cold int initFilter(int16_t **outFilter, int32_t **filterPos,
                               int *outFilterSize, int xInc, int srcW,
                               int dstW, int filterAlign, int one,
                               int flags, int cpu_flags,
                               SwsVector *srcFilter, SwsVector *dstFilter,
-                              double param[2])
+                              double param[2], int srcPos, int dstPos)
 {
     int i;
     int filterSize;
@@ -273,7 +282,7 @@ static av_cold int initFilter(int16_t **outFilter, int32_t **filterPos,
     // NOTE: the +3 is for the MMX(+1) / SSE(+3) scaler which reads over the end
     FF_ALLOC_OR_GOTO(NULL, *filterPos, (dstW + 3) * sizeof(**filterPos), fail);
 
-    if (FFABS(xInc - 0x10000) < 10) { // unscaled
+    if (FFABS(xInc - 0x10000) < 10 && srcPos == dstPos) { // unscaled
         int i;
         filterSize = 1;
         FF_ALLOCZ_OR_GOTO(NULL, filter,
@@ -290,7 +299,7 @@ static av_cold int initFilter(int16_t **outFilter, int32_t **filterPos,
         FF_ALLOC_OR_GOTO(NULL, filter,
                          dstW * sizeof(*filter) * filterSize, fail);
 
-        xDstInSrc = xInc / 2 - 0x8000;
+        xDstInSrc = ((srcPos*xInc)>>8) - ((dstPos*0x8000)>>7);
         for (i = 0; i < dstW; i++) {
             int xx = (xDstInSrc - ((filterSize - 1) << 15) + (1 << 15)) >> 16;
 
@@ -306,7 +315,7 @@ static av_cold int initFilter(int16_t **outFilter, int32_t **filterPos,
         FF_ALLOC_OR_GOTO(NULL, filter,
                          dstW * sizeof(*filter) * filterSize, fail);
 
-        xDstInSrc = xInc / 2 - 0x8000;
+        xDstInSrc = ((srcPos*xInc)>>8) - ((dstPos*0x8000)>>7);
         for (i = 0; i < dstW; i++) {
             int xx = (xDstInSrc - ((filterSize - 1) << 15) + (1 << 15)) >> 16;
             int j;
@@ -357,7 +366,7 @@ static av_cold int initFilter(int16_t **outFilter, int32_t **filterPos,
         FF_ALLOC_OR_GOTO(NULL, filter,
                          dstW * sizeof(*filter) * filterSize, fail);
 
-        xDstInSrc = xInc - 0x10000;
+        xDstInSrc = ((srcPos*xInc)>>7) - ((dstPos*0x10000)>>7);
         for (i = 0; i < dstW; i++) {
             int xx = (xDstInSrc - ((filterSize - 2) << 16)) / (1 << 17);
             int j;
@@ -1091,8 +1100,14 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
 
     unscaled = (srcW == dstW && srcH == dstH);
 
-    handle_jpeg(&c->srcFormat);
-    handle_jpeg(&c->dstFormat);
+    c->srcRange |= handle_jpeg(&c->srcFormat);
+    c->dstRange |= handle_jpeg(&c->dstFormat);
+
+    if (!c->contrast && !c->saturation && !c->dstFormatBpp)
+        sws_setColorspaceDetails(c, ff_yuv2rgb_coeffs[SWS_CS_DEFAULT], c->srcRange,
+                                 ff_yuv2rgb_coeffs[SWS_CS_DEFAULT],
+                                 c->dstRange, 0, 1 << 16, 1 << 16);
+
     if(srcFormat!=c->srcFormat || dstFormat!=c->dstFormat)
         av_log(c, AV_LOG_WARNING, "deprecated pixel format used, make sure you did set range correctly\n");
     handle_formats(c);
@@ -1386,14 +1401,18 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
                            srcW, dstW, filterAlign, 1 << 14,
                            (flags & SWS_BICUBLIN) ? (flags | SWS_BICUBIC) : flags,
                            cpu_flags, srcFilter->lumH, dstFilter->lumH,
-                           c->param) < 0)
+                           c->param,
+                           get_local_pos(c, 0, 0, 0),
+                           get_local_pos(c, 0, 0, 0)) < 0)
                 goto fail;
             if (initFilter(&c->hChrFilter, &c->hChrFilterPos,
                            &c->hChrFilterSize, c->chrXInc,
                            c->chrSrcW, c->chrDstW, filterAlign, 1 << 14,
                            (flags & SWS_BICUBLIN) ? (flags | SWS_BILINEAR) : flags,
                            cpu_flags, srcFilter->chrH, dstFilter->chrH,
-                           c->param) < 0)
+                           c->param,
+                           get_local_pos(c, c->chrSrcHSubSample, c->src_h_chr_pos, 0),
+                           get_local_pos(c, c->chrDstHSubSample, c->dst_h_chr_pos, 0)) < 0)
                 goto fail;
         }
     } // initialize horizontal stuff
@@ -1409,14 +1428,19 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
                        c->lumYInc, srcH, dstH, filterAlign, (1 << 12),
                        (flags & SWS_BICUBLIN) ? (flags | SWS_BICUBIC) : flags,
                        cpu_flags, srcFilter->lumV, dstFilter->lumV,
-                       c->param) < 0)
+                       c->param,
+                       get_local_pos(c, 0, 0, 1),
+                       get_local_pos(c, 0, 0, 1)) < 0)
             goto fail;
         if (initFilter(&c->vChrFilter, &c->vChrFilterPos, &c->vChrFilterSize,
                        c->chrYInc, c->chrSrcH, c->chrDstH,
                        filterAlign, (1 << 12),
                        (flags & SWS_BICUBLIN) ? (flags | SWS_BILINEAR) : flags,
                        cpu_flags, srcFilter->chrV, dstFilter->chrV,
-                       c->param) < 0)
+                       c->param,
+                       get_local_pos(c, c->chrSrcVSubSample, c->src_v_chr_pos, 1),
+                       get_local_pos(c, c->chrDstVSubSample, c->dst_v_chr_pos, 1)) < 0)
+
             goto fail;
 
 #if HAVE_ALTIVEC
@@ -1586,8 +1610,6 @@ SwsContext *sws_getContext(int srcW, int srcH, enum AVPixelFormat srcFormat,
     c->srcH      = srcH;
     c->dstW      = dstW;
     c->dstH      = dstH;
-    c->srcRange  = handle_jpeg(&srcFormat);
-    c->dstRange  = handle_jpeg(&dstFormat);
     c->srcFormat = srcFormat;
     c->dstFormat = dstFormat;
 
@@ -1595,9 +1617,6 @@ SwsContext *sws_getContext(int srcW, int srcH, enum AVPixelFormat srcFormat,
         c->param[0] = param[0];
         c->param[1] = param[1];
     }
-    sws_setColorspaceDetails(c, ff_yuv2rgb_coeffs[SWS_CS_DEFAULT], c->srcRange,
-                             ff_yuv2rgb_coeffs[SWS_CS_DEFAULT] /* FIXME*/,
-                             c->dstRange, 0, 1 << 16, 1 << 16);
 
     if (sws_init_context(c, srcFilter, dstFilter) < 0) {
         sws_freeContext(c);
@@ -2027,19 +2046,13 @@ struct SwsContext *sws_getCachedContext(struct SwsContext *context, int srcW,
             return NULL;
         context->srcW      = srcW;
         context->srcH      = srcH;
-        context->srcRange  = handle_jpeg(&srcFormat);
         context->srcFormat = srcFormat;
         context->dstW      = dstW;
         context->dstH      = dstH;
-        context->dstRange  = handle_jpeg(&dstFormat);
         context->dstFormat = dstFormat;
         context->flags     = flags;
         context->param[0]  = param[0];
         context->param[1]  = param[1];
-        sws_setColorspaceDetails(context, ff_yuv2rgb_coeffs[SWS_CS_DEFAULT],
-                                 context->srcRange,
-                                 ff_yuv2rgb_coeffs[SWS_CS_DEFAULT] /* FIXME*/,
-                                 context->dstRange, 0, 1 << 16, 1 << 16);
         if (sws_init_context(context, srcFilter, dstFilter) < 0) {
             sws_freeContext(context);
             return NULL;

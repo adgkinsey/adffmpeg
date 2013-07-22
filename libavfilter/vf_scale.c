@@ -90,6 +90,12 @@ typedef struct {
     char *w_expr;               ///< width  expression string
     char *h_expr;               ///< height expression string
     char *flags_str;
+
+    char *in_color_matrix;
+    char *out_color_matrix;
+
+    int in_range;
+    int out_range;
 } ScaleContext;
 
 static av_cold int init(AVFilterContext *ctx)
@@ -147,7 +153,6 @@ static av_cold void uninit(AVFilterContext *ctx)
     sws_freeContext(scale->isws[0]);
     sws_freeContext(scale->isws[1]);
     scale->sws = NULL;
-    av_opt_free(scale);
 }
 
 static int query_formats(AVFilterContext *ctx)
@@ -180,6 +185,38 @@ static int query_formats(AVFilterContext *ctx)
     }
 
     return 0;
+}
+
+static const int *parse_yuv_type(const char *s, enum AVColorSpace colorspace)
+{
+    const static int32_t yuv2rgb_coeffs[8][4] = {
+        { 117504, 138453, 13954, 34903 },
+        { 117504, 138453, 13954, 34903 }, /* ITU-R Rec. 709 (1990) */
+        { 104597, 132201, 25675, 53279 }, /* unspecified */
+        { 104597, 132201, 25675, 53279 }, /* reserved */
+        { 104448, 132798, 24759, 53109 }, /* FCC */
+        { 104597, 132201, 25675, 53279 }, /* ITU-R Rec. 624-4 System B, G */
+        { 104597, 132201, 25675, 53279 }, /* SMPTE 170M */
+        { 117579, 136230, 16907, 35559 }  /* SMPTE 240M (1987) */
+    };
+    if (!s)
+        s = "bt601";
+
+    if (s && strstr(s, "bt709")) {
+        colorspace = AVCOL_SPC_BT709;
+    } else if (s && strstr(s, "fcc")) {
+        colorspace = AVCOL_SPC_FCC;
+    } else if (s && strstr(s, "smpte240m")) {
+        colorspace = AVCOL_SPC_SMPTE240M;
+    } else if (s && (strstr(s, "bt601") || strstr(s, "bt470") || strstr(s, "smpte170m"))) {
+        colorspace = AVCOL_SPC_BT470BG;
+    }
+
+    if (colorspace < 1 || colorspace > 7) {
+        colorspace = AVCOL_SPC_BT470BG;
+    }
+
+    return yuv2rgb_coeffs[colorspace];
 }
 
 static int config_props(AVFilterLink *outlink)
@@ -260,25 +297,37 @@ static int config_props(AVFilterLink *outlink)
 
     if (scale->sws)
         sws_freeContext(scale->sws);
+    if (scale->isws[0])
+        sws_freeContext(scale->isws[0]);
+    if (scale->isws[1])
+        sws_freeContext(scale->isws[1]);
+    scale->isws[0] = scale->isws[1] = scale->sws = NULL;
     if (inlink->w == outlink->w && inlink->h == outlink->h &&
         inlink->format == outlink->format)
-        scale->sws = NULL;
+        ;
     else {
-        scale->sws = sws_getContext(inlink ->w, inlink ->h, inlink ->format,
-                                    outlink->w, outlink->h, outfmt,
-                                    scale->flags, NULL, NULL, NULL);
-        if (scale->isws[0])
-            sws_freeContext(scale->isws[0]);
-        scale->isws[0] = sws_getContext(inlink ->w, inlink ->h/2, inlink ->format,
-                                        outlink->w, outlink->h/2, outfmt,
-                                        scale->flags, NULL, NULL, NULL);
-        if (scale->isws[1])
-            sws_freeContext(scale->isws[1]);
-        scale->isws[1] = sws_getContext(inlink ->w, inlink ->h/2, inlink ->format,
-                                        outlink->w, outlink->h/2, outfmt,
-                                        scale->flags, NULL, NULL, NULL);
-        if (!scale->sws || !scale->isws[0] || !scale->isws[1])
-            return AVERROR(EINVAL);
+        struct SwsContext **swscs[3] = {&scale->sws, &scale->isws[0], &scale->isws[1]};
+        int i;
+
+        for (i = 0; i < 3; i++) {
+            struct SwsContext **s = swscs[i];
+            *s = sws_alloc_context();
+            if (!*s)
+                return AVERROR(ENOMEM);
+
+            av_opt_set_int(*s, "srcw", inlink ->w, 0);
+            av_opt_set_int(*s, "srch", inlink ->h >> !!i, 0);
+            av_opt_set_int(*s, "src_format", inlink->format, 0);
+            av_opt_set_int(*s, "dstw", outlink->w, 0);
+            av_opt_set_int(*s, "dsth", outlink->h >> !!i, 0);
+            av_opt_set_int(*s, "dst_format", outfmt, 0);
+            av_opt_set_int(*s, "sws_flags", scale->flags, 0);
+
+            if ((ret = sws_init_context(*s, NULL, NULL)) < 0)
+                return ret;
+            if (!scale->interlaced)
+                break;
+        }
     }
 
     if (inlink->sample_aspect_ratio.num){
@@ -370,6 +419,40 @@ static int filter_frame(AVFilterLink *link, AVFrame *in)
     if(scale->output_is_pal)
         avpriv_set_systematic_pal2((uint32_t*)out->data[1], outlink->format == AV_PIX_FMT_PAL8 ? AV_PIX_FMT_BGR8 : outlink->format);
 
+    if (   scale->in_color_matrix
+        || scale->out_color_matrix
+        || scale-> in_range != AVCOL_RANGE_UNSPECIFIED
+        || scale->out_range != AVCOL_RANGE_UNSPECIFIED) {
+        int in_full, out_full, brightness, contrast, saturation;
+        const int *inv_table, *table;
+
+        sws_getColorspaceDetails(scale->sws, (int **)&inv_table, &in_full,
+                                 (int **)&table, &out_full,
+                                 &brightness, &contrast, &saturation);
+
+        if (scale->in_color_matrix)
+            inv_table = parse_yuv_type(scale->in_color_matrix, av_frame_get_colorspace(in));
+        if (scale->out_color_matrix)
+            table     = parse_yuv_type(scale->out_color_matrix, AVCOL_SPC_UNSPECIFIED);
+
+        if (scale-> in_range != AVCOL_RANGE_UNSPECIFIED)
+            in_full  = (scale-> in_range == AVCOL_RANGE_JPEG);
+        if (scale->out_range != AVCOL_RANGE_UNSPECIFIED)
+            out_full = (scale->out_range == AVCOL_RANGE_JPEG);
+
+        sws_setColorspaceDetails(scale->sws, inv_table, in_full,
+                                 table, out_full,
+                                 brightness, contrast, saturation);
+        if (scale->isws[0])
+            sws_setColorspaceDetails(scale->isws[0], inv_table, in_full,
+                                     table, out_full,
+                                     brightness, contrast, saturation);
+        if (scale->isws[1])
+            sws_setColorspaceDetails(scale->isws[1], inv_table, in_full,
+                                     table, out_full,
+                                     brightness, contrast, saturation);
+    }
+
     av_reduce(&out->sample_aspect_ratio.num, &out->sample_aspect_ratio.den,
               (int64_t)in->sample_aspect_ratio.num * outlink->h * link->w,
               (int64_t)in->sample_aspect_ratio.den * outlink->w * link->h,
@@ -398,6 +481,16 @@ static const AVOption scale_options[] = {
     { "interl", "set interlacing", OFFSET(interlaced), AV_OPT_TYPE_INT, {.i64 = 0 }, -1, 1, FLAGS },
     { "size",   "set video size",          OFFSET(size_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, FLAGS },
     { "s",      "set video size",          OFFSET(size_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, FLAGS },
+    {  "in_color_matrix", "set input YCbCr type",   OFFSET(in_color_matrix),  AV_OPT_TYPE_STRING, { .str = NULL }, .flags = FLAGS },
+    { "out_color_matrix", "set output YCbCr type",  OFFSET(out_color_matrix), AV_OPT_TYPE_STRING, { .str = NULL }, .flags = FLAGS },
+    {  "in_range", "set input color range",  OFFSET( in_range), AV_OPT_TYPE_INT, {.i64 = AVCOL_RANGE_UNSPECIFIED }, 0, 2, FLAGS, "range" },
+    { "out_range", "set output color range", OFFSET(out_range), AV_OPT_TYPE_INT, {.i64 = AVCOL_RANGE_UNSPECIFIED }, 0, 2, FLAGS, "range" },
+    { "auto",   NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_UNSPECIFIED }, 0, 0, FLAGS, "range" },
+    { "full",   NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_JPEG}, 0, 0, FLAGS, "range" },
+    { "jpeg",   NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_JPEG}, 0, 0, FLAGS, "range" },
+    { "mpeg",   NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_MPEG}, 0, 0, FLAGS, "range" },
+    { "tv",     NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_JPEG}, 0, 0, FLAGS, "range" },
+    { "pc",     NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_MPEG}, 0, 0, FLAGS, "range" },
     { NULL },
 };
 

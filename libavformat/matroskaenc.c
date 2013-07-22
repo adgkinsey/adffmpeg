@@ -21,6 +21,7 @@
 
 #include "avc.h"
 #include "avformat.h"
+#include "avio_internal.h"
 #include "avlanguage.h"
 #include "flacenc.h"
 #include "internal.h"
@@ -103,6 +104,8 @@ typedef struct MatroskaMuxContext {
 
     int reserve_cues_space;
     int64_t cues_pos;
+
+    uint32_t chapter_id_offset;
 } MatroskaMuxContext;
 
 
@@ -139,8 +142,7 @@ static void put_ebml_size_unknown(AVIOContext *pb, int bytes)
 {
     av_assert0(bytes <= 8);
     avio_w8(pb, 0x1ff >> bytes);
-    while (--bytes)
-        avio_w8(pb, 0xff);
+    ffio_fill(pb, 0xff, bytes - 1);
 }
 
 /**
@@ -230,8 +232,7 @@ static void put_ebml_void(AVIOContext *pb, uint64_t size)
         put_ebml_num(pb, size-1, 0);
     else
         put_ebml_num(pb, size-9, 8);
-    while(avio_tell(pb) < currentpos + size)
-        avio_w8(pb, 0);
+    ffio_fill(pb, 0, currentpos + size - avio_tell(pb));
 }
 
 static ebml_master start_ebml_master(AVIOContext *pb, unsigned int elementid, uint64_t expectedsize)
@@ -254,9 +255,7 @@ static void end_ebml_master(AVIOContext *pb, ebml_master master)
 
 static void put_xiph_size(AVIOContext *pb, int size)
 {
-    int i;
-    for (i = 0; i < size / 255; i++)
-        avio_w8(pb, 255);
+    ffio_fill(pb, 255, size / 255);
     avio_w8(pb, size % 255);
 }
 
@@ -793,7 +792,7 @@ static int mkv_write_chapters(AVFormatContext *s)
         AVDictionaryEntry *t = NULL;
 
         chapteratom = start_ebml_master(pb, MATROSKA_ID_CHAPTERATOM, 0);
-        put_ebml_uint(pb, MATROSKA_ID_CHAPTERUID, c->id);
+        put_ebml_uint(pb, MATROSKA_ID_CHAPTERUID, c->id + mkv->chapter_id_offset);
         put_ebml_uint(pb, MATROSKA_ID_CHAPTERTIMESTART,
                       av_rescale_q(c->start, c->time_base, scale));
         put_ebml_uint(pb, MATROSKA_ID_CHAPTERTIMEEND,
@@ -872,14 +871,26 @@ static int mkv_write_tag(AVFormatContext *s, AVDictionary *m, unsigned int eleme
     return 0;
 }
 
+static int mkv_check_tag(AVDictionary *m)
+{
+    AVDictionaryEntry *t = NULL;
+
+    while ((t = av_dict_get(m, "", t, AV_DICT_IGNORE_SUFFIX)))
+        if (av_strcasecmp(t->key, "title") && av_strcasecmp(t->key, "stereo_mode"))
+            return 1;
+
+    return 0;
+}
+
 static int mkv_write_tags(AVFormatContext *s)
 {
+    MatroskaMuxContext *mkv = s->priv_data;
     ebml_master tags = {0};
     int i, ret;
 
     ff_metadata_conv_ctx(s, ff_mkv_metadata_conv, NULL);
 
-    if (av_dict_get(s->metadata, "", NULL, AV_DICT_IGNORE_SUFFIX)) {
+    if (mkv_check_tag(s->metadata)) {
         ret = mkv_write_tag(s, s->metadata, 0, 0, &tags);
         if (ret < 0) return ret;
     }
@@ -887,7 +898,7 @@ static int mkv_write_tags(AVFormatContext *s)
     for (i = 0; i < s->nb_streams; i++) {
         AVStream *st = s->streams[i];
 
-        if (!av_dict_get(st->metadata, "", 0, AV_DICT_IGNORE_SUFFIX))
+        if (!mkv_check_tag(st->metadata))
             continue;
 
         ret = mkv_write_tag(s, st->metadata, MATROSKA_ID_TAGTARGETS_TRACKUID, i + 1, &tags);
@@ -897,10 +908,10 @@ static int mkv_write_tags(AVFormatContext *s)
     for (i = 0; i < s->nb_chapters; i++) {
         AVChapter *ch = s->chapters[i];
 
-        if (!av_dict_get(ch->metadata, "", NULL, AV_DICT_IGNORE_SUFFIX))
+        if (!mkv_check_tag(ch->metadata))
             continue;
 
-        ret = mkv_write_tag(s, ch->metadata, MATROSKA_ID_TAGTARGETS_CHAPTERUID, ch->id, &tags);
+        ret = mkv_write_tag(s, ch->metadata, MATROSKA_ID_TAGTARGETS_CHAPTERUID, ch->id + mkv->chapter_id_offset, &tags);
         if (ret < 0) return ret;
     }
 
@@ -1078,6 +1089,9 @@ static int mkv_write_header(AVFormatContext *s)
 
     ret = mkv_write_tracks(s);
     if (ret < 0) return ret;
+
+    for (i = 0; i < s->nb_chapters; i++)
+        mkv->chapter_id_offset = FFMAX(mkv->chapter_id_offset, 1LL - s->chapters[i]->id);
 
     if (mkv->mode != MODE_WEBM) {
         ret = mkv_write_chapters(s);
@@ -1695,7 +1709,7 @@ static const AVClass mka_class = {
 };
 AVOutputFormat ff_matroska_audio_muxer = {
     .name              = "matroska",
-    .long_name         = NULL_IF_CONFIG_SMALL("Matroska"),
+    .long_name         = NULL_IF_CONFIG_SMALL("Matroska Audio"),
     .mime_type         = "audio/x-matroska",
     .extensions        = "mka",
     .priv_data_size    = sizeof(MatroskaMuxContext),

@@ -429,7 +429,7 @@ static void ac3_decode_transform_coeffs_ch(AC3DecodeContext *s, int ch_index, ma
     int end_freq   = s->end_freq[ch_index];
     uint8_t *baps  = s->bap[ch_index];
     int8_t *exps   = s->dexps[ch_index];
-    int32_t *coeffs    = s->fixed_coeffs[ch_index];
+    int32_t *coeffs = s->fixed_coeffs[ch_index];
     int dither     = (ch_index == CPL_CH) || s->dither_flag[ch_index];
     GetBitContext *gbc = &s->gbc;
     int freq;
@@ -1308,7 +1308,7 @@ static int ac3_decode_frame(AVCodecContext * avctx, void *data,
                 av_log(avctx, AV_LOG_ERROR, "unsupported frame type : "
                        "skipping frame\n");
                 *got_frame_ptr = 0;
-                return s->frame_size;
+                return buf_size;
             } else {
                 av_log(avctx, AV_LOG_ERROR, "invalid frame type\n");
             }

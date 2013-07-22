@@ -42,7 +42,8 @@
 
 typedef struct RTPContext {
     URLContext *rtp_hd, *rtcp_hd;
-    int rtp_fd, rtcp_fd;
+    int rtp_fd, rtcp_fd, ssm;
+    struct sockaddr_storage ssm_addr;
 } RTPContext;
 
 /**
@@ -75,6 +76,44 @@ int ff_rtp_set_remote_url(URLContext *h, const char *uri)
     return 0;
 }
 
+static struct addrinfo* rtp_resolve_host(const char *hostname, int port,
+                                         int type, int family, int flags)
+{
+    struct addrinfo hints = { 0 }, *res = 0;
+    int error;
+    char service[16];
+
+    snprintf(service, sizeof(service), "%d", port);
+    hints.ai_socktype = type;
+    hints.ai_family   = family;
+    hints.ai_flags    = flags;
+    if ((error = getaddrinfo(hostname, service, &hints, &res))) {
+        res = NULL;
+        av_log(NULL, AV_LOG_ERROR, "rtp_resolve_host: %s\n", gai_strerror(error));
+    }
+
+    return res;
+}
+
+static int compare_addr(const struct sockaddr_storage *a,
+                        const struct sockaddr_storage *b)
+{
+    if (a->ss_family != b->ss_family)
+        return 1;
+    if (a->ss_family == AF_INET) {
+        return (((const struct sockaddr_in *)a)->sin_addr.s_addr !=
+                ((const struct sockaddr_in *)b)->sin_addr.s_addr);
+    }
+
+#if defined(IPPROTO_IPV6)
+    if (a->ss_family == AF_INET6) {
+        const uint8_t *s6_addr_a = ((const struct sockaddr_in6 *)a)->sin6_addr.s6_addr;
+        const uint8_t *s6_addr_b = ((const struct sockaddr_in6 *)b)->sin6_addr.s6_addr;
+        return memcmp(s6_addr_a, s6_addr_b, 16);
+    }
+#endif
+    return 1;
+}
 
 /**
  * add option to url of the form:
@@ -99,7 +138,8 @@ static av_printf_format(3, 4) void url_add_option(char *buf, int buf_size, const
 static void build_udp_url(char *buf, int buf_size,
                           const char *hostname, int port,
                           int local_port, int ttl,
-                          int max_packet_size, int connect)
+                          int max_packet_size, int connect,
+                          const char* sources)
 {
     ff_url_join(buf, buf_size, "udp", NULL, hostname, port, NULL);
     if (local_port >= 0)
@@ -111,6 +151,8 @@ static void build_udp_url(char *buf, int buf_size,
     if (connect)
         url_add_option(buf, buf_size, "connect=1");
     url_add_option(buf, buf_size, "fifo_size=0");
+    if (sources && sources[0])
+        url_add_option(buf, buf_size, "sources=%s", sources);
 }
 
 /**
@@ -123,6 +165,7 @@ static void build_udp_url(char *buf, int buf_size,
  *         'connect=0/1'      : do a connect() on the UDP socket
  * deprecated option:
  *         'localport=n'      : set the local port to n
+ *         'sources=ip[,ip]'  : list allowed source IP addresses
  *
  * if rtcpport isn't set the rtcp port will be the rtp port + 1
  * if local rtp port isn't set any available port will be used for the local
@@ -136,7 +179,7 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
     int rtp_port, rtcp_port,
         ttl, connect,
         local_rtp_port, local_rtcp_port, max_packet_size;
-    char hostname[256];
+    char hostname[256], sources[1024] = "";
     char buf[1024];
     char path[1024];
     const char *p;
@@ -174,11 +217,27 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
         if (av_find_info_tag(buf, sizeof(buf), "connect", p)) {
             connect = strtol(buf, NULL, 10);
         }
+        if (av_find_info_tag(buf, sizeof(buf), "sources", p)) {
+            struct addrinfo *sourceaddr = NULL;
+            av_strlcpy(sources, buf, sizeof(sources));
+
+            /* Try resolving the IP if only one IP is specified - we don't
+             * support manually checking more than one IP. */
+            if (!strchr(sources, ','))
+                sourceaddr = rtp_resolve_host(sources, 0,
+                                              SOCK_DGRAM, AF_UNSPEC,
+                                              AI_NUMERICHOST);
+            if (sourceaddr) {
+                s->ssm = 1;
+                memcpy(&s->ssm_addr, sourceaddr->ai_addr, sourceaddr->ai_addrlen);
+                freeaddrinfo(sourceaddr);
+            }
+        }
     }
 
     build_udp_url(buf, sizeof(buf),
                   hostname, rtp_port, local_rtp_port, ttl, max_packet_size,
-                  connect);
+                  connect, sources);
     if (ffurl_open(&s->rtp_hd, buf, flags, &h->interrupt_callback, NULL) < 0)
         goto fail;
     if (local_rtp_port>=0 && local_rtcp_port<0)
@@ -186,7 +245,7 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
 
     build_udp_url(buf, sizeof(buf),
                   hostname, rtcp_port, local_rtcp_port, ttl, max_packet_size,
-                  connect);
+                  connect, sources);
     if (ffurl_open(&s->rtcp_hd, buf, flags, &h->interrupt_callback, NULL) < 0)
         goto fail;
 
@@ -232,6 +291,8 @@ static int rtp_read(URLContext *h, uint8_t *buf, int size)
                         continue;
                     return AVERROR(EIO);
                 }
+                if (s->ssm && compare_addr(&from, &s->ssm_addr))
+                    continue;
                 break;
             }
             /* then RTP */
@@ -245,6 +306,8 @@ static int rtp_read(URLContext *h, uint8_t *buf, int size)
                         continue;
                     return AVERROR(EIO);
                 }
+                if (s->ssm && compare_addr(&from, &s->ssm_addr))
+                    continue;
                 break;
             }
         } else if (n < 0) {

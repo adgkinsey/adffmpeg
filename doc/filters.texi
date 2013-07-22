@@ -2371,6 +2371,11 @@ Convert source to grayscale:
 @example
 colorchannelmixer=.3:.4:.3:0:.3:.4:.3:0:.3:.4:.3
 @end example
+@item
+Simulate sepia tones:
+@example
+colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131
+@end example
 @end itemize
 
 @section colormatrix
@@ -5072,7 +5077,7 @@ optimal individual vectors. Default value is 1.
 
 Apply an MPlayer filter to the input video.
 
-This filter provides a wrapper around most of the filters of
+This filter provides a wrapper around some of the filters of
 MPlayer/MEncoder.
 
 This wrapper is considered experimental. Some of the wrapped filters
@@ -5080,7 +5085,7 @@ may not work properly and we may drop support for them, as they will
 be implemented natively into FFmpeg. Thus you should avoid
 depending on them when writing portable scripts.
 
-The filters accepts the parameters:
+The filter accepts the parameters:
 @var{filter_name}[:=]@var{filter_params}
 
 @var{filter_name} is the name of a supported MPlayer filter,
@@ -6247,6 +6252,50 @@ applies a bilinear scaling algorithm.
 @item size, s
 Set the video size, the value must be a valid abbreviation or in the
 form @var{width}x@var{height}.
+
+@item in_color_matrix
+@item out_color_matrix
+Set in/output YCbCr colorspace type.
+This allows the autodetected value to be overridden as well as allows forcing
+a specific value used for the output and encoder.
+If not specified, the colorspace type depends on the pixel format.
+@table @samp
+@item auto
+Choose automatically
+
+@item bt709
+ITU Rec BT709
+
+@item fcc
+United States Federal Communications Commission Title 47 Code of
+Federal Regulations (2003) 73.682 (a)
+
+@item bt601
+ITU Rec BT601
+ITU-R Rec. BT.470-6 System B, G
+Society of Motion Picture and Television Engineers 170M (2004)
+
+@item smpte240m
+Society of Motion Picture and Television Engineers 240M
+@end table
+
+@item in_range
+@item out_range
+Set in/output YCbCr sample range.
+This allows the autodetected value to be overridden as well as allows forcing
+a specific value used for the output and encoder.
+If not specified, the range depends on the pixel format.
+@table @samp
+@item auto
+Choose automatically
+
+@item jpeg/full/pc
+Full range (0-255 in case of 8bit luma)
+
+@item mpeg/tv
+"Mpeg" range (16-235 in case of 8bit luma)
+@end table
+
 @end table
 
 The values of the @var{w} and @var{h} options are expressions
