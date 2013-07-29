@@ -338,6 +338,29 @@ void avcodec_align_dimensions(AVCodecContext *s, int *width, int *height)
     *width              = FFALIGN(*width, align);
 }
 
+int avcodec_enum_to_chroma_pos(int *xpos, int *ypos, enum AVChromaLocation pos)
+{
+    if (pos <= AVCHROMA_LOC_UNSPECIFIED || pos >= AVCHROMA_LOC_NB)
+        return AVERROR(EINVAL);
+    pos--;
+
+    *xpos = (pos&1) * 128;
+    *ypos = ((pos>>1)^(pos<4)) * 128;
+
+    return 0;
+}
+
+enum AVChromaLocation avcodec_chroma_pos_to_enum(int xpos, int ypos)
+{
+    int pos, xout, yout;
+
+    for (pos = AVCHROMA_LOC_UNSPECIFIED + 1; pos < AVCHROMA_LOC_NB; pos++) {
+        if (avcodec_enum_to_chroma_pos(&xout, &yout, pos) == 0 && xout == xpos && yout == ypos)
+            return pos;
+    }
+    return AVCHROMA_LOC_UNSPECIFIED;
+}
+
 int avcodec_fill_audio_frame(AVFrame *frame, int nb_channels,
                              enum AVSampleFormat sample_fmt, const uint8_t *buf,
                              int buf_size, int align)
@@ -2314,7 +2337,10 @@ int avcodec_decode_subtitle2(AVCodecContext *avctx, AVSubtitle *sub,
 
                 av_free_packet(&pkt_recoded);
             }
-            sub->format = !(avctx->codec_descriptor->props & AV_CODEC_PROP_BITMAP_SUB);
+            if (avctx->codec_descriptor->props & AV_CODEC_PROP_BITMAP_SUB)
+                sub->format = 0;
+            else if (avctx->codec_descriptor->props & AV_CODEC_PROP_TEXT_SUB)
+                sub->format = 1;
             avctx->pkt = NULL;
         }
 
@@ -2627,6 +2653,9 @@ void avcodec_string(char *buf, int buf_size, AVCodecContext *enc, int encode)
     if (bitrate != 0) {
         snprintf(buf + strlen(buf), buf_size - strlen(buf),
                  ", %d kb/s", bitrate / 1000);
+    } else if (enc->rc_max_rate > 0) {
+        snprintf(buf + strlen(buf), buf_size - strlen(buf),
+                 ", max. %d kb/s", enc->rc_max_rate / 1000);
     }
 }
 
@@ -3050,6 +3079,8 @@ int ff_lock_avcodec(AVCodecContext *log_ctx)
     entangled_thread_counter++;
     if (entangled_thread_counter != 1) {
         av_log(log_ctx, AV_LOG_ERROR, "Insufficient thread locking around avcodec_open/close()\n");
+        if (!lockmgr_cb)
+            av_log(log_ctx, AV_LOG_ERROR, "No lock manager is set, please see av_lockmgr_register()\n");
         ff_avcodec_locked = 1;
         ff_unlock_avcodec();
         return AVERROR(EINVAL);
@@ -3202,7 +3233,7 @@ const uint8_t *avpriv_find_start_code(const uint8_t *av_restrict p,
 {
     int i;
 
-    assert(p <= end);
+    av_assert0(p <= end);
     if (p >= end)
         return end;
 

@@ -82,7 +82,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     int max_size = deflateBound(&c->zstream, avctx->width * avctx->height * 3);
 
     if ((ret = ff_alloc_packet2(avctx, pkt, max_size)) < 0)
-            return ret;
+        return ret;
 
     *p = *pict;
     p->pict_type= AV_PICTURE_TYPE_I;
@@ -137,7 +137,9 @@ static av_cold int encode_init(AVCodecContext *avctx)
 
     av_assert0(avctx->width && avctx->height);
 
-    avctx->extradata= av_mallocz(8);
+    avctx->extradata = av_mallocz(8 + FF_INPUT_BUFFER_PADDING_SIZE);
+    if (!avctx->extradata)
+        return AVERROR(ENOMEM);
     avctx->coded_frame= &c->pic;
 
     c->compression = avctx->compression_level == FF_COMPRESSION_DEFAULT ?

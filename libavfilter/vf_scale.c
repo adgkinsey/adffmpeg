@@ -96,6 +96,11 @@ typedef struct {
 
     int in_range;
     int out_range;
+
+    int out_h_chr_pos;
+    int out_v_chr_pos;
+    int in_h_chr_pos;
+    int in_v_chr_pos;
 } ScaleContext;
 
 static av_cold int init(AVFilterContext *ctx)
@@ -189,16 +194,6 @@ static int query_formats(AVFilterContext *ctx)
 
 static const int *parse_yuv_type(const char *s, enum AVColorSpace colorspace)
 {
-    const static int32_t yuv2rgb_coeffs[8][4] = {
-        { 117504, 138453, 13954, 34903 },
-        { 117504, 138453, 13954, 34903 }, /* ITU-R Rec. 709 (1990) */
-        { 104597, 132201, 25675, 53279 }, /* unspecified */
-        { 104597, 132201, 25675, 53279 }, /* reserved */
-        { 104448, 132798, 24759, 53109 }, /* FCC */
-        { 104597, 132201, 25675, 53279 }, /* ITU-R Rec. 624-4 System B, G */
-        { 104597, 132201, 25675, 53279 }, /* SMPTE 170M */
-        { 117579, 136230, 16907, 35559 }  /* SMPTE 240M (1987) */
-    };
     if (!s)
         s = "bt601";
 
@@ -216,7 +211,7 @@ static const int *parse_yuv_type(const char *s, enum AVColorSpace colorspace)
         colorspace = AVCOL_SPC_BT470BG;
     }
 
-    return yuv2rgb_coeffs[colorspace];
+    return sws_getCoefficients(colorspace);
 }
 
 static int config_props(AVFilterLink *outlink)
@@ -323,6 +318,11 @@ static int config_props(AVFilterLink *outlink)
             av_opt_set_int(*s, "dst_format", outfmt, 0);
             av_opt_set_int(*s, "sws_flags", scale->flags, 0);
 
+            av_opt_set_int(*s, "src_h_chr_pos", scale->in_h_chr_pos, 0);
+            av_opt_set_int(*s, "src_v_chr_pos", scale->in_v_chr_pos, 0);
+            av_opt_set_int(*s, "dst_h_chr_pos", scale->out_h_chr_pos, 0);
+            av_opt_set_int(*s, "dst_v_chr_pos", scale->out_v_chr_pos, 0);
+
             if ((ret = sws_init_context(*s, NULL, NULL)) < 0)
                 return ret;
             if (!scale->interlaced)
@@ -382,6 +382,7 @@ static int filter_frame(AVFilterLink *link, AVFrame *in)
     AVFrame *out;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(link->format);
     char buf[32];
+    int in_range;
 
     if(   in->width  != link->w
        || in->height != link->h
@@ -419,9 +420,12 @@ static int filter_frame(AVFilterLink *link, AVFrame *in)
     if(scale->output_is_pal)
         avpriv_set_systematic_pal2((uint32_t*)out->data[1], outlink->format == AV_PIX_FMT_PAL8 ? AV_PIX_FMT_BGR8 : outlink->format);
 
+    in_range = av_frame_get_color_range(in);
+
     if (   scale->in_color_matrix
         || scale->out_color_matrix
         || scale-> in_range != AVCOL_RANGE_UNSPECIFIED
+        || in_range != AVCOL_RANGE_UNSPECIFIED
         || scale->out_range != AVCOL_RANGE_UNSPECIFIED) {
         int in_full, out_full, brightness, contrast, saturation;
         const int *inv_table, *table;
@@ -437,6 +441,8 @@ static int filter_frame(AVFilterLink *link, AVFrame *in)
 
         if (scale-> in_range != AVCOL_RANGE_UNSPECIFIED)
             in_full  = (scale-> in_range == AVCOL_RANGE_JPEG);
+        else if (in_range != AVCOL_RANGE_UNSPECIFIED)
+            in_full  = (in_range == AVCOL_RANGE_JPEG);
         if (scale->out_range != AVCOL_RANGE_UNSPECIFIED)
             out_full = (scale->out_range == AVCOL_RANGE_JPEG);
 
@@ -481,7 +487,7 @@ static const AVOption scale_options[] = {
     { "interl", "set interlacing", OFFSET(interlaced), AV_OPT_TYPE_INT, {.i64 = 0 }, -1, 1, FLAGS },
     { "size",   "set video size",          OFFSET(size_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, FLAGS },
     { "s",      "set video size",          OFFSET(size_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, FLAGS },
-    {  "in_color_matrix", "set input YCbCr type",   OFFSET(in_color_matrix),  AV_OPT_TYPE_STRING, { .str = NULL }, .flags = FLAGS },
+    {  "in_color_matrix", "set input YCbCr type",   OFFSET(in_color_matrix),  AV_OPT_TYPE_STRING, { .str = "auto" }, .flags = FLAGS },
     { "out_color_matrix", "set output YCbCr type",  OFFSET(out_color_matrix), AV_OPT_TYPE_STRING, { .str = NULL }, .flags = FLAGS },
     {  "in_range", "set input color range",  OFFSET( in_range), AV_OPT_TYPE_INT, {.i64 = AVCOL_RANGE_UNSPECIFIED }, 0, 2, FLAGS, "range" },
     { "out_range", "set output color range", OFFSET(out_range), AV_OPT_TYPE_INT, {.i64 = AVCOL_RANGE_UNSPECIFIED }, 0, 2, FLAGS, "range" },
@@ -491,6 +497,10 @@ static const AVOption scale_options[] = {
     { "mpeg",   NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_MPEG}, 0, 0, FLAGS, "range" },
     { "tv",     NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_JPEG}, 0, 0, FLAGS, "range" },
     { "pc",     NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_MPEG}, 0, 0, FLAGS, "range" },
+    { "in_v_chr_pos",   "input vertical chroma position in luma grid/256"  , OFFSET(in_v_chr_pos), AV_OPT_TYPE_INT, { .i64 = -1}, -1, 512, FLAGS },
+    { "in_h_chr_pos",   "input horizontal chroma position in luma grid/256", OFFSET(in_h_chr_pos), AV_OPT_TYPE_INT, { .i64 = -1}, -1, 512, FLAGS },
+    { "out_v_chr_pos",   "output vertical chroma position in luma grid/256"  , OFFSET(out_v_chr_pos), AV_OPT_TYPE_INT, { .i64 = -1}, -1, 512, FLAGS },
+    { "out_h_chr_pos",   "output horizontal chroma position in luma grid/256", OFFSET(out_h_chr_pos), AV_OPT_TYPE_INT, { .i64 = -1}, -1, 512, FLAGS },
     { NULL },
 };
 

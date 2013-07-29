@@ -186,7 +186,7 @@ Individual component options:
   --disable-filters        disable all filters
 
 External library support:
-  --enable-avisynth        enable reading of AVISynth script files [no]
+  --enable-avisynth        enable reading of AviSynth script files [no]
   --disable-bzlib          disable bzlib [autodetect]
   --enable-fontconfig      enable fontconfig
   --enable-frei0r          enable frei0r video filtering
@@ -3086,7 +3086,7 @@ case "$arch" in
     aarch64|arm64)
         arch="aarch64"
     ;;
-    arm*|iPad*)
+    arm*|iPad*|iPhone*)
         arch="arm"
     ;;
     mips*|IP*)
@@ -3409,7 +3409,10 @@ enabled spic && enable_weak pic
 # OS specific
 case $target_os in
     aix)
+        SHFLAGS=-shared
         add_cppflags '-I\$(SRC_PATH)/compat/aix'
+        enabled shared && add_ldflags -Wl,-brtl
+        ar_default='ar -Xany'
         ;;
     haiku)
         prefix_default="/boot/common"
@@ -4460,6 +4463,7 @@ elif enabled pathscale; then
 elif enabled_any msvc icl; then
     enabled x86_32 && disable aligned_stack
     enabled_all x86_32 debug && add_cflags -Oy-
+    enabled debug && add_ldflags -debug
     if enabled icl; then
         # basically -fstrict-aliasing that does not work (correctly) on icl 13.x
         check_cpp_condition "windows.h" "__ICL < 1300" && add_cflags -Qansi-alias

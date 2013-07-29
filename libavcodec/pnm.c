@@ -116,8 +116,10 @@ int ff_pnm_decode_header(AVCodecContext *avctx, PNMContext * const s)
         if (depth == 1) {
             if (maxval == 1) {
                 avctx->pix_fmt = AV_PIX_FMT_MONOBLACK;
-            } else if (maxval == 255) {
+            } else if (maxval < 256) {
                 avctx->pix_fmt = AV_PIX_FMT_GRAY8;
+            } else if (maxval < 65535) {
+                avctx->pix_fmt = AV_PIX_FMT_GRAY16;
             } else {
                 avctx->pix_fmt = AV_PIX_FMT_GRAY16BE;
             }
@@ -163,6 +165,8 @@ int ff_pnm_decode_header(AVCodecContext *avctx, PNMContext * const s)
         if (s->maxval >= 256) {
             if (avctx->pix_fmt == AV_PIX_FMT_GRAY8) {
                 avctx->pix_fmt = AV_PIX_FMT_GRAY16BE;
+                if (s->maxval != 65535)
+                    avctx->pix_fmt = AV_PIX_FMT_GRAY16;
             } else if (avctx->pix_fmt == AV_PIX_FMT_RGB24) {
                 avctx->pix_fmt = AV_PIX_FMT_RGB48BE;
             } else if (avctx->pix_fmt == AV_PIX_FMT_YUV420P && s->maxval < 65536) {
@@ -190,15 +194,5 @@ int ff_pnm_decode_header(AVCodecContext *avctx, PNMContext * const s)
         h /= 3;
         avctx->height = h;
     }
-    return 0;
-}
-
-av_cold int ff_pnm_init(AVCodecContext *avctx)
-{
-    PNMContext *s = avctx->priv_data;
-
-    avcodec_get_frame_defaults(&s->picture);
-    avctx->coded_frame = &s->picture;
-
     return 0;
 }

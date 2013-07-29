@@ -23,6 +23,8 @@
 #define AVUTIL_PIXDESC_H
 
 #include <inttypes.h>
+
+#include "attributes.h"
 #include "pixfmt.h"
 
 typedef struct AVComponentDescriptor{
@@ -142,7 +144,7 @@ typedef struct AVPixFmtDescriptor{
 #if defined(_WIN32) && defined(_MSC_VER)
 __declspec(dllimport)
 #endif
-extern const AVPixFmtDescriptor av_pix_fmt_descriptors[];
+extern attribute_deprecated const AVPixFmtDescriptor av_pix_fmt_descriptors[];
 #endif
 
 /**
