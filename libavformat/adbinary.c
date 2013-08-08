@@ -475,10 +475,10 @@ static int adbinary_read_packet(struct AVFormatContext *s, AVPacket *pkt)
             av_log(s, AV_LOG_WARNING, "%s: No handler for data_type = %d", __func__, data_type);
             return ADFFMPEG_AD_ERROR_READ_6_BYTE_SEPARATOR;
         }
-        if (data_channel >= 32)  {
-            av_log(s, AV_LOG_WARNING, "%s: Channel number %d too high", __func__, data_channel);
-            return ADFFMPEG_AD_ERROR_READ_6_BYTE_SEPARATOR;
-        }
+        //if (data_channel >= 32)  {
+        //    av_log(s, AV_LOG_WARNING, "%s: Channel number %d too high", __func__, data_channel);
+        //    return ADFFMPEG_AD_ERROR_READ_6_BYTE_SEPARATOR;
+        //}
         if (size >= 0x1000000)  {
             av_log(s, AV_LOG_WARNING, "%s: Packet too large, %d bytes", __func__, size);
             return ADFFMPEG_AD_ERROR_READ_6_BYTE_SEPARATOR;
