@@ -6,6 +6,14 @@ version <next>
 - aecho filter
 - perspective filter ported from libmpcodecs
 - ffprobe -show_programs option
+- compand filter
+- RTMP seek support
+- when transcoding with ffmpeg (i.e. not streamcopying), -ss is now accurate
+  even when used as an input option. Previous behavior can be restored with
+  the -noaccurate_seek option.
+- ffmpeg -t option can now be used for inputs, to limit the duration of
+  data read from an input file
+- incomplete Voxware MetaSound decoder
 
 
 version 2.0:

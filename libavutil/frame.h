@@ -530,7 +530,7 @@ AVFrame *av_frame_alloc(void);
 void av_frame_free(AVFrame **frame);
 
 /**
- * Setup a new reference to the data described by an given frame.
+ * Setup a new reference to the data described by a given frame.
  *
  * Copy frame properties from src to dst and create a new reference for each
  * AVBufferRef from src.
@@ -644,7 +644,7 @@ AVFrameSideData *av_frame_new_side_data(AVFrame *frame,
  * @return a pointer to the side data of a given type on success, NULL if there
  * is no side data with such type in this frame.
  */
-AVFrameSideData *av_frame_get_side_data(AVFrame *frame,
+AVFrameSideData *av_frame_get_side_data(const AVFrame *frame,
                                         enum AVFrameSideDataType type);
 
 #endif /* AVUTIL_FRAME_H */

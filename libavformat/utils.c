@@ -28,6 +28,7 @@
 #include "libavutil/avassert.h"
 #include "libavutil/opt.h"
 #include "libavutil/dict.h"
+#include "libavutil/internal.h"
 #include "libavutil/pixdesc.h"
 #include "metadata.h"
 #include "id3v2.h"
@@ -96,10 +97,6 @@ static int64_t wrap_timestamp(AVStream *st, int64_t timestamp)
     }
     return timestamp;
 }
-
-#define MAKE_ACCESSORS(str, name, type, field) \
-    type av_##name##_get_##field(const str *s) { return s->field; } \
-    void av_##name##_set_##field(str *s, type v) { s->field = v; }
 
 MAKE_ACCESSORS(AVStream, stream, AVRational, r_frame_rate)
 
@@ -1017,7 +1014,9 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
         pc && pc->pict_type != AV_PICTURE_TYPE_B)
         presentation_delayed = 1;
 
-    if(pkt->pts != AV_NOPTS_VALUE && pkt->dts != AV_NOPTS_VALUE && st->pts_wrap_bits<63 && pkt->dts - (1LL<<(st->pts_wrap_bits-1)) > pkt->pts){
+    if (pkt->pts != AV_NOPTS_VALUE && pkt->dts != AV_NOPTS_VALUE &&
+        st->pts_wrap_bits < 63 &&
+        pkt->dts - (1LL << (st->pts_wrap_bits - 1)) > pkt->pts) {
         if(is_relative(st->cur_dts) || pkt->dts - (1LL<<(st->pts_wrap_bits-1)) > st->cur_dts) {
             pkt->dts -= 1LL<<st->pts_wrap_bits;
         } else
@@ -1239,8 +1238,10 @@ static int parse_packet(AVFormatContext *s, AVPacket *pkt, int stream_index)
             out_pkt.buf   = pkt->buf;
             pkt->buf      = NULL;
 #if FF_API_DESTRUCT_PACKET
+FF_DISABLE_DEPRECATION_WARNINGS
             out_pkt.destruct = pkt->destruct;
             pkt->destruct = NULL;
+FF_ENABLE_DEPRECATION_WARNINGS
 #endif
         }
         if ((ret = av_dup_packet(&out_pkt)) < 0)
@@ -2778,9 +2779,9 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
             break;
         }
 
-        if (ic->flags & AVFMT_FLAG_NOBUFFER) {
-            pkt = &pkt1;
-        } else {
+        if (ic->flags & AVFMT_FLAG_NOBUFFER)
+            free_packet_buffer(&ic->packet_buffer, &ic->packet_buffer_end);
+        {
             pkt = add_to_pktbuf(&ic->packet_buffer, &pkt1,
                                 &ic->packet_buffer_end);
             if (!pkt) {

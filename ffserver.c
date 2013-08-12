@@ -36,6 +36,7 @@
 #include "libavformat/network.h"
 #include "libavformat/os_support.h"
 #include "libavformat/rtpdec.h"
+#include "libavformat/rtpproto.h"
 #include "libavformat/rtsp.h"
 #include "libavformat/avio_internal.h"
 #include "libavformat/internal.h"
@@ -4672,6 +4673,8 @@ int main(int argc, char **argv)
 {
     struct sigaction sigact = { { 0 } };
 
+    config_filename = av_strdup("/etc/ffserver.conf");
+
     parse_loglevel(argc, argv, options);
     av_register_all();
     avformat_network_init();
@@ -4681,9 +4684,6 @@ int main(int argc, char **argv)
     my_program_name = argv[0];
 
     parse_options(NULL, argc, argv, options, NULL);
-
-    if (!config_filename)
-        config_filename = av_strdup("/etc/ffserver.conf");
 
     unsetenv("http_proxy");             /* Kill the http_proxy */
 

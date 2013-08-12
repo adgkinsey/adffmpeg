@@ -1079,6 +1079,10 @@ Enable calculation and printing SSIM stats after the encoding.
 Enable the use of Periodic Intra Refresh instead of IDR frames when set
 to 1.
 
+@item bluray-compat (@emph{bluray-compat})
+Configure the encoder to be compatible with the bluray standard.
+It is a shorthand for setting "bluray-compat=1 force-cfr=1".
+
 @item b-bias (@emph{b-bias})
 Set the influence on how often B-frames are used.
 
@@ -1211,6 +1215,169 @@ no-fast-pskip=1:subq=6:8x8dct=0:trellis=0 OUTPUT
 
 Encoding ffpresets for common usages are provided so they can be used with the
 general presets system (e.g. passing the @option{pre} option).
+
+@section libxvid
+
+Xvid MPEG-4 Part 2 encoder wrapper.
+
+This encoder requires the presence of the libxvidcore headers and library
+during configuration. You need to explicitly configure the build with
+@code{--enable-libxvid --enable-gpl}.
+
+The native @code{mpeg4} encoder supports the MPEG-4 Part 2 format, so
+users can encode to this format without this library.
+
+@subsection Options
+
+The following options are supported by the libxvid wrapper. Some of
+the following options are listed but are not documented, and
+correspond to shared codec options. See @ref{codec-options,,the Codec
+Options chapter} for their documentation. The other shared options
+which are not listed have no effect for the libxvid encoder.
+
+@table @option
+@item b
+
+@item g
+
+@item qmin
+
+@item qmax
+
+@item mpeg_quant
+
+@item threads
+
+@item bf
+
+@item b_qfactor
+
+@item b_qoffset
+
+@item flags
+Set specific encoding flags. Possible values:
+
+@table @samp
+
+@item mv4
+Use four motion vector by macroblock.
+
+@item aic
+Enable high quality AC prediction.
+
+@item gray
+Only encode grayscale.
+
+@item gmc
+Enable the use of global motion compensation (GMC).
+
+@item qpel
+Enable quarter-pixel motion compensation.
+
+@item cgop
+Enable closed GOP.
+
+@item global_header
+Place global headers in extradata instead of every keyframe.
+
+@end table
+
+@item trellis
+
+@item me_method
+Set motion estimation method. Possible values in decreasing order of
+speed and increasing order of quality:
+
+@table @samp
+@item zero
+Use no motion estimation (default).
+
+@item phods
+@item x1
+@item log
+Enable advanced diamond zonal search for 16x16 blocks and half-pixel
+refinement for 16x16 blocks. @samp{x1} and @samp{log} are aliases for
+@samp{phods}.
+
+@item epzs
+Enable all of the things described above, plus advanced diamond zonal
+search for 8x8 blocks, half-pixel refinement for 8x8 blocks, and motion
+estimation on chroma planes.
+
+@item full
+Enable all of the things described above, plus extended 16x16 and 8x8
+blocks search.
+@end table
+
+@item mbd
+Set macroblock decision algorithm. Possible values in the increasing
+order of quality:
+
+@table @samp
+@item simple
+Use macroblock comparing function algorithm (default).
+
+@item bits
+Enable rate distortion-based half pixel and quarter pixel refinement for
+16x16 blocks.
+
+@item rd
+Enable all of the things described above, plus rate distortion-based
+half pixel and quarter pixel refinement for 8x8 blocks, and rate
+distortion-based search using square pattern.
+@end table
+
+@item lumi_aq
+Enable lumi masking adaptive quantization when set to 1. Default is 0
+(disabled).
+
+@item variance_aq
+Enable variance adaptive quantization when set to 1. Default is 0
+(disabled).
+
+When combined with @option{lumi_aq}, the resulting quality will not
+be better than any of the two specified individually. In other
+words, the resulting quality will be the worse one of the two
+effects.
+
+@item ssim
+Set structural similarity (SSIM) displaying method. Possible values:
+
+@table @samp
+@item off
+Disable displaying of SSIM information.
+
+@item avg
+Output average SSIM at the end of encoding to stdout. The format of
+showing the average SSIM is:
+
+@example
+Average SSIM: %f
+@end example
+
+For users who are not familiar with C, %f means a float number, or
+a decimal (e.g. 0.939232).
+
+@item frame
+Output both per-frame SSIM data during encoding and average SSIM at
+the end of encoding to stdout. The format of per-frame information
+is:
+
+@example
+       SSIM: avg: %1.3f min: %1.3f max: %1.3f
+@end example
+
+For users who are not familiar with C, %1.3f means a float number
+rounded to 3 digits after the dot (e.g. 0.932).
+
+@end table
+
+@item ssim_acc
+Set SSIM accuracy. Valid options are integers within the range of
+0-4, while 0 gives the most accurate result and 4 computes the
+fastest.
+
+@end table
 
 @section png
 

@@ -25,7 +25,7 @@
  * libmpcodecs/vf_gradfun.c
  *
  * Apply a boxblur debanding algorithm (based on the gradfun2db
- * Avisynth filter by prunedtree).
+ * AviSynth filter by prunedtree).
  * Foreach pixel, if it's within threshold of the blurred value, make it closer.
  * So now we have a smoothed and higher bitdepth version of all the shallow
  * gradients, while leaving detailed areas untouched.
@@ -199,7 +199,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_copy_props(out, in);
     }
 
-    for (p = 0; p < 4 && in->data[p]; p++) {
+    for (p = 0; p < 4 && in->data[p] && in->linesize[p]; p++) {
         int w = inlink->w;
         int h = inlink->h;
         int r = s->radius;

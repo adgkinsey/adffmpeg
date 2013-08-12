@@ -705,39 +705,38 @@ static int tiff_decode_tag(TiffContext *s, AVFrame *frame)
     tag   = tget_short(&s->gb, s->le);
     type  = tget_short(&s->gb, s->le);
     count = tget_long(&s->gb, s->le);
-    off   = tget_long(&s->gb, s->le);
-    start = bytestream2_tell(&s->gb);
+    start = bytestream2_tell(&s->gb) + 4;
 
     if (type == 0 || type >= FF_ARRAY_ELEMS(type_sizes)) {
         av_log(s->avctx, AV_LOG_DEBUG, "Unknown tiff type (%u) encountered\n",
                type);
-        return 0;
+        goto end;
     }
 
     if (count == 1) {
         switch (type) {
         case TIFF_BYTE:
         case TIFF_SHORT:
-            bytestream2_seek(&s->gb, -4, SEEK_CUR);
             value = tget(&s->gb, type, s->le);
             break;
         case TIFF_LONG:
+            off   = tget_long(&s->gb, s->le);
             value = off;
             break;
         case TIFF_STRING:
             if (count <= 4) {
-                bytestream2_seek(&s->gb, -4, SEEK_CUR);
                 break;
             }
         default:
+            off   = tget_long(&s->gb, s->le);
             value = UINT_MAX;
             bytestream2_seek(&s->gb, off, SEEK_SET);
         }
     } else {
-        if (count <= 4 && type_sizes[type] * count <= 4)
-            bytestream2_seek(&s->gb, -4, SEEK_CUR);
-        else
+        if (type_sizes[type] * count > 4) {
+            off   = tget_long(&s->gb, s->le);
             bytestream2_seek(&s->gb, off, SEEK_SET);
+        }
     }
 
     switch (tag) {
@@ -929,7 +928,7 @@ static int tiff_decode_tag(TiffContext *s, AVFrame *frame)
 #define ADD_METADATA(count, name, sep)\
     if ((ret = add_metadata(count, type, name, sep, s, frame)) < 0) {\
         av_log(s->avctx, AV_LOG_ERROR, "Error allocating temporary buffer\n");\
-        return ret;\
+        goto end;\
     }
     case TIFF_MODEL_PIXEL_SCALE:
         ADD_METADATA(count, "ModelPixelScaleTag", NULL);
@@ -956,7 +955,7 @@ static int tiff_decode_tag(TiffContext *s, AVFrame *frame)
         if (!s->geotags) {
             av_log(s->avctx, AV_LOG_ERROR, "Error allocating temporary buffer\n");
             s->geotag_count = 0;
-            return AVERROR(ENOMEM);
+            goto end;
         }
         for (i = 0; i < s->geotag_count; i++) {
             s->geotags[i].key    = tget_short(&s->gb, s->le);
@@ -977,7 +976,7 @@ static int tiff_decode_tag(TiffContext *s, AVFrame *frame)
         dp = av_malloc(count * sizeof(double));
         if (!dp) {
             av_log(s->avctx, AV_LOG_ERROR, "Error allocating temporary buffer\n");
-            return AVERROR(ENOMEM);
+            goto end;
         }
         for (i = 0; i < count; i++)
             dp[i] = tget_double(&s->gb, s->le);
@@ -1065,6 +1064,7 @@ static int tiff_decode_tag(TiffContext *s, AVFrame *frame)
             return AVERROR_INVALIDDATA;
         }
     }
+end:
     bytestream2_seek(&s->gb, start, SEEK_SET);
     return 0;
 }
