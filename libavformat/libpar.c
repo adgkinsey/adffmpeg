@@ -549,6 +549,18 @@ static AVStream* createStream(AVFormatContext * avf)
                 break;
         }
         avpriv_set_pts_info(st, 64, 1, st->codec->sample_rate);
+        
+        if (fi->channel & 0x8000)  {
+            // Camera associated audio
+            snprintf(textbuf, sizeof(textbuf), "%d", fi->channel & ~0x8000);
+            av_dict_set(&st->metadata, "track", textbuf, 0);
+            av_dict_set(&st->metadata, "associated", "1", 0);
+        }
+        else  {
+            snprintf(textbuf, sizeof(textbuf), "%d", fi->channel);
+            av_dict_set(&st->metadata, "track", textbuf, 0);
+            av_dict_set(&st->metadata, "associated", "0", 0);
+        }
     }
     else  {
         st->codec->codec_type = AVMEDIA_TYPE_DATA;
