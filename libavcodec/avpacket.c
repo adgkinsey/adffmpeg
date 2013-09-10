@@ -215,7 +215,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
     return 0;
 
 failed_alloc:
-    av_destruct_packet(pkt);
+    av_free_packet(pkt);
     return AVERROR(ENOMEM);
 }
 
@@ -225,8 +225,10 @@ int av_copy_packet_side_data(AVPacket *pkt, AVPacket *src)
         int i;
         DUP_DATA(pkt->side_data, src->side_data,
                 src->side_data_elems * sizeof(*src->side_data), 0, ALLOC_MALLOC);
-        memset(pkt->side_data, 0,
-                src->side_data_elems * sizeof(*src->side_data));
+        if (src != pkt) {
+            memset(pkt->side_data, 0,
+                   src->side_data_elems * sizeof(*src->side_data));
+        }
         for (i = 0; i < src->side_data_elems; i++) {
             DUP_DATA(pkt->side_data[i].data, src->side_data[i].data,
                     src->side_data[i].size, 1, ALLOC_MALLOC);
@@ -237,7 +239,7 @@ int av_copy_packet_side_data(AVPacket *pkt, AVPacket *src)
     return 0;
 
 failed_alloc:
-    av_destruct_packet(pkt);
+    av_free_packet(pkt);
     return AVERROR(ENOMEM);
 }
 
@@ -307,7 +309,7 @@ uint8_t *av_packet_new_side_data(AVPacket *pkt, enum AVPacketSideDataType type,
     if (!pkt->side_data)
         return NULL;
 
-    pkt->side_data[elems].data = av_malloc(size + FF_INPUT_BUFFER_PADDING_SIZE);
+    pkt->side_data[elems].data = av_mallocz(size + FF_INPUT_BUFFER_PADDING_SIZE);
     if (!pkt->side_data[elems].data)
         return NULL;
     pkt->side_data[elems].size = size;

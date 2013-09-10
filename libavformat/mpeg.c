@@ -535,7 +535,6 @@ static int mpegps_read_packet(AVFormatContext *s,
         if(lpcm_header_len == 6) {
             codec_id = AV_CODEC_ID_MLP;
         } else {
-            /* 16 bit form will be handled as AV_CODEC_ID_PCM_S16BE */
             codec_id = AV_CODEC_ID_PCM_DVD;
         }
     } else if (startcode >= 0xb0 && startcode <= 0xbf) {
@@ -570,8 +569,7 @@ static int mpegps_read_packet(AVFormatContext *s,
         st->codec->sample_rate = 8000;
     }
     st->request_probe     = request_probe;
-    if (codec_id != AV_CODEC_ID_PCM_S16BE)
-        st->need_parsing = AVSTREAM_PARSE_FULL;
+    st->need_parsing = AVSTREAM_PARSE_FULL;
  found:
     if(st->discard >= AVDISCARD_ALL)
         goto skip;
@@ -581,28 +579,6 @@ static int mpegps_read_packet(AVFormatContext *s,
                 goto skip;
             avio_skip(s->pb, 6);
             len -=6;
-      } else {
-        int b1, freq;
-
-        /* for LPCM, we just skip the header and consider it is raw
-           audio data */
-        if (len <= 3)
-            goto skip;
-        avio_r8(s->pb); /* emphasis (1), muse(1), reserved(1), frame number(5) */
-        b1 = avio_r8(s->pb); /* quant (2), freq(2), reserved(1), channels(3) */
-        avio_r8(s->pb); /* dynamic range control (0x80 = off) */
-        len -= 3;
-        freq = (b1 >> 4) & 3;
-        st->codec->sample_rate = lpcm_freq_tab[freq];
-        st->codec->channels = 1 + (b1 & 7);
-        st->codec->bits_per_coded_sample = 16 + ((b1 >> 6) & 3) * 4;
-        st->codec->bit_rate = st->codec->channels *
-                              st->codec->sample_rate *
-                              st->codec->bits_per_coded_sample;
-        if (st->codec->bits_per_coded_sample == 16)
-            st->codec->codec_id = AV_CODEC_ID_PCM_S16BE;
-        else if (st->codec->bits_per_coded_sample == 28)
-            return AVERROR(EINVAL);
       }
     }
     ret = av_get_packet(s->pb, pkt, len);
@@ -725,6 +701,7 @@ static int vobsub_read_header(AVFormatContext *s)
             st->id = stream_id;
             st->codec->codec_type = AVMEDIA_TYPE_SUBTITLE;
             st->codec->codec_id   = AV_CODEC_ID_DVD_SUBTITLE;
+            avpriv_set_pts_info(st, 64, 1, 1000);
             av_dict_set(&st->metadata, "language", id, 0);
             av_log(s, AV_LOG_DEBUG, "IDX stream[%d] id=%s\n", stream_id, id);
             header_parsed = 1;
@@ -889,6 +866,21 @@ static int vobsub_read_seek(AVFormatContext *s, int stream_index,
                             int64_t min_ts, int64_t ts, int64_t max_ts, int flags)
 {
     MpegDemuxContext *vobsub = s->priv_data;
+
+    /* Rescale requested timestamps based on the first stream (timebase is the
+     * same for all subtitles stream within a .idx/.sub). Rescaling is done just
+     * like in avformat_seek_file(). */
+    if (stream_index == -1 && s->nb_streams != 1) {
+        AVRational time_base = s->streams[0]->time_base;
+        ts = av_rescale_q(ts, AV_TIME_BASE_Q, time_base);
+        min_ts = av_rescale_rnd(min_ts, time_base.den,
+                                time_base.num * (int64_t)AV_TIME_BASE,
+                                AV_ROUND_UP   | AV_ROUND_PASS_MINMAX);
+        max_ts = av_rescale_rnd(max_ts, time_base.den,
+                                time_base.num * (int64_t)AV_TIME_BASE,
+                                AV_ROUND_DOWN | AV_ROUND_PASS_MINMAX);
+    }
+
     return ff_subtitles_queue_seek(&vobsub->q, s, stream_index,
                                    min_ts, ts, max_ts, flags);
 }

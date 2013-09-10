@@ -1711,6 +1711,17 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
             print_int("channels",        dec_ctx->channels);
             print_int("bits_per_sample", av_get_bits_per_sample(dec_ctx->codec_id));
             break;
+
+        case AVMEDIA_TYPE_SUBTITLE:
+            if (dec_ctx->width)
+                print_int("width",       dec_ctx->width);
+            else
+                print_str_opt("width",   "N/A");
+            if (dec_ctx->height)
+                print_int("height",      dec_ctx->height);
+            else
+                print_str_opt("height",  "N/A");
+            break;
         }
     } else {
         print_str_opt("codec_type", "unknown");
@@ -1867,6 +1878,7 @@ static void show_format(WriterContext *w, AVFormatContext *fmt_ctx)
     else           print_str_opt("size", "N/A");
     if (fmt_ctx->bit_rate > 0) print_val    ("bit_rate", fmt_ctx->bit_rate, unit_bit_per_second_str);
     else                       print_str_opt("bit_rate", "N/A");
+    print_int("probe_score", av_format_get_probe_score(fmt_ctx));
     show_tags(w, fmt_ctx->metadata, SECTION_ID_FORMAT_TAGS);
 
     writer_print_section_footer(w);

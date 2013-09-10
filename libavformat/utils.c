@@ -100,6 +100,11 @@ static int64_t wrap_timestamp(AVStream *st, int64_t timestamp)
 
 MAKE_ACCESSORS(AVStream, stream, AVRational, r_frame_rate)
 
+int av_format_get_probe_score(const AVFormatContext *s)
+{
+    return s->probe_score;
+}
+
 /* an arbitrarily chosen "sane" max packet size -- 50M */
 #define SANE_CHUNK_SIZE (50000000)
 
@@ -309,11 +314,7 @@ int av_demuxer_open(AVFormatContext *ic){
 }
 
 
-/** size of probe buffer, for guessing file type from file contents */
-#define PROBE_BUF_MIN 2048
-#define PROBE_BUF_MAX (1<<20)
-
-int av_probe_input_buffer(AVIOContext *pb, AVInputFormat **fmt,
+int av_probe_input_buffer2(AVIOContext *pb, AVInputFormat **fmt,
                           const char *filename, void *logctx,
                           unsigned int offset, unsigned int max_probe_size)
 {
@@ -321,6 +322,7 @@ int av_probe_input_buffer(AVIOContext *pb, AVInputFormat **fmt,
     unsigned char *buf = NULL;
     uint8_t *mime_type;
     int ret = 0, probe_size, buf_offset = 0;
+    int score = 0;
 
     if (!max_probe_size) {
         max_probe_size = PROBE_BUF_MAX;
@@ -345,12 +347,12 @@ int av_probe_input_buffer(AVIOContext *pb, AVInputFormat **fmt,
 
     for(probe_size= PROBE_BUF_MIN; probe_size<=max_probe_size && !*fmt;
         probe_size = FFMIN(probe_size<<1, FFMAX(max_probe_size, probe_size+1))) {
-        int score = probe_size < max_probe_size ? AVPROBE_SCORE_RETRY : 0;
         void *buftmp;
 
         if (probe_size < offset) {
             continue;
         }
+        score = probe_size < max_probe_size ? AVPROBE_SCORE_RETRY : 0;
 
         /* read probe data */
         buftmp = av_realloc(buf, probe_size + AVPROBE_PADDING_SIZE);
@@ -391,8 +393,17 @@ int av_probe_input_buffer(AVIOContext *pb, AVInputFormat **fmt,
     /* rewind. reuse probe buffer to avoid seeking */
     ret = ffio_rewind_with_probe_data(pb, &buf, pd.buf_size);
 
-    return ret;
+    return ret < 0 ? ret : score;
 }
+
+int av_probe_input_buffer(AVIOContext *pb, AVInputFormat **fmt,
+                          const char *filename, void *logctx,
+                          unsigned int offset, unsigned int max_probe_size)
+{
+    int ret = av_probe_input_buffer2(pb, fmt, filename, logctx, offset, max_probe_size);
+    return ret < 0 ? ret : 0;
+}
+
 
 /* open input file and probe the format if necessary */
 static int init_input(AVFormatContext *s, const char *filename, AVDictionary **options)
@@ -404,7 +415,7 @@ static int init_input(AVFormatContext *s, const char *filename, AVDictionary **o
     if (s->pb) {
         s->flags |= AVFMT_FLAG_CUSTOM_IO;
         if (!s->iformat)
-            return av_probe_input_buffer(s->pb, &s->iformat, filename, s, 0, s->probesize);
+            return av_probe_input_buffer2(s->pb, &s->iformat, filename, s, 0, s->probesize);
         else if (s->iformat->flags & AVFMT_NOFILE)
             av_log(s, AV_LOG_WARNING, "Custom AVIOContext makes no sense and "
                                       "will be ignored with AVFMT_NOFILE format.\n");
@@ -413,14 +424,14 @@ static int init_input(AVFormatContext *s, const char *filename, AVDictionary **o
 
     if ( (s->iformat && s->iformat->flags & AVFMT_NOFILE) ||
         (!s->iformat && (s->iformat = av_probe_input_format2(&pd, 0, &score))))
-        return 0;
+        return score;
 
     if ((ret = avio_open2(&s->pb, filename, AVIO_FLAG_READ | s->avio_flags,
                           &s->interrupt_callback, options)) < 0)
         return ret;
     if (s->iformat)
         return 0;
-    return av_probe_input_buffer(s->pb, &s->iformat, filename, s, 0, s->probesize);
+    return av_probe_input_buffer2(s->pb, &s->iformat, filename, s, 0, s->probesize);
 }
 
 static AVPacket *add_to_pktbuf(AVPacketList **packet_buffer, AVPacket *pkt,
@@ -480,6 +491,7 @@ int avformat_open_input(AVFormatContext **ps, const char *filename, AVInputForma
 
     if ((ret = init_input(s, filename, &tmp)) < 0)
         goto fail;
+    s->probe_score = ret;
     avio_skip(s->pb, s->skip_initial_bytes);
 
     /* check filename in case an image number is expected */
@@ -1767,6 +1779,7 @@ int ff_find_last_ts(AVFormatContext *s, int stream_index, int64_t *ts, int64_t *
         int64_t tmp_ts = ff_read_timestamp(s, stream_index, &tmp_pos, INT64_MAX, read_timestamp);
         if(tmp_ts == AV_NOPTS_VALUE)
             break;
+        av_assert0(tmp_pos > pos_max);
         ts_max  = tmp_ts;
         pos_max = tmp_pos;
         if(tmp_pos >= filesize)
@@ -2202,16 +2215,21 @@ static void fill_all_stream_timings(AVFormatContext *ic)
 static void estimate_timings_from_bit_rate(AVFormatContext *ic)
 {
     int64_t filesize, duration;
-    int bit_rate, i, show_warning = 0;
+    int i, show_warning = 0;
     AVStream *st;
 
     /* if bit_rate is already set, we believe it */
     if (ic->bit_rate <= 0) {
-        bit_rate = 0;
+        int bit_rate = 0;
         for(i=0;i<ic->nb_streams;i++) {
             st = ic->streams[i];
-            if (st->codec->bit_rate > 0)
-            bit_rate += st->codec->bit_rate;
+            if (st->codec->bit_rate > 0) {
+                if (INT_MAX - st->codec->bit_rate < bit_rate) {
+                    bit_rate = 0;
+                    break;
+                }
+                bit_rate += st->codec->bit_rate;
+            }
         }
         ic->bit_rate = bit_rate;
     }
@@ -2846,7 +2864,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
             }
             if (pkt->duration) {
                 st->info->codec_info_duration        += pkt->duration;
-                st->info->codec_info_duration_fields += st->parser && st->codec->ticks_per_frame==2 ? st->parser->repeat_pict + 1 : 2;
+                st->info->codec_info_duration_fields += st->parser && st->need_parsing && st->codec->ticks_per_frame==2 ? st->parser->repeat_pict + 1 : 2;
             }
         }
 #if FF_API_R_FRAME_RATE
@@ -3237,8 +3255,14 @@ void av_close_input_file(AVFormatContext *s)
 
 void avformat_close_input(AVFormatContext **ps)
 {
-    AVFormatContext *s = *ps;
-    AVIOContext *pb = s->pb;
+    AVFormatContext *s;
+    AVIOContext *pb;
+
+    if (!ps || !*ps)
+        return;
+
+    s = *ps;
+    pb = s->pb;
 
     if ((s->iformat && s->iformat->flags & AVFMT_NOFILE) ||
         (s->flags & AVFMT_FLAG_CUSTOM_IO))

@@ -273,7 +273,8 @@ static int get_siz(Jpeg2000DecoderContext *s)
         s->sgnd[i]   = !!(x & 0x80);
         s->cdx[i]    = bytestream2_get_byteu(&s->g);
         s->cdy[i]    = bytestream2_get_byteu(&s->g);
-        if (!s->cdx[i] || !s->cdy[i]) {
+        if (   !s->cdx[i] || s->cdx[i] == 3 || s->cdx[i] > 4
+            || !s->cdy[i] || s->cdy[i] == 3 || s->cdy[i] > 4) {
             av_log(s->avctx, AV_LOG_ERROR, "Invalid sample seperation\n");
             return AVERROR_INVALIDDATA;
         }
@@ -381,6 +382,11 @@ static int get_cox(Jpeg2000DecoderContext *s, Jpeg2000CodingStyle *c)
         c->log2_cblk_width + c->log2_cblk_height > 12) {
         av_log(s->avctx, AV_LOG_ERROR, "cblk size invalid\n");
         return AVERROR_INVALIDDATA;
+    }
+
+    if (c->log2_cblk_width > 6 || c->log2_cblk_height > 6) {
+        avpriv_request_sample(s->avctx, "cblk size > 64");
+        return AVERROR_PATCHWELCOME;
     }
 
     c->cblk_style = bytestream2_get_byteu(&s->g);
@@ -1024,6 +1030,9 @@ static int decode_cblk(Jpeg2000DecoderContext *s, Jpeg2000CodingStyle *codsty,
     int bpass_csty_symbol           = codsty->cblk_style & JPEG2000_CBLK_BYPASS;
     int vert_causal_ctx_csty_symbol = codsty->cblk_style & JPEG2000_CBLK_VSC;
 
+    av_assert0(width  <= JPEG2000_MAX_CBLKW);
+    av_assert0(height <= JPEG2000_MAX_CBLKH);
+
     for (y = 0; y < height; y++)
         memset(t1->data[y], 0, width * sizeof(**t1->data));
 
@@ -1605,6 +1614,9 @@ static int jpeg2000_decode_frame(AVCodecContext *avctx, void *data,
     } else {
         bytestream2_seek(&s->g, 0, SEEK_SET);
     }
+
+    while (bytestream2_get_bytes_left(&s->g) >= 3 && bytestream2_peek_be16(&s->g) != JPEG2000_SOC)
+        bytestream2_skip(&s->g, 1);
 
     if (bytestream2_get_be16u(&s->g) != JPEG2000_SOC) {
         av_log(avctx, AV_LOG_ERROR, "SOC marker not present\n");

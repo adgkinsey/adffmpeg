@@ -82,6 +82,7 @@ Standard options:
   --prefix=PREFIX          install in PREFIX [$prefix]
   --bindir=DIR             install binaries in DIR [PREFIX/bin]
   --datadir=DIR            install data files in DIR [PREFIX/share/ffmpeg]
+  --docdir=DIR             install documentation in DIR [PREFIX/share/doc/ffmpeg]
   --libdir=DIR             install libs in DIR [PREFIX/lib]
   --shlibdir=DIR           install shared libs in DIR [PREFIX/lib]
   --incdir=DIR             install includes in DIR [PREFIX/include]
@@ -201,7 +202,7 @@ External library support:
   --enable-libdc1394       enable IIDC-1394 grabbing using libdc1394
                            and libraw1394 [no]
   --enable-libfaac         enable AAC encoding via libfaac [no]
-  --enable-libfdk-aac      enable AAC encoding via libfdk-aac [no]
+  --enable-libfdk-aac      enable AAC de/encoding via libfdk-aac [no]
   --enable-libflite        enable flite (voice synthesis) support via libflite [no]
   --enable-libfreetype     enable libfreetype [no]
   --enable-libgme          enable Game Music Emu via libgme [no]
@@ -241,6 +242,7 @@ External library support:
   --enable-libxvid         enable Xvid encoding via xvidcore,
                            native MPEG-4/Xvid encoder exists [no]
   --enable-libzmq          enable message passing via libzmq [no]
+  --enable-libzvbi         enable teletext support via libzvbi [no]
   --enable-openal          enable OpenAL 1.1 capture support [no]
   --enable-opencl          enable OpenCL code
   --enable-openssl         enable openssl [no]
@@ -994,7 +996,7 @@ check_pkg_config(){
     headers="$2"
     funcs="$3"
     shift 3
-    $pkg_config --exists $pkg 2>/dev/null || return
+    check_cmd $pkg_config --exists --print-errors $pkg || return
     pkg_cflags=$($pkg_config --cflags $pkg)
     pkg_libs=$($pkg_config --libs $pkg)
     check_func_headers "$headers" "$funcs" $pkg_cflags $pkg_libs "$@" &&
@@ -1206,6 +1208,7 @@ EXTERNAL_LIBRARY_LIST="
     libxvid
     libzmq
     libparreader
+    libzvbi
     openal
     opencl
     openssl
@@ -1339,6 +1342,7 @@ ARCH_EXT_LIST_X86='
     amd3dnowext
     avx
     fma4
+    i686
     mmx
     mmxext
     sse
@@ -1463,7 +1467,6 @@ HAVE_LIST="
     glob
     gnu_as
     gsm_h
-    i686
     ibm_asm
     inet_aton
     io_h
@@ -1558,6 +1561,7 @@ CONFIG_EXTRA="
     ac3dsp
     audio_frame_queue
     dsputil
+    exif
     frame_thread_encoder
     gcrypt
     golomb
@@ -1603,6 +1607,7 @@ CMDLINE_SELECT="
 PATHS_LIST='
     bindir
     datadir
+    docdir
     incdir
     libdir
     mandir
@@ -1680,7 +1685,9 @@ ppc4xx_deps="ppc"
 
 vis_deps="sparc"
 
-x86_64_suggest="fast_cmov i686"
+cpunop_deps="i686"
+x86_64_select="i686"
+x86_64_suggest="fast_cmov"
 
 amd3dnow_deps="mmx"
 amd3dnowext_deps="amd3dnow"
@@ -1742,7 +1749,7 @@ alac_encoder_select="lpc"
 als_decoder_select="dsputil"
 amrnb_decoder_select="lsp"
 amrwb_decoder_select="lsp"
-amv_decoder_select="dsputil hpeldsp"
+amv_decoder_select="dsputil hpeldsp exif"
 amv_encoder_select="aandcttables"
 ape_decoder_select="dsputil"
 asv1_decoder_select="dsputil"
@@ -1751,6 +1758,7 @@ asv2_decoder_select="dsputil"
 asv2_encoder_select="dsputil"
 atrac1_decoder_select="mdct sinewin"
 atrac3_decoder_select="mdct"
+avrn_decoder_select="exif"
 bink_decoder_select="dsputil hpeldsp"
 binkaudio_dct_decoder_select="mdct rdft dct sinewin"
 binkaudio_rdft_decoder_select="mdct rdft sinewin"
@@ -1804,7 +1812,7 @@ iac_decoder_select="dsputil fft mdct sinewin"
 imc_decoder_select="dsputil fft mdct sinewin"
 indeo3_decoder_select="hpeldsp"
 interplay_video_decoder_select="hpeldsp"
-jpegls_decoder_select="dsputil golomb hpeldsp"
+jpegls_decoder_select="dsputil golomb hpeldsp exif"
 jpegls_encoder_select="golomb"
 jv_decoder_select="dsputil"
 lagarith_decoder_select="dsputil"
@@ -1813,8 +1821,8 @@ loco_decoder_select="golomb"
 mdec_decoder_select="dsputil error_resilience mpegvideo"
 metasound_decoder_select="lsp mdct sinewin"
 mimic_decoder_select="dsputil hpeldsp"
-mjpeg_decoder_select="dsputil hpeldsp"
-mjpegb_decoder_select="dsputil hpeldsp"
+mjpeg_decoder_select="dsputil hpeldsp exif"
+mjpegb_decoder_select="dsputil hpeldsp exif"
 mjpeg_encoder_select="aandcttables dsputil mpegvideoenc"
 mlp_decoder_select="dsputil mlp_parser"
 motionpixels_decoder_select="dsputil"
@@ -1844,7 +1852,7 @@ msmpeg4v2_encoder_select="h263_encoder"
 msmpeg4v3_decoder_select="h263_decoder"
 msmpeg4v3_encoder_select="h263_encoder"
 mss2_decoder_select="error_resilience vc1_decoder"
-mxpeg_decoder_select="dsputil hpeldsp"
+mxpeg_decoder_select="dsputil hpeldsp exif"
 nellymoser_decoder_select="mdct sinewin"
 nellymoser_encoder_select="audio_frame_queue mdct sinewin"
 nuv_decoder_select="dsputil lzo"
@@ -1871,7 +1879,7 @@ snow_encoder_select="aandcttables dsputil dwt h264qpel hpeldsp mpegvideoenc rang
 sonic_decoder_select="golomb"
 sonic_encoder_select="golomb"
 sonic_ls_encoder_select="golomb"
-sp5x_decoder_select="dsputil hpeldsp"
+sp5x_decoder_select="dsputil hpeldsp exif"
 svq1_decoder_select="hpeldsp"
 svq1_encoder_select="aandcttables dsputil hpeldsp mpegvideoenc"
 svq3_decoder_select="golomb h264chroma h264dsp h264pred h264qpel hpeldsp mpegvideo videodsp"
@@ -1880,7 +1888,7 @@ tak_decoder_select="dsputil"
 theora_decoder_select="vp3_decoder"
 tiff_decoder_suggest="zlib"
 tiff_encoder_suggest="zlib"
-thp_decoder_select="dsputil hpeldsp"
+thp_decoder_select="dsputil hpeldsp exif"
 truehd_decoder_select="mlp_parser"
 truemotion2_decoder_select="dsputil"
 truespeech_decoder_select="dsputil"
@@ -1990,6 +1998,7 @@ libaacplus_encoder_deps="libaacplus"
 libcelt_decoder_deps="libcelt"
 libfaac_encoder_deps="libfaac"
 libfaac_encoder_select="audio_frame_queue"
+libfdk_aac_decoder_deps="libfdk_aac"
 libfdk_aac_encoder_deps="libfdk_aac"
 libfdk_aac_encoder_select="audio_frame_queue"
 libgme_demuxer_deps="libgme"
@@ -2039,6 +2048,7 @@ libxavs_encoder_deps="libxavs"
 libxvid_encoder_deps="libxvid"
 libutvideo_decoder_deps="libutvideo"
 libutvideo_encoder_deps="libutvideo"
+libzvbi_teletext_decoder_deps="libzvbi"
 
 # demuxers / muxers
 ac3_demuxer_select="ac3_parser"
@@ -2201,7 +2211,6 @@ frei0r_src_filter_extralibs='$ldl'
 geq_filter_deps="gpl"
 histeq_filter_deps="gpl"
 hqdn3d_filter_deps="gpl"
-hue_filter_deps="gpl"
 interlace_filter_deps="gpl"
 kerndeint_filter_deps="gpl"
 mcdeint_filter_deps="avcodec gpl"
@@ -2216,6 +2225,7 @@ resample_filter_deps="avresample"
 ocv_filter_deps="libopencv"
 owdenoise_filter_deps="gpl"
 pan_filter_deps="swresample"
+phase_filter_deps="gpl"
 pp_filter_deps="gpl postproc"
 removelogo_filter_deps="avcodec avformat swscale"
 sab_filter_deps="gpl swscale"
@@ -2271,6 +2281,7 @@ logfile="config.log"
 prefix_default="/usr/local"
 bindir_default='${prefix}/bin'
 datadir_default='${prefix}/share/ffmpeg'
+docdir_default='${prefix}/share/doc/ffmpeg'
 incdir_default='${prefix}/include'
 libdir_default='${prefix}/lib'
 mandir_default='${prefix}/share/man'
@@ -3765,6 +3776,7 @@ die_license_disabled gpl libvidstab
 die_license_disabled gpl libx264
 die_license_disabled gpl libxavs
 die_license_disabled gpl libxvid
+die_license_disabled gpl libzvbi
 die_license_disabled gpl x11grab
 
 die_license_disabled nonfree libaacplus
@@ -3980,7 +3992,7 @@ EOF
             die "yasm not found, use --disable-yasm for a crippled build"
         check_yasm "vextractf128 xmm0, ymm0, 0"      || disable avx_external avresample
         check_yasm "vfmaddps ymm0, ymm1, ymm2, ymm3" || disable fma4_external
-        check_yasm "CPU amdnop" && enabled i686 && enable cpunop
+        check_yasm "CPU amdnop" && enable cpunop
     fi
 
     case "$cpu" in
@@ -4243,6 +4255,7 @@ enabled libx264           && require libx264 x264.h x264_encoder_encode -lx264 &
 enabled libxavs           && require libxavs xavs.h xavs_encoder_encode -lxavs
 enabled libxvid           && require libxvid xvid.h xvid_global -lxvidcore
 enabled libzmq            && require_pkg_config libzmq zmq.h zmq_ctx_new
+enabled libzvbi           && require libzvbi libzvbi.h vbi_decoder_new -lzvbi
 enabled openal            && { { for al_libs in "${OPENAL_LIBS}" "-lopenal" "-lOpenAL32"; do
                                check_lib 'AL/al.h' alGetError "${al_libs}" && break; done } ||
                                die "ERROR: openal not found"; } &&
@@ -4634,6 +4647,7 @@ echo "threading support         ${thread_type-no}"
 echo "safe bitstream reader     ${safe_bitstream_reader-no}"
 echo "SDL support               ${sdl-no}"
 echo "opencl enabled            ${opencl-no}"
+echo "libzvbi enabled           ${libzvbi-no}"
 echo "texi2html enabled         ${texi2html-no}"
 echo "perl enabled              ${perl-no}"
 echo "pod2man enabled           ${pod2man-no}"
@@ -4685,6 +4699,7 @@ SHLIBDIR=\$(DESTDIR)$shlibdir
 INCDIR=\$(DESTDIR)$incdir
 BINDIR=\$(DESTDIR)$bindir
 DATADIR=\$(DESTDIR)$datadir
+DOCDIR=\$(DESTDIR)$docdir
 MANDIR=\$(DESTDIR)$mandir
 SRC_PATH=$source_path
 ifndef MAIN_MAKEFILE

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 Clément Bœsch <ubitux@gmail.com>
+ * Copyright (c) 2012 Clément Bœsch <u pkh me>
  *
  * This file is part of FFmpeg.
  *
@@ -141,7 +141,6 @@ static const AVFilterPad silencedetect_inputs[] = {
     {
         .name             = "default",
         .type             = AVMEDIA_TYPE_AUDIO,
-        .get_audio_buffer = ff_null_get_audio_buffer,
         .filter_frame     = filter_frame,
     },
     { NULL }

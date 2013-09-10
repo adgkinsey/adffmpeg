@@ -24,14 +24,14 @@
 #include "put_bits.h"
 #include "pnm.h"
 
-static void samplecpy(void *dst, const void *src, int n, int maxval)
+static void samplecpy(uint8_t *dst, const uint8_t *src, int n, int maxval)
 {
     if (maxval <= 255) {
         memcpy(dst, src, n);
     } else {
         int i;
         for (i=0; i<n/2; i++) {
-            ((uint16_t *)dst)[i] = av_be2ne16(((uint16_t *)src)[i]);
+            ((uint16_t *)dst)[i] = AV_RB16(src+2*i);
         }
     }
 }

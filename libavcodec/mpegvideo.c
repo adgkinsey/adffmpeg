@@ -168,17 +168,16 @@ av_cold int ff_dct_common_init(MpegEncContext *s)
         s->dct_unquantize_mpeg2_intra = dct_unquantize_mpeg2_intra_bitexact;
     s->dct_unquantize_mpeg2_inter = dct_unquantize_mpeg2_inter_c;
 
-#if ARCH_X86
-    ff_MPV_common_init_x86(s);
-#elif ARCH_ALPHA
-    ff_MPV_common_init_axp(s);
-#elif ARCH_ARM
-    ff_MPV_common_init_arm(s);
-#elif ARCH_BFIN
-    ff_MPV_common_init_bfin(s);
-#elif ARCH_PPC
-    ff_MPV_common_init_ppc(s);
-#endif
+    if (ARCH_ALPHA)
+        ff_MPV_common_init_axp(s);
+    if (ARCH_ARM)
+        ff_MPV_common_init_arm(s);
+    if (ARCH_BFIN)
+        ff_MPV_common_init_bfin(s);
+    if (ARCH_PPC)
+        ff_MPV_common_init_ppc(s);
+    if (ARCH_X86)
+        ff_MPV_common_init_x86(s);
 
     /* load & permutate scantables
      * note: only wmv uses different ones
@@ -1594,11 +1593,14 @@ int ff_MPV_frame_start(MpegEncContext *s, AVCodecContext *avctx)
         int h_chroma_shift, v_chroma_shift;
         av_pix_fmt_get_chroma_sub_sample(s->avctx->pix_fmt,
                                          &h_chroma_shift, &v_chroma_shift);
-        if (s->pict_type != AV_PICTURE_TYPE_I)
+        if (s->pict_type == AV_PICTURE_TYPE_B && s->next_picture_ptr && s->next_picture_ptr->f.data[0])
+            av_log(avctx, AV_LOG_DEBUG,
+                   "allocating dummy last picture for B frame\n");
+        else if (s->pict_type != AV_PICTURE_TYPE_I)
             av_log(avctx, AV_LOG_ERROR,
                    "warning: first frame is no keyframe\n");
         else if (s->picture_structure != PICT_FRAME)
-            av_log(avctx, AV_LOG_INFO,
+            av_log(avctx, AV_LOG_DEBUG,
                    "allocate dummy last picture for field based first keyframe\n");
 
         /* Allocate a dummy frame */
@@ -2989,8 +2991,8 @@ void ff_draw_horiz_band(AVCodecContext *avctx, DSPContext *dsp, Picture *cur,
 void ff_mpeg_draw_horiz_band(MpegEncContext *s, int y, int h)
 {
     int draw_edges = s->unrestricted_mv && !s->intra_only;
-    ff_draw_horiz_band(s->avctx, &s->dsp, &s->current_picture,
-                       &s->last_picture, y, h, s->picture_structure,
+    ff_draw_horiz_band(s->avctx, &s->dsp, s->current_picture_ptr,
+                       s->last_picture_ptr, y, h, s->picture_structure,
                        s->first_field, draw_edges, s->low_delay,
                        s->v_edge_pos, s->h_edge_pos);
 }

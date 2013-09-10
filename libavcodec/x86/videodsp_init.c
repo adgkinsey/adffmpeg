@@ -26,6 +26,7 @@
 #include "libavutil/cpu.h"
 #include "libavutil/mem.h"
 #include "libavutil/x86/asm.h"
+#include "libavutil/x86/cpu.h"
 #include "libavcodec/videodsp.h"
 
 #if HAVE_YASM
@@ -45,7 +46,7 @@ static av_always_inline void emulated_edge_mc(uint8_t *buf, const uint8_t *src,
                                               emu_edge_core_func *core_fn)
 {
     int start_y, start_x, end_y, end_x, src_y_add = 0;
-    int linesize = linesize_arg;
+    emuedge_linesize_type linesize = linesize_arg;
 
     if(!w || !h)
         return;
@@ -111,17 +112,17 @@ av_cold void ff_videodsp_init_x86(VideoDSPContext *ctx, int bpc)
     int cpu_flags = av_get_cpu_flags();
 
 #if ARCH_X86_32
-    if (bpc <= 8 && cpu_flags & AV_CPU_FLAG_MMX) {
+    if (EXTERNAL_MMX(cpu_flags) && bpc <= 8) {
         ctx->emulated_edge_mc = emulated_edge_mc_mmx;
     }
-    if (cpu_flags & AV_CPU_FLAG_3DNOW) {
+    if (EXTERNAL_AMD3DNOW(cpu_flags)) {
         ctx->prefetch = ff_prefetch_3dnow;
     }
 #endif /* ARCH_X86_32 */
-    if (cpu_flags & AV_CPU_FLAG_MMXEXT) {
+    if (EXTERNAL_MMXEXT(cpu_flags)) {
         ctx->prefetch = ff_prefetch_mmxext;
     }
-    if (bpc <= 8 && cpu_flags & AV_CPU_FLAG_SSE) {
+    if (EXTERNAL_SSE(cpu_flags) && bpc <= 8) {
         ctx->emulated_edge_mc = emulated_edge_mc_sse;
     }
 #endif /* HAVE_YASM */

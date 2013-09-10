@@ -184,7 +184,7 @@ void avcodec_set_dimensions(AVCodecContext *s, int width, int height)
     s->height       = FF_CEIL_RSHIFT(height, s->lowres);
 }
 
-#if (ARCH_ARM && HAVE_NEON) || ARCH_PPC || HAVE_MMX
+#if HAVE_NEON || ARCH_PPC || HAVE_MMX
 #   define STRIDE_ALIGN 16
 #else
 #   define STRIDE_ALIGN 8
@@ -568,6 +568,7 @@ static int video_get_buffer(AVCodecContext *s, AVFrame *pic)
     for (i = 0; i < 4 && pool->pools[i]; i++) {
         const int h_shift = i == 0 ? 0 : h_chroma_shift;
         const int v_shift = i == 0 ? 0 : v_chroma_shift;
+        int is_planar = pool->pools[2] || (i==0 && s->pix_fmt == AV_PIX_FMT_GRAY8);
 
         pic->linesize[i] = pool->linesize[i];
 
@@ -576,7 +577,7 @@ static int video_get_buffer(AVCodecContext *s, AVFrame *pic)
             goto fail;
 
         // no edge if EDGE EMU or not planar YUV
-        if ((s->flags & CODEC_FLAG_EMU_EDGE) || !pool->pools[2])
+        if ((s->flags & CODEC_FLAG_EMU_EDGE) || !is_planar)
             pic->data[i] = pic->buf[i]->data;
         else {
             pic->data[i] = pic->buf[i]->data +
@@ -1424,14 +1425,14 @@ free_and_end:
     goto end;
 }
 
-int ff_alloc_packet2(AVCodecContext *avctx, AVPacket *avpkt, int size)
+int ff_alloc_packet2(AVCodecContext *avctx, AVPacket *avpkt, int64_t size)
 {
     if (avpkt->size < 0) {
         av_log(avctx, AV_LOG_ERROR, "Invalid negative user packet size %d\n", avpkt->size);
         return AVERROR(EINVAL);
     }
     if (size < 0 || size > INT_MAX - FF_INPUT_BUFFER_PADDING_SIZE) {
-        av_log(avctx, AV_LOG_ERROR, "Invalid minimum required packet size %d (max allowed is %d)\n",
+        av_log(avctx, AV_LOG_ERROR, "Invalid minimum required packet size %"PRId64" (max allowed is %d)\n",
                size, INT_MAX - FF_INPUT_BUFFER_PADDING_SIZE);
         return AVERROR(EINVAL);
     }
@@ -1455,7 +1456,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
 #endif
 
         if (avpkt->size < size) {
-            av_log(avctx, AV_LOG_ERROR, "User packet is too small (%d < %d)\n", avpkt->size, size);
+            av_log(avctx, AV_LOG_ERROR, "User packet is too small (%d < %"PRId64")\n", avpkt->size, size);
             return AVERROR(EINVAL);
         }
 
@@ -1471,7 +1472,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
     } else {
         int ret = av_new_packet(avpkt, size);
         if (ret < 0)
-            av_log(avctx, AV_LOG_ERROR, "Failed to allocate packet of size %d\n", size);
+            av_log(avctx, AV_LOG_ERROR, "Failed to allocate packet of size %"PRId64"\n", size);
         return ret;
     }
 }
@@ -2397,7 +2398,12 @@ av_cold int ff_codec_close_recursive(AVCodecContext *avctx)
 
 av_cold int avcodec_close(AVCodecContext *avctx)
 {
-    int ret = ff_lock_avcodec(avctx);
+    int ret;
+
+    if (!avctx)
+        return 0;
+
+    ret = ff_lock_avcodec(avctx);
     if (ret < 0)
         return ret;
 
@@ -2590,13 +2596,35 @@ void avcodec_string(char *buf, int buf_size, AVCodecContext *enc, int encode)
     switch (enc->codec_type) {
     case AVMEDIA_TYPE_VIDEO:
         if (enc->pix_fmt != AV_PIX_FMT_NONE) {
+            char detail[256] = "(";
             snprintf(buf + strlen(buf), buf_size - strlen(buf),
                      ", %s",
                      av_get_pix_fmt_name(enc->pix_fmt));
             if (enc->bits_per_raw_sample &&
                 enc->bits_per_raw_sample <= av_pix_fmt_desc_get(enc->pix_fmt)->comp[0].depth_minus1)
-                snprintf(buf + strlen(buf), buf_size - strlen(buf),
-                         " (%d bpc)", enc->bits_per_raw_sample);
+                av_strlcatf(detail, sizeof(detail), "%d bpc, ", enc->bits_per_raw_sample);
+            if (enc->color_range != AVCOL_RANGE_UNSPECIFIED)
+                av_strlcatf(detail, sizeof(detail),
+                            enc->color_range == AVCOL_RANGE_MPEG ? "tv, ": "pc, ");
+            if (enc->colorspace<9U) {
+                static const char *name[] =  {
+                    "GBR",
+                    "bt709",
+                    NULL,
+                    NULL,
+                    "fcc",
+                    "bt470bg",
+                    "smpte170m",
+                    "smpte240m",
+                    "YCgCo",
+                };
+                if (name[enc->colorspace])
+                    av_strlcatf(detail, sizeof(detail), "%s, ", name[enc->colorspace]);
+            }
+            if (strlen(detail) > 1) {
+                detail[strlen(detail) - 2] = 0;
+                av_strlcatf(buf, buf_size, "%s)", detail);
+            }
         }
         if (enc->width) {
             snprintf(buf + strlen(buf), buf_size - strlen(buf),
@@ -2644,6 +2672,11 @@ void avcodec_string(char *buf, int buf_size, AVCodecContext *enc, int encode)
                          ", %d/%d",
                          enc->time_base.num / g, enc->time_base.den / g);
         }
+        break;
+    case AVMEDIA_TYPE_SUBTITLE:
+        if (enc->width)
+            snprintf(buf + strlen(buf), buf_size - strlen(buf),
+                     ", %dx%d", enc->width, enc->height);
         break;
     default:
         return;

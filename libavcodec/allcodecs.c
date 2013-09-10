@@ -479,7 +479,7 @@ void avcodec_register_all(void)
     /* external libraries */
     REGISTER_DECODER(LIBCELT,           libcelt);
     REGISTER_ENCODER(LIBFAAC,           libfaac);
-    REGISTER_ENCODER(LIBFDK_AAC,        libfdk_aac);
+    REGISTER_ENCDEC (LIBFDK_AAC,        libfdk_aac);
     REGISTER_ENCDEC (LIBGSM,            libgsm);
     REGISTER_ENCDEC (LIBGSM_MS,         libgsm_ms);
     REGISTER_ENCDEC (LIBILBC,           libilbc);
@@ -505,6 +505,7 @@ void avcodec_register_all(void)
     REGISTER_ENCODER(LIBX264RGB,        libx264rgb);
     REGISTER_ENCODER(LIBXAVS,           libxavs);
     REGISTER_ENCODER(LIBXVID,           libxvid);
+    REGISTER_DECODER(LIBZVBI_TELETEXT,  libzvbi_teletext);
     REGISTER_ENCODER(LIBAACPLUS,        libaacplus);
 
     /* text */

@@ -1,6 +1,4 @@
 /*
- * Copyright (c) 2010 Mans Rullgard <mans@mansr.com>
- *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -18,22 +16,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <stdint.h>
+#ifndef AVUTIL_PPC_CPU_H
+#define AVUTIL_PPC_CPU_H
 
-#include "libavutil/attributes.h"
-#include "libavutil/arm/cpu.h"
-#include "libavcodec/avcodec.h"
-#include "libavcodec/vp56dsp.h"
+#include "config.h"
+#include "libavutil/cpu.h"
+#include "libavutil/cpu_internal.h"
 
-void ff_vp6_edge_filter_hor_neon(uint8_t *yuv, int stride, int t);
-void ff_vp6_edge_filter_ver_neon(uint8_t *yuv, int stride, int t);
+#define PPC_ALTIVEC(flags) CPUEXT(flags, ALTIVEC)
 
-av_cold void ff_vp56dsp_init_arm(VP56DSPContext *s, enum AVCodecID codec)
-{
-    int cpu_flags = av_get_cpu_flags();
-
-    if (codec != AV_CODEC_ID_VP5 && have_neon(cpu_flags)) {
-        s->edge_filter_hor = ff_vp6_edge_filter_hor_neon;
-        s->edge_filter_ver = ff_vp6_edge_filter_ver_neon;
-    }
-}
+#endif /* AVUTIL_PPC_CPU_H */

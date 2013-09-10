@@ -3239,16 +3239,6 @@ Either a string (e.g. "yellow") or in 0xRRGGBB[AA] format
 (e.g. "0xff00ff"), possibly followed by an alpha specifier.
 The default value of @var{boxcolor} is "white".
 
-@item draw
-Set an expression which specifies if the text should be drawn. If the
-expression evaluates to 0, the text is not drawn. This is useful for
-specifying that the text should be drawn only when specific conditions
-are met.
-
-Default value is "1".
-
-See below for the list of accepted constants and functions.
-
 @item expansion
 Select how the @var{text} is expanded. Can be either @code{none},
 @code{strftime} (deprecated) or
@@ -3548,7 +3538,7 @@ drawtext="fontsize=60:fontfile=FreeSerif.ttf:fontcolor=green:text=g:x=(w-max_gly
 @item
 Show text for 1 second every 3 seconds:
 @example
-drawtext="fontfile=FreeSerif.ttf:fontcolor=white:x=100:y=x/dar:draw=lt(mod(t\,3)\,1):text='blink'"
+drawtext="fontfile=FreeSerif.ttf:fontcolor=white:x=100:y=x/dar:enable=lt(mod(t\,3)\,1):text='blink'"
 @end example
 
 @item
@@ -4159,6 +4149,14 @@ round to nearest
 @end table
 The default is @code{near}.
 
+@item start_time
+Assume the first PTS should be the given value, in seconds. This allows for
+padding/trimming at the start of stream. By default, no assumption is made
+about the first frame's expected PTS, so no padding or trimming is done.
+For example, this could be set to 0 to pad the beginning with duplicates of
+the first frame if a video stream starts after the audio stream or to trim any
+frames with a negative PTS.
+
 @end table
 
 Alternatively, the options can be specified as a flat string:
@@ -4707,12 +4705,16 @@ defaults to "1".
 @item H
 Specify the hue angle as a number of radians. It accepts an
 expression, and defaults to "0".
+
+@item b
+Specify the brightness in the [-10,10] range. It accepts an expression and
+defaults to "0".
 @end table
 
 @option{h} and @option{H} are mutually exclusive, and can't be
 specified at the same time.
 
-The @option{h}, @option{H} and @option{s} option values are
+The @option{b}, @option{h}, @option{H} and @option{s} option values are
 expressions containing the following constants:
 
 @table @option
@@ -4782,10 +4784,11 @@ hue="s=max(0\, min(1\, (START+DURATION-t)/DURATION))"
 
 This filter supports the following commands:
 @table @option
+@item b
 @item s
 @item h
 @item H
-Modify the hue and/or the saturation of the input video.
+Modify the hue and/or the saturation and/or brightness of the input video.
 The command accepts the same syntax of the corresponding option.
 
 If the specified expression is not valid, it is kept at its current
@@ -5171,13 +5174,10 @@ the named filter.
 
 The list of the currently supported filters follows:
 @table @var
-@item dint
 @item eq2
 @item eq
-@item fil
 @item fspp
 @item ilpack
-@item phase
 @item pp7
 @item pullup
 @item qp
@@ -5839,6 +5839,67 @@ It accepts the following values:
 @end table
 
 Default value is @samp{linear}.
+@end table
+
+@section phase
+
+Delay interlaced video by one field time so that the field order changes.
+
+The intended use is to fix PAL movies that have been captured with the
+opposite field order to the film-to-video transfer.
+
+A description of the accepted parameters follows.
+
+@table @option
+@item mode
+Set phase mode.
+
+It accepts the following values:
+@table @samp
+@item t
+Capture field order top-first, transfer bottom-first.
+Filter will delay the bottom field.
+
+@item b
+Capture field order bottom-first, transfer top-first.
+Filter will delay the top field.
+
+@item p
+Capture and transfer with the same field order. This mode only exists
+for the documentation of the other options to refer to, but if you
+actually select it, the filter will faithfully do nothing.
+
+@item a
+Capture field order determined automatically by field flags, transfer
+opposite.
+Filter selects among @samp{t} and @samp{b} modes on a frame by frame
+basis using field flags. If no field information is available,
+then this works just like @samp{u}.
+
+@item u
+Capture unknown or varying, transfer opposite.
+Filter selects among @samp{t} and @samp{b} on a frame by frame basis by
+analyzing the images and selecting the alternative that produces best
+match between the fields.
+
+@item T
+Capture top-first, transfer unknown or varying.
+Filter selects among @samp{t} and @samp{p} using image analysis.
+
+@item B
+Capture bottom-first, transfer unknown or varying.
+Filter selects among @samp{b} and @samp{p} using image analysis.
+
+@item A
+Capture determined by field flags, transfer unknown or varying.
+Filter selects among @samp{t}, @samp{b} and @samp{p} using field flags and
+image analysis. If no field information is available, then this works just
+like @samp{U}. This is the default mode.
+
+@item U
+Both capture and transfer unknown or varying.
+Filter selects among @samp{t}, @samp{b} and @samp{p} using image analysis only.
+@end table
 @end table
 
 @section pixdesctest
@@ -7769,6 +7830,45 @@ vignette='PI/4+random(1)*PI/50':eval=frame
 
 @end itemize
 
+@section w3fdif
+
+Deinterlace the input video ("w3fdif" stands for "Weston 3 Field
+Deinterlacing Filter").
+
+Based on the process described by Martin Weston for BBC R&D, and
+implemented based on the de-interlace algorithm written by Jim
+Easterbrook for BBC R&D, the Weston 3 field deinterlacing filter
+uses filter coefficients calculated by BBC R&D.
+
+There are two sets of filter coefficients, so called "simple":
+and "complex". Which set of filter coefficients is used can
+be set by passing an optional parameter:
+
+@table @option
+@item filter
+Set the interlacing filter coefficients. Accepts one of the following values:
+
+@table @samp
+@item simple
+Simple filter coefficient set.
+@item complex
+More-complex filter coefficient set.
+@end table
+Default value is @samp{complex}.
+
+@item deint
+Specify which frames to deinterlace. Accept one of the following values:
+
+@table @samp
+@item all
+Deinterlace all frames,
+@item interlaced
+Only deinterlace frames marked as interlaced.
+@end table
+
+Default value is @samp{all}.
+@end table
+
 @anchor{yadif}
 @section yadif
 
@@ -9113,9 +9213,6 @@ tell if the current frame is interlaced
 @item T
 the time in seconds of the current frame
 
-@item TB
-the time base
-
 @item POS
 original position in the file of the frame, or undefined if undefined
 for the current frame
@@ -9138,6 +9235,10 @@ instead.
 
 @item RTCSTART
 wallclock (RTC) time at the start of the movie in microseconds
+
+@item TB
+timebase of the input timestamps
+
 @end table
 
 @subsection Examples

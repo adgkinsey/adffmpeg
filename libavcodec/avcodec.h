@@ -303,6 +303,7 @@ enum AVCodecID {
     AV_CODEC_ID_SNOW       = MKBETAG('S','N','O','W'),
     AV_CODEC_ID_WEBP       = MKBETAG('W','E','B','P'),
     AV_CODEC_ID_SMVJPEG    = MKBETAG('S','M','V','J'),
+    AV_CODEC_ID_H265       = MKBETAG('H','2','6','5'),
 
     /* various PCM "codecs" */
     AV_CODEC_ID_FIRST_AUDIO = 0x10000,     ///< A dummy id pointing at the start of audio codecs
@@ -3843,7 +3844,7 @@ int avcodec_decode_audio4(AVCodecContext *avctx, AVFrame *frame,
  *             next call to this function or until closing the decoder. The
  *             caller may not write to it.
  *
- * @param[in] avpkt The input AVpacket containing the input buffer.
+ * @param[in] avpkt The input AVPacket containing the input buffer.
  *            You can create such packet with av_init_packet() and by then setting
  *            data and size, some decoders might in addition need other fields like
  *            flags&AV_PKT_FLAG_KEY. All decoders are designed to use the least

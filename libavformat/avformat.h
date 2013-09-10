@@ -1101,6 +1101,17 @@ typedef struct AVFormatContext {
      */
     unsigned int max_picture_buffer;
 
+    /**
+     * Number of chapters in AVChapter array.
+     * When muxing, chapters are normally written in the file header,
+     * so nb_chapters should normally be initialized before write_header
+     * is called. Some muxers (e.g. mov and mkv) can also write chapters
+     * in the trailer.  To write chapters in the trailer, nb_chapters
+     * must be zero when write_header is called and non-zero when
+     * write_trailer is called.
+     * muxing  : set by user
+     * demuxing: set by libavformat
+     */
     unsigned int nb_chapters;
     AVChapter **chapters;
 
@@ -1237,6 +1248,15 @@ typedef struct AVFormatContext {
      */
     int flush_packets;
 
+    /**
+     * format probing score.
+     * The maximal score is AVPROBE_SCORE_MAX, its set when the demuxer probes
+     * the format.
+     * - encoding: unused
+     * - decoding: set by avformat, read by user via av_format_get_probe_score() (NO direct access)
+     */
+    int probe_score;
+
     /*****************************************************************
      * All fields below this line are not part of the public API. They
      * may not be used outside of libavformat and can be changed and
@@ -1295,6 +1315,8 @@ typedef struct AVFormatContext {
      */
     int io_repositioned;
 } AVFormatContext;
+
+int av_format_get_probe_score(const AVFormatContext *s);
 
 /**
  * Returns the method used to set ctx->duration.
@@ -1504,8 +1526,16 @@ AVInputFormat *av_probe_input_format3(AVProbeData *pd, int is_opened, int *score
  * @param logctx the log context
  * @param offset the offset within the bytestream to probe from
  * @param max_probe_size the maximum probe buffer size (zero for default)
- * @return 0 in case of success, a negative value corresponding to an
+ * @return the score in case of success, a negative value corresponding to an
+ *         the maximal score is AVPROBE_SCORE_MAX
  * AVERROR code otherwise
+ */
+int av_probe_input_buffer2(AVIOContext *pb, AVInputFormat **fmt,
+                           const char *filename, void *logctx,
+                           unsigned int offset, unsigned int max_probe_size);
+
+/**
+ * Like av_probe_input_buffer2() but returns 0 on success
  */
 int av_probe_input_buffer(AVIOContext *pb, AVInputFormat **fmt,
                           const char *filename, void *logctx,
@@ -1513,7 +1543,7 @@ int av_probe_input_buffer(AVIOContext *pb, AVInputFormat **fmt,
 
 /**
  * Open an input stream and read the header. The codecs are not opened.
- * The stream must be closed with av_close_input_file().
+ * The stream must be closed with avformat_close_input().
  *
  * @param ps Pointer to user-supplied AVFormatContext (allocated by avformat_alloc_context).
  *           May be a pointer to NULL, in which case an AVFormatContext is allocated by this
@@ -1648,8 +1678,8 @@ int av_read_packet(AVFormatContext *s, AVPacket *pkt);
  * information possible for decoding.
  *
  * If pkt->buf is NULL, then the packet is valid until the next
- * av_read_frame() or until av_close_input_file(). Otherwise the packet is valid
- * indefinitely. In both cases the packet must be freed with
+ * av_read_frame() or until avformat_close_input(). Otherwise the packet
+ * is valid indefinitely. In both cases the packet must be freed with
  * av_free_packet when it is no longer needed. For video, the packet contains
  * exactly one frame. For audio, it contains an integer number of frames if each
  * frame has a known fixed size (e.g. PCM or ADPCM data). If the audio frames
