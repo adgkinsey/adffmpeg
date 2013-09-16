@@ -275,7 +275,7 @@ static int get_siz(Jpeg2000DecoderContext *s)
         s->cdy[i]    = bytestream2_get_byteu(&s->g);
         if (   !s->cdx[i] || s->cdx[i] == 3 || s->cdx[i] > 4
             || !s->cdy[i] || s->cdy[i] == 3 || s->cdy[i] > 4) {
-            av_log(s->avctx, AV_LOG_ERROR, "Invalid sample seperation\n");
+            av_log(s->avctx, AV_LOG_ERROR, "Invalid sample separation %d/%d\n", s->cdx[i], s->cdy[i]);
             return AVERROR_INVALIDDATA;
         }
         log2_chroma_wh |= s->cdy[i] >> 1 << i * 4 | s->cdx[i] >> 1 << i * 4 + 2;
@@ -350,6 +350,7 @@ static int get_siz(Jpeg2000DecoderContext *s)
                ncomponents > 2 ? s->cdx[2] : 0,
                ncomponents > 2 ? s->cdy[2] : 0);
     }
+    s->avctx->bits_per_raw_sample = s->precision;
     return 0;
 }
 

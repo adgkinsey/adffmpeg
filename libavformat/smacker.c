@@ -180,6 +180,8 @@ static int smacker_read_header(AVFormatContext *s)
         smk->indexes[i] = -1;
         if (smk->rates[i]) {
             ast[i] = avformat_new_stream(s, NULL);
+            if (!ast[i])
+                return AVERROR(ENOMEM);
             smk->indexes[i] = ast[i]->index;
             ast[i]->codec->codec_type = AVMEDIA_TYPE_AUDIO;
             if (smk->aflags[i] & SMK_AUD_BINKAUD) {
@@ -215,14 +217,14 @@ static int smacker_read_header(AVFormatContext *s)
     st->codec->extradata_size = smk->treesize + 16;
     if(!st->codec->extradata){
         av_log(s, AV_LOG_ERROR, "Cannot allocate %i bytes of extradata\n", smk->treesize + 16);
-        av_free(smk->frm_size);
-        av_free(smk->frm_flags);
+        av_freep(&smk->frm_size);
+        av_freep(&smk->frm_flags);
         return AVERROR(ENOMEM);
     }
     ret = avio_read(pb, st->codec->extradata + 16, st->codec->extradata_size - 16);
     if(ret != st->codec->extradata_size - 16){
-        av_free(smk->frm_size);
-        av_free(smk->frm_flags);
+        av_freep(&smk->frm_size);
+        av_freep(&smk->frm_flags);
         return AVERROR(EIO);
     }
     ((int32_t*)st->codec->extradata)[0] = av_le2ne32(smk->mmap_size);
@@ -329,7 +331,7 @@ static int smacker_read_packet(AVFormatContext *s, AVPacket *pkt)
             }
             flags >>= 1;
         }
-        if (frame_size < 0)
+        if (frame_size < 0 || frame_size >= INT_MAX/2)
             return AVERROR_INVALIDDATA;
         if (av_new_packet(pkt, frame_size + 769))
             return AVERROR(ENOMEM);
@@ -346,6 +348,8 @@ static int smacker_read_packet(AVFormatContext *s, AVPacket *pkt)
         smk->cur_frame++;
         smk->nextpos = avio_tell(s->pb);
     } else {
+        if (smk->stream_id[smk->curstream] < 0)
+            return AVERROR_INVALIDDATA;
         if (av_new_packet(pkt, smk->buf_sizes[smk->curstream]))
             return AVERROR(ENOMEM);
         memcpy(pkt->data, smk->bufs[smk->curstream], smk->buf_sizes[smk->curstream]);
@@ -365,9 +369,9 @@ static int smacker_read_close(AVFormatContext *s)
     int i;
 
     for(i = 0; i < 7; i++)
-        av_free(smk->bufs[i]);
-    av_free(smk->frm_size);
-    av_free(smk->frm_flags);
+        av_freep(&smk->bufs[i]);
+    av_freep(&smk->frm_size);
+    av_freep(&smk->frm_flags);
 
     return 0;
 }

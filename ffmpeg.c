@@ -2681,7 +2681,7 @@ static int check_keyboard_interaction(int64_t cur_time)
         char buf[4096], target[64], command[256], arg[256] = {0};
         double time;
         int k, n = 0;
-        fprintf(stderr, "\nEnter command: <target> <time> <command>[ <argument>]\n");
+        fprintf(stderr, "\nEnter command: <target>|all <time>|-1 <command>[ <argument>]\n");
         i = 0;
         while ((k = read_key()) != '\n' && k != '\r' && i < sizeof(buf)-1)
             if (k > 0)
@@ -2697,7 +2697,10 @@ static int check_keyboard_interaction(int64_t cur_time)
                     if (time < 0) {
                         ret = avfilter_graph_send_command(fg->graph, target, command, arg, buf, sizeof(buf),
                                                           key == 'c' ? AVFILTER_CMD_FLAG_ONE : 0);
-                        fprintf(stderr, "Command reply for stream %d: ret:%d res:%s\n", i, ret, buf);
+                        fprintf(stderr, "Command reply for stream %d: ret:%d res:\n%s", i, ret, buf);
+                    } else if (key == 'c') {
+                        fprintf(stderr, "Queing commands only on filters supporting the specific command is unsupported\n");
+                        ret = AVERROR_PATCHWELCOME;
                     } else {
                         ret = avfilter_graph_queue_command(fg->graph, target, command, arg, 0, time);
                     }
@@ -2734,7 +2737,8 @@ static int check_keyboard_interaction(int64_t cur_time)
                         "?      show this help\n"
                         "+      increase verbosity\n"
                         "-      decrease verbosity\n"
-                        "c      Send command to filtergraph\n"
+                        "c      Send command to first matching filter supporting it\n"
+                        "C      Send/Que command to all matching filters\n"
                         "D      cycle through available debug modes\n"
                         "h      dump packets/hex press to cycle through the 3 states\n"
                         "q      quit\n"
