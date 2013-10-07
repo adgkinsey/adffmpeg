@@ -277,6 +277,7 @@ enum AVCodecID {
     AV_CODEC_ID_AIC,
     AV_CODEC_ID_ESCAPE130_DEPRECATED,
     AV_CODEC_ID_G2M_DEPRECATED,
+    AV_CODEC_ID_WEBP_DEPRECATED,
 
     AV_CODEC_ID_BRENDER_PIX= MKBETAG('B','P','I','X'),
     AV_CODEC_ID_Y41P       = MKBETAG('Y','4','1','P'),
@@ -335,6 +336,8 @@ enum AVCodecID {
     AV_CODEC_ID_PCM_LXF,
     AV_CODEC_ID_S302M,
     AV_CODEC_ID_PCM_S8_PLANAR,
+    AV_CODEC_ID_PCM_S24LE_PLANAR_DEPRECATED,
+    AV_CODEC_ID_PCM_S32LE_PLANAR_DEPRECATED,
     AV_CODEC_ID_PCM_S24LE_PLANAR = MKBETAG(24,'P','S','P'),
     AV_CODEC_ID_PCM_S32LE_PLANAR = MKBETAG(32,'P','S','P'),
     AV_CODEC_ID_PCM_S16BE_PLANAR = MKBETAG('P','S','P',16),
@@ -2872,6 +2875,20 @@ typedef struct AVCodecContext {
 #define FF_SUB_CHARENC_MODE_AUTOMATIC    0  ///< libavcodec will select the mode itself
 #define FF_SUB_CHARENC_MODE_PRE_DECODER  1  ///< the AVPacket data needs to be recoded to UTF-8 before being fed to the decoder, requires iconv
 
+    /**
+     * Skip processing alpha if supported by codec.
+     * Note that if the format uses pre-multiplied alpha (common with VP6,
+     * and recommended due to better video quality/compression)
+     * the image will look as if alpha-blended onto a black background.
+     * However for formats that do not use pre-multiplied alpha
+     * there might be serious artefacts (though e.g. libswscale currently
+     * assumes pre-multiplied alpha anyway).
+     * Code outside libavcodec should access this field using AVOptions
+     *
+     * - decoding: set by user
+     * - encoding: unused
+     */
+    int skip_alpha;
 } AVCodecContext;
 
 AVRational av_codec_get_pkt_timebase         (const AVCodecContext *avctx);
@@ -3792,8 +3809,8 @@ attribute_deprecated int avcodec_decode_audio3(AVCodecContext *avctx, int16_t *s
  *                   to the frame if av_frame_is_writable() returns 1.
  *                   When AVCodecContext.refcounted_frames is set to 0, the returned
  *                   reference belongs to the decoder and is valid only until the
- *                   next call to this function or until closing the decoder.
- *                   The caller may not write to it.
+ *                   next call to this function or until closing or flushing the
+ *                   decoder. The caller may not write to it.
  * @param[out] got_frame_ptr Zero if no frame could be decoded, otherwise it is
  *                           non-zero.
  * @param[in]  avpkt The input AVPacket containing the input buffer.
@@ -3841,8 +3858,8 @@ int avcodec_decode_audio4(AVCodecContext *avctx, AVFrame *frame,
  *             to the frame if av_frame_is_writable() returns 1.
  *             When AVCodecContext.refcounted_frames is set to 0, the returned
  *             reference belongs to the decoder and is valid only until the
- *             next call to this function or until closing the decoder. The
- *             caller may not write to it.
+ *             next call to this function or until closing or flushing the
+ *             decoder. The caller may not write to it.
  *
  * @param[in] avpkt The input AVPacket containing the input buffer.
  *            You can create such packet with av_init_packet() and by then setting
@@ -4685,7 +4702,13 @@ int avcodec_fill_audio_frame(AVFrame *frame, int nb_channels,
                              int buf_size, int align);
 
 /**
- * Flush buffers, should be called when seeking or when switching to a different stream.
+ * Reset the internal decoder state / flush internal buffers. Should be called
+ * e.g. when seeking or when switching to a different stream.
+ *
+ * @note when refcounted frames are not used (i.e. avctx->refcounted_frames is 0),
+ * this invalidates the frames previously returned from the decoder. When
+ * refcounted frames are used, the decoder just releases any references it might
+ * keep internally, but the caller's reference remains valid.
  */
 void avcodec_flush_buffers(AVCodecContext *avctx);
 

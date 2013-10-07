@@ -25,7 +25,6 @@
 #include "libavcodec/internal.h"
 #include "libavcodec/raw.h"
 #include "libavcodec/bytestream.h"
-#include "libavutil/avassert.h"
 #include "libavutil/opt.h"
 #include "libavutil/dict.h"
 #include "libavutil/internal.h"
@@ -99,6 +98,14 @@ static int64_t wrap_timestamp(AVStream *st, int64_t timestamp)
 }
 
 MAKE_ACCESSORS(AVStream, stream, AVRational, r_frame_rate)
+
+static AVCodec *find_decoder(AVStream *st, enum AVCodecID codec_id)
+{
+    if (st->codec->codec)
+        return st->codec->codec;
+
+    return avcodec_find_decoder(codec_id);
+}
 
 int av_format_get_probe_score(const AVFormatContext *s)
 {
@@ -347,7 +354,6 @@ int av_probe_input_buffer2(AVIOContext *pb, AVInputFormat **fmt,
 
     for(probe_size= PROBE_BUF_MIN; probe_size<=max_probe_size && !*fmt;
         probe_size = FFMIN(probe_size<<1, FFMAX(max_probe_size, probe_size+1))) {
-        void *buftmp;
 
         if (probe_size < offset) {
             continue;
@@ -355,12 +361,8 @@ int av_probe_input_buffer2(AVIOContext *pb, AVInputFormat **fmt,
         score = probe_size < max_probe_size ? AVPROBE_SCORE_RETRY : 0;
 
         /* read probe data */
-        buftmp = av_realloc(buf, probe_size + AVPROBE_PADDING_SIZE);
-        if(!buftmp){
-            av_free(buf);
-            return AVERROR(ENOMEM);
-        }
-        buf=buftmp;
+        if ((ret = av_reallocp(&buf, probe_size + AVPROBE_PADDING_SIZE)) < 0)
+            return ret;
         if ((ret = avio_read(pb, buf + buf_offset, probe_size - buf_offset)) < 0) {
             /* fail if error was not end of file, otherwise, lower score */
             if (ret != AVERROR_EOF) {
@@ -579,7 +581,7 @@ static void force_codec_ids(AVFormatContext *s, AVStream *st)
     }
 }
 
-static void probe_codec(AVFormatContext *s, AVStream *st, const AVPacket *pkt)
+static int probe_codec(AVFormatContext *s, AVStream *st, const AVPacket *pkt)
 {
     if(st->request_probe>0){
         AVProbeData *pd = &st->probe_data;
@@ -589,8 +591,12 @@ static void probe_codec(AVFormatContext *s, AVStream *st, const AVPacket *pkt)
 
         if (pkt) {
             uint8_t *new_buf = av_realloc(pd->buf, pd->buf_size+pkt->size+AVPROBE_PADDING_SIZE);
-            if(!new_buf)
+            if(!new_buf) {
+                av_log(s, AV_LOG_WARNING,
+                       "Failed to reallocate probe buffer for stream %d\n",
+                       st->index);
                 goto no_packet;
+            }
             pd->buf = new_buf;
             memcpy(pd->buf+pd->buf_size, pkt->data, pkt->size);
             pd->buf_size += pkt->size;
@@ -622,11 +628,12 @@ no_packet:
             force_codec_ids(s, st);
         }
     }
+    return 0;
 }
 
 int ff_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    int ret, i;
+    int ret, i, err;
     AVStream *st;
 
     for(;;){
@@ -635,8 +642,10 @@ int ff_read_packet(AVFormatContext *s, AVPacket *pkt)
         if (pktl) {
             *pkt = pktl->pkt;
             st = s->streams[pkt->stream_index];
-            if (s->raw_packet_buffer_remaining_size <= 0)
-                probe_codec(s, st, NULL);
+            if (s->raw_packet_buffer_remaining_size <= 0) {
+                if ((err = probe_codec(s, st, NULL)) < 0)
+                    return err;
+            }
             if(st->request_probe <= 0){
                 s->raw_packet_buffer = pktl->next;
                 s->raw_packet_buffer_remaining_size += pkt->size;
@@ -655,7 +664,8 @@ int ff_read_packet(AVFormatContext *s, AVPacket *pkt)
             for (i = 0; i < s->nb_streams; i++) {
                 st = s->streams[i];
                 if (st->probe_packets) {
-                    probe_codec(s, st, NULL);
+                    if ((err = probe_codec(s, st, NULL)) < 0)
+                        return err;
                 }
                 av_assert0(st->request_probe <= 0);
             }
@@ -695,7 +705,8 @@ int ff_read_packet(AVFormatContext *s, AVPacket *pkt)
         add_to_pktbuf(&s->raw_packet_buffer, pkt, &s->raw_packet_buffer_end);
         s->raw_packet_buffer_remaining_size -= pkt->size;
 
-        probe_codec(s, st, pkt);
+        if ((err = probe_codec(s, st, pkt)) < 0)
+            return err;
     }
 }
 
@@ -2441,8 +2452,7 @@ static int try_decode_frame(AVStream *st, AVPacket *avpkt, AVDictionary **option
     if (!avcodec_is_open(st->codec) && !st->info->found_decoder) {
         AVDictionary *thread_opt = NULL;
 
-        codec = st->codec->codec ? st->codec->codec :
-                                   avcodec_find_decoder(st->codec->codec_id);
+        codec = find_decoder(st, st->codec->codec_id);
 
         if (!codec) {
             st->info->found_decoder = -1;
@@ -2693,8 +2703,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
                        avcodec_get_name(st->codec->codec_id));
             }
         }
-        codec = st->codec->codec ? st->codec->codec :
-                                   avcodec_find_decoder(st->codec->codec_id);
+        codec = find_decoder(st, st->codec->codec_id);
 
         /* force thread count to 1 since the h264 decoder will not extract SPS
          *  and PPS to extradata during multi-threaded decoding */
@@ -2779,7 +2788,8 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
             av_log(ic, AV_LOG_DEBUG, "Probe buffer size limit of %d bytes reached\n", ic->probesize);
             for (i = 0; i < ic->nb_streams; i++)
                 if (!ic->streams[i]->r_frame_rate.num &&
-                    ic->streams[i]->info->duration_count <= 1)
+                    ic->streams[i]->info->duration_count <= 1 &&
+                    strcmp(ic->iformat->name, "image2"))
                     av_log(ic, AV_LOG_WARNING,
                            "Stream #%d: not enough frames to estimate rate; "
                            "consider increasing probesize\n", i);
@@ -2974,7 +2984,8 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
                 double best_error = 0.01;
 
                 if (st->info->codec_info_duration        >= INT64_MAX / st->time_base.num / 2||
-                    st->info->codec_info_duration_fields >= INT64_MAX / st->time_base.den)
+                    st->info->codec_info_duration_fields >= INT64_MAX / st->time_base.den ||
+                    st->info->codec_info_duration        < 0)
                     continue;
                 av_reduce(&st->avg_frame_rate.num, &st->avg_frame_rate.den,
                           st->info->codec_info_duration_fields*(int64_t)st->time_base.den,
@@ -3143,7 +3154,7 @@ int av_find_best_stream(AVFormatContext *ic,
         if (st->disposition & (AV_DISPOSITION_HEARING_IMPAIRED|AV_DISPOSITION_VISUAL_IMPAIRED))
             continue;
         if (decoder_ret) {
-            decoder = avcodec_find_decoder(st->codec->codec_id);
+            decoder = find_decoder(st, st->codec->codec_id);
             if (!decoder) {
                 if (ret < 0)
                     ret = AVERROR_DECODER_NOT_FOUND;

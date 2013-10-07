@@ -170,9 +170,10 @@ static int decode_slice(MpegEncContext *s){
 
     if (s->avctx->hwaccel) {
         const uint8_t *start= s->gb.buffer + get_bits_count(&s->gb)/8;
-        const uint8_t *end  = ff_h263_find_resync_marker(s, start + 1, s->gb.buffer_end);
-        skip_bits_long(&s->gb, 8*(end - start));
-        return s->avctx->hwaccel->decode_slice(s->avctx, start, end - start);
+        ret = s->avctx->hwaccel->decode_slice(s->avctx, start, s->gb.buffer_end - start);
+        // ensure we exit decode loop
+        s->mb_y = s->mb_height;
+        return ret;
     }
 
     if(s->partitioned_frame){
@@ -595,17 +596,6 @@ retry:
         /* FIXME: By the way H263 decoder is evolving it should have */
         /* an H263EncContext                                         */
 
-    if ((!avctx->coded_width || !avctx->coded_height) && 0) {
-        ParseContext pc= s->parse_context; //FIXME move these demuxng hack to avformat
-
-        s->parse_context.buffer=0;
-        ff_MPV_common_end(s);
-        s->parse_context= pc;
-        avcodec_set_dimensions(avctx, s->width, s->height);
-
-        goto retry;
-    }
-
     if (s->width  != avctx->coded_width  ||
         s->height != avctx->coded_height ||
         s->context_reinit) {
@@ -672,7 +662,7 @@ retry:
     if (CONFIG_WMV2_DECODER && s->msmpeg4_version==5){
         ret = ff_wmv2_decode_secondary_picture_header(s);
         if(ret<0) return ret;
-        if(ret==1) goto intrax8_decoded;
+        if(ret==1) goto frame_end;
     }
 
     /* decode each macroblock */
@@ -705,7 +695,18 @@ retry:
 
     av_assert1(s->bitstream_buffer_size==0);
 frame_end:
+    ff_er_frame_end(&s->er);
+
+    if (avctx->hwaccel) {
+        if ((ret = avctx->hwaccel->end_frame(avctx)) < 0)
+            return ret;
+    }
+
+    ff_MPV_frame_end(s);
+
     /* divx 5.01+ bitstream reorder stuff */
+    /* Since this clobbers the input buffer and hwaccel codecs still need the
+     * data during hwaccel->end_frame we should not do this any earlier */
     if(s->codec_id==AV_CODEC_ID_MPEG4 && s->divx_packed){
         int current_pos= s->gb.buffer == s->bitstream_buffer ? 0 : (get_bits_count(&s->gb)>>3);
         int startcode_found=0;
@@ -731,16 +732,6 @@ frame_end:
             s->bitstream_buffer_size= buf_size - current_pos;
         }
     }
-
-intrax8_decoded:
-    ff_er_frame_end(&s->er);
-
-    if (avctx->hwaccel) {
-        if ((ret = avctx->hwaccel->end_frame(avctx)) < 0)
-            return ret;
-    }
-
-    ff_MPV_frame_end(s);
 
     if (!s->divx_packed && avctx->hwaccel)
         ff_thread_finish_setup(avctx);

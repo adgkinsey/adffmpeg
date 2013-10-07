@@ -142,8 +142,13 @@ static int smacker_read_header(AVFormatContext *s)
         av_log(s, AV_LOG_ERROR, "Too many frames: %i\n", smk->frames);
         return AVERROR_INVALIDDATA;
     }
-    smk->frm_size = av_malloc(smk->frames * 4);
+    smk->frm_size = av_malloc_array(smk->frames, sizeof(*smk->frm_size));
     smk->frm_flags = av_malloc(smk->frames);
+    if (!smk->frm_size || !smk->frm_flags) {
+        av_freep(&smk->frm_size);
+        av_freep(&smk->frm_flags);
+        return AVERROR(ENOMEM);
+    }
 
     smk->is_ver4 = (smk->magic != MKTAG('S', 'M', 'K', '2'));
 
@@ -309,7 +314,7 @@ static int smacker_read_packet(AVFormatContext *s, AVPacket *pkt)
         for(i = 0; i < 7; i++) {
             if(flags & 1) {
                 uint32_t size;
-                uint8_t *tmpbuf;
+                int err;
 
                 size = avio_rl32(s->pb) - 4;
                 if (!size || size + 4L > frame_size) {
@@ -319,10 +324,10 @@ static int smacker_read_packet(AVFormatContext *s, AVPacket *pkt)
                 frame_size -= size;
                 frame_size -= 4;
                 smk->curstream++;
-                tmpbuf = av_realloc(smk->bufs[smk->curstream], size);
-                if (!tmpbuf)
-                    return AVERROR(ENOMEM);
-                smk->bufs[smk->curstream] = tmpbuf;
+                if ((err = av_reallocp(&smk->bufs[smk->curstream], size)) < 0) {
+                    smk->buf_sizes[smk->curstream] = 0;
+                    return err;
+                }
                 smk->buf_sizes[smk->curstream] = size;
                 ret = avio_read(s->pb, smk->bufs[smk->curstream], size);
                 if(ret != size)
@@ -348,7 +353,7 @@ static int smacker_read_packet(AVFormatContext *s, AVPacket *pkt)
         smk->cur_frame++;
         smk->nextpos = avio_tell(s->pb);
     } else {
-        if (smk->stream_id[smk->curstream] < 0)
+        if (smk->stream_id[smk->curstream] < 0 || !smk->bufs[smk->curstream])
             return AVERROR_INVALIDDATA;
         if (av_new_packet(pkt, smk->buf_sizes[smk->curstream]))
             return AVERROR(ENOMEM);

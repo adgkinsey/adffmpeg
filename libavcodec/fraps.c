@@ -94,7 +94,8 @@ static int fraps2_decode_plane(FrapsContext *s, uint8_t *dst, int stride, int w,
     for (i = 0; i < 256; i++)
         nodes[i].count = bytestream_get_le32(&src);
     size -= 1024;
-    if ((ret = ff_huff_build_tree(s->avctx, &vlc, 256, nodes, huff_cmp,
+    if ((ret = ff_huff_build_tree(s->avctx, &vlc, 256, FF_HUFFMAN_BITS,
+                                  nodes, huff_cmp,
                                   FF_HUFFMAN_FLAG_ZERO_COUNT)) < 0)
         return ret;
     /* we have built Huffman table and are ready to decode plane */
@@ -142,6 +143,11 @@ static int decode_frame(AVCodecContext *avctx,
     int i, j, ret, is_chroma;
     const int planes = 3;
     uint8_t *out;
+
+    if (buf_size < 4) {
+        av_log(avctx, AV_LOG_ERROR, "Packet is too short\n");
+        return AVERROR_INVALIDDATA;
+    }
 
     header      = AV_RL32(buf);
     version     = header & 0xff;
@@ -201,6 +207,7 @@ static int decode_frame(AVCodecContext *avctx,
 
     avctx->pix_fmt = version & 1 ? AV_PIX_FMT_BGR24 : AV_PIX_FMT_YUVJ420P;
     avctx->color_range = version & 1 ? AVCOL_RANGE_UNSPECIFIED : AVCOL_RANGE_JPEG;
+    avctx->colorspace = version & 1 ? AVCOL_SPC_UNSPECIFIED : AVCOL_SPC_BT709;
 
     if ((ret = ff_thread_get_buffer(avctx, &frame, 0)) < 0)
         return ret;

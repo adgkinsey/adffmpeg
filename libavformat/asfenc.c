@@ -21,6 +21,7 @@
 
 #include "libavutil/avassert.h"
 #include "libavutil/dict.h"
+#include "libavutil/mathematics.h"
 #include "avformat.h"
 #include "avio_internal.h"
 #include "internal.h"
@@ -183,6 +184,8 @@
      1 -         /* Payload Flags */                      \
      2 * PAYLOAD_HEADER_SIZE_MULTIPLE_PAYLOADS)
 
+#define DATA_HEADER_SIZE 50
+
 typedef struct {
     uint32_t seqno;
     int is_streamed;
@@ -206,6 +209,7 @@ typedef struct {
     uint16_t maximum_packet;
     uint32_t next_packet_number;
     uint16_t next_packet_count;
+    uint64_t next_packet_offset;
     int      next_start_sec;
     int      end_sec;
 } ASFContext;
@@ -286,6 +290,64 @@ static int64_t unix_to_file_time(int ti)
     t  = ti * INT64_C(10000000);
     t += INT64_C(116444736000000000);
     return t;
+}
+
+static int32_t get_send_time(ASFContext *asf, int64_t pres_time, uint64_t *offset)
+{
+    int i;
+    int32_t send_time = 0;
+    *offset = asf->data_offset + DATA_HEADER_SIZE;
+    for (i = 0; i < asf->next_start_sec; i++) {
+        if (pres_time <= asf->index_ptr[i].send_time)
+            break;
+        send_time = asf->index_ptr[i].send_time;
+        *offset   = asf->index_ptr[i].offset;
+    }
+
+    return send_time / 10000;
+}
+
+static int asf_write_markers(AVFormatContext *s)
+{
+    ASFContext *asf = s->priv_data;
+    AVIOContext *pb = s->pb;
+    int i;
+    AVRational scale = {1, 10000000};
+    int64_t hpos = put_header(pb, &ff_asf_marker_header);
+
+    ff_put_guid(pb, &ff_asf_reserved_4);// ASF spec mandates this reserved value
+    avio_wl32(pb, s->nb_chapters);     // markers count
+    avio_wl16(pb, 0);                  // ASF spec mandates 0 for this
+    avio_wl16(pb, 0);                  // name length 0, no name given
+
+    for (i = 0; i < s->nb_chapters; i++) {
+        AVChapter *c = s->chapters[i];
+        AVDictionaryEntry *t = av_dict_get(c->metadata, "title", NULL, 0);
+        int64_t pres_time = av_rescale_q(c->start, c->time_base, scale);
+        uint64_t offset;
+        int32_t send_time = get_send_time(asf, pres_time, &offset);
+        int len = 0;
+        uint8_t *buf;
+        AVIOContext *dyn_buf;
+        if (t) {
+            if (avio_open_dyn_buf(&dyn_buf) < 0)
+                return AVERROR(ENOMEM);
+            avio_put_str16le(dyn_buf, t->value);
+            len = avio_close_dyn_buf(dyn_buf, &buf);
+        }
+        avio_wl64(pb, offset);            // offset of the packet with send_time
+        avio_wl64(pb, pres_time + PREROLL_TIME * 10000); // presentation time
+        avio_wl16(pb, 12 + len);          // entry length
+        avio_wl32(pb, send_time);         // send time
+        avio_wl32(pb, 0);                 // flags, should be 0
+        avio_wl32(pb, len / 2);           // marker desc length in WCHARS!
+        if (t) {
+            avio_write(pb, buf, len);     // marker desc
+            av_freep(&buf);
+        }
+    }
+    end_header(pb, hpos);
+    return 0;
 }
 
 /* write the header (used two times if non streamed) */
@@ -389,7 +451,12 @@ static int asf_write_header1(AVFormatContext *s, int64_t file_size,
         }
         end_header(pb, hpos);
     }
-
+    /* chapters using ASF markers */
+    if (!asf->is_streamed && s->nb_chapters) {
+        int ret;
+        if (ret = asf_write_markers(s))
+            return ret;
+    }
     /* stream headers */
     for (n = 0; n < s->nb_streams; n++) {
         int64_t es_pos;
@@ -520,14 +587,14 @@ static int asf_write_header1(AVFormatContext *s, int64_t file_size,
     cur_pos     = avio_tell(pb);
     header_size = cur_pos - header_offset;
     if (asf->is_streamed) {
-        header_size += 8 + 30 + 50;
+        header_size += 8 + 30 + DATA_HEADER_SIZE;
 
         avio_seek(pb, header_offset - 10 - 30, SEEK_SET);
         avio_wl16(pb, header_size);
         avio_seek(pb, header_offset - 2 - 30, SEEK_SET);
         avio_wl16(pb, header_size);
 
-        header_size -= 8 + 30 + 50;
+        header_size -= 8 + 30 + DATA_HEADER_SIZE;
     }
     header_size += 24 + 6;
     avio_seek(pb, header_offset - 14, SEEK_SET);
@@ -556,10 +623,10 @@ static int asf_write_header(AVFormatContext *s)
     asf->nb_index_memory_alloc = ASF_INDEX_BLOCK;
     asf->maximum_packet        = 0;
 
-    /* the data-chunk-size has to be 50, which is data_size - asf->data_offset
-     *  at the moment this function is done. It is needed to use asf as
-     *  streamable format. */
-    if (asf_write_header1(s, 0, 50) < 0) {
+    /* the data-chunk-size has to be 50 (DATA_HEADER_SIZE), which is
+     * data_size - asf->data_offset at the moment this function is done.
+     * It is needed to use asf as a streamable format. */
+    if (asf_write_header1(s, 0, DATA_HEADER_SIZE) < 0) {
         //av_free(asf);
         return -1;
     }
@@ -761,7 +828,8 @@ static void put_frame(AVFormatContext *s, ASFStream *stream, AVStream *avst,
 }
 
 static int update_index(AVFormatContext *s, int start_sec,
-                         uint32_t packet_number, uint16_t packet_count)
+                         uint32_t packet_number, uint16_t packet_count,
+                         uint64_t packet_offset)
 {
     ASFContext *asf = s->priv_data;
 
@@ -771,6 +839,7 @@ static int update_index(AVFormatContext *s, int start_sec,
         if (!asf->next_start_sec) {
             asf->next_packet_number = packet_number;
             asf->next_packet_count  = packet_count;
+            asf->next_packet_offset = packet_offset;
         }
 
         if (start_sec > asf->nb_index_memory_alloc) {
@@ -786,11 +855,15 @@ static int update_index(AVFormatContext *s, int start_sec,
         for (i = asf->next_start_sec; i < start_sec; i++) {
             asf->index_ptr[i].packet_number = asf->next_packet_number;
             asf->index_ptr[i].packet_count  = asf->next_packet_count;
+            asf->index_ptr[i].send_time     = asf->next_start_sec * INT64_C(10000000);
+            asf->index_ptr[i].offset        = asf->next_packet_offset;
+
         }
     }
     asf->maximum_packet     = FFMAX(asf->maximum_packet, packet_count);
     asf->next_packet_number = packet_number;
     asf->next_packet_count  = packet_count;
+    asf->next_packet_offset = packet_offset;
     asf->next_start_sec     = start_sec;
 
     return 0;
@@ -799,6 +872,7 @@ static int update_index(AVFormatContext *s, int start_sec,
 static int asf_write_packet(AVFormatContext *s, AVPacket *pkt)
 {
     ASFContext *asf = s->priv_data;
+    AVIOContext *pb = s->pb;
     ASFStream *stream;
     AVCodecContext *codec;
     uint32_t packet_number;
@@ -806,6 +880,7 @@ static int asf_write_packet(AVFormatContext *s, AVPacket *pkt)
     int start_sec;
     int flags = pkt->flags;
     int ret;
+    uint64_t offset = avio_tell(pb);
 
     codec  = s->streams[pkt->stream_index]->codec;
     stream = &asf->streams[pkt->stream_index];
@@ -828,7 +903,8 @@ static int asf_write_packet(AVFormatContext *s, AVPacket *pkt)
     /* check index */
     if ((!asf->is_streamed) && (flags & AV_PKT_FLAG_KEY)) {
         uint16_t packet_count = asf->nb_packets - packet_number;
-        if ((ret = update_index(s, start_sec, packet_number, packet_count)) < 0)
+        ret = update_index(s, start_sec, packet_number, packet_count, offset);
+        if (ret < 0)
             return ret;
     }
     asf->end_sec = start_sec;
@@ -869,7 +945,7 @@ static int asf_write_trailer(AVFormatContext *s)
     /* write index */
     data_size = avio_tell(s->pb);
     if (!asf->is_streamed && asf->next_start_sec) {
-        if ((ret = update_index(s, asf->end_sec + 1, 0, 0)) < ret)
+        if ((ret = update_index(s, asf->end_sec + 1, 0, 0, 0)) < 0)
             return ret;
         asf_write_index(s, asf->index_ptr, asf->maximum_packet, asf->next_start_sec);
     }

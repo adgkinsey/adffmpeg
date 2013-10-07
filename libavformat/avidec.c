@@ -692,11 +692,12 @@ static int avi_read_header(AVFormatContext *s)
                     if (st->codec->codec_tag == 0 && st->codec->height > 0 &&
                         st->codec->extradata_size < 1U << 30) {
                         st->codec->extradata_size += 9;
-                        st->codec->extradata       = av_realloc_f(st->codec->extradata,
-                                                                  1,
-                                                                  st->codec->extradata_size +
-                                                                  FF_INPUT_BUFFER_PADDING_SIZE);
-                        if (st->codec->extradata)
+                        if ((ret = av_reallocp(&st->codec->extradata,
+                                               st->codec->extradata_size +
+                                               FF_INPUT_BUFFER_PADDING_SIZE)) < 0) {
+                            st->codec->extradata_size = 0;
+                            return ret;
+                        } else
                             memcpy(st->codec->extradata + st->codec->extradata_size - 9,
                                    "BottomUp", 9);
                     }
@@ -904,7 +905,8 @@ fail:
 
 static int read_gab2_sub(AVStream *st, AVPacket *pkt)
 {
-    if (pkt->data && !strcmp(pkt->data, "GAB2") && AV_RL16(pkt->data + 5) == 2) {
+    if (pkt->size >= 7 &&
+        !strcmp(pkt->data, "GAB2") && AV_RL16(pkt->data + 5) == 2) {
         uint8_t desc[256];
         int score      = AVPROBE_SCORE_EXTENSION, ret;
         AVIStream *ast = st->priv_data;
@@ -1487,7 +1489,9 @@ static int guess_ni_flag(AVFormatContext *s)
     avio_seek(s->pb, oldpos, SEEK_SET);
     if (last_start > first_end)
         return 1;
-    idx= av_mallocz(sizeof(*idx) * s->nb_streams);
+    idx= av_calloc(s->nb_streams, sizeof(*idx));
+    if (!idx)
+        return 0;
     for (min_pos=pos=0; min_pos!=INT64_MAX; pos= min_pos+1LU) {
         int64_t max_dts = INT64_MIN/2, min_dts= INT64_MAX/2;
         min_pos = INT64_MAX;

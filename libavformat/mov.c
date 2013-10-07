@@ -981,6 +981,7 @@ static int mov_read_extradata(MOVContext *c, AVIOContext *pb, MOVAtom atom,
     AVStream *st;
     uint64_t size;
     uint8_t *buf;
+    int err;
 
     if (c->fc->nb_streams < 1) // will happen with jp2 files
         return 0;
@@ -992,11 +993,11 @@ static int mov_read_extradata(MOVContext *c, AVIOContext *pb, MOVAtom atom,
     size= (uint64_t)st->codec->extradata_size + atom.size + 8 + FF_INPUT_BUFFER_PADDING_SIZE;
     if (size > INT_MAX || (uint64_t)atom.size > INT_MAX)
         return AVERROR_INVALIDDATA;
-    buf= av_realloc(st->codec->extradata, size);
-    if (!buf)
-        return AVERROR(ENOMEM);
-    st->codec->extradata= buf;
-    buf+= st->codec->extradata_size;
+    if ((err = av_reallocp(&st->codec->extradata, size)) < 0) {
+        st->codec->extradata_size = 0;
+        return err;
+    }
+    buf = st->codec->extradata + st->codec->extradata_size;
     st->codec->extradata_size= size - FF_INPUT_BUFFER_PADDING_SIZE;
     AV_WB32(       buf    , atom.size + 8);
     AV_WL32(       buf + 4, atom.type);
@@ -1921,10 +1922,15 @@ static int mov_read_stts(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
         sample_count=avio_rb32(pb);
         sample_duration = avio_rb32(pb);
+
         /* sample_duration < 0 is invalid based on the spec */
         if (sample_duration < 0) {
             av_log(c->fc, AV_LOG_ERROR, "Invalid SampleDelta in STTS %d\n", sample_duration);
             sample_duration = 1;
+        }
+        if (sample_count < 0) {
+            av_log(c->fc, AV_LOG_ERROR, "Invalid sample_count=%d\n", sample_count);
+            return AVERROR_INVALIDDATA;
         }
         sc->stts_data[i].count= sample_count;
         sc->stts_data[i].duration= sample_duration;
@@ -3396,7 +3402,7 @@ static int mov_read_header(AVFormatContext *s)
         for (i = 0; i < s->nb_streams; i++) {
             AVStream *st = s->streams[i];
             MOVStreamContext *sc = st->priv_data;
-            if (st->duration)
+            if (st->duration > 0)
                 st->codec->bit_rate = sc->data_size * 8 * sc->time_scale / st->duration;
         }
     }

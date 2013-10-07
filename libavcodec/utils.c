@@ -40,7 +40,6 @@
 #include "libavutil/imgutils.h"
 #include "libavutil/samplefmt.h"
 #include "libavutil/dict.h"
-#include "libavutil/avassert.h"
 #include "avcodec.h"
 #include "dsputil.h"
 #include "libavutil/opt.h"
@@ -2485,8 +2484,11 @@ static enum AVCodecID remap_deprecated_codec_id(enum AVCodecID id)
 //         case AV_CODEC_ID_UTVIDEO_DEPRECATED: return AV_CODEC_ID_UTVIDEO;
         case AV_CODEC_ID_OPUS_DEPRECATED: return AV_CODEC_ID_OPUS;
         case AV_CODEC_ID_TAK_DEPRECATED : return AV_CODEC_ID_TAK;
+        case AV_CODEC_ID_PCM_S24LE_PLANAR_DEPRECATED : return AV_CODEC_ID_PCM_S24LE_PLANAR;
+        case AV_CODEC_ID_PCM_S32LE_PLANAR_DEPRECATED : return AV_CODEC_ID_PCM_S32LE_PLANAR;
         case AV_CODEC_ID_ESCAPE130_DEPRECATED : return AV_CODEC_ID_ESCAPE130;
         case AV_CODEC_ID_G2M_DEPRECATED : return AV_CODEC_ID_G2M;
+        case AV_CODEC_ID_WEBP_DEPRECATED: return AV_CODEC_ID_WEBP;
         default                         : return id;
     }
 }
@@ -2630,6 +2632,7 @@ void avcodec_string(char *buf, int buf_size, AVCodecContext *enc, int encode)
     case AVMEDIA_TYPE_VIDEO:
         if (enc->pix_fmt != AV_PIX_FMT_NONE) {
             char detail[256] = "(";
+            const char *colorspace_name;
             snprintf(buf + strlen(buf), buf_size - strlen(buf),
                      ", %s",
                      av_get_pix_fmt_name(enc->pix_fmt));
@@ -2639,21 +2642,11 @@ void avcodec_string(char *buf, int buf_size, AVCodecContext *enc, int encode)
             if (enc->color_range != AVCOL_RANGE_UNSPECIFIED)
                 av_strlcatf(detail, sizeof(detail),
                             enc->color_range == AVCOL_RANGE_MPEG ? "tv, ": "pc, ");
-            if (enc->colorspace<9U) {
-                static const char *name[] =  {
-                    "GBR",
-                    "bt709",
-                    NULL,
-                    NULL,
-                    "fcc",
-                    "bt470bg",
-                    "smpte170m",
-                    "smpte240m",
-                    "YCgCo",
-                };
-                if (name[enc->colorspace])
-                    av_strlcatf(detail, sizeof(detail), "%s, ", name[enc->colorspace]);
-            }
+
+            colorspace_name = av_get_colorspace_name(enc->colorspace);
+            if (colorspace_name)
+                av_strlcatf(detail, sizeof(detail), "%s, ", colorspace_name);
+
             if (strlen(detail) > 1) {
                 detail[strlen(detail) - 2] = 0;
                 av_strlcatf(buf, buf_size, "%s)", detail);

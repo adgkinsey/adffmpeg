@@ -24,7 +24,6 @@
 #include "libavcodec/internal.h"
 #include "libavutil/avutil.h"
 #include "libavutil/mem.h"
-#include "url.h"
 #include "libavutil/time.h"
 
 #if HAVE_THREADS
@@ -42,7 +41,6 @@
 static int openssl_init;
 #if HAVE_THREADS
 #include <openssl/crypto.h>
-#include "libavutil/avutil.h"
 pthread_mutex_t *openssl_mutexes;
 static void openssl_lock(int mode, int type, const char *file, int line)
 {

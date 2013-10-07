@@ -935,6 +935,7 @@ static const MXFCodecUL mxf_intra_only_essence_container_uls[] = {
 /* intra-only PictureEssenceCoding ULs, where no corresponding EC UL exists */
 static const MXFCodecUL mxf_intra_only_picture_essence_coding_uls[] = {
     { { 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x0A,0x04,0x01,0x02,0x02,0x01,0x32,0x00,0x00 }, 14,       AV_CODEC_ID_H264 }, /* H.264/MPEG-4 AVC Intra Profiles */
+    { { 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x07,0x04,0x01,0x02,0x02,0x03,0x01,0x01,0x00 }, 14,   AV_CODEC_ID_JPEG2000 }, /* JPEG2000 Codestream */
     { { 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 },  0,       AV_CODEC_ID_NONE },
 };
 
@@ -1568,11 +1569,13 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
             st->codec->bits_per_coded_sample = descriptor->bits_per_sample;
 
             if (descriptor->sample_rate.den > 0) {
-                avpriv_set_pts_info(st, 64, descriptor->sample_rate.den, descriptor->sample_rate.num);
                 st->codec->sample_rate = descriptor->sample_rate.num / descriptor->sample_rate.den;
+                avpriv_set_pts_info(st, 64, descriptor->sample_rate.den, descriptor->sample_rate.num);
             } else {
-                av_log(mxf->fc, AV_LOG_WARNING, "invalid sample rate (%d/%d) found for stream #%d, time base forced to 1/48000\n",
-                       descriptor->sample_rate.num, descriptor->sample_rate.den, st->index);
+                av_log(mxf->fc, AV_LOG_WARNING,
+                       "invalid sample rate (%d/%d) found for stream #%d, time base forced to 1/48000\n",
+                       descriptor->sample_rate.num, descriptor->sample_rate.den,
+                       st->index);
                 avpriv_set_pts_info(st, 64, 1, 48000);
             }
 
@@ -2195,7 +2198,9 @@ static int mxf_set_audio_pts(MXFContext *mxf, AVCodecContext *codec, AVPacket *p
 {
     MXFTrack *track = mxf->fc->streams[pkt->stream_index]->priv_data;
     pkt->pts = track->sample_count;
-    if (codec->channels <= 0 || av_get_bits_per_sample(codec->codec_id) <= 0)
+    if (   codec->channels <= 0
+        || av_get_bits_per_sample(codec->codec_id) <= 0
+        || codec->channels * (int64_t)av_get_bits_per_sample(codec->codec_id) < 8)
         return AVERROR(EINVAL);
     track->sample_count += pkt->size / (codec->channels * (int64_t)av_get_bits_per_sample(codec->codec_id) / 8);
     return 0;

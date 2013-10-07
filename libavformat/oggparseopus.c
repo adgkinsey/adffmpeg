@@ -118,8 +118,9 @@ static int opus_packet(AVFormatContext *avf, int idx)
         skip = FFMIN(skip, os->pduration);
         if (skip > 0) {
             os->pduration = skip < os->pduration ? os->pduration - skip : 1;
-            av_log(avf, AV_LOG_WARNING,
-                   "Last packet must be truncated to %d (unimplemented).\n",
+            os->end_trimming = skip;
+            av_log(avf, AV_LOG_DEBUG,
+                   "Last packet was truncated to %d due to end trimming.\n",
                    os->pduration);
         }
     }

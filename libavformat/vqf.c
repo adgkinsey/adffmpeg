@@ -163,7 +163,7 @@ static int vqf_read_header(AVFormatContext *s)
 
         header_size -= len;
 
-    } while (header_size >= 0);
+    } while (header_size >= 0 && !url_feof(s->pb));
 
     switch (rate_flag) {
     case -1:
@@ -179,12 +179,19 @@ static int vqf_read_header(AVFormatContext *s)
         st->codec->sample_rate = 11025;
         break;
     default:
-        st->codec->sample_rate = rate_flag*1000;
-        if (st->codec->sample_rate <= 0) {
-            av_log(s, AV_LOG_ERROR, "sample rate %d is invalid\n", st->codec->sample_rate);
-            return -1;
+        if (rate_flag < 8 || rate_flag > 44) {
+            av_log(s, AV_LOG_ERROR, "Invalid rate flag %d\n", rate_flag);
+            return AVERROR_INVALIDDATA;
         }
+        st->codec->sample_rate = rate_flag*1000;
         break;
+    }
+
+    if (read_bitrate / st->codec->channels <  8 ||
+        read_bitrate / st->codec->channels > 48) {
+        av_log(s, AV_LOG_ERROR, "Invalid bitrate per channel %d\n",
+               read_bitrate / st->codec->channels);
+        return AVERROR_INVALIDDATA;
     }
 
     switch (((st->codec->sample_rate/1000) << 8) +

@@ -35,7 +35,6 @@
 #include "libavutil/colorspace.h"
 #include "libavutil/avassert.h"
 #include "libavutil/imgutils.h"
-#include "libavutil/opt.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/opt.h"
@@ -394,7 +393,7 @@ static const AVFilterPad avfilter_vf_pad_outputs[] = {
 
 AVFilter avfilter_vf_pad = {
     .name          = "pad",
-    .description   = NULL_IF_CONFIG_SMALL("Pad input image to width:height[:x:y[:color]] (default x and y: 0, default color: black)."),
+    .description   = NULL_IF_CONFIG_SMALL("Pad the input video."),
     .priv_size     = sizeof(PadContext),
     .priv_class    = &pad_class,
     .query_formats = query_formats,

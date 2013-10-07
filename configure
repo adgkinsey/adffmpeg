@@ -193,6 +193,7 @@ External library support:
   --enable-frei0r          enable frei0r video filtering
   --enable-gnutls          enable gnutls [no]
   --disable-iconv          disable iconv [autodetect]
+  --enable-ladspa          enable LADSPA audio filtering
   --enable-libaacplus      enable AAC+ encoding via libaacplus [no]
   --enable-libass          enable libass subtitles rendering [no]
   --enable-libbluray       enable BluRay reading using libbluray [no]
@@ -225,6 +226,7 @@ External library support:
   --enable-libshine        enable fixed-point MP3 encoding via libshine [no]
   --enable-libsoxr         enable Include libsoxr resampling [no]
   --enable-libspeex        enable Speex de/encoding via libspeex [no]
+  --enable-libssh          enable SFTP protocol via libssh [no]
   --enable-libstagefright-h264  enable H.264 decoding via libstagefright [no]
   --enable-libtheora       enable Theora encoding via libtheora [no]
   --enable-libtwolame      enable MP2 encoding via libtwolame [no]
@@ -1162,6 +1164,7 @@ EXTERNAL_LIBRARY_LIST="
     frei0r
     gnutls
     iconv
+    ladspa
     libaacplus
     libass
     libbluray
@@ -1192,6 +1195,7 @@ EXTERNAL_LIBRARY_LIST="
     libshine
     libsoxr
     libspeex
+    libssh
     libstagefright_h264
     libtheora
     libtwolame
@@ -2162,6 +2166,7 @@ librtmpe_protocol_deps="librtmp"
 librtmps_protocol_deps="librtmp"
 librtmpt_protocol_deps="librtmp"
 librtmpte_protocol_deps="librtmp"
+libssh_protocol_deps="libssh"
 mmsh_protocol_select="http_protocol"
 mmst_protocol_select="network"
 rtmp_protocol_deps="!librtmp_protocol"
@@ -2213,6 +2218,7 @@ histeq_filter_deps="gpl"
 hqdn3d_filter_deps="gpl"
 interlace_filter_deps="gpl"
 kerndeint_filter_deps="gpl"
+ladspa_filter_deps="ladspa dlopen"
 mcdeint_filter_deps="avcodec gpl"
 movie_filter_deps="avcodec avformat"
 mp_filter_deps="gpl avcodec swscale inline_asm"
@@ -2227,6 +2233,7 @@ owdenoise_filter_deps="gpl"
 pan_filter_deps="swresample"
 phase_filter_deps="gpl"
 pp_filter_deps="gpl postproc"
+pullup_filter_deps="gpl"
 removelogo_filter_deps="avcodec avformat swscale"
 sab_filter_deps="gpl swscale"
 scale_filter_deps="swscale"
@@ -2713,6 +2720,18 @@ ccc_flags(){
    done
 }
 
+cparser_flags(){
+    for flag; do
+        case $flag in
+            -Wno-switch)             echo -Wno-switch-enum ;;
+            -Wno-format-zero-length) ;;
+            -Wdisabled-optimization) ;;
+            -Wno-pointer-sign)       echo -Wno-other ;;
+            *)                       echo $flag ;;
+        esac
+    done
+}
+
 msvc_common_flags(){
     for flag; do
         case $flag in
@@ -2747,7 +2766,7 @@ msvc_flags(){
                                        -wd4146 -wd4057 -wd4204 -wd4706 -wd4305 \
                                        -wd4152 -wd4324 -we4013 -wd4100 -wd4214 \
                                        -wd4554 \
-                                       -wd4996 -wd4273 ;;
+                                       -wd4273 ;;
         esac
     done
 }
@@ -2972,7 +2991,7 @@ probe_cc(){
         _ld_lib='lib%.a'
         _ld_path='-libpath:'
         _flags='-nologo'
-        _cflags='-D_USE_MATH_DEFINES -Dinline=__inline -FIstdlib.h -Dstrtoll=_strtoi64'
+        _cflags='-D_USE_MATH_DEFINES -D_CRT_SECURE_NO_WARNINGS -Dinline=__inline -FIstdlib.h -Dstrtoll=_strtoi64'
         if [ $pfx = hostcc ]; then
             append _cflags -Dsnprintf=_snprintf
         fi
@@ -3005,6 +3024,13 @@ probe_cc(){
         if [ $pfx = hostcc ]; then
             append _cflags -Dsnprintf=_snprintf
         fi
+    elif $_cc --version 2>/dev/null | grep -q ^cparser; then
+        _type=cparser
+        _ident=$($_cc --version | head -n1)
+        _depflags='-MMD'
+        _cflags_speed='-O4'
+        _cflags_size='-O2'
+        _flags_filter=cparser_flags
     fi
 
     eval ${pfx}_type=\$_type
@@ -4193,6 +4219,7 @@ enabled avisynth          && { { check_lib2 "windows.h" LoadLibrary; } ||
 enabled fontconfig        && require_pkg_config fontconfig "fontconfig/fontconfig.h" FcInit
 enabled frei0r            && { check_header frei0r.h || die "ERROR: frei0r.h header not found"; }
 enabled gnutls            && require_pkg_config gnutls gnutls/gnutls.h gnutls_global_init
+enabled ladspa            && { check_header ladspa.h || die "ERROR: ladspa.h header not found"; }
 enabled libiec61883       && require libiec61883 libiec61883/iec61883.h iec61883_cmp_connect -lraw1394 -lavc1394 -lrom1394 -liec61883
 enabled libaacplus        && require "libaacplus >= 2.0.0" aacplus.h aacplusEncOpen -laacplus
 enabled libass            && require_pkg_config libass ass/ass.h ass_library_init
@@ -4227,6 +4254,7 @@ enabled librtmp           && require_pkg_config librtmp librtmp/rtmp.h RTMP_Sock
 enabled libschroedinger   && require_pkg_config schroedinger-1.0 schroedinger/schro.h schro_init
 enabled libshine          && require_pkg_config shine shine/layer3.h shine_encode_buffer
 enabled libsoxr           && require libsoxr soxr.h soxr_create -lsoxr
+enabled libssh            && require_pkg_config libssh libssh/sftp.h sftp_init
 enabled libspeex          && require libspeex speex/speex.h speex_decoder_init -lspeex
 enabled libstagefright_h264 && require_cpp libstagefright_h264 "binder/ProcessState.h media/stagefright/MetaData.h
     media/stagefright/MediaBufferGroup.h media/stagefright/MediaDebug.h media/stagefright/MediaDefs.h
@@ -4407,7 +4435,7 @@ enabled xmm_clobber_test &&
                   -Wl,--wrap,avcodec_decode_video2      \
                   -Wl,--wrap,avcodec_decode_subtitle2   \
                   -Wl,--wrap,avcodec_encode_audio2      \
-                  -Wl,--wrap,avcodec_encode_video       \
+                  -Wl,--wrap,avcodec_encode_video2      \
                   -Wl,--wrap,avcodec_encode_subtitle    \
                   -Wl,--wrap,sws_scale ||
     disable xmm_clobber_test
@@ -4501,6 +4529,9 @@ elif enabled clang; then
     check_cflags -Werror=implicit-function-declaration
     check_cflags -Werror=missing-prototypes
     check_cflags -Werror=return-type
+elif enabled cparser; then
+    add_cflags -Wno-missing-variable-declarations
+    add_cflags -Wno-empty-statement
 elif enabled armcc; then
     # 2523: use of inline assembler is deprecated
     add_cflags -W${armcc_opt},--diag_suppress=2523
@@ -4517,9 +4548,12 @@ elif enabled_any msvc icl; then
     enabled x86_32 && disable aligned_stack
     enabled_all x86_32 debug && add_cflags -Oy-
     enabled debug && add_ldflags -debug
+    enable pragma_deprecated
     if enabled icl; then
-        # basically -fstrict-aliasing that does not work (correctly) on icl 13.x
-        check_cpp_condition "windows.h" "__ICL < 1300" && add_cflags -Qansi-alias
+        # -Qansi-alias is basically -fstrict-aliasing, but does not work
+        # (correctly) on icl 13.x.
+        check_cpp_condition "windows.h" "__ICL < 1300 || __ICL >= 1400" &&
+            add_cflags -Qansi-alias
         # icl will pass the inline asm tests but inline asm is currently
         # not supported (build will fail)
         disable inline_asm

@@ -30,7 +30,6 @@
 #include "libavutil/common.h"
 #include "libavutil/eval.h"
 #include "libavutil/avstring.h"
-#include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/mathematics.h"
@@ -310,6 +309,11 @@ static int config_input_overlay(AVFilterLink *inlink)
 static int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
+    OverlayContext *s = ctx->priv;
+    int ret;
+
+    if ((ret = ff_dualinput_init(ctx, &s->dinput)) < 0)
+        return ret;
 
     outlink->w = ctx->inputs[MAIN]->w;
     outlink->h = ctx->inputs[MAIN]->h;

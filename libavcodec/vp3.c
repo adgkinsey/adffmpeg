@@ -1476,7 +1476,7 @@ static void render_slice(Vp3DecodeContext *s, int slice)
         uint8_t *output_plane = s->current_frame.f->data    [plane] + s->data_offset[plane];
         uint8_t *  last_plane = s->   last_frame.f->data    [plane] + s->data_offset[plane];
         uint8_t *golden_plane = s-> golden_frame.f->data    [plane] + s->data_offset[plane];
-        int stride            = s->current_frame.f->linesize[plane];
+        ptrdiff_t stride      = s->current_frame.f->linesize[plane];
         int plane_width       = s->width  >> (plane && s->chroma_x_shift);
         int plane_height      = s->height >> (plane && s->chroma_y_shift);
         int8_t (*motion_val)[2] = s->motion_val[!!plane];
@@ -1549,7 +1549,10 @@ static void render_slice(Vp3DecodeContext *s, int slice)
                             uint8_t *temp= s->edge_emu_buffer;
                             if(stride<0) temp -= 8*stride;
 
-                            s->vdsp.emulated_edge_mc(temp, motion_source, stride, 9, 9, src_x, src_y, plane_width, plane_height);
+                            s->vdsp.emulated_edge_mc(temp, stride,
+                                                     motion_source, stride,
+                                                     9, 9, src_x, src_y,
+                                                     plane_width, plane_height);
                             motion_source= temp;
                         }
                     }
@@ -2225,7 +2228,11 @@ static int theora_decode_header(AVCodecContext *avctx, GetBitContext *gb)
 
     fps.num = get_bits_long(gb, 32);
     fps.den = get_bits_long(gb, 32);
-    if (fps.num>0 && fps.den>0) {
+    if (fps.num && fps.den) {
+        if (fps.num < 0 || fps.den < 0) {
+            av_log(avctx, AV_LOG_ERROR, "Invalid framerate\n");
+            return AVERROR_INVALIDDATA;
+        }
         av_reduce(&avctx->time_base.num, &avctx->time_base.den,
                   fps.den, fps.num, 1<<30);
     }

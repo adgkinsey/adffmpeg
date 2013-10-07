@@ -476,6 +476,7 @@ static EbmlSyntax matroska_index_pos[] = {
     { MATROSKA_ID_CUETRACK,           EBML_UINT, 0, offsetof(MatroskaIndexPos,track) },
     { MATROSKA_ID_CUECLUSTERPOSITION, EBML_UINT, 0, offsetof(MatroskaIndexPos,pos)   },
     { MATROSKA_ID_CUERELATIVEPOSITION,EBML_NONE },
+    { MATROSKA_ID_CUEDURATION,        EBML_NONE },
     { MATROSKA_ID_CUEBLOCKNUMBER,     EBML_NONE },
     { 0 }
 };
@@ -919,7 +920,13 @@ static int ebml_parse_nest(MatroskaDemuxContext *matroska, EbmlSyntax *syntax,
             break;
         case EBML_STR:
         case EBML_UTF8:
-            *(char    **)((char *)data+syntax[i].data_offset) = av_strdup(syntax[i].def.s);
+            // the default may be NULL
+            if (syntax[i].def.s) {
+                uint8_t **dst = (uint8_t**)((uint8_t*)data + syntax[i].data_offset);
+                *dst = av_strdup(syntax[i].def.s);
+                if (!*dst)
+                    return AVERROR(ENOMEM);
+            }
             break;
         }
 
@@ -1766,7 +1773,13 @@ static int matroska_read_header(AVFormatContext *s)
             track->audio.sub_packet_h    = avio_rb16(&b);
             track->audio.frame_size      = avio_rb16(&b);
             track->audio.sub_packet_size = avio_rb16(&b);
-            track->audio.buf = av_malloc(track->audio.frame_size * track->audio.sub_packet_h);
+            if (flavor <= 0 || track->audio.coded_framesize <= 0 ||
+                track->audio.sub_packet_h <= 0 || track->audio.frame_size <= 0 ||
+                track->audio.sub_packet_size <= 0)
+                return AVERROR_INVALIDDATA;
+            track->audio.buf = av_malloc_array(track->audio.sub_packet_h, track->audio.frame_size);
+            if (!track->audio.buf)
+                return AVERROR(ENOMEM);
             if (codec_id == AV_CODEC_ID_RA_288) {
                 st->codec->block_align = track->audio.coded_framesize;
                 track->codec_priv.size = 0;
@@ -2552,12 +2565,12 @@ static int matroska_parse_block(MatroskaDemuxContext *matroska, uint8_t *data,
     if (matroska->skip_to_keyframe && track->type != MATROSKA_TRACK_TYPE_SUBTITLE) {
         if (timecode < matroska->skip_to_timecode)
             return res;
-        if (!st->skip_to_keyframe) {
+        if (is_keyframe)
+            matroska->skip_to_keyframe = 0;
+        else if (!st->skip_to_keyframe) {
             av_log(matroska->ctx, AV_LOG_ERROR, "File is broken, keyframes not correctly marked!\n");
             matroska->skip_to_keyframe = 0;
         }
-        if (is_keyframe)
-            matroska->skip_to_keyframe = 0;
     }
 
     res = matroska_parse_laces(matroska, &data, &size, (flags & 0x06) >> 1,

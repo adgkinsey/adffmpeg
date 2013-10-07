@@ -36,7 +36,6 @@
 #include "avfilter.h"
 #include "formats.h"
 #include "internal.h"
-#include "audio.h"
 
 static int ff_filter_frame_framed(AVFilterLink *link, AVFrame *frame);
 
@@ -577,7 +576,7 @@ static const AVClass avfilter_class = {
     .option           = avfilter_options,
 };
 
-static int default_execute(AVFilterContext *ctx, action_func *func, void *arg,
+static int default_execute(AVFilterContext *ctx, avfilter_action_func *func, void *arg,
                            int *ret, int nb_jobs)
 {
     int i;

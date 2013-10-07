@@ -9,9 +9,10 @@ To illustrate the sorts of things that are possible, we consider the
 following filtergraph.
 
 @example
+                [main]
 input --> split ---------------------> overlay --> output
             |                             ^
-            |                             |
+            |[tmp]                  [flip]|
             +-----> crop --> vflip -------+
 @end example
 
@@ -344,6 +345,33 @@ aconvert=fltp:stereo
 Convert input to unsigned 8-bit, automatically select out channel layout:
 @example
 aconvert=u8:auto
+@end example
+@end itemize
+
+@section adelay
+
+Delay one or more audio channels.
+
+Samples in delayed channel are filled with silence.
+
+The filter accepts the following option:
+
+@table @option
+@item delays
+Set list of delays in milliseconds for each channel separated by '|'.
+At least one delay greater than 0 should be provided.
+Unused delays will be silently ignored. If number of given delays is
+smaller than number of channels all remaining channels will not be delayed.
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Delay first channel by 1.5 seconds, the third channel by 0.5 seconds and leave
+the second channel (and any other channels that may be present) unchanged.
+@example
+adelay=1500:0:500
 @end example
 @end itemize
 
@@ -1372,6 +1400,117 @@ ffmpeg -i fl -i fr -i fc -i sl -i sr -i lfe -filter_complex
 'join=inputs=6:channel_layout=5.1:map=0.0-FL|1.0-FR|2.0-FC|3.0-SL|4.0-SR|5.0-LFE'
 out
 @end example
+
+@section ladspa
+
+Load a LADSPA (Linux Audio Developer's Simple Plugin API) plugin.
+
+To enable compilation of this filter you need to configure FFmpeg with
+@code{--enable-ladspa}.
+
+@table @option
+@item file, f
+Specifies the name of LADSPA plugin library to load. If the environment
+variable @env{LADSPA_PATH} is defined, the LADSPA plugin is searched in
+each one of the directories specified by the colon separated list in
+@env{LADSPA_PATH}, otherwise in the standard LADSPA paths, which are in
+this order: @file{HOME/.ladspa/lib/}, @file{/usr/local/lib/ladspa/},
+@file{/usr/lib/ladspa/}.
+
+@item plugin, p
+Specifies the plugin within the library. Some libraries contain only
+one plugin, but others contain many of them. If this is not set filter
+will list all available plugins within the specified library.
+
+@item controls, c
+Set the '|' separated list of controls which are zero or more floating point
+values that determine the behavior of the loaded plugin (for example delay,
+threshold or gain).
+Controls need to be defined using the following syntax:
+c0=@var{value0}|c1=@var{value1}|c2=@var{value2}|..., where
+@var{valuei} is the value set on the @var{i}-th control.
+If @option{controls} is set to @code{help}, all available controls and
+their valid ranges are printed.
+
+@item sample_rate, s
+Specify the sample rate, default to 44100. Only used if plugin have
+zero inputs.
+
+@item nb_samples, n
+Set the number of samples per channel per each output frame, default
+is 1024. Only used if plugin have zero inputs.
+
+@item duration, d
+Set the minimum duration of the sourced audio. See the function
+@code{av_parse_time()} for the accepted format, also check the "Time duration"
+section in the ffmpeg-utils manual.
+Note that the resulting duration may be greater than the specified duration,
+as the generated audio is always cut at the end of a complete frame.
+If not specified, or the expressed duration is negative, the audio is
+supposed to be generated forever.
+Only used if plugin have zero inputs.
+
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+List all available plugins within amp (LADSPA example plugin) library:
+@example
+ladspa=file=amp
+@end example
+
+@item
+List all available controls and their valid ranges for @code{vcf_notch}
+plugin from @code{VCF} library:
+@example
+ladspa=f=vcf:p=vcf_notch:c=help
+@end example
+
+@item
+Simulate low quality audio equipment using @code{Computer Music Toolkit} (CMT)
+plugin library:
+@example
+ladspa=file=cmt:plugin=lofi:controls=c0=22|c1=12|c2=12
+@end example
+
+@item
+Add reverberation to the audio using TAP-plugins
+(Tom's Audio Processing plugins):
+@example
+ladspa=file=tap_reverb:tap_reverb
+@end example
+
+@item
+Generate white noise, with 0.2 amplitude:
+@example
+ladspa=file=cmt:noise_source_white:c=c0=.2
+@end example
+
+@item
+Generate 20 bpm clicks using plugin @code{C* Click - Metronome} from the
+@code{C* Audio Plugin Suite} (CAPS) library:
+@example
+ladspa=file=caps:Click:c=c1=20'
+@end example
+
+@item
+Apply @code{C* Eq10X2 - Stereo 10-band equaliser} effect:
+@example
+ladspa=caps:Eq10X2:c=c0=-48|c9=-24|c3=12|c4=2
+@end example
+@end itemize
+
+@subsection Commands
+
+This filter supports the following commands:
+@table @option
+@item cN
+Modify the @var{N}-th control value.
+
+If the specified value is not valid, it is ignored and prior one is kept.
+@end table
 
 @section lowpass
 
@@ -5179,8 +5318,6 @@ The list of the currently supported filters follows:
 @item fspp
 @item ilpack
 @item pp7
-@item pullup
-@item qp
 @item softpulldown
 @item uspp
 @end table
@@ -6156,6 +6293,68 @@ movie=ref_movie.mpg, setpts=PTS-STARTPTS [main];
 On this example the input file being processed is compared with the
 reference file @file{ref_movie.mpg}. The PSNR of each individual frame
 is stored in @file{stats.log}.
+
+@section pullup
+
+Pulldown reversal (inverse telecine) filter, capable of handling mixed
+hard-telecine, 24000/1001 fps progressive, and 30000/1001 fps progressive
+content.
+
+The pullup filter is designed to take advantage of future context in making
+its decisions. This filter is stateless in the sense that it does not lock
+onto a pattern to follow, but it instead looks forward to the following
+fields in order to identify matches and rebuild progressive frames.
+
+To produce content with an even framerate, insert the fps filter after
+pullup, use @code{fps=24000/1001} if the input frame rate is 29.97fps,
+@code{fps=24} for 30fps and the (rare) telecined 25fps input.
+
+The filter accepts the following options:
+
+@table @option
+@item jl
+@item jr
+@item jt
+@item jb
+These options set the amount of "junk" to ignore at the left, right, top, and
+bottom of the image, respectively. Left and right are in units of 8 pixels,
+while top and bottom are in units of 2 lines.
+The default is 8 pixels on each side.
+
+@item sb
+Set the strict breaks. Setting this option to 1 will reduce the chances of
+filter generating an occasional mismatched frame, but it may also cause an
+excessive number of frames to be dropped during high motion sequences.
+Conversely, setting it to -1 will make filter match fields more easily.
+This may help processing of video where there is slight blurring between
+the fields, but may also cause there to be interlaced frames in the output.
+Default value is @code{0}.
+
+@item mp
+Set the metric plane to use. It accepts the following values:
+@table @samp
+@item l
+Use luma plane.
+
+@item u
+Use chroma blue plane.
+
+@item v
+Use chroma red plane.
+@end table
+
+This option may be set to use chroma plane instead of the default luma plane
+for doing filter's computations. This may improve accuracy on very clean
+source material, but more likely will decrease accuracy, especially if there
+is chroma noise (rainbow effect) or any grayscale video.
+The main purpose of setting @option{mp} to a chroma plane is to reduce CPU
+load and make pullup usable in realtime on slow machines.
+@end table
+
+For example to inverse telecined NTSC input:
+@example
+pullup,fps=24000/1001
+@end example
 
 @section removelogo
 
@@ -7654,8 +7853,15 @@ percentage to zoom (default: 0)
 @end table
 
 @item optzoom
-if 1 then optimal zoom value is determined (default).
-Optimal zoom means no (or only little) border should be visible.
+set optimal zooming to avoid borders
+@table @samp
+@item 0
+disabled
+@item 1
+optimal static zoom value is determined (only very strong movements will lead to visible borders) (default)
+@item 2
+optimal adaptive zoom value is determined (no borders will be visible)
+@end table
 Note that the value given at zoom is added to the one calculated
 here.
 
@@ -8993,13 +9199,13 @@ select='not(mod(n\,100))'
 @item
 Select only frames contained in the 10-20 time interval:
 @example
-select='gte(t\,10)*lte(t\,20)'
+select=between(t\,10\,20)
 @end example
 
 @item
 Select only I frames contained in the 10-20 time interval:
 @example
-select='gte(t\,10)*lte(t\,20)*eq(pict_type\,I)'
+select=between(t\,10\,20)*eq(pict_type\,I)
 @end example
 
 @item

@@ -48,6 +48,7 @@ void avfilter_register_all(void)
 #if FF_API_ACONVERT_FILTER
     REGISTER_FILTER(ACONVERT,       aconvert,       af);
 #endif
+    REGISTER_FILTER(ADELAY,         adelay,         af);
     REGISTER_FILTER(AECHO,          aecho,          af);
     REGISTER_FILTER(AFADE,          afade,          af);
     REGISTER_FILTER(AFORMAT,        aformat,        af);
@@ -86,6 +87,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(EQUALIZER,      equalizer,      af);
     REGISTER_FILTER(HIGHPASS,       highpass,       af);
     REGISTER_FILTER(JOIN,           join,           af);
+    REGISTER_FILTER(LADSPA,         ladspa,         af);
     REGISTER_FILTER(LOWPASS,        lowpass,        af);
     REGISTER_FILTER(PAN,            pan,            af);
     REGISTER_FILTER(RESAMPLE,       resample,       af);
@@ -167,6 +169,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(PIXDESCTEST,    pixdesctest,    vf);
     REGISTER_FILTER(PP,             pp,             vf);
     REGISTER_FILTER(PSNR,           psnr,           vf);
+    REGISTER_FILTER(PULLUP,         pullup,         vf);
     REGISTER_FILTER(REMOVELOGO,     removelogo,     vf);
     REGISTER_FILTER(ROTATE,         rotate,         vf);
     REGISTER_FILTER(SAB,            sab,            vf);
