@@ -57,7 +57,7 @@ FATE_FILTER_VSYNTH-$(CONFIG_HISTOGRAM_FILTER) += fate-filter-histogram-levels
 fate-filter-histogram-levels: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf histogram -flags +bitexact -sws_flags +accurate_rnd+bitexact
 
 FATE_FILTER_VSYNTH-$(CONFIG_HISTOGRAM_FILTER) += fate-filter-histogram-waveform
-fate-filter-histogram-waveform: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf histogram=mode=waveform -flags +bitexact -sws_flags +accurate_rnd+bitexact
+fate-filter-histogram-waveform: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf format=yuv444p,histogram=mode=waveform -flags +bitexact -sws_flags +accurate_rnd+bitexact
 
 FATE_FILTER_VSYNTH-$(CONFIG_OVERLAY_FILTER) += fate-filter-overlay
 fate-filter-overlay: tests/data/filtergraphs/overlay
@@ -243,6 +243,9 @@ fate-filter-pixfmts-crop:  CMD = pixfmts "100:100:100:100"
 
 FATE_FILTER_PIXFMTS-$(CONFIG_FIELD_FILTER) += fate-filter-pixfmts-field
 fate-filter-pixfmts-field: CMD = pixfmts "bottom"
+
+FATE_FILTER_PIXFMTS-$(CONFIG_FIELDORDER_FILTER) += fate-filter-pixfmts-fieldorder
+fate-filter-pixfmts-fieldorder: CMD = pixfmts "tff" "setfield=bff,"
 
 FATE_FILTER_PIXFMTS-$(CONFIG_HFLIP_FILTER) += fate-filter-pixfmts-hflip
 fate-filter-pixfmts-hflip: CMD = pixfmts

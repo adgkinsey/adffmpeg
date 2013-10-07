@@ -4698,7 +4698,7 @@ It accepts the following values:
 @item levels
 standard histogram that display color components distribution in an image.
 Displays color graph for each color component. Shows distribution
-of the Y, U, V, A or G, B, R components, depending on input format,
+of the Y, U, V, A or R, G, B components, depending on input format,
 in current frame. Bellow each graph is color component scale meter.
 
 @item color
@@ -4750,6 +4750,12 @@ Default value is @code{10}. Allowed range is [1, 255].
 @item waveform_mode
 Set mode for @code{waveform}. Can be either @code{row}, or @code{column}.
 Default is @code{row}.
+
+@item waveform_mirror
+Set mirroring mode for @code{waveform}. @code{0} means unmirrored, @code{1}
+means mirrored. In mirrored mode, higher values will be represented on the left
+side for @code{row} mode and at the top for @code{column} mode. Default is
+@code{0} (unmirrored).
 
 @item display_mode
 Set display mode for @code{waveform} and @code{levels}.
@@ -6559,7 +6565,11 @@ the next filter, the scale filter will convert the input to the
 requested format.
 
 @subsection Options
-The filter accepts the following options:
+The filter accepts the following options, or any of the options
+supported by the libswscale scaler.
+
+See @ref{scaler_options,,the ffmpeg-scaler manual,ffmpeg-scaler} for
+the complete list of scaler options.
 
 @table @option
 @item width, w
@@ -6596,7 +6606,9 @@ Default value is @samp{0}.
 
 @item flags
 Set libswscale scaling flags. If not explictly specified the filter
-applies a bilinear scaling algorithm.
+applies a bicubic scaling algorithm.
+See @ref{sws_flags,,the ffmpeg-scaler manual,ffmpeg-scaler} for
+the complete list of values.
 
 @item size, s
 Set the video size, the value must be a valid abbreviation or in the
@@ -6661,23 +6673,6 @@ Set full range (0-255 in case of 8-bit luma).
 
 @item mpeg/tv
 Set "MPEG" range (16-235 in case of 8-bit luma).
-@end table
-
-@item sws_dither
-Set the dithering algorithm
-
-@table @samp
-@item auto
-Choose automatically.
-
-@item none
-No dithering
-
-@item bayer
-bayer dither
-
-@item ed
-error diffusion dither
 @end table
 
 @item force_original_aspect_ratio

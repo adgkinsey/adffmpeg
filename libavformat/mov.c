@@ -1790,6 +1790,8 @@ static int mov_read_stss(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     if (!entries)
     {
         sc->keyframe_absent = 1;
+        if (!st->need_parsing)
+            st->need_parsing = AVSTREAM_PARSE_HEADERS;
         return 0;
     }
     if (entries >= UINT_MAX / sizeof(int))
@@ -2636,7 +2638,7 @@ static int mov_read_trun(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         return AVERROR_INVALIDDATA;
     }
     sc = st->priv_data;
-    if (sc->pseudo_stream_id+1 != frag->stsd_id)
+    if (sc->pseudo_stream_id+1 != frag->stsd_id && sc->pseudo_stream_id != -1)
         return 0;
     avio_r8(pb); /* version */
     flags = avio_rb24(pb);
@@ -2651,7 +2653,7 @@ static int mov_read_trun(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     if (!sc->ctts_count && sc->sample_count)
     {
         /* Complement ctts table if moov atom doesn't have ctts atom. */
-        ctts_data = av_malloc(sizeof(*sc->ctts_data));
+        ctts_data = av_realloc(NULL, sizeof(*sc->ctts_data));
         if (!ctts_data)
             return AVERROR(ENOMEM);
         sc->ctts_data = ctts_data;

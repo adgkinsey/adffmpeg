@@ -622,6 +622,10 @@ static av_cold int initFilter(int16_t **outFilter, int32_t **filterPos,
             sum += filter[i * filterSize + j];
         }
         sum = (sum + one / 2) / one;
+        if (!sum) {
+            av_log(NULL, AV_LOG_WARNING, "SwScaler: zero vector in scaling\n");
+            sum = 1;
+        }
         for (j = 0; j < *outFilterSize; j++) {
             int64_t v = filter[i * filterSize + j] + error;
             int intV  = ROUNDED_DIV(v, sum);
@@ -1151,8 +1155,19 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
                  SWS_SINC          |
                  SWS_SPLINE        |
                  SWS_BICUBLIN);
-    if (!i || (i & (i - 1))) {
-        av_log(c, AV_LOG_ERROR, "Exactly one scaler algorithm must be chosen, got %X\n", i);
+
+    /* provide a default scaler if not set by caller */
+    if (!i) {
+        if (dstW < srcW && dstH < srcH)
+            flags |= SWS_BICUBIC;
+        else if (dstW > srcW && dstH > srcH)
+            flags |= SWS_BICUBIC;
+        else
+            flags |= SWS_BICUBIC;
+        c->flags = flags;
+    } else if (i & (i - 1)) {
+        av_log(c, AV_LOG_ERROR,
+               "Exactly one scaler algorithm must be chosen, got %X\n", i);
         return AVERROR(EINVAL);
     }
     /* sanity check */

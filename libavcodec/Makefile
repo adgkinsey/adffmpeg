@@ -471,6 +471,7 @@ OBJS-$(CONFIG_VP5_DECODER)             += vp5.o vp56.o vp56data.o vp56dsp.o \
 OBJS-$(CONFIG_VP6_DECODER)             += vp6.o vp56.o vp56data.o vp56dsp.o \
                                           vp6dsp.o vp56rac.o
 OBJS-$(CONFIG_VP8_DECODER)             += vp8.o vp8dsp.o vp56rac.o
+OBJS-$(CONFIG_VP9_DECODER)             += vp9.o vp9dsp.o vp56rac.o
 OBJS-$(CONFIG_VPLAYER_DECODER)         += textdec.o ass.o
 OBJS-$(CONFIG_VQA_DECODER)             += vqavideo.o
 OBJS-$(CONFIG_WAVPACK_DECODER)         += wavpack.o
@@ -743,6 +744,7 @@ OBJS-$(CONFIG_COOK_PARSER)             += cook_parser.o
 OBJS-$(CONFIG_DCA_PARSER)              += dca_parser.o dca.o
 OBJS-$(CONFIG_DIRAC_PARSER)            += dirac_parser.o
 OBJS-$(CONFIG_DNXHD_PARSER)            += dnxhd_parser.o
+OBJS-$(CONFIG_DPX_PARSER)              += dpx_parser.o
 OBJS-$(CONFIG_DVBSUB_PARSER)           += dvbsub_parser.o
 OBJS-$(CONFIG_DVD_NAV_PARSER)          += dvd_nav_parser.o
 OBJS-$(CONFIG_DVDSUB_PARSER)           += dvdsub_parser.o
