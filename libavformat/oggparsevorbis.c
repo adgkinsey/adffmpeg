@@ -32,7 +32,7 @@
 #include "libavcodec/get_bits.h"
 #include "libavcodec/vorbis_parser.h"
 #include "avformat.h"
-#include "flacdec.h"
+#include "flac_picture.h"
 #include "internal.h"
 #include "oggdec.h"
 #include "vorbiscomment.h"
@@ -53,7 +53,7 @@ static int ogm_chapter(AVFormatContext *as, uint8_t *key, uint8_t *val)
                            ms + 1000 * (s + 60 * (m + 60 * h)),
                            AV_NOPTS_VALUE, NULL);
         av_free(val);
-    } else if (!strcmp(key + (keylen - 4), "NAME")) {
+    } else if (!strcmp(key + keylen - 4, "NAME")) {
         for (i = 0; i < as->nb_chapters; i++)
             if (as->chapters[i]->id == cnum) {
                 chapter = as->chapters[i];
@@ -120,9 +120,7 @@ int ff_vorbis_comment(AVFormatContext *as, AVDictionary **m,
             if (!tt || !ct) {
                 av_freep(&tt);
                 av_freep(&ct);
-                av_log(as, AV_LOG_WARNING,
-                       "out-of-memory error. skipping VorbisComment tag.\n");
-                continue;
+                return AVERROR(ENOMEM);
             }
 
             for (j = 0; j < tl; j++)
@@ -132,6 +130,12 @@ int ff_vorbis_comment(AVFormatContext *as, AVDictionary **m,
             memcpy(ct, v, vl);
             ct[vl] = 0;
 
+            /* The format in which the pictures are stored is the FLAC format.
+             * Xiph says: "The binary FLAC picture structure is base64 encoded
+             * and placed within a VorbisComment with the tag name
+             * 'METADATA_BLOCK_PICTURE'. This is the preferred and
+             * recommended way of embedding cover art within VorbisComments."
+             */
             if (!strcmp(tt, "METADATA_BLOCK_PICTURE")) {
                 int ret;
                 char *pict = av_malloc(vl);
@@ -144,9 +148,9 @@ int ff_vorbis_comment(AVFormatContext *as, AVDictionary **m,
                 }
                 if ((ret = av_base64_decode(pict, ct, vl)) > 0)
                     ret = ff_flac_parse_picture(as, pict, ret);
-                av_freep(&pict);
                 av_freep(&tt);
                 av_freep(&ct);
+                av_freep(&pict);
                 if (ret < 0) {
                     av_log(as, AV_LOG_WARNING, "Failed to parse cover art block.\n");
                     continue;
@@ -193,9 +197,9 @@ struct oggvorbis_private {
     int final_duration;
 };
 
-static unsigned int fixup_vorbis_headers(AVFormatContext *as,
-                                         struct oggvorbis_private *priv,
-                                         uint8_t **buf)
+static int fixup_vorbis_headers(AVFormatContext *as,
+                                struct oggvorbis_private *priv,
+                                uint8_t **buf)
 {
     int i, offset, len, err;
     int buf_len;
@@ -204,8 +208,8 @@ static unsigned int fixup_vorbis_headers(AVFormatContext *as,
     len = priv->len[0] + priv->len[1] + priv->len[2];
     buf_len = len + len / 255 + 64;
     ptr = *buf = av_realloc(NULL, buf_len);
-    if (!*buf)
-        return 0;
+    if (!ptr)
+        return AVERROR(ENOMEM);
     memset(*buf, '\0', buf_len);
 
     ptr[0]  = 2;

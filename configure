@@ -2138,6 +2138,7 @@ openal_indev_deps="openal"
 oss_indev_deps_any="soundcard_h sys_soundcard_h"
 oss_outdev_deps_any="soundcard_h sys_soundcard_h"
 pulse_indev_deps="libpulse"
+pulse_outdev_deps="libpulse"
 sdl_outdev_deps="sdl"
 sndio_indev_deps="sndio_h"
 sndio_outdev_deps="sndio_h"
@@ -4023,8 +4024,8 @@ EOF
             elf*) enabled debug && append YASMFLAGS $yasm_debug ;;
         esac
 
-        check_yasm "pextrd [eax], xmm0, 1" && enable yasm ||
-            die "yasm not found, use --disable-yasm for a crippled build"
+        check_yasm "movbe ecx, [5]" && enable yasm ||
+            die "yasm/nasm not found or too old. Use --disable-yasm for a crippled build."
         check_yasm "vextractf128 xmm0, ymm0, 0"      || disable avx_external avresample
         check_yasm "vfmaddps ymm0, ymm1, ymm2, ymm3" || disable fma4_external
         check_yasm "CPU amdnop" && enable cpunop
@@ -4765,9 +4766,9 @@ AR=$ar
 ARFLAGS=$arflags
 AR_O=$ar_o
 RANLIB=$ranlib
+STRIP=$strip
 CP=cp -p
 LN_S=$ln_s
-STRIP=$strip
 CPPFLAGS=$CPPFLAGS
 CFLAGS=$CFLAGS
 CXXFLAGS=$CXXFLAGS

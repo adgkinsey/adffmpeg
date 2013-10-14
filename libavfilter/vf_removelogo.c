@@ -154,7 +154,7 @@ static void convert_mask_to_strength_mask(uint8_t *data, int linesize,
     while (1) {
         /* If this doesn't get set by the end of this pass, then we're done. */
         int has_anything_changed = 0;
-        uint8_t *current_pixel0 = data, *current_pixel;
+        uint8_t *current_pixel0 = data + 1 + linesize, *current_pixel;
         current_pass++;
 
         for (y = 1; y < h-1; y++) {
@@ -174,8 +174,8 @@ static void convert_mask_to_strength_mask(uint8_t *data, int linesize,
                 if ( *current_pixel      >= current_pass &&
                     *(current_pixel + 1) >= current_pass &&
                     *(current_pixel - 1) >= current_pass &&
-                    *(current_pixel + w) >= current_pass &&
-                    *(current_pixel - w) >= current_pass) {
+                    *(current_pixel + linesize) >= current_pass &&
+                    *(current_pixel - linesize) >= current_pass) {
                     /* Increment the value since it still has not been
                      * eroded, as evidenced by the if statement that
                      * just evaluated to true. */
@@ -235,8 +235,8 @@ static int load_mask(uint8_t **mask, int *w, int *h,
     av_image_copy_plane(*mask, *w, gray_data[0], gray_linesize[0], *w, *h);
 
 end:
-    av_free(src_data[0]);
-    av_free(gray_data[0]);
+    av_freep(&src_data[0]);
+    av_freep(&gray_data[0]);
     return ret;
 }
 
@@ -540,9 +540,9 @@ static av_cold void uninit(AVFilterContext *ctx)
         for (a = 0; a <= s->max_mask_size; a++) {
             /* Loop through each scanline in a mask. */
             for (b = -a; b <= a; b++) {
-                av_free(s->mask[a][b + a]); /* Free a scanline. */
+                av_freep(&s->mask[a][b + a]); /* Free a scanline. */
             }
-            av_free(s->mask[a]);
+            av_freep(&s->mask[a]);
         }
         /* Free the array of pointers pointing to the masks. */
         av_freep(&s->mask);

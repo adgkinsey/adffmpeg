@@ -304,7 +304,8 @@ enum AVCodecID {
     AV_CODEC_ID_SNOW       = MKBETAG('S','N','O','W'),
     AV_CODEC_ID_WEBP       = MKBETAG('W','E','B','P'),
     AV_CODEC_ID_SMVJPEG    = MKBETAG('S','M','V','J'),
-    AV_CODEC_ID_H265       = MKBETAG('H','2','6','5'),
+    AV_CODEC_ID_HEVC       = MKBETAG('H','2','6','5'),
+#define AV_CODEC_ID_H265 AV_CODEC_ID_HEVC
 
     /* various PCM "codecs" */
     AV_CODEC_ID_FIRST_AUDIO = 0x10000,     ///< A dummy id pointing at the start of audio codecs
@@ -3789,18 +3790,24 @@ attribute_deprecated int avcodec_decode_audio3(AVCodecContext *avctx, int16_t *s
  * Decode the audio frame of size avpkt->size from avpkt->data into frame.
  *
  * Some decoders may support multiple frames in a single AVPacket. Such
- * decoders would then just decode the first frame. In this case,
- * avcodec_decode_audio4 has to be called again with an AVPacket containing
- * the remaining data in order to decode the second frame, etc...
- * Even if no frames are returned, the packet needs to be fed to the decoder
- * with remaining data until it is completely consumed or an error occurs.
+ * decoders would then just decode the first frame and the return value would be
+ * less than the packet size. In this case, avcodec_decode_audio4 has to be
+ * called again with an AVPacket containing the remaining data in order to
+ * decode the second frame, etc...  Even if no frames are returned, the packet
+ * needs to be fed to the decoder with remaining data until it is completely
+ * consumed or an error occurs.
+ *
+ * Some decoders (those marked with CODEC_CAP_DELAY) have a delay between input
+ * and output. This means that for some packets they will not immediately
+ * produce decoded output and need to be flushed at the end of decoding to get
+ * all the decoded data. Flushing is done by calling this function with packets
+ * with avpkt->data set to NULL and avpkt->size set to 0 until it stops
+ * returning samples. It is safe to flush even those decoders that are not
+ * marked with CODEC_CAP_DELAY, then no samples will be returned.
  *
  * @warning The input buffer, avpkt->data must be FF_INPUT_BUFFER_PADDING_SIZE
  *          larger than the actual read bytes because some optimized bitstream
  *          readers read 32 or 64 bits at once and could read over the end.
- *
- * @note You might have to align the input buffer. The alignment requirements
- *       depend on the CPU and the decoder.
  *
  * @param      avctx the codec context
  * @param[out] frame The AVFrame in which to store decoded audio samples.
@@ -3816,7 +3823,10 @@ attribute_deprecated int avcodec_decode_audio3(AVCodecContext *avctx, int16_t *s
  *                   next call to this function or until closing or flushing the
  *                   decoder. The caller may not write to it.
  * @param[out] got_frame_ptr Zero if no frame could be decoded, otherwise it is
- *                           non-zero.
+ *                           non-zero. Note that this field being set to zero
+ *                           does not mean that an error has occurred. For
+ *                           decoders with CODEC_CAP_DELAY set, no given decode
+ *                           call is guaranteed to produce a frame.
  * @param[in]  avpkt The input AVPacket containing the input buffer.
  *                   At least avpkt->data and avpkt->size should be set. Some
  *                   decoders might also require additional fields to be set.
@@ -3838,13 +3848,6 @@ int avcodec_decode_audio4(AVCodecContext *avctx, AVFrame *frame,
  *
  * @warning The end of the input buffer buf should be set to 0 to ensure that
  * no overreading happens for damaged MPEG streams.
- *
- * @note You might have to align the input buffer avpkt->data.
- * The alignment requirements depend on the CPU: on some CPUs it isn't
- * necessary at all, on others it won't work at all if not aligned and on others
- * it will work but it will have an impact on performance.
- *
- * In practice, avpkt->data should have 4 byte alignment at minimum.
  *
  * @note Codecs which have the CODEC_CAP_DELAY capability set have a delay
  * between input and output, these need to be fed with avpkt->data=NULL,

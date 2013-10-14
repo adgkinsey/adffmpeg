@@ -791,8 +791,12 @@ static int jpeg2000_decode_packet(Jpeg2000DecoderContext *s,
             Jpeg2000Cblk *cblk = prec->cblk + cblkno;
             if (   bytestream2_get_bytes_left(&s->g) < cblk->lengthinc
                 || sizeof(cblk->data) < cblk->length + cblk->lengthinc + 2
-            )
+            ) {
+                av_log(s->avctx, AV_LOG_ERROR,
+                       "Block length %d or lengthinc %d is too large\n",
+                       cblk->length, cblk->lengthinc);
                 return AVERROR_INVALIDDATA;
+            }
 
             bytestream2_get_bufferu(&s->g, cblk->data + cblk->length, cblk->lengthinc);
             cblk->length   += cblk->lengthinc;
@@ -1136,6 +1140,12 @@ static void mct_decode(Jpeg2000DecoderContext *s, Jpeg2000Tile *tile)
     int32_t *src[3],  i0,  i1,  i2;
     float   *srcf[3], i0f, i1f, i2f;
 
+    for (i = 1; i < 3; i++)
+        if (tile->codsty[0].transform != tile->codsty[i].transform) {
+            av_log(s->avctx, AV_LOG_ERROR, "Transforms mismatch, MCT not supported\n");
+            return;
+        }
+
     for (i = 0; i < 3; i++)
         if (tile->codsty[0].transform == FF_DWT97)
             srcf[i] = tile->comp[i].f_data;
@@ -1268,12 +1278,12 @@ static int jpeg2000_decode_tile(Jpeg2000DecoderContext *s, Jpeg2000Tile *tile,
 
 
             y    = tile->comp[compno].coord[1][0] - s->image_offset_y;
-            line = picture->data[plane] + y * picture->linesize[plane];
+            line = picture->data[plane] + y / s->cdy[compno] * picture->linesize[plane];
             for (; y < tile->comp[compno].coord[1][1] - s->image_offset_y; y += s->cdy[compno]) {
                 uint8_t *dst;
 
                 x   = tile->comp[compno].coord[0][0] - s->image_offset_x;
-                dst = line + x * pixelsize + compno*!planar;
+                dst = line + x / s->cdx[compno] * pixelsize + compno*!planar;
 
                 if (codsty->transform == FF_DWT97) {
                     for (; x < w; x += s->cdx[compno]) {
@@ -1314,12 +1324,12 @@ static int jpeg2000_decode_tile(Jpeg2000DecoderContext *s, Jpeg2000Tile *tile,
                 plane = s->cdef[compno] ? s->cdef[compno]-1 : (s->ncomponents-1);
 
             y     = tile->comp[compno].coord[1][0] - s->image_offset_y;
-            linel = (uint16_t *)picture->data[plane] + y * (picture->linesize[plane] >> 1);
+            linel = (uint16_t *)picture->data[plane] + y / s->cdy[compno] * (picture->linesize[plane] >> 1);
             for (; y < tile->comp[compno].coord[1][1] - s->image_offset_y; y += s->cdy[compno]) {
                 uint16_t *dst;
 
                 x   = tile->comp[compno].coord[0][0] - s->image_offset_x;
-                dst = linel + (x * pixelsize + compno*!planar);
+                dst = linel + (x / s->cdx[compno] * pixelsize + compno*!planar);
                 if (codsty->transform == FF_DWT97) {
                     for (; x < w; x += s-> cdx[compno]) {
                         int  val = lrintf(*datap) + (1 << (cbps - 1));

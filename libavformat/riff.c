@@ -40,6 +40,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { AV_CODEC_ID_H264,         MKTAG('V', 'S', 'S', 'H') },
     { AV_CODEC_ID_H264,         MKTAG('Q', '2', '6', '4') }, /* QNAP surveillance system */
     { AV_CODEC_ID_H264,         MKTAG('V', '2', '6', '4') },
+    { AV_CODEC_ID_H264,         MKTAG('G', 'A', 'V', 'C') }, /* GeoVision camera */
     { AV_CODEC_ID_H263,         MKTAG('H', '2', '6', '3') },
     { AV_CODEC_ID_H263,         MKTAG('X', '2', '6', '3') },
     { AV_CODEC_ID_H263,         MKTAG('T', '2', '6', '3') },
@@ -250,6 +251,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { AV_CODEC_ID_VP6,          MKTAG('V', 'P', '6', '0') },
     { AV_CODEC_ID_VP6,          MKTAG('V', 'P', '6', '1') },
     { AV_CODEC_ID_VP6,          MKTAG('V', 'P', '6', '2') },
+    { AV_CODEC_ID_VP6A,         MKTAG('V', 'P', '6', 'A') },
     { AV_CODEC_ID_VP6F,         MKTAG('V', 'P', '6', 'F') },
     { AV_CODEC_ID_VP6F,         MKTAG('F', 'L', 'V', '4') },
     { AV_CODEC_ID_VP8,          MKTAG('V', 'P', '8', '0') },

@@ -884,6 +884,78 @@ static int mov_get_dv_codec_tag(AVFormatContext *s, MOVTrack *track)
     return tag;
 }
 
+static AVRational find_fps(AVFormatContext *s, AVStream *st)
+{
+    AVRational rate = {st->codec->time_base.den, st->codec->time_base.num};
+    /* if the codec time base makes no sense, try to fallback on stream frame rate */
+    if (av_timecode_check_frame_rate(rate) < 0) {
+        av_log(s, AV_LOG_DEBUG, "timecode: tbc=%d/%d invalid, fallback on %d/%d\n",
+               rate.num, rate.den, st->avg_frame_rate.num, st->avg_frame_rate.den);
+        rate = st->avg_frame_rate;
+    }
+
+    return rate;
+}
+
+static int mov_get_mpeg2_xdcam_codec_tag(AVFormatContext *s, MOVTrack *track)
+{
+    int tag = MKTAG('m', '2', 'v', '1'); //fallback tag
+    int interlaced = track->enc->field_order > AV_FIELD_PROGRESSIVE;
+    AVStream *st = track->st;
+    int rate = av_q2d(find_fps(s, st));
+
+    if (track->enc->pix_fmt == AV_PIX_FMT_YUV420P) {
+        if (track->enc->width == 1280 && track->enc->height == 720) {
+            if (!interlaced) {
+                if      (rate == 24) tag = MKTAG('x','d','v','4');
+                else if (rate == 25) tag = MKTAG('x','d','v','5');
+                else if (rate == 30) tag = MKTAG('x','d','v','1');
+                else if (rate == 50) tag = MKTAG('x','d','v','a');
+                else if (rate == 60) tag = MKTAG('x','d','v','9');
+            }
+        } else if (track->enc->width == 1440 && track->enc->height == 1080) {
+            if (!interlaced) {
+                if      (rate == 24) tag = MKTAG('x','d','v','6');
+                else if (rate == 25) tag = MKTAG('x','d','v','7');
+                else if (rate == 30) tag = MKTAG('x','d','v','8');
+            } else {
+                if      (rate == 25) tag = MKTAG('x','d','v','3');
+                else if (rate == 30) tag = MKTAG('x','d','v','2');
+            }
+        } else if (track->enc->width == 1920 && track->enc->height == 1080) {
+            if (!interlaced) {
+                if      (rate == 24) tag = MKTAG('x','d','v','d');
+                else if (rate == 25) tag = MKTAG('x','d','v','e');
+                else if (rate == 30) tag = MKTAG('x','d','v','f');
+            } else {
+                if      (rate == 25) tag = MKTAG('x','d','v','c');
+                else if (rate == 30) tag = MKTAG('x','d','v','b');
+            }
+        }
+    } else if (track->enc->pix_fmt == AV_PIX_FMT_YUV422P) {
+        if (track->enc->width == 1280 && track->enc->height == 720) {
+            if (!interlaced) {
+                if      (rate == 24) tag = MKTAG('x','d','5','4');
+                else if (rate == 25) tag = MKTAG('x','d','5','5');
+                else if (rate == 30) tag = MKTAG('x','d','5','1');
+                else if (rate == 50) tag = MKTAG('x','d','5','a');
+                else if (rate == 60) tag = MKTAG('x','d','5','9');
+            }
+        } else if (track->enc->width == 1920 && track->enc->height == 1080) {
+            if (!interlaced) {
+                if      (rate == 24) tag = MKTAG('x','d','5','d');
+                else if (rate == 25) tag = MKTAG('x','d','5','e');
+                else if (rate == 30) tag = MKTAG('x','d','5','f');
+            } else {
+                if      (rate == 25) tag = MKTAG('x','d','5','c');
+                else if (rate == 30) tag = MKTAG('x','d','5','b');
+            }
+        }
+    }
+
+    return tag;
+}
+
 static const struct {
     enum AVPixelFormat pix_fmt;
     uint32_t tag;
@@ -931,11 +1003,14 @@ static int mov_get_codec_tag(AVFormatContext *s, MOVTrack *track)
                  (track->enc->codec_id == AV_CODEC_ID_DVVIDEO ||
                   track->enc->codec_id == AV_CODEC_ID_RAWVIDEO ||
                   track->enc->codec_id == AV_CODEC_ID_H263 ||
+                  track->enc->codec_id == AV_CODEC_ID_MPEG2VIDEO ||
                   av_get_bits_per_sample(track->enc->codec_id)))) { // pcm audio
         if (track->enc->codec_id == AV_CODEC_ID_DVVIDEO)
             tag = mov_get_dv_codec_tag(s, track);
         else if (track->enc->codec_id == AV_CODEC_ID_RAWVIDEO)
             tag = mov_get_rawvideo_codec_tag(s, track);
+        else if (track->enc->codec_id == AV_CODEC_ID_MPEG2VIDEO)
+            tag = mov_get_mpeg2_xdcam_codec_tag(s, track);
         else if (track->enc->codec_type == AVMEDIA_TYPE_VIDEO) {
             tag = ff_codec_get_tag(ff_codec_movvideo_tags, track->enc->codec_id);
             if (!tag) { // if no mac fcc found, try with Microsoft tags
@@ -1063,6 +1138,32 @@ static int mov_write_pasp_tag(AVIOContext *pb, MOVTrack *track)
     return 16;
 }
 
+static void find_compressor(char * compressor_name, int len, MOVTrack *track)
+{
+    int xdcam_res =  (track->enc->width == 1280 && track->enc->height == 720)
+                  || (track->enc->width == 1440 && track->enc->height == 1080)
+                  || (track->enc->width == 1920 && track->enc->height == 1080);
+
+    if (track->mode == MODE_MOV && track->enc->codec && track->enc->codec->name) {
+        av_strlcpy(compressor_name, track->enc->codec->name, 32);
+    } else if (track->enc->codec_id == AV_CODEC_ID_MPEG2VIDEO && xdcam_res) {
+        int interlaced = track->enc->field_order > AV_FIELD_PROGRESSIVE;
+        AVStream *st = track->st;
+        int rate = av_q2d(find_fps(NULL, st));
+        av_strlcatf(compressor_name, len, "XDCAM");
+        if (track->enc->pix_fmt == AV_PIX_FMT_YUV422P) {
+            av_strlcatf(compressor_name, len, " HD422");
+        } else if(track->enc->width == 1440) {
+            av_strlcatf(compressor_name, len, " HD");
+        } else
+            av_strlcatf(compressor_name, len, " EX");
+
+        av_strlcatf(compressor_name, len, " %d%c", track->enc->height, interlaced ? 'i' : 'p');
+
+        av_strlcatf(compressor_name, len, "%d", rate * (interlaced + 1));
+    }
+}
+
 static int mov_write_video_tag(AVIOContext *pb, MOVTrack *track)
 {
     int64_t pos = avio_tell(pb);
@@ -1098,8 +1199,7 @@ static int mov_write_video_tag(AVIOContext *pb, MOVTrack *track)
     avio_wb16(pb, 1); /* Frame count (= 1) */
 
     /* FIXME not sure, ISO 14496-1 draft where it shall be set to 0 */
-    if (track->mode == MODE_MOV && track->enc->codec && track->enc->codec->name)
-        av_strlcpy(compressor_name, track->enc->codec->name, 32);
+    find_compressor(compressor_name, 32, track);
     avio_w8(pb, strlen(compressor_name));
     avio_write(pb, compressor_name, 31);
 
@@ -3490,14 +3590,7 @@ static int mov_create_timecode_track(AVFormatContext *s, int index, int src_inde
     AVStream *src_st    = s->streams[src_index];
     AVTimecode tc;
     AVPacket pkt    = {.stream_index = index, .flags = AV_PKT_FLAG_KEY, .size = 4};
-    AVRational rate = {src_st->codec->time_base.den, src_st->codec->time_base.num};
-
-    /* if the codec time base makes no sense, try to fallback on stream frame rate */
-    if (av_timecode_check_frame_rate(rate) < 0) {
-        av_log(s, AV_LOG_DEBUG, "timecode: tbc=%d/%d invalid, fallback on %d/%d\n",
-               rate.num, rate.den, src_st->avg_frame_rate.num, src_st->avg_frame_rate.den);
-        rate = src_st->avg_frame_rate;
-    }
+    AVRational rate = find_fps(s, src_st);
 
     /* compute the frame number */
     ret = av_timecode_init_from_string(&tc, rate, tcstr, s);
@@ -3732,6 +3825,7 @@ static int mov_write_header(AVFormatContext *s)
         AVDictionaryEntry *lang = av_dict_get(st->metadata, "language", NULL,0);
 
         track->enc = st->codec;
+        track->st = st;
         track->language = ff_mov_iso639_to_lang(lang?lang->value:"und", mov->mode!=MODE_MOV);
         if (track->language < 0)
             track->language = 0;
