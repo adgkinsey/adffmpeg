@@ -379,6 +379,7 @@ enum AVCodecID {
     AV_CODEC_ID_ADPCM_IMA_OKI = MKBETAG('O','K','I',' '),
     AV_CODEC_ID_ADPCM_DTK  = MKBETAG('D','T','K',' '),
     AV_CODEC_ID_ADPCM_IMA_RAD = MKBETAG('R','A','D',' '),
+    AV_CODEC_ID_ADPCM_G726LE = MKBETAG('6','2','7','G'),
 
     /* AMR */
     AV_CODEC_ID_AMR_NB = 0x12000,
@@ -2890,6 +2891,13 @@ typedef struct AVCodecContext {
      * - encoding: unused
      */
     int skip_alpha;
+
+    /**
+     * Number of samples to skip after a discontinuity
+     * - decoding: unused
+     * - encoding: set by libavcodec
+     */
+    int seek_preroll;
 } AVCodecContext;
 
 AVRational av_codec_get_pkt_timebase         (const AVCodecContext *avctx);
@@ -2900,6 +2908,9 @@ void                     av_codec_set_codec_descriptor(AVCodecContext *avctx, co
 
 int  av_codec_get_lowres(const AVCodecContext *avctx);
 void av_codec_set_lowres(AVCodecContext *avctx, int val);
+
+int  av_codec_get_seek_preroll(const AVCodecContext *avctx);
+void av_codec_set_seek_preroll(AVCodecContext *avctx, int val);
 
 /**
  * AVProfile.

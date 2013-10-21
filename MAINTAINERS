@@ -43,7 +43,7 @@ QuickTime faststart:
 Miscellaneous Areas
 ===================
 
-documentation                           Mike Melanson
+documentation                           Stefano Sabatini, Mike Melanson, Timothy Gu
 build system (configure,Makefiles)      Diego Biurrun, Mans Rullgard
 project server                          Árpád Gereöffy, Michael Niedermayer, Reimar Döffinger, Alexander Strasser
 presets                                 Robert Swain
@@ -273,6 +273,7 @@ Codecs:
   wnv1.c                                Kostya Shishkov
   xan.c                                 Mike Melanson
   xbm*                                  Paul B Mahol
+  xface                                 Stefano Sabatini
   xl.c                                  Kostya Shishkov
   xvmc.c                                Ivan Kalvachev
   xwd*                                  Paul B Mahol
@@ -295,9 +296,12 @@ libavdevice
 
 
   dshow.c                               Roger Pack
+  fbdev_enc.c                           Lukasz Marek
   iec61883.c                            Georg Lippitsch
+  lavfi                                 Stefano Sabatini
   libdc1394.c                           Roman Shaposhnik
   pulse_audio_enc.c                     Lukasz Marek
+  sdl                                   Stefano Sabatini
   v4l2.c                                Luca Abeni
   vfwcap.c                              Ramiro Polla
 

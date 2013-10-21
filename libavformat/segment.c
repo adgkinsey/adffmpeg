@@ -187,7 +187,6 @@ static int segment_start(AVFormatContext *s, int write_header)
     seg->segment_idx++;
     if ((err = set_segment_filename(s)) < 0)
         return err;
-    seg->segment_count++;
 
     if ((err = avio_open2(&oc->pb, oc->filename, AVIO_FLAG_WRITE,
                           &s->interrupt_callback, NULL)) < 0)
@@ -319,6 +318,10 @@ static int segment_end(AVFormatContext *s, int write_trailer, int is_last)
         }
         avio_flush(seg->list_pb);
     }
+
+    av_log(s, AV_LOG_VERBOSE, "segment:'%s' count:%d ended\n",
+           seg->avf->filename, seg->segment_count);
+    seg->segment_count++;
 
 end:
     avio_close(oc->pb);
@@ -594,7 +597,6 @@ static int seg_write_header(AVFormatContext *s)
 
     if ((ret = set_segment_filename(s)) < 0)
         goto fail;
-    seg->segment_count++;
 
     if (seg->write_header_trailer) {
         if ((ret = avio_open2(&oc->pb, oc->filename, AVIO_FLAG_WRITE,
@@ -641,13 +643,13 @@ static int seg_write_packet(AVFormatContext *s, AVPacket *pkt)
     int ret;
 
     if (seg->times) {
-        end_pts = seg->segment_count <= seg->nb_times ?
-            seg->times[seg->segment_count-1] : INT64_MAX;
+        end_pts = seg->segment_count < seg->nb_times ?
+            seg->times[seg->segment_count] : INT64_MAX;
     } else if (seg->frames) {
         start_frame = seg->segment_count <= seg->nb_frames ?
-            seg->frames[seg->segment_count-1] : INT_MAX;
+            seg->frames[seg->segment_count] : INT_MAX;
     } else {
-        end_pts = seg->time * seg->segment_count;
+        end_pts = seg->time * (seg->segment_count+1);
     }
 
     av_dlog(s, "packet stream:%d pts:%s pts_time:%s is_key:%d frame:%d\n",
@@ -661,12 +663,10 @@ static int seg_write_packet(AVFormatContext *s, AVPacket *pkt)
          (pkt->pts != AV_NOPTS_VALUE &&
           av_compare_ts(pkt->pts, st->time_base,
                         end_pts-seg->time_delta, AV_TIME_BASE_Q) >= 0))) {
-        ret = segment_end(s, seg->individual_header_trailer, 0);
+        if ((ret = segment_end(s, seg->individual_header_trailer, 0)) < 0)
+            goto fail;
 
-        if (!ret)
-            ret = segment_start(s, seg->individual_header_trailer);
-
-        if (ret)
+        if ((ret = segment_start(s, seg->individual_header_trailer)) < 0)
             goto fail;
 
         oc = seg->avf;

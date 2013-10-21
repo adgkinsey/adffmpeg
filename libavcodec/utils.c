@@ -1044,6 +1044,7 @@ void avcodec_free_frame(AVFrame **frame)
 MAKE_ACCESSORS(AVCodecContext, codec, AVRational, pkt_timebase)
 MAKE_ACCESSORS(AVCodecContext, codec, const AVCodecDescriptor *, codec_descriptor)
 MAKE_ACCESSORS(AVCodecContext, codec, int, lowres)
+MAKE_ACCESSORS(AVCodecContext, codec, int, seek_preroll)
 
 int av_codec_get_max_lowres(const AVCodec *codec)
 {
@@ -1951,10 +1952,17 @@ static int add_metadata_from_side_data(AVCodecContext *avctx, AVFrame *frame)
     if (!side_metadata)
         goto end;
     end = side_metadata + size;
+    if (size && end[-1])
+        return AVERROR_INVALIDDATA;
     while (side_metadata < end) {
         const uint8_t *key = side_metadata;
         const uint8_t *val = side_metadata + strlen(key) + 1;
-        int ret = av_dict_set(avpriv_frame_get_metadatap(frame), key, val, 0);
+        int ret;
+
+        if (val >= end)
+            return AVERROR_INVALIDDATA;
+
+        ret = av_dict_set(avpriv_frame_get_metadatap(frame), key, val, 0);
         if (ret < 0)
             break;
         side_metadata = val + strlen(val) + 1;
@@ -2330,6 +2338,12 @@ int avcodec_decode_subtitle2(AVCodecContext *avctx, AVSubtitle *sub,
 {
     int i, ret = 0;
 
+    if (!avpkt->data && avpkt->size) {
+        av_log(avctx, AV_LOG_ERROR, "invalid packet: NULL data, size != 0\n");
+        return AVERROR(EINVAL);
+    }
+    if (!avctx->codec)
+        return AVERROR(EINVAL);
     if (avctx->codec->type != AVMEDIA_TYPE_SUBTITLE) {
         av_log(avctx, AV_LOG_ERROR, "Invalid media type for subtitles\n");
         return AVERROR(EINVAL);

@@ -425,7 +425,7 @@ sh_quote(){
 }
 
 cleanws(){
-    echo "$@" | sed 's/^ *//;s/  */ /g;s/ *$//'
+    echo "$@" | sed 's/^ *//;s/  */ /g;s/ *$//;s/\r//g'
 }
 
 filter(){
@@ -1811,6 +1811,7 @@ h263i_decoder_select="h263_decoder"
 h263p_encoder_select="h263_encoder"
 h264_decoder_select="golomb h264chroma h264dsp h264pred h264qpel videodsp"
 h264_decoder_suggest="error_resilience"
+hevc_decoder_select="dsputil golomb videodsp"
 huffyuv_decoder_select="dsputil"
 huffyuv_encoder_select="dsputil huffman"
 iac_decoder_select="dsputil fft mdct sinewin"
@@ -4567,6 +4568,7 @@ elif enabled_any msvc icl; then
             add_cflags -Qansi-alias
         # icl will pass the inline asm tests but inline asm is currently
         # not supported (build will fail)
+        disabled inline_asm || warn "inline asm disabled due to issues with it in ICL"
         disable inline_asm
     fi
 fi
