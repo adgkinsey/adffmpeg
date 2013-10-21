@@ -141,7 +141,7 @@ int ff_mjpeg_decode_dqt(MJpegDecodeContext *s)
         index = get_bits(&s->gb, 4);
         if (index >= 4)
             return -1;
-        av_log(s->avctx, AV_LOG_DEBUG, "index=%d\n", index);
+        /*av_log(s->avctx, AV_LOG_DEBUG, "index=%d\n", index);*/
         /* read quant table */
         for (i = 0; i < 64; i++) {
             j = s->scantable.permutated[i];
@@ -151,8 +151,8 @@ int ff_mjpeg_decode_dqt(MJpegDecodeContext *s)
         // XXX FIXME finetune, and perhaps add dc too
         s->qscale[index] = FFMAX(s->quant_matrixes[index][s->scantable.permutated[1]],
                                  s->quant_matrixes[index][s->scantable.permutated[8]]) >> 1;
-        av_log(s->avctx, AV_LOG_DEBUG, "qscale[%d]: %d\n",
-               index, s->qscale[index]);
+        /*av_log(s->avctx, AV_LOG_DEBUG, "qscale[%d]: %d\n",
+               index, s->qscale[index]);*/
         len -= 65;
     }
     return 0;
@@ -197,8 +197,8 @@ int ff_mjpeg_decode_dht(MJpegDecodeContext *s)
 
         /* build VLC and flush previous vlc if present */
         ff_free_vlc(&s->vlcs[class][index]);
-        av_log(s->avctx, AV_LOG_DEBUG, "class=%d index=%d nb_codes=%d\n",
-               class, index, code_max + 1);
+        /*av_log(s->avctx, AV_LOG_DEBUG, "class=%d index=%d nb_codes=%d\n",
+               class, index, code_max + 1);*/
         if ((ret = build_vlc(&s->vlcs[class][index], bits_table, val_table,
                              code_max + 1, 0, class > 0)) < 0)
             return ret;
@@ -244,7 +244,7 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
     if (s->interlaced && s->width == width && s->height == height + 1)
         height= s->height;
 
-    av_log(s->avctx, AV_LOG_DEBUG, "sof0: picture: %dx%d\n", width, height);
+    /*av_log(s->avctx, AV_LOG_DEBUG, "sof0: picture: %dx%d\n", width, height);*/
     if (av_image_check_size(width, height, 0, s->avctx))
         return AVERROR_INVALIDDATA;
 
@@ -292,9 +292,9 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
             return AVERROR_INVALIDDATA;
         }
 
-        av_log(s->avctx, AV_LOG_DEBUG, "component %d %d:%d id: %d quant:%d\n",
+        /*av_log(s->avctx, AV_LOG_DEBUG, "component %d %d:%d id: %d quant:%d\n",
                i, h_count[i], v_count[i],
-               s->component_id[i], s->quant_index[i]);
+               s->component_id[i], s->quant_index[i]);*/
     }
 
     if (s->ls && (s->h_max > 1 || s->v_max > 1)) {
@@ -346,7 +346,7 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
                  (s->h_count[1] << 20) | (s->v_count[1] << 16) |
                  (s->h_count[2] << 12) | (s->v_count[2] <<  8) |
                  (s->h_count[3] <<  4) |  s->v_count[3];
-    av_log(s->avctx, AV_LOG_DEBUG, "pix fmt id %x\n", pix_fmt_id);
+    /*av_log(s->avctx, AV_LOG_DEBUG, "pix fmt id %x\n", pix_fmt_id);*/
     /* NOTE we do not allocate pictures large enough for the possible
      * padding of h/v_count being 4 */
     if (!(pix_fmt_id & 0xD0D0D0D0))
@@ -1293,7 +1293,7 @@ int ff_mjpeg_decode_sos(MJpegDecodeContext *s, const uint8_t *mb_bitmask,
     }
     for (i = 0; i < nb_components; i++) {
         id = get_bits(&s->gb, 8) - 1;
-        av_log(s->avctx, AV_LOG_DEBUG, "component: %d\n", id);
+        /*av_log(s->avctx, AV_LOG_DEBUG, "component: %d\n", id);*/
         /* find component index */
         for (index = 0; index < s->nb_components; index++)
             if (id == s->component_id[index])
@@ -1723,8 +1723,8 @@ int ff_mjpeg_find_marker(MJpegDecodeContext *s,
         memset(s->buffer + *unescaped_buf_size, 0,
                FF_INPUT_BUFFER_PADDING_SIZE);
 
-        av_log(s->avctx, AV_LOG_DEBUG, "escaping removed %td bytes\n",
-               (buf_end - *buf_ptr) - (dst - s->buffer));
+        /*av_log(s->avctx, AV_LOG_DEBUG, "escaping removed %td bytes\n",
+               (buf_end - *buf_ptr) - (dst - s->buffer));*/
     } else if (start_code == SOS && s->ls) {
         const uint8_t *src = *buf_ptr;
         uint8_t *dst  = s->buffer;
@@ -1805,8 +1805,8 @@ int ff_mjpeg_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
                    start_code, unescaped_buf_size, buf_size);
             return AVERROR_INVALIDDATA;
         }
-        av_log(avctx, AV_LOG_DEBUG, "marker=%x avail_size_in_buf=%td\n",
-               start_code, buf_end - buf_ptr);
+        /*av_log(avctx, AV_LOG_DEBUG, "marker=%x avail_size_in_buf=%td\n",
+               start_code, buf_end - buf_ptr);*/
 
         ret = init_get_bits8(&s->gb, unescaped_buf_ptr, unescaped_buf_size);
 
@@ -1947,9 +1947,9 @@ eoi_parser:
 
         /* eof process start code */
         buf_ptr += (get_bits_count(&s->gb) + 7) / 8;
-        av_log(avctx, AV_LOG_DEBUG,
+        /*av_log(avctx, AV_LOG_DEBUG,
                "marker parser used %d bytes (%d bits)\n",
-               (get_bits_count(&s->gb) + 7) / 8, get_bits_count(&s->gb));
+               (get_bits_count(&s->gb) + 7) / 8, get_bits_count(&s->gb));*/
     }
     if (s->got_picture) {
         av_log(avctx, AV_LOG_WARNING, "EOI missing, emulating\n");
@@ -2020,8 +2020,8 @@ the_end:
     av_dict_copy(avpriv_frame_get_metadatap(data), s->exif_metadata, 0);
     av_dict_free(&s->exif_metadata);
 
-    av_log(avctx, AV_LOG_DEBUG, "decode frame unused %td bytes\n",
-           buf_end - buf_ptr);
+    /*av_log(avctx, AV_LOG_DEBUG, "decode frame unused %td bytes\n",
+           buf_end - buf_ptr);*/
 //  return buf_end - buf_ptr;
     return buf_ptr - buf;
 }
