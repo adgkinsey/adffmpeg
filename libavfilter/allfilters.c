@@ -90,6 +90,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(LADSPA,         ladspa,         af);
     REGISTER_FILTER(LOWPASS,        lowpass,        af);
     REGISTER_FILTER(PAN,            pan,            af);
+    REGISTER_FILTER(REPLAYGAIN,     replaygain,     af);
     REGISTER_FILTER(RESAMPLE,       resample,       af);
     REGISTER_FILTER(SILENCEDETECT,  silencedetect,  af);
     REGISTER_FILTER(TREBLE,         treble,         af);
@@ -153,6 +154,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(LUTRGB,         lutrgb,         vf);
     REGISTER_FILTER(LUTYUV,         lutyuv,         vf);
     REGISTER_FILTER(MCDEINT,        mcdeint,        vf);
+    REGISTER_FILTER(MERGEPLANES,    mergeplanes,    vf);
     REGISTER_FILTER(MP,             mp,             vf);
     REGISTER_FILTER(MPDECIMATE,     mpdecimate,     vf);
     REGISTER_FILTER(NEGATE,         negate,         vf);
