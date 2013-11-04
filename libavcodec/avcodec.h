@@ -278,6 +278,8 @@ enum AVCodecID {
     AV_CODEC_ID_ESCAPE130_DEPRECATED,
     AV_CODEC_ID_G2M_DEPRECATED,
     AV_CODEC_ID_WEBP_DEPRECATED,
+    AV_CODEC_ID_HNM4_VIDEO,
+    AV_CODEC_ID_HEVC_DEPRECATED,
 
     AV_CODEC_ID_BRENDER_PIX= MKBETAG('B','P','I','X'),
     AV_CODEC_ID_Y41P       = MKBETAG('Y','4','1','P'),
@@ -693,6 +695,7 @@ typedef struct RcOverride{
 #define CODEC_FLAG_UNALIGNED 0x0001
 #define CODEC_FLAG_QSCALE 0x0002  ///< Use fixed qscale.
 #define CODEC_FLAG_4MV    0x0004  ///< 4 MV per MB allowed / advanced prediction for H.263.
+#define CODEC_FLAG_OUTPUT_CORRUPT 0x0008 ///< Output even those frames that might be corrupted
 #define CODEC_FLAG_QPEL   0x0010  ///< Use qpel MC.
 #define CODEC_FLAG_GMC    0x0020  ///< Use GMC.
 #define CODEC_FLAG_MV0    0x0040  ///< Always try a MB with MV=<0,0>.
@@ -1331,7 +1334,9 @@ typedef struct AVCodecContext {
      */
     int coded_width, coded_height;
 
+#if FF_API_ASPECT_EXTENDED
 #define FF_ASPECT_EXTENDED 15
+#endif
 
     /**
      * the number of pictures in a group of pictures, or 0 for intra_only
@@ -2398,12 +2403,16 @@ typedef struct AVCodecContext {
      */
     int workaround_bugs;
 #define FF_BUG_AUTODETECT       1  ///< autodetection
+#if FF_API_OLD_MSMPEG4
 #define FF_BUG_OLD_MSMPEG4      2
+#endif
 #define FF_BUG_XVID_ILACE       4
 #define FF_BUG_UMP4             8
 #define FF_BUG_NO_PADDING       16
 #define FF_BUG_AMV              32
+#if FF_API_AC_VLC
 #define FF_BUG_AC_VLC           0  ///< Will be removed, libavcodec can now handle these non-compliant files by default.
+#endif
 #define FF_BUG_QPEL_CHROMA      64
 #define FF_BUG_STD_QPEL         128
 #define FF_BUG_QPEL_CHROMA2     256
@@ -2453,7 +2462,12 @@ typedef struct AVCodecContext {
 #define FF_DEBUG_BITSTREAM   4
 #define FF_DEBUG_MB_TYPE     8
 #define FF_DEBUG_QP          16
+#if FF_API_DEBUG_MV
+/**
+ * @deprecated this option does nothing
+ */
 #define FF_DEBUG_MV          32
+#endif
 #define FF_DEBUG_DCT_COEFF   0x00000040
 #define FF_DEBUG_SKIP        0x00000080
 #define FF_DEBUG_STARTCODE   0x00000100
@@ -2461,13 +2475,17 @@ typedef struct AVCodecContext {
 #define FF_DEBUG_ER          0x00000400
 #define FF_DEBUG_MMCO        0x00000800
 #define FF_DEBUG_BUGS        0x00001000
-#define FF_DEBUG_VIS_QP      0x00002000
-#define FF_DEBUG_VIS_MB_TYPE 0x00004000
+#if FF_API_DEBUG_MV
+#define FF_DEBUG_VIS_QP      0x00002000 ///< only access through AVOptions from outside libavcodec
+#define FF_DEBUG_VIS_MB_TYPE 0x00004000 ///< only access through AVOptions from outside libavcodec
+#endif
 #define FF_DEBUG_BUFFERS     0x00008000
 #define FF_DEBUG_THREADS     0x00010000
 
+#if FF_API_DEBUG_MV
     /**
      * debug
+     * Code outside libavcodec should access this field using AVOptions
      * - encoding: Set by user.
      * - decoding: Set by user.
      */
@@ -2475,6 +2493,7 @@ typedef struct AVCodecContext {
 #define FF_DEBUG_VIS_MV_P_FOR  0x00000001 //visualize forward predicted MVs of P frames
 #define FF_DEBUG_VIS_MV_B_FOR  0x00000002 //visualize forward predicted MVs of B frames
 #define FF_DEBUG_VIS_MV_B_BACK 0x00000004 //visualize backward predicted MVs of B frames
+#endif
 
     /**
      * Error recognition; may misdetect some more or less valid parts as errors.
@@ -2482,7 +2501,14 @@ typedef struct AVCodecContext {
      * - decoding: Set by user.
      */
     int err_recognition;
-#define AV_EF_CRCCHECK  (1<<0)          ///< verify embedded CRCs
+
+/**
+ * Verify checksums embedded in the bitstream (could be of either encoded or
+ * decoded data, depending on the codec) and print an error message on mismatch.
+ * If AV_EF_EXPLODE is also set, a mismatching checksum will result in the
+ * decoder returning an error.
+ */
+#define AV_EF_CRCCHECK  (1<<0)
 #define AV_EF_BITSTREAM (1<<1)          ///< detect bitstream specification deviations
 #define AV_EF_BUFFER    (1<<2)          ///< detect improper bitstream length
 #define AV_EF_EXPLODE   (1<<3)          ///< abort decoding on minor error detection
@@ -2898,6 +2924,19 @@ typedef struct AVCodecContext {
      * - encoding: set by libavcodec
      */
     int seek_preroll;
+
+#if !FF_API_DEBUG_MV
+    /**
+     * debug motion vectors
+     * Code outside libavcodec should access this field using AVOptions
+     * - encoding: Set by user.
+     * - decoding: Set by user.
+     */
+    int debug_mv;
+#define FF_DEBUG_VIS_MV_P_FOR  0x00000001 //visualize forward predicted MVs of P frames
+#define FF_DEBUG_VIS_MV_B_FOR  0x00000002 //visualize forward predicted MVs of B frames
+#define FF_DEBUG_VIS_MV_B_BACK 0x00000004 //visualize backward predicted MVs of B frames
+#endif
 } AVCodecContext;
 
 AVRational av_codec_get_pkt_timebase         (const AVCodecContext *avctx);
@@ -3234,40 +3273,6 @@ void avcodec_register(AVCodec *codec);
  */
 void avcodec_register_all(void);
 
-
-#if FF_API_ALLOC_CONTEXT
-/**
- * Allocate an AVCodecContext and set its fields to default values.  The
- * resulting struct can be deallocated by simply calling av_free().
- *
- * @return An AVCodecContext filled with default values or NULL on failure.
- * @see avcodec_get_context_defaults
- *
- * @deprecated use avcodec_alloc_context3()
- */
-attribute_deprecated
-AVCodecContext *avcodec_alloc_context(void);
-
-/** THIS FUNCTION IS NOT YET PART OF THE PUBLIC API!
- *  we WILL change its arguments and name a few times! */
-attribute_deprecated
-AVCodecContext *avcodec_alloc_context2(enum AVMediaType);
-
-/**
- * Set the fields of the given AVCodecContext to default values.
- *
- * @param s The AVCodecContext of which the fields should be set to default values.
- * @deprecated use avcodec_get_context_defaults3
- */
-attribute_deprecated
-void avcodec_get_context_defaults(AVCodecContext *s);
-
-/** THIS FUNCTION IS NOT YET PART OF THE PUBLIC API!
- *  we WILL change its arguments and name a few times! */
-attribute_deprecated
-void avcodec_get_context_defaults2(AVCodecContext *s, enum AVMediaType);
-#endif
-
 /**
  * Allocate an AVCodecContext and set its fields to default values.  The
  * resulting struct can be deallocated by calling avcodec_close() on it followed
@@ -3360,40 +3365,6 @@ void avcodec_get_frame_defaults(AVFrame *frame);
  *  a custom get_buffer()).
  */
 void avcodec_free_frame(AVFrame **frame);
-
-#if FF_API_AVCODEC_OPEN
-/**
- * Initialize the AVCodecContext to use the given AVCodec. Prior to using this
- * function the context has to be allocated.
- *
- * The functions avcodec_find_decoder_by_name(), avcodec_find_encoder_by_name(),
- * avcodec_find_decoder() and avcodec_find_encoder() provide an easy way for
- * retrieving a codec.
- *
- * @warning This function is not thread safe!
- *
- * @code
- * avcodec_register_all();
- * codec = avcodec_find_decoder(AV_CODEC_ID_H264);
- * if (!codec)
- *     exit(1);
- *
- * context = avcodec_alloc_context3(codec);
- *
- * if (avcodec_open(context, codec) < 0)
- *     exit(1);
- * @endcode
- *
- * @param avctx The context which will be set up to use the given codec.
- * @param codec The codec to use within the context.
- * @return zero on success, a negative value on error
- * @see avcodec_alloc_context3, avcodec_find_decoder, avcodec_find_encoder, avcodec_close
- *
- * @deprecated use avcodec_open2
- */
-attribute_deprecated
-int avcodec_open(AVCodecContext *avctx, AVCodec *codec);
-#endif
 
 /**
  * Initialize the AVCodecContext to use the given AVCodec. Prior to using this
@@ -4674,7 +4645,13 @@ enum AVPixelFormat avcodec_default_get_format(struct AVCodecContext *s, const en
  * @}
  */
 
+#if FF_API_SET_DIMENSIONS
+/**
+ * @deprecated this function is not supposed to be used from outside of lavc
+ */
+attribute_deprecated
 void avcodec_set_dimensions(AVCodecContext *s, int width, int height);
+#endif
 
 /**
  * Put a string representing the codec tag codec_tag in buf.

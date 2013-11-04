@@ -858,12 +858,17 @@ int x;
 EOF
 }
 
-check_cflags(){
-    log check_cflags "$@"
+test_cflags(){
+    log test_cflags "$@"
     set -- $($cflags_filter "$@")
-    check_cc "$@" <<EOF && append CFLAGS "$@"
+    check_cc "$@" <<EOF
 int x;
 EOF
+}
+
+check_cflags(){
+    log check_cflags "$@"
+    test_cflags "$@" && add_cflags "$@"
 }
 
 check_cxxflags(){
@@ -2076,6 +2081,7 @@ dxa_demuxer_select="riffdec"
 eac3_demuxer_select="ac3_parser"
 f4v_muxer_select="mov_muxer"
 flac_demuxer_select="flac_parser"
+hds_muxer_select="flv_muxer"
 hls_muxer_select="mpegts_muxer"
 ipod_muxer_select="mov_muxer"
 ismv_muxer_select="mov_muxer"
@@ -2638,6 +2644,10 @@ case "$toolchain" in
     gcov)
         add_cflags  -fprofile-arcs -ftest-coverage
         add_ldflags -fprofile-arcs -ftest-coverage
+    ;;
+    hardened)
+        add_cflags -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fno-strict-overflow -fstack-protector-all
+        add_ldflags -Wl,-z,relro -Wl,-z,now
     ;;
     ?*)
         die "Unknown toolchain $toolchain"
@@ -4423,13 +4433,9 @@ enabled debug && add_cflags -g"$debuglevel" && add_asflags -g"$debuglevel"
 # add some useful compiler flags if supported
 check_cflags -Wdeclaration-after-statement
 check_cflags -Wall
-check_cflags -Wno-parentheses
-check_cflags -Wno-switch
-check_cflags -Wno-format-zero-length
 check_cflags -Wdisabled-optimization
 check_cflags -Wpointer-arith
 check_cflags -Wredundant-decls
-check_cflags -Wno-pointer-sign
 check_cflags -Wwrite-strings
 check_cflags -Wtype-limits
 check_cflags -Wundef
@@ -4437,6 +4443,17 @@ check_cflags -Wmissing-prototypes
 check_cflags -Wno-pointer-to-int-cast
 check_cflags -Wstrict-prototypes
 enabled extra_warnings && check_cflags -Winline
+
+check_disable_warning(){
+    warning_flag=-W${1#-Wno-}
+    test_cflags $warning_flag && add_cflags $1
+}
+
+check_disable_warning -Wno-parentheses
+check_disable_warning -Wno-switch
+check_disable_warning -Wno-format-zero-length
+check_disable_warning -Wno-pointer-sign
+enabled extra_warnings || check_disable_warning -Wno-maybe-uninitialized
 
 # add some linker flags
 check_ldflags -Wl,--warn-common

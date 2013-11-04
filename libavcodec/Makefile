@@ -236,7 +236,7 @@ OBJS-$(CONFIG_H264_VDA_DECODER)        += vda_h264_dec.o
 OBJS-$(CONFIG_HEVC_DECODER)            += hevc.o hevc_mvs.o hevc_ps.o hevc_sei.o \
                                           hevc_cabac.o hevc_refs.o hevcpred.o    \
                                           hevcdsp.o hevc_filter.o cabac.o
-
+OBJS-$(CONFIG_HNM4_VIDEO_DECODER)      += hnm4video.o
 OBJS-$(CONFIG_HUFFYUV_DECODER)         += huffyuv.o huffyuvdec.o
 OBJS-$(CONFIG_HUFFYUV_ENCODER)         += huffyuv.o huffyuvenc.o
 OBJS-$(CONFIG_IAC_DECODER)             += imc.o
@@ -300,8 +300,7 @@ OBJS-$(CONFIG_MPEG_XVMC_DECODER)       += mpegvideo_xvmc.o
 OBJS-$(CONFIG_MPEG1VIDEO_DECODER)      += mpeg12dec.o mpeg12.o mpeg12data.o
 OBJS-$(CONFIG_MPEG1VIDEO_ENCODER)      += mpeg12enc.o mpeg12.o
 OBJS-$(CONFIG_MPEG2VIDEO_DECODER)      += mpeg12dec.o mpeg12.o mpeg12data.o
-OBJS-$(CONFIG_MPEG2VIDEO_ENCODER)      += mpeg12enc.o mpeg12.o          \
-                                          timecode.o
+OBJS-$(CONFIG_MPEG2VIDEO_ENCODER)      += mpeg12enc.o mpeg12.o
 OBJS-$(CONFIG_MPL2_DECODER)            += mpl2dec.o ass.o
 OBJS-$(CONFIG_MSMPEG4V1_DECODER)       += msmpeg4dec.o msmpeg4.o msmpeg4data.o
 OBJS-$(CONFIG_MSMPEG4V2_DECODER)       += msmpeg4dec.o msmpeg4.o msmpeg4data.o \
@@ -649,7 +648,7 @@ OBJS-$(CONFIG_ADX_DEMUXER)             += adx.o
 OBJS-$(CONFIG_CAF_DEMUXER)             += mpeg4audio.o mpegaudiodata.o  \
                                           ac3tab.o
 OBJS-$(CONFIG_DV_DEMUXER)              += dv_profile.o
-OBJS-$(CONFIG_DV_MUXER)                += dv_profile.o timecode.o
+OBJS-$(CONFIG_DV_MUXER)                += dv_profile.o
 OBJS-$(CONFIG_FLAC_DEMUXER)            += flac.o flacdata.o vorbis_data.o \
                                           vorbis_parser.o xiph.o
 OBJS-$(CONFIG_FLAC_MUXER)              += flac.o flacdata.o vorbis_data.o
@@ -665,11 +664,11 @@ OBJS-$(CONFIG_MATROSKA_MUXER)          += mpeg4audio.o mpegaudiodata.o  \
                                           flac.o flacdata.o vorbis_data.o xiph.o
 OBJS-$(CONFIG_MP2_MUXER)               += mpegaudiodata.o mpegaudiodecheader.o
 OBJS-$(CONFIG_MP3_MUXER)               += mpegaudiodata.o mpegaudiodecheader.o
-OBJS-$(CONFIG_MOV_DEMUXER)             += mpeg4audio.o mpegaudiodata.o ac3tab.o timecode.o
+OBJS-$(CONFIG_MOV_DEMUXER)             += mpeg4audio.o mpegaudiodata.o ac3tab.o
 OBJS-$(CONFIG_MOV_MUXER)               += mpeg4audio.o mpegaudiodata.o
 OBJS-$(CONFIG_MPEGTS_MUXER)            += mpeg4audio.o
 OBJS-$(CONFIG_MPEGTS_DEMUXER)          += mpeg4audio.o mpegaudiodata.o
-OBJS-$(CONFIG_MXF_MUXER)               += timecode.o dnxhddata.o
+OBJS-$(CONFIG_MXF_MUXER)               += dnxhddata.o
 OBJS-$(CONFIG_NUT_MUXER)               += mpegaudiodata.o
 OBJS-$(CONFIG_OGG_DEMUXER)             += xiph.o flac.o flacdata.o     \
                                           mpeg12data.o vorbis_parser.o \

@@ -230,12 +230,26 @@ unsigned avcodec_get_edge_width(void)
     return EDGE_WIDTH;
 }
 
+#if FF_API_SET_DIMENSIONS
 void avcodec_set_dimensions(AVCodecContext *s, int width, int height)
 {
+    ff_set_dimensions(s, width, height);
+}
+#endif
+
+int ff_set_dimensions(AVCodecContext *s, int width, int height)
+{
+    int ret = av_image_check_size(width, height, 0, s);
+
+    if (ret < 0)
+        width = height = 0;
+
     s->coded_width  = width;
     s->coded_height = height;
     s->width        = FF_CEIL_RSHIFT(width,  s->lowres);
     s->height       = FF_CEIL_RSHIFT(height, s->lowres);
+
+    return ret;
 }
 
 #if HAVE_NEON || ARCH_PPC || HAVE_MMX
@@ -1135,13 +1149,6 @@ static int get_bit_rate(AVCodecContext *ctx)
     return bit_rate;
 }
 
-#if FF_API_AVCODEC_OPEN
-int attribute_align_arg avcodec_open(AVCodecContext *avctx, AVCodec *codec)
-{
-    return avcodec_open2(avctx, codec, NULL);
-}
-#endif
-
 int attribute_align_arg ff_codec_open2_recursive(AVCodecContext *avctx, const AVCodec *codec, AVDictionary **options)
 {
     int ret = 0;
@@ -1216,20 +1223,22 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
     if ((ret = av_opt_set_dict(avctx, &tmp)) < 0)
         goto free_and_end;
 
-    // only call avcodec_set_dimensions() for non H.264/VP6F codecs so as not to overwrite previously setup dimensions
+    // only call ff_set_dimensions() for non H.264/VP6F codecs so as not to overwrite previously setup dimensions
     if (!(avctx->coded_width && avctx->coded_height && avctx->width && avctx->height &&
           (avctx->codec_id == AV_CODEC_ID_H264 || avctx->codec_id == AV_CODEC_ID_VP6F))) {
     if (avctx->coded_width && avctx->coded_height)
-        avcodec_set_dimensions(avctx, avctx->coded_width, avctx->coded_height);
+        ret = ff_set_dimensions(avctx, avctx->coded_width, avctx->coded_height);
     else if (avctx->width && avctx->height)
-        avcodec_set_dimensions(avctx, avctx->width, avctx->height);
+        ret = ff_set_dimensions(avctx, avctx->width, avctx->height);
+    if (ret < 0)
+        goto free_and_end;
     }
 
     if ((avctx->coded_width || avctx->coded_height || avctx->width || avctx->height)
         && (  av_image_check_size(avctx->coded_width, avctx->coded_height, 0, avctx) < 0
            || av_image_check_size(avctx->width,       avctx->height,       0, avctx) < 0)) {
         av_log(avctx, AV_LOG_WARNING, "Ignoring invalid width/height values\n");
-        avcodec_set_dimensions(avctx, 0, 0);
+        ff_set_dimensions(avctx, 0, 0);
     }
 
     /* if the decoder init function was already called previously,
@@ -1954,46 +1963,61 @@ static int64_t guess_correct_pts(AVCodecContext *ctx,
     return pts;
 }
 
-static void apply_param_change(AVCodecContext *avctx, AVPacket *avpkt)
+static int apply_param_change(AVCodecContext *avctx, AVPacket *avpkt)
 {
-    int size = 0;
+    int size = 0, ret;
     const uint8_t *data;
     uint32_t flags;
 
-    if (!(avctx->codec->capabilities & CODEC_CAP_PARAM_CHANGE))
-        return;
-
     data = av_packet_get_side_data(avpkt, AV_PKT_DATA_PARAM_CHANGE, &size);
-    if (!data || size < 4)
-        return;
+    if (!data)
+        return 0;
+
+    if (!(avctx->codec->capabilities & CODEC_CAP_PARAM_CHANGE)) {
+        av_log(avctx, AV_LOG_ERROR, "This decoder does not support parameter "
+               "changes, but PARAM_CHANGE side data was sent to it.\n");
+        return AVERROR(EINVAL);
+    }
+
+    if (size < 4)
+        goto fail;
+
     flags = bytestream_get_le32(&data);
     size -= 4;
-    if (size < 4) /* Required for any of the changes */
-        return;
+
     if (flags & AV_SIDE_DATA_PARAM_CHANGE_CHANNEL_COUNT) {
+        if (size < 4)
+            goto fail;
         avctx->channels = bytestream_get_le32(&data);
         size -= 4;
     }
     if (flags & AV_SIDE_DATA_PARAM_CHANGE_CHANNEL_LAYOUT) {
         if (size < 8)
-            return;
+            goto fail;
         avctx->channel_layout = bytestream_get_le64(&data);
         size -= 8;
     }
-    if (size < 4)
-        return;
     if (flags & AV_SIDE_DATA_PARAM_CHANGE_SAMPLE_RATE) {
+        if (size < 4)
+            goto fail;
         avctx->sample_rate = bytestream_get_le32(&data);
         size -= 4;
     }
     if (flags & AV_SIDE_DATA_PARAM_CHANGE_DIMENSIONS) {
         if (size < 8)
-            return;
+            goto fail;
         avctx->width  = bytestream_get_le32(&data);
         avctx->height = bytestream_get_le32(&data);
-        avcodec_set_dimensions(avctx, avctx->width, avctx->height);
         size -= 8;
+        ret = ff_set_dimensions(avctx, avctx->width, avctx->height);
+        if (ret < 0)
+            return ret;
     }
+
+    return 0;
+fail:
+    av_log(avctx, AV_LOG_ERROR, "PARAM_CHANGE side data too small.\n");
+    return AVERROR_INVALIDDATA;
 }
 
 static int add_metadata_from_side_data(AVCodecContext *avctx, AVFrame *frame)
@@ -2053,7 +2077,13 @@ int attribute_align_arg avcodec_decode_video2(AVCodecContext *avctx, AVFrame *pi
 
     if ((avctx->codec->capabilities & CODEC_CAP_DELAY) || avpkt->size || (avctx->active_thread_type & FF_THREAD_FRAME)) {
         int did_split = av_packet_split_side_data(&tmp);
-        apply_param_change(avctx, &tmp);
+        ret = apply_param_change(avctx, &tmp);
+        if (ret < 0) {
+            av_log(avctx, AV_LOG_ERROR, "Error applying parameter changes.\n");
+            if (avctx->err_recognition & AV_EF_EXPLODE)
+                goto fail;
+        }
+
         avctx->pkt = &tmp;
         if (HAVE_THREADS && avctx->active_thread_type & FF_THREAD_FRAME)
             ret = ff_thread_decode_frame(avctx, picture, got_picture_ptr,
@@ -2077,6 +2107,7 @@ int attribute_align_arg avcodec_decode_video2(AVCodecContext *avctx, AVFrame *pi
         }
         add_metadata_from_side_data(avctx, picture);
 
+fail:
         emms_c(); //needed to avoid an emms_c() call before every return;
 
         avctx->pkt = NULL;
@@ -2195,7 +2226,12 @@ int attribute_align_arg avcodec_decode_audio4(AVCodecContext *avctx,
         // copy to ensure we do not change avpkt
         AVPacket tmp = *avpkt;
         int did_split = av_packet_split_side_data(&tmp);
-        apply_param_change(avctx, &tmp);
+        ret = apply_param_change(avctx, &tmp);
+        if (ret < 0) {
+            av_log(avctx, AV_LOG_ERROR, "Error applying parameter changes.\n");
+            if (avctx->err_recognition & AV_EF_EXPLODE)
+                goto fail;
+        }
 
         avctx->pkt = &tmp;
         if (HAVE_THREADS && avctx->active_thread_type & FF_THREAD_FRAME)
@@ -2275,7 +2311,7 @@ int attribute_align_arg avcodec_decode_audio4(AVCodecContext *avctx,
                 frame->nb_samples -= discard_padding;
             }
         }
-
+fail:
         avctx->pkt = NULL;
         if (did_split) {
             av_packet_free_side_data(&tmp);
@@ -2563,6 +2599,7 @@ static enum AVCodecID remap_deprecated_codec_id(enum AVCodecID id)
         case AV_CODEC_ID_ESCAPE130_DEPRECATED : return AV_CODEC_ID_ESCAPE130;
         case AV_CODEC_ID_G2M_DEPRECATED : return AV_CODEC_ID_G2M;
         case AV_CODEC_ID_WEBP_DEPRECATED: return AV_CODEC_ID_WEBP;
+        case AV_CODEC_ID_HEVC_DEPRECATED: return AV_CODEC_ID_HEVC;
         default                         : return id;
     }
 }

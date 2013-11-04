@@ -237,7 +237,7 @@ static int dv_decode_video_segment(AVCodecContext *avctx, void *arg)
     flush_put_bits(&vs_pb);
     for (mb_index = 0; mb_index < 5; mb_index++) {
         for (j = 0; j < s->sys->bpm; j++) {
-            if (mb->pos < 64) {
+            if (mb->pos < 64 && get_bits_left(&gb) > 0) {
                 av_dlog(avctx, "start %d:%d\n", mb_index, j);
                 dv_decode_ac(&gb, mb, block);
             }
@@ -319,7 +319,7 @@ static int dvvideo_decode_frame(AVCodecContext *avctx,
     int buf_size = avpkt->size;
     DVVideoContext *s = avctx->priv_data;
     const uint8_t* vsc_pack;
-    int ret, apt, is16_9;
+    int apt, is16_9, ret;
 
     s->sys = avpriv_dv_frame_profile2(avctx, s->sys, buf, buf_size);
     if (!s->sys || buf_size < s->sys->frame_size || ff_dv_init_dynamic_tables(s->sys)) {
@@ -331,7 +331,11 @@ static int dvvideo_decode_frame(AVCodecContext *avctx,
     s->picture.pict_type = AV_PICTURE_TYPE_I;
     avctx->pix_fmt   = s->sys->pix_fmt;
     avctx->time_base = s->sys->time_base;
-    avcodec_set_dimensions(avctx, s->sys->width, s->sys->height);
+
+    ret = ff_set_dimensions(avctx, s->sys->width, s->sys->height);
+    if (ret < 0)
+        return ret;
+
     if ((ret = ff_get_buffer(avctx, &s->picture, 0)) < 0)
         return ret;
     s->picture.interlaced_frame = 1;

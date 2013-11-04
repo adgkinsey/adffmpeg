@@ -1195,6 +1195,7 @@ static int mpeg_decode_postinit(AVCodecContext *avctx)
     Mpeg1Context *s1 = avctx->priv_data;
     MpegEncContext *s = &s1->mpeg_enc_ctx;
     uint8_t old_permutation[64];
+    int ret;
 
     if ((s1->mpeg_enc_ctx_allocated == 0) ||
         avctx->coded_width  != s->width   ||
@@ -1217,7 +1218,10 @@ static int mpeg_decode_postinit(AVCodecContext *avctx)
         if ((s->width == 0) || (s->height == 0))
             return -2;
 
-        avcodec_set_dimensions(avctx, s->width, s->height);
+        ret = ff_set_dimensions(avctx, s->width, s->height);
+        if (ret < 0)
+            return ret;
+
         if (avctx->codec_id == AV_CODEC_ID_MPEG2VIDEO && s->bit_rate) {
             avctx->rc_max_rate = s->bit_rate;
         } else if (avctx->codec_id == AV_CODEC_ID_MPEG1VIDEO && s->bit_rate &&
@@ -1639,9 +1643,8 @@ static int mpeg_decode_slice(MpegEncContext *s, int mb_y,
     }
 
     /* extra slice info */
-    while (get_bits1(&s->gb) != 0) {
-        skip_bits(&s->gb, 8);
-    }
+    if (skip_1stop_8data_bits(&s->gb) < 0)
+        return AVERROR_INVALIDDATA;
 
     s->mb_x = 0;
 
@@ -2185,6 +2188,10 @@ static int decode_chunks(AVCodecContext *avctx,
                 }
             }
             s2->pict_type = 0;
+
+            if (avctx->err_recognition & AV_EF_EXPLODE && s2->er.error_count)
+                return AVERROR_INVALIDDATA;
+
             return FFMAX(0, buf_ptr - buf - s2->parse_context.last_index);
         }
 

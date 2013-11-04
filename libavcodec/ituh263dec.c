@@ -895,7 +895,6 @@ int ff_h263_decode_picture_header(MpegEncContext *s)
     i = get_bits(&s->gb, 8); /* picture timestamp */
     if( (s->picture_number&~0xFF)+i < s->picture_number)
         i+= 256;
-    s->current_picture_ptr->f.pts =
     s->picture_number= (s->picture_number&~0xFF) + i;
 
     /* PTYPE starts here */
@@ -1114,9 +1113,8 @@ int ff_h263_decode_picture_header(MpegEncContext *s)
     }
 
     /* PEI */
-    while (get_bits1(&s->gb) != 0) {
-        skip_bits(&s->gb, 8);
-    }
+    if (skip_1stop_8data_bits(&s->gb) < 0)
+        return AVERROR_INVALIDDATA;
 
     if(s->h263_slice_structured){
         if (get_bits1(&s->gb) != 1) {

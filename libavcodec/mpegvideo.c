@@ -327,8 +327,7 @@ static int alloc_picture_tables(MpegEncContext *s, Picture *pic)
             return AVERROR(ENOMEM);
     }
 
-    if (s->out_format == FMT_H263 || s->encoding ||
-               (s->avctx->debug & FF_DEBUG_MV) || s->avctx->debug_mv) {
+    if (s->out_format == FMT_H263 || s->encoding || s->avctx->debug_mv) {
         int mv_size        = 2 * (b8_array_size + 4) * sizeof(int16_t);
         int ref_index_size = 4 * mb_array_size;
 
@@ -1034,8 +1033,9 @@ av_cold int ff_MPV_common_init(MpegEncContext *s)
                                   &s->chroma_y_shift);
 
     /* convert fourcc to upper case */
-    s->codec_tag        = avpriv_toupper4(s->avctx->codec_tag);
-    s->stream_codec_tag = avpriv_toupper4(s->avctx->stream_codec_tag);
+    s->codec_tag          = avpriv_toupper4(s->avctx->codec_tag);
+
+    s->stream_codec_tag   = avpriv_toupper4(s->avctx->stream_codec_tag);
 
     s->avctx->coded_frame = &s->current_picture.f;
 
@@ -2768,7 +2768,7 @@ void MPV_decode_mb_internal(MpegEncContext *s, int16_t block[12][64],
                         MPV_motion_lowres(s, dest_y, dest_cb, dest_cr, 1, s->next_picture.f.data, op_pix);
                     }
                 }else{
-                    op_qpix= s->me.qpel_put;
+                    op_qpix = s->me.qpel_put;
                     if ((!s->no_rounding) || s->pict_type==AV_PICTURE_TYPE_B){
                         op_pix = s->hdsp.put_pixels_tab;
                     }else{
@@ -2879,7 +2879,7 @@ void MPV_decode_mb_internal(MpegEncContext *s, int16_t block[12][64],
                     }else{
 
                         dct_linesize = uvlinesize << s->interlaced_dct;
-                        dct_offset   = s->interlaced_dct? uvlinesize : uvlinesize*block_size;
+                        dct_offset   = s->interlaced_dct ? uvlinesize : uvlinesize*block_size;
 
                         s->dsp.idct_put(dest_cb,              dct_linesize, block[4]);
                         s->dsp.idct_put(dest_cr,              dct_linesize, block[5]);

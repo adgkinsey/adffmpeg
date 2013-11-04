@@ -452,6 +452,11 @@ av_cold int ff_MPV_encode_init(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "b frames not supported by codec\n");
         return -1;
     }
+    if (s->max_b_frames < 0) {
+        av_log(avctx, AV_LOG_ERROR,
+               "max b frames must be 0 or positive for mpegvideo based encoders\n");
+        return -1;
+    }
 
     if ((s->codec_id == AV_CODEC_ID_MPEG4 ||
          s->codec_id == AV_CODEC_ID_H263  ||
@@ -1815,7 +1820,7 @@ static av_always_inline void encode_mb_internal(MpegEncContext *s,
     ptr_cr = s->new_picture.f.data[2] +
              (mb_y * mb_block_height * wrap_c) + mb_x * mb_block_width;
 
-    if((mb_x*16+16 > s->width || mb_y*16+16 > s->height) && s->codec_id != AV_CODEC_ID_AMV){
+    if((mb_x * 16 + 16 > s->width || mb_y * 16 + 16 > s->height) && s->codec_id != AV_CODEC_ID_AMV){
         uint8_t *ebuf = s->edge_emu_buffer + 32;
         int cw = (s->width  + s->chroma_x_shift) >> s->chroma_x_shift;
         int ch = (s->height + s->chroma_y_shift) >> s->chroma_y_shift;
@@ -2567,6 +2572,7 @@ static int encode_thread(AVCodecContext *c, void *arg){
                 if(is_gob_start){
                     if(s->start_mb_y != mb_y || mb_x!=0){
                         write_slice_end(s);
+
                         if(CONFIG_MPEG4_ENCODER && s->codec_id==AV_CODEC_ID_MPEG4 && s->partitioned_frame){
                             ff_mpeg4_init_partitions(s);
                         }
