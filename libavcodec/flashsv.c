@@ -255,7 +255,8 @@ static int flashsv_decode_frame(AVCodecContext *avctx, void *data,
     if (buf_size < 4)
         return -1;
 
-    init_get_bits(&gb, avpkt->data, buf_size * 8);
+    if ((ret = init_get_bits8(&gb, avpkt->data, buf_size)) < 0)
+        return ret;
 
     /* start to parse the bitstream */
     s->block_width  = 16 * (get_bits(&gb, 4) + 1);
@@ -316,7 +317,8 @@ static int flashsv_decode_frame(AVCodecContext *avctx, void *data,
 
     /* initialize the image size once */
     if (avctx->width == 0 && avctx->height == 0) {
-        avcodec_set_dimensions(avctx, s->image_width, s->image_height);
+        if ((ret = ff_set_dimensions(avctx, s->image_width, s->image_height)) < 0)
+            return ret;
     }
 
     /* check for changes of image width and image height */
@@ -480,7 +482,7 @@ static av_cold int flashsv_decode_end(AVCodecContext *avctx)
     av_frame_unref(&s->frame);
 
     /* free the tmpblock */
-    av_free(s->tmpblock);
+    av_freep(&s->tmpblock);
 
     return 0;
 }

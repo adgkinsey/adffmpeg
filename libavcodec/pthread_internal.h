@@ -1,7 +1,4 @@
 /*
- * RAW Dirac demuxer
- * Copyright (c) 2007 Marco Gerards <marco@gnu.org>
- *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -19,25 +16,19 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/intreadwrite.h"
-#include "avformat.h"
-#include "rawdec.h"
+#ifndef AVCODEC_PTHREAD_INTERNAL_H
+#define AVCODEC_PTHREAD_INTERNAL_H
 
-static int dirac_probe(AVProbeData *p)
-{
-    unsigned size;
-    if (AV_RL32(p->buf) != MKTAG('B', 'B', 'C', 'D'))
-        return 0;
+#include "avcodec.h"
 
-    size = AV_RB32(p->buf+5);
-    if (size < 13)
-        return 0;
-    if (size + 13LL > p->buf_size)
-        return AVPROBE_SCORE_MAX / 4;
-    if (AV_RL32(p->buf + size) != MKTAG('B', 'B', 'C', 'D'))
-        return 0;
+/* H264 slice threading seems to be buggy with more than 16 threads,
+ * limit the number of threads to 16 for automatic detection */
+#define MAX_AUTO_THREADS 16
 
-    return AVPROBE_SCORE_MAX;
-}
+int ff_slice_thread_init(AVCodecContext *avctx);
+void ff_slice_thread_free(AVCodecContext *avctx);
 
-FF_DEF_RAWVIDEO_DEMUXER(dirac, "raw Dirac", dirac_probe, NULL, AV_CODEC_ID_DIRAC)
+int ff_frame_thread_init(AVCodecContext *avctx);
+void ff_frame_thread_free(AVCodecContext *avctx, int thread_count);
+
+#endif // AVCODEC_PTHREAD_INTERNAL_H

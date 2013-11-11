@@ -1,7 +1,4 @@
 /*
- * RAW Dirac demuxer
- * Copyright (c) 2007 Marco Gerards <marco@gnu.org>
- *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -19,25 +16,19 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/intreadwrite.h"
-#include "avformat.h"
-#include "rawdec.h"
+#ifndef AVCODEC_H263DSP_H
+#define AVCODEC_H263DSP_H
 
-static int dirac_probe(AVProbeData *p)
-{
-    unsigned size;
-    if (AV_RL32(p->buf) != MKTAG('B', 'B', 'C', 'D'))
-        return 0;
+#include <stdint.h>
 
-    size = AV_RB32(p->buf+5);
-    if (size < 13)
-        return 0;
-    if (size + 13LL > p->buf_size)
-        return AVPROBE_SCORE_MAX / 4;
-    if (AV_RL32(p->buf + size) != MKTAG('B', 'B', 'C', 'D'))
-        return 0;
+extern const uint8_t ff_h263_loop_filter_strength[32];
 
-    return AVPROBE_SCORE_MAX;
-}
+typedef struct H263DSPContext {
+    void (*h263_h_loop_filter)(uint8_t *src, int stride, int qscale);
+    void (*h263_v_loop_filter)(uint8_t *src, int stride, int qscale);
+} H263DSPContext;
 
-FF_DEF_RAWVIDEO_DEMUXER(dirac, "raw Dirac", dirac_probe, NULL, AV_CODEC_ID_DIRAC)
+void ff_h263dsp_init(H263DSPContext *ctx);
+void ff_h263dsp_init_x86(H263DSPContext *ctx);
+
+#endif /* AVCODEC_H263DSP_H */

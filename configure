@@ -1578,6 +1578,7 @@ CONFIG_EXTRA="
     gcrypt
     golomb
     gplv3
+    h263dsp
     h264chroma
     h264dsp
     h264pred
@@ -1813,8 +1814,8 @@ g2m_decoder_select="dsputil zlib"
 g729_decoder_select="dsputil"
 h261_decoder_select="error_resilience mpegvideo"
 h261_encoder_select="aandcttables mpegvideoenc"
-h263_decoder_select="error_resilience h263_parser mpegvideo"
-h263_encoder_select="aandcttables mpegvideoenc"
+h263_decoder_select="error_resilience h263_parser h263dsp mpegvideo"
+h263_encoder_select="aandcttables h263dsp mpegvideoenc"
 h263i_decoder_select="h263_decoder"
 h263p_encoder_select="h263_encoder"
 h264_decoder_select="golomb h264chroma h264dsp h264pred h264qpel videodsp"
@@ -1879,9 +1880,9 @@ qdm2_decoder_select="mdct rdft mpegaudiodsp"
 ra_144_encoder_select="audio_frame_queue lpc"
 ralf_decoder_select="golomb"
 rtjpeg_decoder_select="dsputil"
-rv10_decoder_select="error_resilience h263_decoder"
+rv10_decoder_select="error_resilience h263_decoder h263dsp"
 rv10_encoder_select="h263_encoder"
-rv20_decoder_select="error_resilience h263_decoder"
+rv20_decoder_select="error_resilience h263_decoder h263dsp"
 rv20_encoder_select="h263_encoder"
 rv30_decoder_select="error_resilience golomb h264chroma h264pred h264qpel mpegvideo videodsp"
 rv40_decoder_select="error_resilience golomb h264chroma h264pred h264qpel mpegvideo videodsp"
@@ -2894,7 +2895,9 @@ probe_cc(){
     unset _depflags _DEPCMD _DEPFLAGS
     _flags_filter=echo
 
-    if $_cc -v 2>&1 | grep -q '^gcc.*LLVM'; then
+    if $_cc --version 2>&1 | grep -q '^GNU assembler'; then
+        true # no-op to avoid reading stdin in following checks
+    elif $_cc -v 2>&1 | grep -q '^gcc.*LLVM'; then
         _type=llvm_gcc
         gcc_extra_ver=$(expr "$($_cc --version | head -n1)" : '.*\((.*)\)')
         _ident="llvm-gcc $($_cc -dumpversion) $gcc_extra_ver"
@@ -4453,7 +4456,6 @@ check_disable_warning -Wno-parentheses
 check_disable_warning -Wno-switch
 check_disable_warning -Wno-format-zero-length
 check_disable_warning -Wno-pointer-sign
-enabled extra_warnings || check_disable_warning -Wno-maybe-uninitialized
 
 # add some linker flags
 check_ldflags -Wl,--warn-common
@@ -4553,6 +4555,7 @@ elif enabled gcc; then
     check_cflags -Werror=missing-prototypes
     check_cflags -Werror=return-type
     check_cflags -Werror=vla
+    enabled extra_warnings || check_disable_warning -Wno-maybe-uninitialized
 elif enabled llvm_gcc; then
     check_cflags -mllvm -stack-alignment=16
 elif enabled clang; then

@@ -1,6 +1,5 @@
 /*
- * RAW Dirac demuxer
- * Copyright (c) 2007 Marco Gerards <marco@gnu.org>
+ * Copyright (c) 2013 Diego Biurrun <diego@biurrun.de>
  *
  * This file is part of FFmpeg.
  *
@@ -19,25 +18,22 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/intreadwrite.h"
-#include "avformat.h"
-#include "rawdec.h"
+#include <stdint.h>
 
-static int dirac_probe(AVProbeData *p)
+#include "libavutil/attributes.h"
+#include "libavutil/cpu.h"
+#include "libavutil/x86/cpu.h"
+#include "libavcodec/h263dsp.h"
+
+void ff_h263_h_loop_filter_mmx(uint8_t *src, int stride, int qscale);
+void ff_h263_v_loop_filter_mmx(uint8_t *src, int stride, int qscale);
+
+av_cold void ff_h263dsp_init_x86(H263DSPContext *c)
 {
-    unsigned size;
-    if (AV_RL32(p->buf) != MKTAG('B', 'B', 'C', 'D'))
-        return 0;
+    int cpu_flags = av_get_cpu_flags();
 
-    size = AV_RB32(p->buf+5);
-    if (size < 13)
-        return 0;
-    if (size + 13LL > p->buf_size)
-        return AVPROBE_SCORE_MAX / 4;
-    if (AV_RL32(p->buf + size) != MKTAG('B', 'B', 'C', 'D'))
-        return 0;
-
-    return AVPROBE_SCORE_MAX;
+    if (EXTERNAL_MMX(cpu_flags)) {
+        c->h263_h_loop_filter = ff_h263_h_loop_filter_mmx;
+        c->h263_v_loop_filter = ff_h263_v_loop_filter_mmx;
+    }
 }
-
-FF_DEF_RAWVIDEO_DEMUXER(dirac, "raw Dirac", dirac_probe, NULL, AV_CODEC_ID_DIRAC)
