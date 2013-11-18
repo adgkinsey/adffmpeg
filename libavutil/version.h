@@ -75,7 +75,7 @@
  */
 
 #define LIBAVUTIL_VERSION_MAJOR  52
-#define LIBAVUTIL_VERSION_MINOR  52
+#define LIBAVUTIL_VERSION_MINOR  53
 #define LIBAVUTIL_VERSION_MICRO 100
 
 #define LIBAVUTIL_VERSION_INT   AV_VERSION_INT(LIBAVUTIL_VERSION_MAJOR, \
@@ -132,6 +132,9 @@
 #ifndef FF_API_LLS_PRIVATE
 #define FF_API_LLS_PRIVATE              (LIBAVUTIL_VERSION_MAJOR < 53)
 #endif
+#ifndef FF_API_LLS1
+#define FF_API_LLS1                     (LIBAVUTIL_VERSION_MAJOR < 53)
+#endif
 #ifndef FF_API_AVFRAME_LAVC
 #define FF_API_AVFRAME_LAVC             (LIBAVUTIL_VERSION_MAJOR < 53)
 #endif
@@ -143,6 +146,9 @@
 #endif
 #ifndef FF_API_OLD_OPENCL
 #define FF_API_OLD_OPENCL               (LIBAVUTIL_VERSION_MAJOR < 53)
+#endif
+#ifndef FF_API_XVMC
+#define FF_API_XVMC                     (LIBAVUTIL_VERSION_MAJOR < 53)
 #endif
 
 /**
