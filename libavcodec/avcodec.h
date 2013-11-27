@@ -37,16 +37,18 @@
 #include "libavutil/dict.h"
 #include "libavutil/frame.h"
 #include "libavutil/log.h"
-#if FF_API_FAST_MALLOC
-// to provide fast_*alloc
-#include "libavutil/mem.h"
-#endif
 #include "libavutil/pixfmt.h"
 #include "libavutil/rational.h"
 
 #include "version.h"
 
+#if FF_API_FAST_MALLOC
+// to provide fast_*alloc
+#include "libavutil/mem.h"
+#endif
+
 #include "libavcodec/adsidedata.h"
+
 
 /**
  * @defgroup libavc Encoding/Decoding Library
@@ -1045,6 +1047,13 @@ enum AVPacketSideDataType {
      * follow the timestamp specifier of a WebVTT cue.
      */
     AV_PKT_DATA_WEBVTT_SETTINGS,
+
+    /**
+     * A list of zero terminated key/value strings. There is no end marker for
+     * the list, so it is required to rely on the side data size to stop. This
+     * side data includes updated metadata which appeared in the stream.
+     */
+    AV_PKT_DATA_METADATA_UPDATE,
     
 #ifdef AD_SIDEDATA
     AV_PKT_DATA_AD_FRAME=0x4000,
@@ -2814,6 +2823,11 @@ typedef struct AVCodecContext {
 #define FF_PROFILE_JPEG2000_DCINEMA_2K              3
 #define FF_PROFILE_JPEG2000_DCINEMA_4K              4
 
+
+#define FF_PROFILE_HEVC_MAIN                        1
+#define FF_PROFILE_HEVC_MAIN_10                     2
+#define FF_PROFILE_HEVC_MAIN_STILL_PICTURE          3
+
     /**
      * level
      * - encoding: Set by user.
@@ -3586,6 +3600,24 @@ uint8_t* av_packet_get_side_data(AVPacket *pkt, enum AVPacketSideDataType type,
 int av_packet_merge_side_data(AVPacket *pkt);
 
 int av_packet_split_side_data(AVPacket *pkt);
+
+/**
+ * Pack a dictionary for use in side_data.
+ *
+ * @param dict The dictionary to pack.
+ * @param size pointer to store the size of the returned data
+ * @return pointer to data if successful, NULL otherwise
+ */
+uint8_t *av_packet_pack_dictionary(AVDictionary *dict, int *size);
+/**
+ * Unpack a dictionary from side_data.
+ *
+ * @param data data from side_data
+ * @param size size of the data
+ * @param dict the metadata storage dictionary
+ * @return 0 on success, < 0 on failure
+ */
+int av_packet_unpack_dictionary(const uint8_t *data, int size, AVDictionary **dict);
 
 
 /**

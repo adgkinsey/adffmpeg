@@ -19,6 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <stdint.h>
+
 #include "avformat.h"
 #include "avio_internal.h"
 #include "internal.h"
@@ -700,9 +702,6 @@ int ff_read_packet(AVFormatContext *s, AVPacket *pkt)
             av_free_packet(pkt);
             continue;
         }
-
-        if(!(s->flags & AVFMT_FLAG_KEEP_SIDE_DATA))
-            av_packet_merge_side_data(pkt);
 
         if(pkt->stream_index >= (unsigned)s->nb_streams){
             av_log(s, AV_LOG_ERROR, "Invalid stream index %d\n", pkt->stream_index);
@@ -1401,6 +1400,21 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
     if (!got_packet && s->parse_queue)
         ret = read_from_packet_buffer(&s->parse_queue, &s->parse_queue_end, pkt);
 
+    if (ret >= 0) {
+        AVStream *st = s->streams[pkt->stream_index];
+        if (st->skip_samples) {
+            uint8_t *p = av_packet_new_side_data(pkt, AV_PKT_DATA_SKIP_SAMPLES, 10);
+            if (p) {
+                AV_WL32(p, st->skip_samples);
+                av_log(s, AV_LOG_DEBUG, "demuxer injecting skip %d\n", st->skip_samples);
+            }
+            st->skip_samples = 0;
+        }
+    }
+
+    if(ret >= 0 && !(s->flags & AVFMT_FLAG_KEEP_SIDE_DATA))
+        av_packet_merge_side_data(pkt);
+
     if(s->debug & FF_FDEBUG_TS)
         av_log(s, AV_LOG_DEBUG, "read_frame_internal stream=%d, pts=%s, dts=%s, size=%d, duration=%d, flags=%d\n",
             pkt->stream_index,
@@ -1490,15 +1504,6 @@ int av_read_frame(AVFormatContext *s, AVPacket *pkt)
 return_packet:
 
     st = s->streams[pkt->stream_index];
-    if (st->skip_samples) {
-        uint8_t *p = av_packet_new_side_data(pkt, AV_PKT_DATA_SKIP_SAMPLES, 10);
-        if (p) {
-            AV_WL32(p, st->skip_samples);
-            av_log(s, AV_LOG_DEBUG, "demuxer injecting skip %d\n", st->skip_samples);
-        }
-        st->skip_samples = 0;
-    }
-
     if ((s->iformat->flags & AVFMT_GENERIC_INDEX) && pkt->flags & AV_PKT_FLAG_KEY) {
         ff_reduce_index(s, st->index);
         av_add_index_entry(st, pkt->pos, pkt->dts, 0, 0, AVINDEX_KEYFRAME);

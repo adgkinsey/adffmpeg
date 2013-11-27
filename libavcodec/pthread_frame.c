@@ -343,6 +343,10 @@ static int submit_packet(PerThreadContext *p, AVPacket *avpkt)
         p->avpkt.buf = av_buffer_ref(avpkt->buf);
     else {
         av_fast_malloc(&p->buf, &p->allocated_buf_size, avpkt->size + FF_INPUT_BUFFER_PADDING_SIZE);
+        if (!p->buf) {
+            pthread_mutex_unlock(&p->mutex);
+            return AVERROR(ENOMEM);
+        }
         p->avpkt.data = p->buf;
         memcpy(p->buf, avpkt->data, avpkt->size);
         memset(p->buf + avpkt->size, 0, FF_INPUT_BUFFER_PADDING_SIZE);
@@ -853,7 +857,7 @@ FF_DISABLE_DEPRECATION_WARNINGS
                            avctx->get_buffer2 == avcodec_default_get_buffer2);
 FF_ENABLE_DEPRECATION_WARNINGS
 
-    if (!f->f->data[0])
+    if (!f->f->buf[0])
         return;
 
     if (avctx->debug & FF_DEBUG_BUFFERS)
