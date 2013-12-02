@@ -731,6 +731,10 @@ add_ldflags(){
     append LDFLAGS $($ldflags_filter "$@")
 }
 
+add_stripflags(){
+    append ASMSTRIPFLAGS "$@"
+}
+
 add_extralibs(){
     prepend extralibs $($ldflags_filter "$@")
 }
@@ -891,6 +895,20 @@ EOF
 check_ldflags(){
     log check_ldflags "$@"
     test_ldflags "$@" && add_ldflags "$@"
+}
+
+test_stripflags(){
+    log test_stripflags "$@"
+    # call check_cc to get a fresh TMPO
+    check_cc <<EOF
+int main(void) { return 0; }
+EOF
+    check_cmd $strip $ASMSTRIPFLAGS "$@" $TMPO
+}
+
+check_stripflags(){
+    log check_stripflags "$@"
+    test_stripflags "$@" && add_stripflags "$@"
 }
 
 check_header(){
@@ -1166,7 +1184,14 @@ COMPONENT_LIST="
 "
 
 EXAMPLE_LIST="
+    decoding_encoding_example
+    demuxing_decoding_example
+    filtering_audio_example
+    filtering_video_example
+    metadata_example
     muxing_example
+    resampling_audio_example
+    scaling_video_example
     transcode_aac_example
 "
 
@@ -2282,8 +2307,15 @@ tinterlace_pad_test_deps="tinterlace_filter"
 zmq_filter_deps="libzmq"
 
 # examples
+decoding_encoding_example_deps="avcodec avutil"
+demuxing_decoding_example_deps="avcodec avformat avutil"
+filtering_audio_example_deps="avfilter avcodec avformat avutil"
+filtering_video_example_deps="avfilter avcodec avformat avutil"
+metadata_example_deps="avformat avutil"
 muxing_example_deps="avcodec avformat avutil swscale"
-transcode_aac_example_deps="avcodec avformat avresample"
+resampling_audio_example_deps="avutil swresample"
+scaling_video_example_deps="avutil swscale"
+transcode_aac_example_deps="avcodec avformat swresample"
 
 # libraries
 avcodec_deps="avutil"
@@ -4228,17 +4260,17 @@ fi
 # do this before the optional library checks as some of them require pthreads
 if ! disabled pthreads && ! enabled w32threads && ! enabled os2threads; then
     enable pthreads
-    if check_func pthread_create; then
+    if check_func pthread_join; then
         :
-    elif check_func pthread_create -pthread; then
+    elif check_func pthread_join -pthread; then
         add_cflags -pthread
         add_extralibs -pthread
-    elif check_func pthread_create -pthreads; then
+    elif check_func pthread_join -pthreads; then
         add_cflags -pthreads
         add_extralibs -pthreads
-    elif check_func pthread_create -lpthreadGC2; then
+    elif check_func pthread_join -lpthreadGC2; then
         add_extralibs -lpthreadGC2
-    elif ! check_lib pthread.h pthread_create -lpthread; then
+    elif ! check_lib pthread.h pthread_join -lpthread; then
         disable pthreads
     fi
 fi
@@ -4499,6 +4531,10 @@ check_ldflags -Wl,--warn-common
 check_ldflags -Wl,-rpath-link=libpostproc:libswresample:libswscale:libavfilter:libavdevice:libavformat:libavcodec:libavutil:libavresample
 enabled rpath && add_ldflags -Wl,-rpath=$libdir
 test_ldflags -Wl,-Bsymbolic && append SHFLAGS -Wl,-Bsymbolic
+
+# add some strip flags
+# -wN '..@*' is more selective than -x, but not available everywhere.
+check_stripflags -wN \'..@*\' || check_stripflags -x
 
 enabled xmm_clobber_test &&
     check_ldflags -Wl,--wrap,avcodec_open2              \
@@ -4851,6 +4887,7 @@ LD_PATH=$LD_PATH
 DLLTOOL=$dlltool
 LDFLAGS=$LDFLAGS
 SHFLAGS=$(echo $($ldflags_filter $SHFLAGS))
+ASMSTRIPFLAGS=$ASMSTRIPFLAGS
 YASMFLAGS=$YASMFLAGS
 BUILDSUF=$build_suffix
 PROGSSUF=$progs_suffix
