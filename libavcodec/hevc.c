@@ -688,8 +688,8 @@ static int hls_slice_header(HEVCContext *s)
     s->HEVClc->first_qp_group = !s->sh.dependent_slice_segment_flag;
 
     if (!s->pps->cu_qp_delta_enabled_flag)
-        s->HEVClc->qp_y = ((s->sh.slice_qp + 52 + 2 * s->sps->qp_bd_offset) %
-                          (52 + s->sps->qp_bd_offset)) - s->sps->qp_bd_offset;
+        s->HEVClc->qp_y = FFUMOD(s->sh.slice_qp + 52 + 2 * s->sps->qp_bd_offset,
+                                 52 + s->sps->qp_bd_offset) - s->sps->qp_bd_offset;
 
     s->slice_initialized = 1;
 
@@ -2728,6 +2728,8 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
             av_freep(&s->sList[i]);
         }
     }
+    if (s->HEVClc == s->HEVClcList[0])
+        s->HEVClc = NULL;
     av_freep(&s->HEVClcList[0]);
 
     for (i = 0; i < s->nals_allocated; i++)
@@ -2984,9 +2986,9 @@ static void hevc_decode_flush(AVCodecContext *avctx)
 #define PAR (AV_OPT_FLAG_DECODING_PARAM | AV_OPT_FLAG_VIDEO_PARAM)
 
 static const AVProfile profiles[] = {
-    { FF_PROFILE_HEVC_MAIN,                 "Main"              },
-    { FF_PROFILE_HEVC_MAIN_10,              "Main10"            },
-    { FF_PROFILE_HEVC_MAIN_STILL_PICTURE,   "MainStillPicture"  },
+    { FF_PROFILE_HEVC_MAIN,                 "Main"                },
+    { FF_PROFILE_HEVC_MAIN_10,              "Main 10"             },
+    { FF_PROFILE_HEVC_MAIN_STILL_PICTURE,   "Main Still Picture"  },
     { FF_PROFILE_UNKNOWN },
 };
 

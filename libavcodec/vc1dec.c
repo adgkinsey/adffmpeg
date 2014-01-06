@@ -377,7 +377,7 @@ static void vc1_mc_1mv(VC1Context *v, int dir)
             srcV = s->current_picture.f.data[2];
             luty  = v->curr_luty;
             lutuv = v->curr_lutuv;
-            use_ic = v->curr_use_ic;
+            use_ic = *v->curr_use_ic;
         } else {
             srcY = s->last_picture.f.data[0];
             srcU = s->last_picture.f.data[1];
@@ -571,7 +571,7 @@ static void vc1_mc_4mv_luma(VC1Context *v, int n, int dir, int avg)
         if (v->field_mode && (v->cur_field_type != v->ref_field_type[dir]) && v->second_field) {
             srcY = s->current_picture.f.data[0];
             luty = v->curr_luty;
-            use_ic = v->curr_use_ic;
+            use_ic = *v->curr_use_ic;
         } else {
             srcY = s->last_picture.f.data[0];
             luty = v->last_luty;
@@ -873,7 +873,7 @@ static void vc1_mc_4mv_chroma(VC1Context *v, int dir)
             srcU = s->current_picture.f.data[1];
             srcV = s->current_picture.f.data[2];
             lutuv = v->curr_lutuv;
-            use_ic = v->curr_use_ic;
+            use_ic = *v->curr_use_ic;
         } else {
             srcU = s->last_picture.f.data[1];
             srcV = s->last_picture.f.data[2];
@@ -5516,7 +5516,7 @@ av_cold int ff_vc1_decode_init_alloc_tables(VC1Context *v)
     v->ttblk            = v->ttblk_base + s->mb_stride;
     v->is_intra_base    = av_mallocz(sizeof(v->is_intra_base[0]) * 2 * s->mb_stride);
     v->is_intra         = v->is_intra_base + s->mb_stride;
-    v->luma_mv_base     = av_malloc(sizeof(v->luma_mv_base[0]) * 2 * s->mb_stride);
+    v->luma_mv_base     = av_mallocz(sizeof(v->luma_mv_base[0]) * 2 * s->mb_stride);
     v->luma_mv          = v->luma_mv_base + s->mb_stride;
 
     /* allocate block type info in that way so it could be used with s->block_index[] */

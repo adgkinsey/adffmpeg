@@ -201,12 +201,14 @@ static void decode_profile_tier_level(HEVCContext *s, PTLCommon *ptl)
     ptl->profile_space = get_bits(gb, 2);
     ptl->tier_flag     = get_bits1(gb);
     ptl->profile_idc   = get_bits(gb, 5);
-    if (ptl->profile_idc == 1)
+    if (ptl->profile_idc == FF_PROFILE_HEVC_MAIN)
         av_log(s->avctx, AV_LOG_DEBUG, "Main profile bitstream\n");
-    else if (ptl->profile_idc == 2)
-        av_log(s->avctx, AV_LOG_DEBUG, "Main10 profile bitstream\n");
+    else if (ptl->profile_idc == FF_PROFILE_HEVC_MAIN_10)
+        av_log(s->avctx, AV_LOG_DEBUG, "Main 10 profile bitstream\n");
+    else if (ptl->profile_idc == FF_PROFILE_HEVC_MAIN_STILL_PICTURE)
+        av_log(s->avctx, AV_LOG_DEBUG, "Main Still Picture profile bitstream\n");
     else
-        av_log(s->avctx, AV_LOG_WARNING, "No profile indication! (%d)\n", ptl->profile_idc);
+        av_log(s->avctx, AV_LOG_WARNING, "Unknown HEVC profile: %d\n", ptl->profile_idc);
 
     for (i = 0; i < 32; i++)
         ptl->profile_compatibility_flag[i] = get_bits1(gb);
@@ -629,6 +631,12 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
     sps->vps_id = get_bits(gb, 4);
     if (sps->vps_id >= MAX_VPS_COUNT) {
         av_log(s->avctx, AV_LOG_ERROR, "VPS id out of range: %d\n", sps->vps_id);
+        ret = AVERROR_INVALIDDATA;
+        goto err;
+    }
+
+    if (!s->vps_list[sps->vps_id]) {
+        av_log(s->avctx, AV_LOG_ERROR, "VPS does not exist \n");
         ret = AVERROR_INVALIDDATA;
         goto err;
     }

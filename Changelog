@@ -14,6 +14,10 @@ version <next>
 - Windows resource files for shared libraries
 - aeval filter
 - stereoscopic 3d metadata handling
+- WebP encoding via libwebp
+- ATRAC3+ decoder
+- VP8 in Ogg demuxing
+- side & metadata support in NUT
 
 
 version 2.1:

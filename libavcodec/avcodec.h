@@ -516,6 +516,7 @@ enum AVCodecID {
     AV_CODEC_ID_OTF        = MKBETAG( 0 ,'O','T','F'),
     AV_CODEC_ID_SMPTE_KLV  = MKBETAG('K','L','V','A'),
     AV_CODEC_ID_DVD_NAV    = MKBETAG('D','N','A','V'),
+    AV_CODEC_ID_TIMED_ID3  = MKBETAG('T','I','D','3'),
 
 
     AV_CODEC_ID_PROBE = 0x19000, ///< codec_id is not known (like AV_CODEC_ID_NONE) but lavf should attempt to identify it
@@ -770,7 +771,13 @@ typedef struct RcOverride{
 #define CODEC_CAP_DR1             0x0002
 #define CODEC_CAP_TRUNCATED       0x0008
 #if FF_API_XVMC
-/* Codec can export data for HW decoding (XvMC). */
+/* Codec can export data for HW decoding. This flag indicates that
+ * the codec would call get_format() with list that might contain HW accelerated
+ * pixel formats (XvMC, VDPAU, VAAPI, etc). The application can pick any of them
+ * including raw image format.
+ * The application can use the passed context to determine bitstream version,
+ * chroma format, resolution etc.
+ */
 #define CODEC_CAP_HWACCEL         0x0010
 #endif /* FF_API_XVMC */
 /**
@@ -1704,7 +1711,7 @@ typedef struct AVCodecContext {
      * XVideo Motion Acceleration
      * - encoding: forbidden
      * - decoding: set by decoder
-     * @deprecated XvMC support is slated for removal.
+     * @deprecated XvMC doesn't need it anymore.
      */
     attribute_deprecated int xvmc_acceleration;
 #endif /* FF_API_XVMC */
@@ -2159,6 +2166,8 @@ typedef struct AVCodecContext {
      *
      * avcodec_align_dimensions2() should be used to find the required width and
      * height, as they normally need to be rounded up to the next multiple of 16.
+     *
+     * Some decoders do not support linesizes changing between frames.
      *
      * If frame multithreading is used and thread_safe_callbacks is set,
      * this callback may be called from a different thread, but not from more
@@ -3109,6 +3118,8 @@ typedef struct AVCodec {
 
 int av_codec_get_max_lowres(const AVCodec *codec);
 
+struct MpegEncContext;
+
 /**
  * AVHWAccel.
  */
@@ -3170,6 +3181,7 @@ typedef struct AVHWAccel {
      *
      * Meaningful slice information (codec specific) is guaranteed to
      * be parsed at this point. This function is mandatory.
+     * The only exception is XvMC, that works on MB level.
      *
      * @param avctx the codec context
      * @param buf the slice data buffer base
@@ -3197,6 +3209,17 @@ typedef struct AVHWAccel {
      * AVCodecContext.release_buffer().
      */
     int priv_data_size;
+
+    /**
+     * Called for every Macroblock in a slice.
+     *
+     * XvMC uses it to replace the ff_MPV_decode_mb().
+     * Instead of decoding to raw picture, MB parameters are
+     * stored in an array provided by the video driver.
+     *
+     * @param s the mpeg context
+     */
+    void (*decode_mb)(struct MpegEncContext *s);
 } AVHWAccel;
 
 /**

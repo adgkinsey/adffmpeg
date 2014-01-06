@@ -1213,9 +1213,6 @@ static void free_tables(H264Context *h, int free_rbsp)
     av_freep(&h->mb2b_xy);
     av_freep(&h->mb2br_xy);
 
-    for (i = 0; i < 3; i++)
-        av_freep(&h->visualization_buffer[i]);
-
     av_buffer_pool_uninit(&h->qscale_table_pool);
     av_buffer_pool_uninit(&h->mb_type_pool);
     av_buffer_pool_uninit(&h->motion_val_pool);
@@ -1975,6 +1972,10 @@ static int h264_frame_start(H264Context *h)
 
     h->cur_pic_ptr = pic;
     unref_picture(h, &h->cur_pic);
+    if (CONFIG_ERROR_RESILIENCE) {
+        h->er.cur_pic = NULL;
+    }
+
     if ((ret = ref_picture(h, &h->cur_pic, h->cur_pic_ptr)) < 0)
         return ret;
 
@@ -4970,8 +4971,13 @@ again:
                 hx->intra_gb_ptr =
                 hx->inter_gb_ptr = NULL;
 
-                if ((err = decode_slice_header(hx, h)) < 0)
+                if ((err = decode_slice_header(hx, h)) < 0) {
+                    /* make sure data_partitioning is cleared if it was set
+                     * before, so we don't try decoding a slice without a valid
+                     * slice header later */
+                    h->data_partitioning = 0;
                     break;
+                }
 
                 hx->data_partitioning = 1;
                 break;
@@ -5103,8 +5109,8 @@ static int output_frame(H264Context *h, AVFrame *dst, Picture *srcp)
     return 0;
 }
 
-static int decode_frame(AVCodecContext *avctx, void *data,
-                        int *got_frame, AVPacket *avpkt)
+static int h264_decode_frame(AVCodecContext *avctx, void *data,
+                             int *got_frame, AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
     int buf_size       = avpkt->size;
@@ -5291,7 +5297,7 @@ AVCodec ff_h264_decoder = {
     .priv_data_size        = sizeof(H264Context),
     .init                  = ff_h264_decode_init,
     .close                 = h264_decode_end,
-    .decode                = decode_frame,
+    .decode                = h264_decode_frame,
     .capabilities          = /*CODEC_CAP_DRAW_HORIZ_BAND |*/ CODEC_CAP_DR1 |
                              CODEC_CAP_DELAY | CODEC_CAP_SLICE_THREADS |
                              CODEC_CAP_FRAME_THREADS,
@@ -5311,7 +5317,7 @@ AVCodec ff_h264_vdpau_decoder = {
     .priv_data_size = sizeof(H264Context),
     .init           = ff_h264_decode_init,
     .close          = h264_decode_end,
-    .decode         = decode_frame,
+    .decode         = h264_decode_frame,
     .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_DELAY | CODEC_CAP_HWACCEL_VDPAU,
     .flush          = flush_dpb,
     .pix_fmts       = (const enum AVPixelFormat[]) { AV_PIX_FMT_VDPAU_H264,

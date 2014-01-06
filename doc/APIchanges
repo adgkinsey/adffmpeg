@@ -4,7 +4,7 @@ since the last major version increase or the API was added.
 The last version increases were:
 libavcodec:    2013-03-xx
 libavdevice:   2013-03-xx
-libavfilter:   2012-06-22
+libavfilter:   2013-12-xx
 libavformat:   2013-03-xx
 libavresample: 2012-10-05
 libpostproc:   2011-04-18
@@ -14,6 +14,20 @@ libavutil:     2012-10-22
 
 
 API changes, most recent first:
+
+2013-12-xx - xxxxxxx - lavu 53.2.0 - frame.h
+  Add AV_FRAME_DATA_MATRIXENCODING value to the AVFrameSideDataType enum, which
+  identifies AVMatrixEncoding data.
+
+2013-12-xx - xxxxxxx - lavu 53.1.0 - channel_layout.h
+  Add values for various Dolby flags to the AVMatrixEncoding enum.
+
+2014-01-04 - xxxxxxx - lavu 52.60.100 - mathematics.h
+  Add av_add_stable() function.
+
+2013-12-22 - xxxxxxx - lavu 52.59.100 - avstring.h
+  Add av_strnlen() function.
+
 2013-12-xx - xxxxxxx - lavu 52.57.100 - opencl.h
   Add av_opencl_benchmark() function.
 
@@ -36,6 +50,9 @@ API changes, most recent first:
 
 2013-11-XX - xxxxxxx - lavu 52.54.100 - avstring.h
   Add av_utf8_decode() function.
+
+2013-11-22 - fb7d70c - lavc 55.44.100 - avcodec.h
+  Add HEVC profiles
 
 2013-11-xx - xxxxxxx - lavc 55.44.100 - avcodec.h
   Add av_packet_{un,}pack_dictionary()

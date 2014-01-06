@@ -938,8 +938,8 @@ static AVPacketList *get_next_pkt(AVFormatContext *s, AVStream *st, AVPacketList
 {
     if (pktl->next)
         return pktl->next;
-    if (pktl == s->parse_queue_end)
-        return s->packet_buffer;
+    if (pktl == s->packet_buffer_end)
+        return s->parse_queue;
     return NULL;
 }
 
@@ -947,7 +947,7 @@ static void update_initial_timestamps(AVFormatContext *s, int stream_index,
                                       int64_t dts, int64_t pts, AVPacket *pkt)
 {
     AVStream *st= s->streams[stream_index];
-    AVPacketList *pktl= s->parse_queue ? s->parse_queue : s->packet_buffer;
+    AVPacketList *pktl= s->packet_buffer ? s->packet_buffer : s->parse_queue;
     int64_t pts_buffer[MAX_REORDER_DELAY+1];
     int64_t shift;
     int i, delay;
@@ -994,10 +994,13 @@ static void update_initial_timestamps(AVFormatContext *s, int stream_index,
 static void update_initial_durations(AVFormatContext *s, AVStream *st,
                                      int stream_index, int duration)
 {
-    AVPacketList *pktl= s->parse_queue ? s->parse_queue : s->packet_buffer;
+    AVPacketList *pktl= s->packet_buffer ? s->packet_buffer : s->parse_queue;
     int64_t cur_dts= RELATIVE_TS_BASE;
 
     if(st->first_dts != AV_NOPTS_VALUE){
+        if (st->update_initial_durations_done)
+            return;
+        st->update_initial_durations_done = 1;
         cur_dts= st->first_dts;
         for(; pktl; pktl= get_next_pkt(s, st, pktl)){
             if(pktl->pkt.stream_index == stream_index){
@@ -1015,7 +1018,7 @@ static void update_initial_durations(AVFormatContext *s, AVStream *st,
             av_log(s, AV_LOG_DEBUG, "first_dts %s but no packet with dts in the queue\n", av_ts2str(st->first_dts));
             return;
         }
-        pktl= s->parse_queue ? s->parse_queue : s->packet_buffer;
+        pktl= s->packet_buffer ? s->packet_buffer : s->parse_queue;
         st->first_dts = cur_dts;
     }else if(st->cur_dts != RELATIVE_TS_BASE)
         return;
@@ -1043,6 +1046,7 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
 {
     int num, den, presentation_delayed, delay, i;
     int64_t offset;
+    AVRational duration;
 
     if (s->flags & AVFMT_FLAG_NOFILLIN)
         return;
@@ -1084,12 +1088,15 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
             pkt->dts= AV_NOPTS_VALUE;
     }
 
+    duration = av_mul_q((AVRational){pkt->duration, 1}, st->time_base);
     if (pkt->duration == 0) {
         ff_compute_frame_duration(&num, &den, st, pc, pkt);
         if (den && num) {
+            duration = (AVRational){num, den};
             pkt->duration = av_rescale_rnd(1, num * (int64_t)st->time_base.den, den * (int64_t)st->time_base.num, AV_ROUND_DOWN);
         }
     }
+
     if(pkt->duration != 0 && (s->packet_buffer || s->parse_queue))
         update_initial_durations(s, st, pkt->stream_index, pkt->duration);
 
@@ -1135,7 +1142,6 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
         } else if (pkt->pts != AV_NOPTS_VALUE ||
                    pkt->dts != AV_NOPTS_VALUE ||
                    pkt->duration                ) {
-            int duration = pkt->duration;
 
             /* presentation is not delayed : PTS and DTS are the same */
             if (pkt->pts == AV_NOPTS_VALUE)
@@ -1146,7 +1152,7 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
                 pkt->pts = st->cur_dts;
             pkt->dts = pkt->pts;
             if (pkt->pts != AV_NOPTS_VALUE)
-                st->cur_dts = pkt->pts + duration;
+                st->cur_dts = av_add_stable(st->time_base, pkt->pts, duration, 1);
         }
     }
 
@@ -2698,6 +2704,22 @@ int ff_alloc_extradata(AVCodecContext *avctx, int size)
         avctx->extradata_size = 0;
         ret = AVERROR(ENOMEM);
     }
+    return ret;
+}
+
+int ff_get_extradata(AVCodecContext *avctx, AVIOContext *pb, int size)
+{
+    int ret = ff_alloc_extradata(avctx, size);
+    if (ret < 0)
+        return ret;
+    ret = avio_read(pb, avctx->extradata, size);
+    if (ret != size) {
+        av_freep(&avctx->extradata);
+        avctx->extradata_size = 0;
+        av_log(avctx, AV_LOG_ERROR, "Failed to read extradata of size %d\n", size);
+        return ret < 0 ? ret : AVERROR_INVALIDDATA;
+    }
+
     return ret;
 }
 

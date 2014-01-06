@@ -537,7 +537,8 @@ static int mov_read_dref(MOVContext *c, AVIOContext *pb, MOVAtom atom)
                     dref->dir = av_malloc(len+1);
                     if (!dref->dir)
                         return AVERROR(ENOMEM);
-                    avio_read(pb, dref->dir, len);
+                    if (avio_read(pb, dref->dir, len) != len)
+                        return AVERROR_INVALIDDATA;
                     dref->dir[len] = 0;
                     for (j = 0; j < len; j++)
                         if (dref->dir[j] == ':')
@@ -1009,6 +1010,7 @@ static int mov_read_extradata(MOVContext *c, AVIOContext *pb, MOVAtom atom,
         av_log(c->fc, AV_LOG_WARNING, "truncated extradata\n");
         st->codec->extradata_size -= atom.size - err;
     }
+    memset(buf + 8 + err, 0, FF_INPUT_BUFFER_PADDING_SIZE);
     return 0;
 }
 
@@ -1086,9 +1088,8 @@ static int mov_read_wave(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         st->codec->codec_id == AV_CODEC_ID_SPEEX) {
         // pass all frma atom to codec, needed at least for QDMC and QDM2
         av_free(st->codec->extradata);
-        if (ff_alloc_extradata(st->codec, atom.size))
+        if (ff_get_extradata(st->codec, pb, atom.size) < 0)
             return AVERROR(ENOMEM);
-        avio_read(pb, st->codec->extradata, atom.size);
     } else if (atom.size > 8) { /* to read frma, esds atoms */
         int ret;
         if ((ret = mov_read_default(c, pb, atom)) < 0)
@@ -1123,9 +1124,9 @@ static int mov_read_glbl(MOVContext *c, AVIOContext *pb, MOVAtom atom)
             return mov_read_default(c, pb, atom);
     }
     av_free(st->codec->extradata);
-    if (ff_alloc_extradata(st->codec, atom.size))
+    if (ff_get_extradata(st->codec, pb, atom.size) < 0)
         return AVERROR(ENOMEM);
-    avio_read(pb, st->codec->extradata, atom.size);
+
     return 0;
 }
 
@@ -1133,6 +1134,7 @@ static int mov_read_dvc1(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
     AVStream *st;
     uint8_t profile_level;
+    int ret;
 
     if (c->fc->nb_streams < 1)
         return 0;
@@ -1145,11 +1147,11 @@ static int mov_read_dvc1(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     if ((profile_level & 0xf0) != 0xc0)
         return 0;
 
-    av_free(st->codec->extradata);
-    if (ff_alloc_extradata(st->codec, atom.size - 7))
-        return AVERROR(ENOMEM);
     avio_seek(pb, 6, SEEK_CUR);
-    avio_read(pb, st->codec->extradata, st->codec->extradata_size);
+    av_free(st->codec->extradata);
+    if ((ret = ff_get_extradata(st->codec, pb, atom.size - 7)) < 0)
+        return ret;
+
     return 0;
 }
 
@@ -1171,11 +1173,10 @@ static int mov_read_strf(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     if ((uint64_t)atom.size > (1<<30))
         return AVERROR_INVALIDDATA;
 
-    av_free(st->codec->extradata);
-    if (ff_alloc_extradata(st->codec, atom.size - 40))
-        return AVERROR(ENOMEM);
     avio_skip(pb, 40);
-    avio_read(pb, st->codec->extradata, atom.size - 40);
+    av_free(st->codec->extradata);
+    if (ff_get_extradata(st->codec, pb, atom.size - 40) < 0)
+        return AVERROR(ENOMEM);
     return 0;
 }
 
@@ -1314,6 +1315,9 @@ static void mov_parse_stsd_video(MOVContext *c, AVIOContext *pb,
     /* figure out the palette situation */
     color_depth     = st->codec->bits_per_coded_sample & 0x1F;
     color_greyscale = st->codec->bits_per_coded_sample & 0x20;
+    /* Do not create a greyscale palette for cinepak */
+    if (color_greyscale && st->codec->codec_id == AV_CODEC_ID_CINEPAK)
+        return;
 
     /* if the depth is 2, 4, or 8 bpp, file is palettized */
     if ((color_depth == 2) || (color_depth == 4) || (color_depth == 8)) {
@@ -1324,14 +1328,10 @@ static void mov_parse_stsd_video(MOVContext *c, AVIOContext *pb,
         if (color_greyscale) {
             int color_index, color_dec;
             /* compute the greyscale palette */
-            st->codec->bits_per_coded_sample = color_depth;
             color_count = 1 << color_depth;
             color_index = 255;
             color_dec   = 256 / (color_count - 1);
             for (j = 0; j < color_count; j++) {
-                if (st->codec->codec_id == AV_CODEC_ID_CINEPAK){
-                    r = g = b = color_count - 1 - color_index;
-                } else
                 r = g = b = color_index;
                 sc->palette[j] = (0xFFU << 24) | (r << 16) | (g << 8) | (b);
                 color_index -= color_dec;
@@ -1488,9 +1488,8 @@ static int mov_parse_stsd_data(MOVContext *c, AVIOContext *pb,
                                 int size)
 {
     if (st->codec->codec_tag == MKTAG('t','m','c','d')) {
-        if (ff_alloc_extradata(st->codec, size))
+        if (ff_get_extradata(st->codec, pb, size) < 0)
             return AVERROR(ENOMEM);
-        avio_read(pb, st->codec->extradata, size);
         if (size > 16) {
             MOVStreamContext *tmcd_ctx = st->priv_data;
             int val;

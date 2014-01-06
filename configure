@@ -107,6 +107,7 @@ Configuration options:
   --disable-all            disable building components, libraries and programs
   --enable-incompatible-libav-abi enable incompatible Libav fork ABI [no]
   --enable-incompatible-fork-abi  enable incompatible Libav fork ABI (deprecated) [no]
+  --enable-raise-major     increase major version numbers in sonames [no]
 
 Program options:
   --disable-programs       do not build command line programs
@@ -241,6 +242,7 @@ External library support:
                            native implementation exists [no]
   --enable-libvpx          enable VP8 and VP9 de/encoding via libvpx [no]
   --enable-libwavpack      enable wavpack encoding via libwavpack [no]
+  --enable-libwebp         enable WebP encoding via libwebp [no]
   --enable-libx264         enable H.264 encoding via x264 [no]
   --enable-libxavs         enable AVS encoding via xavs [no]
   --enable-libxvid         enable Xvid encoding via xvidcore,
@@ -844,6 +846,13 @@ check_ld(){
     check_cmd $ld $LDFLAGS $flags $(ld_o $TMPE) $TMPO $libs $extralibs
 }
 
+print_include(){
+    hdr=$1
+    test "${hdr%.h}" = "${hdr}" &&
+        echo "#include $hdr"    ||
+        echo "#include <$hdr>"
+}
+
 check_code(){
     log check_code "$@"
     check=$1
@@ -852,7 +861,7 @@ check_code(){
     shift 3
     {
         for hdr in $headers; do
-            echo "#include <$hdr>"
+            print_include $hdr
         done
         echo "int main(void) { $code; return 0; }"
     } | check_$check "$@"
@@ -955,7 +964,7 @@ check_func_headers(){
     shift 2
     {
         for hdr in $headers; do
-            echo "#include <$hdr>"
+            print_include $hdr
         done
         for func in $funcs; do
             echo "long check_$func(void) { return (long) $func; }"
@@ -1291,6 +1300,7 @@ EXTERNAL_LIBRARY_LIST="
     libvorbis
     libvpx
     libwavpack
+    libwebp
     libx264
     libxavs
     libxvid
@@ -1317,6 +1327,7 @@ HWACCEL_LIST="
     vaapi
     vda
     vdpau
+    xvmc
 "
 
 LIBRARY_LIST="
@@ -1365,6 +1376,7 @@ CONFIG_LIST="
     network
     nonfree
     pic
+    raise_major
     rdft
     runtime_cpudetect
     safe_bitstream_reader
@@ -1822,6 +1834,13 @@ log2_deps="!libc_msvcrt"
 
 symver_if_any="symver_asm_label symver_gnu_asm"
 
+# threading support
+atomics_gcc_if="sync_val_compare_and_swap"
+atomics_suncc_if="atomic_cas_ptr machine_rw_barrier"
+atomics_win32_if="MemoryBarrier"
+atomics_native_if_any="$ATOMICS_LIST"
+threads_if_any="$THREADS_LIST"
+
 # subsystems
 dct_select="rdft"
 error_resilience_select="dsputil"
@@ -1855,6 +1874,7 @@ asv2_decoder_select="dsputil"
 asv2_encoder_select="dsputil"
 atrac1_decoder_select="mdct sinewin"
 atrac3_decoder_select="mdct"
+atrac3p_decoder_select="mdct sinewin"
 avrn_decoder_select="exif"
 bink_decoder_select="dsputil hpeldsp"
 binkaudio_dct_decoder_select="mdct rdft dct sinewin"
@@ -2030,6 +2050,7 @@ vaapi_deps="va_va_h"
 vda_deps="VideoDecodeAcceleration_VDADecoder_h pthreads"
 vda_extralibs="-framework CoreFoundation -framework VideoDecodeAcceleration -framework QuartzCore"
 vdpau_deps="vdpau_vdpau_h vdpau_vdpau_x11_h"
+xvmc_deps="X11_extensions_XvMClib_h"
 
 h263_vaapi_hwaccel_deps="vaapi"
 h263_vaapi_hwaccel_select="h263_decoder"
@@ -2050,10 +2071,14 @@ h264_vdpau_hwaccel_deps="vdpau"
 h264_vdpau_hwaccel_select="h264_decoder"
 mpeg_vdpau_decoder_deps="vdpau"
 mpeg_vdpau_decoder_select="mpeg2video_decoder"
+mpeg_xvmc_hwaccel_deps="xvmc"
+mpeg_xvmc_hwaccel_select="mpeg2video_decoder"
 mpeg1_vdpau_decoder_deps="vdpau"
 mpeg1_vdpau_decoder_select="mpeg1video_decoder"
 mpeg1_vdpau_hwaccel_deps="vdpau"
 mpeg1_vdpau_hwaccel_select="mpeg1video_decoder"
+mpeg1_xvmc_hwaccel_deps="xvmc"
+mpeg1_xvmc_hwaccel_select="mpeg1video_decoder"
 mpeg2_crystalhd_decoder_select="crystalhd"
 mpeg2_dxva2_hwaccel_deps="dxva2"
 mpeg2_dxva2_hwaccel_select="mpeg2video_decoder"
@@ -2061,6 +2086,8 @@ mpeg2_vaapi_hwaccel_deps="vaapi"
 mpeg2_vaapi_hwaccel_select="mpeg2video_decoder"
 mpeg2_vdpau_hwaccel_deps="vdpau"
 mpeg2_vdpau_hwaccel_select="mpeg2video_decoder"
+mpeg2_xvmc_hwaccel_deps="xvmc"
+mpeg2_xvmc_hwaccel_select="mpeg2video_decoder"
 mpeg4_crystalhd_decoder_select="crystalhd"
 mpeg4_vaapi_hwaccel_deps="vaapi"
 mpeg4_vaapi_hwaccel_select="mpeg4_decoder"
@@ -2140,6 +2167,7 @@ libvpx_vp8_encoder_deps="libvpx"
 libvpx_vp9_decoder_deps="libvpx"
 libvpx_vp9_encoder_deps="libvpx"
 libwavpack_encoder_deps="libwavpack"
+libwebp_encoder_deps="libwebp"
 libx264_encoder_deps="libx264"
 libx264rgb_encoder_deps="libx264"
 libxavs_encoder_deps="libxavs"
@@ -2448,7 +2476,7 @@ enable static
 enable swscale_alpha
 
 # Enable hwaccels by default.
-enable dxva2 vaapi vdpau
+enable dxva2 vaapi vdpau xvmc
 
 # build settings
 SHFLAGS='-shared -Wl,-soname,$$(@F)'
@@ -3842,6 +3870,7 @@ esac
 
 probe_libc(){
     pfx=$1
+    pfx_no_=${pfx%_}
     # uclibc defines __GLIBC__, so it needs to be checked before glibc.
     if check_${pfx}cpp_condition features.h "defined __UCLIBC__"; then
         eval ${pfx}libc_type=uclibc
@@ -3861,6 +3890,8 @@ probe_libc(){
             add_cflags "-include $source_path/compat/msvcrt/snprintf.h"
         fi
         add_${pfx}cppflags -U__STRICT_ANSI__ -D__USE_MINGW_ANSI_STDIO=1
+        eval test \$${pfx_no_}cc_type = "gcc" &&
+            add_${pfx}cppflags -D__printf__=__gnu_printf__
     elif check_${pfx}cpp_condition _mingw.h "defined __MINGW_VERSION"  ||
          check_${pfx}cpp_condition _mingw.h "defined __MINGW32_VERSION"; then
         eval ${pfx}libc_type=mingw32
@@ -3868,6 +3899,8 @@ probe_libc(){
             (__MINGW32_MAJOR_VERSION == 3 && __MINGW32_MINOR_VERSION >= 15)" ||
             die "ERROR: MinGW32 runtime version must be >= 3.15."
         add_${pfx}cppflags -U__STRICT_ANSI__ -D__USE_MINGW_ANSI_STDIO=1
+        eval test \$${pfx_no_}cc_type = "gcc" &&
+            add_${pfx}cppflags -D__printf__=__gnu_printf__
     elif check_${pfx}cpp_condition crtversion.h "defined _VC_CRT_MAJOR_VERSION"; then
         eval ${pfx}libc_type=msvcrt
         # The MSVC 2010 headers (Win 7.0 SDK) set _WIN32_WINNT to
@@ -4318,7 +4351,8 @@ check_header X11/extensions/XvMClib.h
 check_header asm/types.h
 
 if ! disabled w32threads && ! enabled pthreads; then
-    check_func_headers "windows.h process.h" _beginthreadex && enable w32threads
+    check_func_headers "windows.h process.h" _beginthreadex &&
+        enable w32threads || disable w32threads
 fi
 
 # check for some common methods of building with pthread support
@@ -4338,6 +4372,7 @@ if ! disabled pthreads && ! enabled w32threads && ! enabled os2threads; then
     elif ! check_func pthread_join && ! check_func pthread_create; then
         disable pthreads
     fi
+    check_code cc "pthread.h" "static pthread_mutex_t atomic_lock = PTHREAD_MUTEX_INITIALIZER" || disable pthreads
 fi
 
 for thread in $THREADS_LIST; do
@@ -4354,10 +4389,6 @@ fi
 
 disabled  zlib || check_lib   zlib.h      zlibVersion -lz   || disable  zlib
 disabled bzlib || check_lib2 bzlib.h BZ2_bzlibVersion -lbz2 || disable bzlib
-
-enabled sync_val_compare_and_swap && enable atomics_gcc
-enabled_all atomic_cas_ptr machine_rw_barrier && enable atomics_suncc
-enabled MemoryBarrier && enable atomics_win32
 
 check_lib math.h sin -lm && LIBM="-lm"
 disabled crystalhd || check_lib libcrystalhd/libcrystalhd_if.h DtsCrystalHDVersion -lcrystalhd || disable crystalhd
@@ -4435,6 +4466,7 @@ enabled libvpx            && {
     enabled libvpx_vp9_decoder && { check_lib2 "vpx/vpx_decoder.h vpx/vp8dx.h" "vpx_codec_vp9_dx" -lvpx || disable libvpx_vp9_decoder; }
     enabled libvpx_vp9_encoder && { check_lib2 "vpx/vpx_encoder.h vpx/vp8cx.h" "vpx_codec_vp9_cx VP9E_SET_SVC" -lvpx || disable libvpx_vp9_encoder; } }
 enabled libwavpack        && require libwavpack wavpack/wavpack.h WavpackOpenFileOutput  -lwavpack
+enabled libwebp           && require_pkg_config libwebp webp/encode.h WebPGetEncoderVersion
 enabled libx264           && require libx264 x264.h x264_encoder_encode -lx264 &&
                              { check_cpp_condition x264.h "X264_BUILD >= 118" ||
                                die "ERROR: libx264 must be installed and version must be >= 0.118."; }
@@ -4749,10 +4781,6 @@ case $target_os in
 esac
 
 enable frame_thread_encoder
-enabled_any $THREADS_LIST      && enable threads
-enabled_any $ATOMICS_LIST      && enable atomics_native
-
-enabled threads && ! enabled pthreads && ! enabled atomics_native && die "non pthread threading without atomics not supported, try adding --enable-pthreads or --cpu=i486 or higher if you are on x86"
 
 enabled asm || { arch=c; disable $ARCH_LIST $ARCH_EXT_LIST; }
 
@@ -4760,6 +4788,8 @@ check_deps $CONFIG_LIST       \
            $CONFIG_EXTRA      \
            $HAVE_LIST         \
            $ALL_COMPONENTS    \
+
+enabled threads && ! enabled pthreads && ! enabled atomics_native && die "non pthread threading without atomics not supported, try adding --enable-pthreads or --cpu=i486 or higher if you are on x86"
 
 
 if test $target_os = "haiku"; then
@@ -5027,6 +5057,7 @@ get_version(){
     name=$(toupper $lcname)
     file=$source_path/$lcname/version.h
     eval $(awk "/#define ${name}_VERSION_M/ { print \$2 \"=\" \$3 }" "$file")
+    enabled raise_major && eval ${name}_VERSION_MAJOR=$((${name}_VERSION_MAJOR+100))
     eval ${name}_VERSION=\$${name}_VERSION_MAJOR.\$${name}_VERSION_MINOR.\$${name}_VERSION_MICRO
     eval echo "${lcname}_VERSION=\$${name}_VERSION" >> config.mak
     eval echo "${lcname}_VERSION_MAJOR=\$${name}_VERSION_MAJOR" >> config.mak
@@ -5041,7 +5072,7 @@ cat > $TMPH <<EOF
 #define FFMPEG_CONFIG_H
 #define FFMPEG_CONFIGURATION "$(c_escape $FFMPEG_CONFIGURATION)"
 #define FFMPEG_LICENSE "$(c_escape $license)"
-#define CONFIG_THIS_YEAR 2013
+#define CONFIG_THIS_YEAR 2014
 #define FFMPEG_DATADIR "$(eval c_escape $datadir)"
 #define AVCONV_DATADIR "$(eval c_escape $datadir)"
 #define CC_IDENT "$(c_escape ${cc_ident:-Unknown compiler})"
@@ -5170,26 +5201,3 @@ pkgconfig_generate libpostproc   "FFmpeg postprocessing library"        "$LIBPOS
 pkgconfig_generate libavresample "Libav audio resampling library"       "$LIBAVRESAMPLE_VERSION" "$extralibs" "libavutil${build_suffix} = $LIBAVUTIL_VERSION"
 pkgconfig_generate libswscale    "FFmpeg image rescaling library"       "$LIBSWSCALE_VERSION"    "$LIBM"      "libavutil${build_suffix} = $LIBAVUTIL_VERSION"
 pkgconfig_generate libswresample "FFmpeg audio resampling library"      "$LIBSWRESAMPLE_VERSION" "$LIBM"      "libavutil${build_suffix} = $LIBAVUTIL_VERSION"
-
-fix_ffmpeg_remote(){
-    git_remote_from=$1
-    git_remote_to=$2
-    fixme_remote=$(git --git-dir=$source_path/.git --work-tree=$source_path remote -v | grep $git_remote_from | cut -f 1 | sort | uniq)
-    if [ "$fixme_remote" != "" ]; then
-        echolog "
-Outdated domain in git config, the official domain for ffmpeg git is since
-November 2011, source.ffmpeg.org, both the old and the new point to the same
-repository and server. To update it enter the following commands:
-"
-        for remote in $fixme_remote; do
-            echolog "git remote set-url $remote $git_remote_to"
-        done
-    fi
-}
-
-if test -f "$source_path/.git/config"; then
-    remote_from=git.videolan.org
-    remote_to=source.ffmpeg.org
-    fix_ffmpeg_remote git@$remote_from:ffmpeg   git@$remote_to:ffmpeg
-    fix_ffmpeg_remote git://$remote_from/ffmpeg git://$remote_to/ffmpeg
-fi
