@@ -48,7 +48,7 @@ $(TESTPROGS):         THISLIB = $(SUBDIR)$(LIBNAME)
 $(EXAMPLES) $(TESTPROGS) $(TOOLS): %$(EXESUF): %.o $(EXEOBJS)
 	$$(LD) $(LDFLAGS) $$(LD_O) $$(filter %.o,$$^) $$(THISLIB) $(FFEXTRALIBS) $$(ELIBS)
 
-$(SUBDIR)$(SLIBNAME): $(OBJS) $(SUBDIR)lib$(NAME).ver
+$(SUBDIR)$(SLIBNAME): $(OBJS) $(SLIBOBJS) $(SUBDIR)lib$(NAME).ver
 	$(SLIB_CREATE_DEF_CMD)
 	$$(LD) $(SHFLAGS) $(LDFLAGS) $$(LD_O) $$(filter %.o,$$^) $(FFEXTRALIBS)
 	$(SLIB_EXTRA_CMD)

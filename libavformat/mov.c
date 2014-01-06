@@ -1002,7 +1002,13 @@ static int mov_read_extradata(MOVContext *c, AVIOContext *pb, MOVAtom atom,
     st->codec->extradata_size= size - FF_INPUT_BUFFER_PADDING_SIZE;
     AV_WB32(       buf    , atom.size + 8);
     AV_WL32(       buf + 4, atom.type);
-    avio_read(pb, buf + 8, atom.size);
+    err = avio_read(pb, buf + 8, atom.size);
+    if (err < 0) {
+        return err;
+    } else if (err < atom.size) {
+        av_log(c->fc, AV_LOG_WARNING, "truncated extradata\n");
+        st->codec->extradata_size -= atom.size - err;
+    }
     return 0;
 }
 
@@ -2159,6 +2165,8 @@ static void mov_build_index(MOVContext *mov, AVStream *st)
                     av_dlog(mov->fc, "AVIndex stream %d, sample %d, offset %"PRIx64", dts %"PRId64", "
                             "size %d, distance %d, keyframe %d\n", st->index, current_sample,
                             current_offset, current_dts, sample_size, distance, keyframe);
+                    if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO && st->nb_index_entries < 100)
+                        ff_rfps_add_frame(mov->fc, st, current_dts);
                 }
 
                 current_offset += sample_size;
@@ -3409,6 +3417,8 @@ static int mov_read_header(AVFormatContext *s)
             s->streams[i]->codec->bit_rate = mov->bitrates[i];
         }
     }
+
+    ff_rfps_calculate(s);
 
     return 0;
 }

@@ -544,15 +544,14 @@ static void read_chapter(AVFormatContext *s, AVIOContext *pb, int len, char *tta
 
     len -= 16;
     while (len > 10) {
-        avio_read(pb, tag, 4);
+        if (avio_read(pb, tag, 4) < 4)
+            goto end;
         tag[4] = 0;
         taglen = avio_rb32(pb);
         avio_skip(pb, 2);
         len -= 10;
-        if (taglen < 0 || taglen > len) {
-            av_free(dst);
-            return;
-        }
+        if (taglen < 0 || taglen > len)
+            goto end;
         if (tag[0] == 'T')
             read_ttag(s, pb, taglen, &chapter->metadata, tag);
         else
@@ -562,6 +561,7 @@ static void read_chapter(AVFormatContext *s, AVIOContext *pb, int len, char *tta
 
     ff_metadata_conv(&chapter->metadata, NULL, ff_id3v2_34_metadata_conv);
     ff_metadata_conv(&chapter->metadata, NULL, ff_id3v2_4_metadata_conv);
+end:
     av_free(dst);
 }
 
@@ -667,7 +667,8 @@ static void id3v2_parse(AVFormatContext *s, int len, uint8_t version,
         unsigned long dlen;
 
         if (isv34) {
-            avio_read(s->pb, tag, 4);
+            if (avio_read(s->pb, tag, 4) < 4)
+                break;
             tag[4] = 0;
             if (version == 3) {
                 tlen = avio_rb32(s->pb);
@@ -676,7 +677,8 @@ static void id3v2_parse(AVFormatContext *s, int len, uint8_t version,
             tflags  = avio_rb16(s->pb);
             tunsync = tflags & ID3v2_FLAG_UNSYNCH;
         } else {
-            avio_read(s->pb, tag, 3);
+            if (avio_read(s->pb, tag, 3) < 3)
+                break;
             tag[3] = 0;
             tlen   = avio_rb24(s->pb);
         }

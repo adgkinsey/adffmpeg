@@ -468,7 +468,7 @@ static void ffmpeg_cleanup(int ret)
             bsfc = next;
         }
         output_streams[i]->bitstream_filters = NULL;
-        avcodec_free_frame(&output_streams[i]->filtered_frame);
+        av_frame_free(&output_streams[i]->filtered_frame);
 
         av_parser_close(output_streams[i]->parser);
 
@@ -1080,8 +1080,7 @@ static int reap_filters(void)
 
         if (!ost->filtered_frame && !(ost->filtered_frame = av_frame_alloc())) {
             return AVERROR(ENOMEM);
-        } else
-            avcodec_get_frame_defaults(ost->filtered_frame);
+        }
         filtered_frame = ost->filtered_frame;
 
         while (1) {

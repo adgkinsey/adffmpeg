@@ -27,6 +27,7 @@
 
 #include "libavutil/attributes.h"
 #include "libavutil/internal.h"
+#include "libavutil/stereo3d.h"
 #include "internal.h"
 #include "avcodec.h"
 #include "dsputil.h"
@@ -53,6 +54,7 @@ typedef struct Mpeg1Context {
     AVRational frame_rate_ext;       ///< MPEG-2 specific framerate modificator
     int sync;                        ///< Did we reach a sync point like a GOP/SEQ/KEYFrame?
     int tmpgexs;
+    int first_slice;
     int extradata_decoded;
 } Mpeg1Context;
 
@@ -1955,7 +1957,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
 #endif /* FF_API_XVMC */
 
     /* end of slice reached */
-    if (/*s->mb_y << field_pic == s->mb_height &&*/ !s->first_field && !s->first_slice) {
+    if (/*s->mb_y << field_pic == s->mb_height &&*/ !s->first_field && !s1->first_slice) {
         /* end of image */
 
         ff_er_frame_end(&s->er);
@@ -2212,6 +2214,41 @@ static void mpeg_decode_user_data(AVCodecContext *avctx,
                 return;
             avctx->dtg_active_format = p[0] & 0x0f;
         }
+    } else if (buf_end - p >= 6 &&
+               p[0] == 'J' && p[1] == 'P' && p[2] == '3' && p[3] == 'D' &&
+               p[4] == 0x03) { // S3D_video_format_length
+        // the 0x7F mask ignores the reserved_bit value
+        const uint8_t S3D_video_format_type = p[5] & 0x7F;
+
+        if (S3D_video_format_type == 0x03 ||
+            S3D_video_format_type == 0x04 ||
+            S3D_video_format_type == 0x08 ||
+            S3D_video_format_type == 0x23) {
+            Mpeg1Context *s1   = avctx->priv_data;
+            MpegEncContext *s  = &s1->mpeg_enc_ctx;
+            AVStereo3D *stereo;
+            if (!s->current_picture_ptr)
+                return;
+
+            stereo = av_stereo3d_create_side_data(&s->current_picture_ptr->f);
+            if (!stereo)
+                return;
+
+            switch (S3D_video_format_type) {
+            case 0x03:
+                stereo->type = AV_STEREO3D_SIDEBYSIDE;
+                break;
+            case 0x04:
+                stereo->type = AV_STEREO3D_TOPBOTTOM;
+                break;
+            case 0x08:
+                stereo->type = AV_STEREO3D_2D;
+                break;
+            case 0x23:
+                stereo->type = AV_STEREO3D_SIDEBYSIDE_QUINCUNX;
+                break;
+            }
+        }
     } else if (mpeg_decode_a53_cc(avctx, p, buf_size)) {
         return;
     }
@@ -2352,7 +2389,7 @@ static int decode_chunks(AVCodecContext *avctx,
                 /* we have a complete image: we try to decompress it */
                 if (mpeg1_decode_picture(avctx, buf_ptr, input_size) < 0)
                     s2->pict_type = 0;
-                s2->first_slice = 1;
+                s->first_slice = 1;
                 last_code = PICTURE_START_CODE;
             } else {
                 av_log(avctx, AV_LOG_ERROR, "ignoring pic after %X\n", last_code);
@@ -2496,9 +2533,9 @@ static int decode_chunks(AVCodecContext *avctx,
                     break;
                 }
 
-                if (s2->first_slice) {
+                if (s->first_slice) {
                     skip_frame = 0;
-                    s2->first_slice = 0;
+                    s->first_slice = 0;
                     if (mpeg_field_start(s2, buf, buf_size) < 0)
                         return -1;
                 }
