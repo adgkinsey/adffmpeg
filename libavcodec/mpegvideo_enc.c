@@ -407,7 +407,7 @@ av_cold int ff_MPV_encode_init(AVCodecContext *avctx)
         avctx->bit_rate * av_q2d(avctx->time_base) >
             avctx->bit_rate_tolerance) {
         av_log(avctx, AV_LOG_ERROR,
-               "bitrate tolerance too small for bitrate\n");
+               "bitrate tolerance %d too small for bitrate %d\n", avctx->bit_rate_tolerance, avctx->bit_rate);
         return -1;
     }
 
@@ -1209,7 +1209,7 @@ static int estimate_best_b_count(MpegEncContext *s)
     c->width        = s->width  >> scale;
     c->height       = s->height >> scale;
     c->flags        = CODEC_FLAG_QSCALE | CODEC_FLAG_PSNR |
-                      CODEC_FLAG_INPUT_PRESERVED /*| CODEC_FLAG_EMU_EDGE*/;
+                      CODEC_FLAG_INPUT_PRESERVED;
     c->flags       |= s->avctx->flags & CODEC_FLAG_QPEL;
     c->mb_decision  = s->avctx->mb_decision;
     c->me_cmp       = s->avctx->me_cmp;
@@ -3384,7 +3384,7 @@ static int encode_picture(MpegEncContext *s, int picture_number)
         update_qscale(s);
     }
 
-    if(s->codec_id != AV_CODEC_ID_AMV){
+    if(s->codec_id != AV_CODEC_ID_AMV && s->codec_id != AV_CODEC_ID_MJPEG){
         if(s->q_chroma_intra_matrix   != s->q_intra_matrix  ) av_freep(&s->q_chroma_intra_matrix);
         if(s->q_chroma_intra_matrix16 != s->q_intra_matrix16) av_freep(&s->q_chroma_intra_matrix16);
         s->q_chroma_intra_matrix   = s->q_intra_matrix;
@@ -3500,17 +3500,29 @@ static int encode_picture(MpegEncContext *s, int picture_number)
         s->qscale= 3; //reduce clipping problems
 
     if (s->out_format == FMT_MJPEG) {
+        const uint16_t *  luma_matrix = ff_mpeg1_default_intra_matrix;
+        const uint16_t *chroma_matrix = ff_mpeg1_default_intra_matrix;
+
+        if (s->avctx->intra_matrix) {
+            chroma_matrix =
+            luma_matrix = s->avctx->intra_matrix;
+        }
+
         /* for mjpeg, we do include qscale in the matrix */
         for(i=1;i<64;i++){
             int j= s->dsp.idct_permutation[i];
 
-            s->intra_matrix[j] = av_clip_uint8((ff_mpeg1_default_intra_matrix[i] * s->qscale) >> 3);
+            s->chroma_intra_matrix[j] = av_clip_uint8((chroma_matrix[i] * s->qscale) >> 3);
+            s->       intra_matrix[j] = av_clip_uint8((  luma_matrix[i] * s->qscale) >> 3);
         }
         s->y_dc_scale_table=
         s->c_dc_scale_table= ff_mpeg2_dc_scale_table[s->intra_dc_precision];
+        s->chroma_intra_matrix[0] =
         s->intra_matrix[0] = ff_mpeg2_dc_scale_table[s->intra_dc_precision][8];
         ff_convert_matrix(&s->dsp, s->q_intra_matrix, s->q_intra_matrix16,
                        s->intra_matrix, s->intra_quant_bias, 8, 8, 1);
+        ff_convert_matrix(&s->dsp, s->q_chroma_intra_matrix, s->q_chroma_intra_matrix16,
+                       s->chroma_intra_matrix, s->intra_quant_bias, 8, 8, 1);
         s->qscale= 8;
     }
     if(s->codec_id == AV_CODEC_ID_AMV){
@@ -3548,7 +3560,7 @@ static int encode_picture(MpegEncContext *s, int picture_number)
     case FMT_MJPEG:
         if (CONFIG_MJPEG_ENCODER)
             ff_mjpeg_encode_picture_header(s->avctx, &s->pb, &s->intra_scantable,
-                                           s->intra_matrix);
+                                           s->intra_matrix, s->chroma_intra_matrix);
         break;
     case FMT_H261:
         if (CONFIG_H261_ENCODER)

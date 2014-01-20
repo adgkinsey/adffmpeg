@@ -351,6 +351,8 @@ Developer options (useful when working on FFmpeg itself):
   --enable-ftrapv          Trap arithmetic overflows
   --samples=PATH           location of test samples for FATE, if not set use
                            \$FATE_SAMPLES at make invocation time.
+  --enable-neon-clobber-test check NEON registers for clobbering (should be
+                           used only for debugging purposes)
   --enable-xmm-clobber-test check XMM registers for clobbering (Win64-only;
                            should be used only for debugging purposes)
   --enable-random          randomly enable/disable components
@@ -1031,11 +1033,12 @@ check_lib_cpp(){
 
 check_pkg_config(){
     log check_pkg_config "$@"
-    pkg="$1"
+    pkgandversion="$1"
+    pkg="${1%% *}"
     headers="$2"
     funcs="$3"
     shift 3
-    check_cmd $pkg_config --exists --print-errors $pkg || return
+    check_cmd $pkg_config --exists --print-errors $pkgandversion || return
     pkg_cflags=$($pkg_config --cflags $pkg)
     pkg_libs=$($pkg_config --libs $pkg)
     check_func_headers "$headers" "$funcs" $pkg_cflags $pkg_libs "$@" &&
@@ -1373,6 +1376,7 @@ CONFIG_LIST="
     mdct
     memalign_hack
     memory_poisoning
+    neon_clobber_test
     network
     nonfree
     pic
@@ -1678,6 +1682,7 @@ CONFIG_EXTRA="
     h264qpel
     hpeldsp
     huffman
+    intrax8
     lgplv3
     lpc
     mpegaudio
@@ -1777,8 +1782,8 @@ CMDLINE_APPEND="
 armv5te_deps="arm"
 armv6_deps="arm"
 armv6t2_deps="arm"
-neon_deps="arm"
-vfp_deps="arm"
+neon_deps_any="aarch64 arm"
+vfp_deps_any="aarch64 arm"
 vfpv3_deps="vfp"
 
 map 'eval ${v}_inline_deps=inline_asm' $ARCH_EXT_LIST_ARM
@@ -1822,10 +1827,10 @@ for ext in $(filter_out mmx $ARCH_EXT_LIST_X86); do
     eval ${ext}_suggest='"${ext}_external ${ext}_inline"'
 done
 
-aligned_stack_if_any="ppc x86"
-fast_64bit_if_any="alpha ia64 mips64 parisc64 ppc64 sparc64 x86_64"
-fast_clz_if_any="alpha avr32 mips ppc x86"
-fast_unaligned_if_any="ppc x86"
+aligned_stack_if_any="aarch64 ppc x86"
+fast_64bit_if_any="aarch64 alpha ia64 mips64 parisc64 ppc64 sparc64 x86_64"
+fast_clz_if_any="aarch64 alpha avr32 mips ppc x86"
+fast_unaligned_if_any="aarch64 ppc x86"
 
 need_memalign="altivec neon sse"
 
@@ -2013,7 +2018,7 @@ twinvq_decoder_select="mdct lsp sinewin"
 utvideo_decoder_select="dsputil"
 utvideo_encoder_select="dsputil huffman"
 vble_decoder_select="dsputil"
-vc1_decoder_select="error_resilience h263_decoder h264chroma h264qpel"
+vc1_decoder_select="error_resilience h263_decoder h264chroma h264qpel intrax8"
 vc1image_decoder_select="vc1_decoder"
 vorbis_decoder_select="mdct"
 vorbis_encoder_select="mdct"
@@ -2033,7 +2038,7 @@ wmav2_encoder_select="mdct sinewin"
 wmavoice_decoder_select="lsp rdft dct mdct sinewin"
 wmv1_decoder_select="h263_decoder"
 wmv1_encoder_select="h263_encoder"
-wmv2_decoder_select="h263_decoder videodsp"
+wmv2_decoder_select="h263_decoder intrax8 videodsp"
 wmv2_encoder_select="h263_encoder"
 wmv3_decoder_select="vc1_decoder"
 wmv3image_decoder_select="wmv3_decoder"
@@ -2374,7 +2379,6 @@ super2xsai_filter_deps="gpl"
 tinterlace_filter_deps="gpl"
 vidstabdetect_filter_deps="libvidstab"
 vidstabtransform_filter_deps="libvidstab"
-yadif_filter_deps="gpl"
 pixfmts_super2xsai_test_deps="super2xsai_filter"
 tinterlace_merge_test_deps="tinterlace_filter"
 tinterlace_pad_test_deps="tinterlace_filter"
@@ -4062,7 +4066,14 @@ od -t x1 $TMPO | grep -q '42 *49 *47 *45' && enable bigendian
 
 check_inline_asm inline_asm_labels '"1:\n"'
 
-if enabled alpha; then
+if enabled aarch64; then
+    # internal assembler in clang 3.3 does not support this instruction
+    enabled neon && check_insn neon 'ext   v0.8B, v0.8B, v1.8B, #1'
+    enabled vfp  && check_insn vfp  'fmadd d0,    d0,    d1,    d2'
+
+    map 'enabled_any ${v}_external ${v}_inline || disable $v' $ARCH_EXT_LIST_ARM
+
+elif enabled alpha; then
 
     check_cflags -mieee
 
@@ -4259,7 +4270,7 @@ if ! disabled network; then
         check_func_headers winsock2.h closesocket -lws2 &&
             network_extralibs="-lws2" ||
         { check_func_headers winsock2.h closesocket -lws2_32 &&
-            network_extralibs="-lws2_32"; }
+            network_extralibs="-lws2_32"; } || disable winsock2_h network
         check_func_headers ws2tcpip.h getaddrinfo $network_extralibs
         check_type ws2tcpip.h socklen_t
         check_type ws2tcpip.h "struct addrinfo"
@@ -4454,7 +4465,7 @@ enabled libtwolame        && require libtwolame twolame.h twolame_init -ltwolame
                                die "ERROR: libtwolame must be installed and version must be >= 0.3.10"; }
 enabled libutvideo        && require_cpp utvideo "stdint.h stdlib.h utvideo/utvideo.h utvideo/Codec.h" 'CCodec*' -lutvideo -lstdc++
 enabled libv4l2           && require_pkg_config libv4l2 libv4l2.h v4l2_ioctl
-enabled libvidstab        && require_pkg_config vidstab vid.stab/libvidstab.h vsMotionDetectInit
+enabled libvidstab        && require_pkg_config "vidstab >= 0.98" vid.stab/libvidstab.h vsMotionDetectInit
 enabled libvo_aacenc      && require libvo_aacenc vo-aacenc/voAAC.h voGetAACEncAPI -lvo-aacenc
 enabled libvo_amrwbenc    && require libvo_amrwbenc vo-amrwbenc/enc_if.h E_IF_init -lvo-amrwbenc
 enabled libvorbis         && require libvorbis vorbis/vorbisenc.h vorbis_info_init -lvorbisenc -lvorbis -logg
@@ -4636,6 +4647,18 @@ test_ldflags -Wl,-Bsymbolic && append SHFLAGS -Wl,-Bsymbolic
 # -wN '..@*' is more selective than -x, but not available everywhere.
 check_stripflags -wN \'..@*\' || check_stripflags -x
 
+enabled neon_clobber_test &&
+    check_ldflags -Wl,--wrap,avcodec_open2              \
+                  -Wl,--wrap,avcodec_decode_audio4      \
+                  -Wl,--wrap,avcodec_decode_video2      \
+                  -Wl,--wrap,avcodec_decode_subtitle2   \
+                  -Wl,--wrap,avcodec_encode_audio2      \
+                  -Wl,--wrap,avcodec_encode_video2      \
+                  -Wl,--wrap,avcodec_encode_subtitle    \
+                  -Wl,--wrap,swr_convert                \
+                  -Wl,--wrap,avresample_convert ||
+    disable neon_clobber_test
+
 enabled xmm_clobber_test &&
     check_ldflags -Wl,--wrap,avcodec_open2              \
                   -Wl,--wrap,avcodec_decode_audio4      \
@@ -4645,6 +4668,8 @@ enabled xmm_clobber_test &&
                   -Wl,--wrap,avcodec_encode_video       \
                   -Wl,--wrap,avcodec_encode_video2      \
                   -Wl,--wrap,avcodec_encode_subtitle    \
+                  -Wl,--wrap,swr_convert                \
+                  -Wl,--wrap,avresample_convert         \
                   -Wl,--wrap,sws_scale ||
     disable xmm_clobber_test
 
@@ -4861,6 +4886,10 @@ if enabled x86; then
     echo "CMOV is fast              ${fast_cmov-no}"
     echo "EBX available             ${ebx_available-no}"
     echo "EBP available             ${ebp_available-no}"
+fi
+if enabled aarch64; then
+    echo "NEON enabled              ${neon-no}"
+    echo "VFP enabled               ${vfp-no}"
 fi
 if enabled arm; then
     echo "ARMv5TE enabled           ${armv5te-no}"

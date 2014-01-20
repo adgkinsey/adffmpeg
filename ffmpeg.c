@@ -313,6 +313,7 @@ void term_exit(void)
 
 static volatile int received_sigterm = 0;
 static volatile int received_nb_signals = 0;
+static int main_return_code = 0;
 
 static void
 sigterm_handler(int sig)
@@ -547,6 +548,15 @@ static void update_benchmark(const char *fmt, ...)
     }
 }
 
+static void close_all_output_streams(OutputStream *ost, OSTFinished this_stream, OSTFinished others)
+{
+    int i;
+    for (i = 0; i < nb_output_streams; i++) {
+        OutputStream *ost2 = output_streams[i];
+        ost2->finished |= ost == ost2 ? this_stream : others;
+    }
+}
+
 static void write_frame(AVFormatContext *s, AVPacket *pkt, OutputStream *ost)
 {
     AVBitStreamFilterContext *bsfc = ost->bitstream_filters;
@@ -647,7 +657,8 @@ static void write_frame(AVFormatContext *s, AVPacket *pkt, OutputStream *ost)
     ret = av_interleaved_write_frame(s, pkt);
     if (ret < 0) {
         print_error("av_interleaved_write_frame()", ret);
-        exit_program(1);
+        main_return_code = 1;
+        close_all_output_streams(ost, MUXER_FINISHED | ENCODER_FINISHED, ENCODER_FINISHED);
     }
 }
 
@@ -655,7 +666,7 @@ static void close_output_stream(OutputStream *ost)
 {
     OutputFile *of = output_files[ost->file_index];
 
-    ost->finished = 1;
+    ost->finished |= ENCODER_FINISHED;
     if (of->shortest) {
         int64_t end = av_rescale_q(ost->sync_opts - ost->first_pts, ost->st->codec->time_base, AV_TIME_BASE_Q);
         of->recording_time = FFMIN(of->recording_time, end);
@@ -1093,6 +1104,10 @@ static int reap_filters(void)
                 }
                 break;
             }
+            if (ost->finished) {
+                av_frame_unref(filtered_frame);
+                continue;
+            }
             frame_pts = AV_NOPTS_VALUE;
             if (filtered_frame->pts != AV_NOPTS_VALUE) {
                 int64_t start_time = (of->start_time == AV_NOPTS_VALUE) ? 0 : of->start_time;
@@ -1366,7 +1381,6 @@ static void flush_encoders(void)
                     av_log(NULL, AV_LOG_FATAL, "%s encoding failed\n", desc);
                     exit_program(1);
                 }
-                *size += pkt.size;
                 if (ost->logfile && enc->stats_out) {
                     fprintf(ost->logfile, "%s", enc->stats_out);
                 }
@@ -1374,6 +1388,11 @@ static void flush_encoders(void)
                     stop_encoding = 1;
                     break;
                 }
+                if (ost->finished & MUXER_FINISHED) {
+                    av_free_packet(&pkt);
+                    continue;
+                }
+                *size += pkt.size;
                 if (pkt.pts != AV_NOPTS_VALUE)
                     pkt.pts = av_rescale_q(pkt.pts, enc->time_base, ost->st->time_base);
                 if (pkt.dts != AV_NOPTS_VALUE)
@@ -1401,6 +1420,9 @@ static int check_output_constraints(InputStream *ist, OutputStream *ost)
     int ist_index  = input_files[ist->file_index]->ist_index + ist->st->index;
 
     if (ost->source_index != ist_index)
+        return 0;
+
+    if (ost->finished)
         return 0;
 
     if (of->start_time != AV_NOPTS_VALUE && ist->pts < of->start_time)
@@ -2442,7 +2464,16 @@ static int transcode_init(void)
                 if (ist && !ost->frame_rate.num)
                     ost->frame_rate = ist->framerate;
                 if (ist && !ost->frame_rate.num)
-                    ost->frame_rate = ist->st->r_frame_rate.num ? ist->st->r_frame_rate : (AVRational){25, 1};
+                    ost->frame_rate = ist->st->r_frame_rate;
+                if (ist && !ost->frame_rate.num) {
+                    ost->frame_rate = (AVRational){25, 1};
+                    av_log(NULL, AV_LOG_WARNING,
+                           "No information "
+                           "about the input framerate is available. Falling "
+                           "back to a default value of 25fps for output stream #%d:%d. Use the -r option "
+                           "if you want a different framerate.\n",
+                           ost->file_index, ost->index);
+                }
 //                    ost->frame_rate = ist->st->avg_frame_rate.num ? ist->st->avg_frame_rate : (AVRational){25, 1};
                 if (ost->enc && ost->enc->supported_framerates && !ost->force_fps) {
                     int idx = av_find_nearest_q_idx(ost->frame_rate, ost->enc->supported_framerates);
@@ -3552,6 +3583,6 @@ int main(int argc, char **argv)
     if ((decode_error_stat[0] + decode_error_stat[1]) * max_error_rate < decode_error_stat[1])
         exit_program(69);
 
-    exit_program(received_nb_signals ? 255 : 0);
-    return 0;
+    exit_program(received_nb_signals ? 255 : main_return_code);
+    return main_return_code;
 }

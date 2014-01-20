@@ -107,7 +107,7 @@ static int pic_arrays_init(HEVCContext *s, const HEVCSPS *sps)
         goto fail;
 
     s->cbf_luma = av_malloc(sps->min_tb_width * sps->min_tb_height);
-    s->tab_ipm  = av_malloc(min_pu_size);
+    s->tab_ipm  = av_mallocz(min_pu_size);
     s->is_pcm   = av_malloc(min_pu_size);
     if (!s->tab_ipm || !s->cbf_luma || !s->is_pcm)
         goto fail;
@@ -654,6 +654,11 @@ static int hls_slice_header(HEVCContext *s)
             sh->entry_point_offset = av_malloc(sh->num_entry_point_offsets * sizeof(int));
             sh->offset = av_malloc(sh->num_entry_point_offsets * sizeof(int));
             sh->size = av_malloc(sh->num_entry_point_offsets * sizeof(int));
+            if (!sh->entry_point_offset || !sh->offset || !sh->size) {
+                sh->num_entry_point_offsets = 0;
+                av_log(s->avctx, AV_LOG_ERROR, "Failed to allocate memory\n");
+                return AVERROR(ENOMEM);
+            }
             for (i = 0; i < sh->num_entry_point_offsets; i++) {
                 int val = 0;
                 for (j = 0; j < segments; j++) {
@@ -682,7 +687,17 @@ static int hls_slice_header(HEVCContext *s)
     }
 
     // Inferred parameters
-    sh->slice_qp          = 26 + s->pps->pic_init_qp_minus26 + sh->slice_qp_delta;
+    sh->slice_qp = 26U + s->pps->pic_init_qp_minus26 + sh->slice_qp_delta;
+    if (sh->slice_qp > 51 ||
+        sh->slice_qp < -s->sps->qp_bd_offset) {
+        av_log(s->avctx, AV_LOG_ERROR,
+               "The slice_qp %d is outside the valid range "
+               "[%d, 51].\n",
+               sh->slice_qp,
+               -s->sps->qp_bd_offset);
+        return AVERROR_INVALIDDATA;
+    }
+
     sh->slice_ctb_addr_rs = sh->slice_segment_addr;
 
     s->HEVClc->first_qp_group = !s->sh.dependent_slice_segment_flag;
@@ -1041,15 +1056,19 @@ static void luma_mc(HEVCContext *s, int16_t *dst, ptrdiff_t dststride,
     if (x_off < extra_left || y_off < extra_top ||
         x_off >= pic_width - block_w - ff_hevc_qpel_extra_after[mx] ||
         y_off >= pic_height - block_h - ff_hevc_qpel_extra_after[my]) {
+        const int edge_emu_stride = EDGE_EMU_BUFFER_STRIDE << s->sps->pixel_shift;
         int offset = extra_top * srcstride + (extra_left << s->sps->pixel_shift);
+        int buf_offset = extra_top *
+                         edge_emu_stride + (extra_left << s->sps->pixel_shift);
 
         s->vdsp.emulated_edge_mc(lc->edge_emu_buffer, src - offset,
-                                 srcstride, srcstride,
+                                 edge_emu_stride, srcstride,
                                  block_w + ff_hevc_qpel_extra[mx],
                                  block_h + ff_hevc_qpel_extra[my],
                                  x_off - extra_left, y_off - extra_top,
                                  pic_width, pic_height);
-        src = lc->edge_emu_buffer + offset;
+        src = lc->edge_emu_buffer + buf_offset;
+        srcstride = edge_emu_stride;
     }
     s->hevcdsp.put_hevc_qpel[my][mx](dst, dststride, src, srcstride, block_w,
                                      block_h, lc->mc_buffer);
@@ -1092,27 +1111,35 @@ static void chroma_mc(HEVCContext *s, int16_t *dst1, int16_t *dst2,
     if (x_off < EPEL_EXTRA_BEFORE || y_off < EPEL_EXTRA_AFTER ||
         x_off >= pic_width - block_w - EPEL_EXTRA_AFTER ||
         y_off >= pic_height - block_h - EPEL_EXTRA_AFTER) {
+        const int edge_emu_stride = EDGE_EMU_BUFFER_STRIDE << s->sps->pixel_shift;
         int offset1 = EPEL_EXTRA_BEFORE * (src1stride + (1 << s->sps->pixel_shift));
+        int buf_offset1 = EPEL_EXTRA_BEFORE *
+                          (edge_emu_stride + (1 << s->sps->pixel_shift));
         int offset2 = EPEL_EXTRA_BEFORE * (src2stride + (1 << s->sps->pixel_shift));
+        int buf_offset2 = EPEL_EXTRA_BEFORE *
+                          (edge_emu_stride + (1 << s->sps->pixel_shift));
 
         s->vdsp.emulated_edge_mc(lc->edge_emu_buffer, src1 - offset1,
-                                 src1stride, src1stride,
+                                 edge_emu_stride, src1stride,
                                  block_w + EPEL_EXTRA, block_h + EPEL_EXTRA,
                                  x_off - EPEL_EXTRA_BEFORE,
                                  y_off - EPEL_EXTRA_BEFORE,
                                  pic_width, pic_height);
 
-        src1 = lc->edge_emu_buffer + offset1;
+        src1 = lc->edge_emu_buffer + buf_offset1;
+        src1stride = edge_emu_stride;
         s->hevcdsp.put_hevc_epel[!!my][!!mx](dst1, dststride, src1, src1stride,
                                              block_w, block_h, mx, my, lc->mc_buffer);
 
         s->vdsp.emulated_edge_mc(lc->edge_emu_buffer, src2 - offset2,
-                                 src2stride, src2stride,
+                                 edge_emu_stride, src2stride,
                                  block_w + EPEL_EXTRA, block_h + EPEL_EXTRA,
                                  x_off - EPEL_EXTRA_BEFORE,
                                  y_off - EPEL_EXTRA_BEFORE,
                                  pic_width, pic_height);
-        src2 = lc->edge_emu_buffer + offset2;
+        src2 = lc->edge_emu_buffer + buf_offset2;
+        src2stride = edge_emu_stride;
+
         s->hevcdsp.put_hevc_epel[!!my][!!mx](dst2, dststride, src2, src2stride,
                                              block_w, block_h, mx, my,
                                              lc->mc_buffer);
@@ -1841,6 +1868,11 @@ static int hls_decode_entry(AVCodecContext *avctxt, void *isFilterThread)
     int y_ctb       = 0;
     int ctb_addr_ts = s->pps->ctb_addr_rs_to_ts[s->sh.slice_ctb_addr_rs];
 
+    if (!ctb_addr_ts && s->sh.dependent_slice_segment_flag) {
+        av_log(s->avctx, AV_LOG_ERROR, "Impossible initial tile.\n");
+        return AVERROR_INVALIDDATA;
+    }
+
     while (more_data && ctb_addr_ts < s->sps->ctb_size) {
         int ctb_addr_rs = s->pps->ctb_addr_ts_to_rs[ctb_addr_ts];
 
@@ -1974,7 +2006,6 @@ static int hls_slice_data_wpp(HEVCContext *s, const uint8_t *nal, int length)
             s->sList[i] = av_malloc(sizeof(HEVCContext));
             memcpy(s->sList[i], s, sizeof(HEVCContext));
             s->HEVClcList[i] = av_malloc(sizeof(HEVCLocalContext));
-            s->HEVClcList[i]->edge_emu_buffer = av_malloc((MAX_PB_SIZE + 7) * s->frame->linesize[0]);
             s->sList[i]->HEVClc = s->HEVClcList[i];
         }
     }
@@ -2142,13 +2173,6 @@ static int hevc_frame_start(HEVCContext *s)
                               s->poc);
     if (ret < 0)
         goto fail;
-
-    av_fast_malloc(&lc->edge_emu_buffer, &lc->edge_emu_buffer_size,
-                   (MAX_PB_SIZE + 7) * s->ref->frame->linesize[0]);
-    if (!lc->edge_emu_buffer) {
-        ret = AVERROR(ENOMEM);
-        goto fail;
-    }
 
     ret = ff_hevc_frame_rps(s);
     if (ret < 0) {
@@ -2688,8 +2712,6 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
 
     pic_arrays_free(s);
 
-    if (lc)
-        av_freep(&lc->edge_emu_buffer);
     av_freep(&s->md5_ctx);
 
     for(i=0; i < s->nals_allocated; i++) {
@@ -2723,7 +2745,6 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
     for (i = 1; i < s->threads_number; i++) {
         lc = s->HEVClcList[i];
         if (lc) {
-            av_freep(&lc->edge_emu_buffer);
             av_freep(&s->HEVClcList[i]);
             av_freep(&s->sList[i]);
         }

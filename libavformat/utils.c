@@ -342,8 +342,8 @@ int av_probe_input_buffer2(AVIOContext *pb, AVInputFormat **fmt,
                           const char *filename, void *logctx,
                           unsigned int offset, unsigned int max_probe_size)
 {
-    AVProbeData pd = { filename ? filename : "", NULL, -offset };
-    unsigned char *buf = NULL;
+    AVProbeData pd = { filename ? filename : "" };
+    uint8_t *buf = NULL;
     uint8_t *mime_type;
     int ret = 0, probe_size, buf_offset = 0;
     int score = 0;
@@ -371,10 +371,6 @@ int av_probe_input_buffer2(AVIOContext *pb, AVInputFormat **fmt,
 
     for(probe_size= PROBE_BUF_MIN; probe_size<=max_probe_size && !*fmt;
         probe_size = FFMIN(probe_size<<1, FFMAX(max_probe_size, probe_size+1))) {
-
-        if (probe_size < offset) {
-            continue;
-        }
         score = probe_size < max_probe_size ? AVPROBE_SCORE_RETRY : 0;
 
         /* read probe data */
@@ -389,7 +385,10 @@ int av_probe_input_buffer2(AVIOContext *pb, AVInputFormat **fmt,
             score = 0;
             ret = 0;            /* error was end of file, nothing read */
         }
-        pd.buf_size = buf_offset += ret;
+        buf_offset += ret;
+        if (buf_offset < offset)
+            continue;
+        pd.buf_size = buf_offset - offset;
         pd.buf = &buf[offset];
 
         memset(pd.buf + pd.buf_size, 0, AVPROBE_PADDING_SIZE);
@@ -415,7 +414,7 @@ int av_probe_input_buffer2(AVIOContext *pb, AVInputFormat **fmt,
     }
 
     /* rewind. reuse probe buffer to avoid seeking */
-    ret = ffio_rewind_with_probe_data(pb, &buf, pd.buf_size);
+    ret = ffio_rewind_with_probe_data(pb, &buf, buf_offset);
 
     return ret < 0 ? ret : score;
 }
@@ -3206,7 +3205,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
  find_stream_info_err:
     for (i=0; i < ic->nb_streams; i++) {
         st = ic->streams[i];
-        if (ic->streams[i]->codec && ic->streams[i]->codec->codec_type != AVMEDIA_TYPE_AUDIO)
+        if (ic->streams[i]->codec->codec_type != AVMEDIA_TYPE_AUDIO)
             ic->streams[i]->codec->thread_count = 0;
         if (st->info)
             av_freep(&st->info->duration_error);
@@ -3263,6 +3262,8 @@ int av_find_best_stream(AVFormatContext *ic,
         if (wanted_stream_nb >= 0 && real_stream_index != wanted_stream_nb)
             continue;
         if (st->disposition & (AV_DISPOSITION_HEARING_IMPAIRED|AV_DISPOSITION_VISUAL_IMPAIRED))
+            continue;
+        if (type == AVMEDIA_TYPE_AUDIO && !avctx->channels)
             continue;
         if (decoder_ret) {
             decoder = find_decoder(ic, st, st->codec->codec_id);

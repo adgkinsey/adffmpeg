@@ -27,6 +27,7 @@
 #include "libavutil/x86/cpu.h"
 #include "libavcodec/dsputil.h"
 #include "libavcodec/simple_idct.h"
+#include "libavcodec/version.h"
 #include "dsputil_x86.h"
 #include "idct_xvid.h"
 
@@ -541,6 +542,7 @@ static av_cold void dsputil_init_mmx(DSPContext *c, AVCodecContext *avctx,
 #endif /* HAVE_MMX_INLINE */
 
 #if HAVE_MMX_EXTERNAL
+    c->add_int16 = ff_add_int16_mmx;
     c->vector_clip_int32 = ff_vector_clip_int32_mmx;
 #endif /* HAVE_MMX_EXTERNAL */
 }
@@ -582,15 +584,16 @@ static av_cold void dsputil_init_sse(DSPContext *c, AVCodecContext *avctx,
 #if HAVE_SSE_INLINE
     const int high_bit_depth = avctx->bits_per_raw_sample > 8;
 
+    c->vector_clipf = ff_vector_clipf_sse;
+
+    /* XvMCCreateBlocks() may not allocate 16-byte aligned blocks */
+    if (CONFIG_XVMC && avctx->hwaccel && avctx->hwaccel->decode_mb)
+        return;
+
     if (!high_bit_depth) {
-        if (!(CONFIG_XVMC && avctx->hwaccel && avctx->hwaccel->decode_mb)) {
-            /* XvMCCreateBlocks() may not allocate 16-byte aligned blocks */
         c->clear_block  = ff_clear_block_sse;
         c->clear_blocks = ff_clear_blocks_sse;
-        }
     }
-
-    c->vector_clipf = ff_vector_clipf_sse;
 #endif /* HAVE_SSE_INLINE */
 
 #if HAVE_YASM
@@ -623,6 +626,8 @@ static av_cold void dsputil_init_sse2(DSPContext *c, AVCodecContext *avctx,
         c->vector_clip_int32 = ff_vector_clip_int32_sse2;
     }
     c->bswap_buf = ff_bswap32_buf_sse2;
+
+    c->add_int16 = ff_add_int16_sse2;
 #endif /* HAVE_SSE2_EXTERNAL */
 }
 
