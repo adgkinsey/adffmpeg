@@ -109,6 +109,9 @@ static int use_color = -1;
 
 static void colored_fputs(int level, const char *str)
 {
+    if (!*str)
+        return;
+
     if (use_color < 0) {
 #if HAVE_SETCONSOLETEXTATTRIBUTE
         CONSOLE_SCREEN_BUFFER_INFO con_info;
@@ -200,7 +203,7 @@ static void format_line(void *ptr, int level, const char *fmt, va_list vl,
     av_vbprintf(part+2, fmt, vl);
 
     if(*part[0].str || *part[1].str || *part[2].str) {
-        char lastc = part[2].len ? part[2].str[part[2].len - 1] : 0;
+        char lastc = part[2].len && part[2].len <= part[2].size ? part[2].str[part[2].len - 1] : 0;
         *print_prefix = lastc == '\n' || lastc == '\r';
     }
 }

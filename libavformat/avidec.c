@@ -685,6 +685,8 @@ static int avi_read_header(AVFormatContext *s)
                     /* This is needed to get the pict type which is necessary
                      * for generating correct pts. */
                     st->need_parsing = AVSTREAM_PARSE_HEADERS;
+                    if (st->codec->codec_tag == MKTAG('V', 'S', 'S', 'H'))
+                        st->need_parsing = AVSTREAM_PARSE_FULL;
 
                     if (st->codec->codec_tag == 0 && st->codec->height > 0 &&
                         st->codec->extradata_size < 1U << 30) {
@@ -1306,10 +1308,9 @@ FF_ENABLE_DEPRECATION_WARNINGS
                     size);
             pkt->stream_index = avi->stream_index;
 
-            if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
+            if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO && st->index_entries) {
                 AVIndexEntry *e;
                 int index;
-                av_assert0(st->index_entries);
 
                 index = av_index_search_timestamp(st, ast->frame_offset, 0);
                 e     = &st->index_entries[index];

@@ -109,7 +109,7 @@ static int pic_arrays_init(HEVCContext *s)
     if (!s->skip_flag || !s->tab_ct_depth)
         goto fail;
 
-    s->tab_ipm  = av_malloc(pic_size_in_min_pu);
+    s->tab_ipm  = av_mallocz(pic_size_in_min_pu);
     s->cbf_luma = av_malloc(pic_width_in_min_tu * pic_height_in_min_tu);
     s->is_pcm   = av_malloc(pic_size_in_min_pu);
     if (!s->tab_ipm || !s->cbf_luma || !s->is_pcm)
@@ -602,6 +602,11 @@ static int hls_slice_header(HEVCContext *s)
             sh->entry_point_offset = av_malloc(sh->num_entry_point_offsets * sizeof(int));
             sh->offset = av_malloc(sh->num_entry_point_offsets * sizeof(int));
             sh->size = av_malloc(sh->num_entry_point_offsets * sizeof(int));
+            if (!sh->entry_point_offset || !sh->offset || !sh->size) {
+                sh->num_entry_point_offsets = 0;
+                av_log(s->avctx, AV_LOG_ERROR, "Failed to allocate memory\n");
+                return AVERROR(ENOMEM);
+            }
             for (i = 0; i < sh->num_entry_point_offsets; i++) {
                 int val = 0;
                 for (j = 0; j < segments; j++) {
@@ -630,14 +635,24 @@ static int hls_slice_header(HEVCContext *s)
     }
 
     // Inferred parameters
-    sh->slice_qp          = 26 + s->pps->pic_init_qp_minus26 + sh->slice_qp_delta;
+    sh->slice_qp = 26U + s->pps->pic_init_qp_minus26 + sh->slice_qp_delta;
+    if (sh->slice_qp > 51 ||
+        sh->slice_qp < -s->sps->qp_bd_offset) {
+        av_log(s->avctx, AV_LOG_ERROR,
+               "The slice_qp %d is outside the valid range "
+               "[%d, 51].\n",
+               sh->slice_qp,
+               -s->sps->qp_bd_offset);
+        return AVERROR_INVALIDDATA;
+    }
+
     sh->slice_ctb_addr_rs = sh->slice_segment_addr;
 
     s->HEVClc->first_qp_group = !s->sh.dependent_slice_segment_flag;
 
     if (!s->pps->cu_qp_delta_enabled_flag)
-        s->HEVClc->qp_y = ((s->sh.slice_qp + 52 + 2 * s->sps->qp_bd_offset) %
-                          (52 + s->sps->qp_bd_offset)) - s->sps->qp_bd_offset;
+        s->HEVClc->qp_y = FFUMOD(s->sh.slice_qp + 52 + 2 * s->sps->qp_bd_offset,
+                                 52 + s->sps->qp_bd_offset) - s->sps->qp_bd_offset;
 
     s->slice_initialized = 1;
 
@@ -1775,6 +1790,11 @@ static int hls_decode_entry(AVCodecContext *avctxt, void *isFilterThread)
     int y_ctb       = 0;
     int ctb_addr_ts = s->pps->ctb_addr_rs_to_ts[s->sh.slice_ctb_addr_rs];
 
+    if (!ctb_addr_ts && s->sh.dependent_slice_segment_flag) {
+        av_log(s->avctx, AV_LOG_ERROR, "Impossible initial tile.\n");
+        return AVERROR_INVALIDDATA;
+    }
+
     while (more_data && ctb_addr_ts < s->sps->ctb_size) {
         int ctb_addr_rs = s->pps->ctb_addr_ts_to_rs[ctb_addr_ts];
 
@@ -2584,7 +2604,8 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
 
     pic_arrays_free(s);
 
-    av_freep(&lc->edge_emu_buffer);
+    if (lc)
+        av_freep(&lc->edge_emu_buffer);
     av_freep(&s->md5_ctx);
 
     for(i=0; i < s->nals_allocated; i++) {
@@ -2624,6 +2645,8 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
             av_freep(&s->sList[i]);
         }
     }
+    if (s->HEVClc == s->HEVClcList[0])
+        s->HEVClc = NULL;
     av_freep(&s->HEVClcList[0]);
 
     for (i = 0; i < s->nals_allocated; i++)
