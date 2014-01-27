@@ -1,7 +1,7 @@
 /*
  * huffyuv codec for libavcodec
  *
- * Copyright (c) 2002-2003 Michael Niedermayer <michaelni@gmx.at>
+ * Copyright (c) 2002-2014 Michael Niedermayer <michaelni@gmx.at>
  *
  * see http://www.pcisys.net/~melanson/codecs/huffyuv.txt for a description of
  * the algorithm used
@@ -81,6 +81,7 @@ av_cold void ff_huffyuv_common_init(AVCodecContext *avctx)
     s->flags = avctx->flags;
 
     ff_dsputil_init(&s->dsp, avctx);
+    ff_llviddsp_init(&s->llviddsp, avctx);
 
     s->width = avctx->width;
     s->height = avctx->height;

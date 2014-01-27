@@ -1247,6 +1247,7 @@ EXAMPLE_LIST="
     filtering_video_example
     metadata_example
     muxing_example
+    remuxing_example
     resampling_audio_example
     scaling_video_example
     transcode_aac_example
@@ -1684,6 +1685,7 @@ CONFIG_EXTRA="
     huffman
     intrax8
     lgplv3
+    llviddsp
     lpc
     mpegaudio
     mpegaudiodsp
@@ -1804,6 +1806,7 @@ x86_64_suggest="fast_cmov"
 
 amd3dnow_deps="mmx"
 amd3dnowext_deps="amd3dnow"
+i686_deps="x86"
 mmx_deps="x86"
 mmxext_deps="mmx"
 sse_deps="mmxext"
@@ -1905,8 +1908,8 @@ eatqi_decoder_select="aandcttables error_resilience mpegvideo"
 exr_decoder_select="zlib"
 ffv1_decoder_select="dsputil golomb rangecoder"
 ffv1_encoder_select="dsputil rangecoder"
-ffvhuff_decoder_select="dsputil"
-ffvhuff_encoder_select="dsputil huffman"
+ffvhuff_decoder_select="dsputil llviddsp"
+ffvhuff_encoder_select="dsputil huffman llviddsp"
 flac_decoder_select="golomb"
 flac_encoder_select="dsputil golomb lpc"
 flashsv_decoder_select="zlib"
@@ -1928,8 +1931,8 @@ h263p_encoder_select="h263_encoder"
 h264_decoder_select="golomb h264chroma h264dsp h264pred h264qpel videodsp"
 h264_decoder_suggest="error_resilience"
 hevc_decoder_select="dsputil golomb videodsp"
-huffyuv_decoder_select="dsputil"
-huffyuv_encoder_select="dsputil huffman"
+huffyuv_decoder_select="dsputil llviddsp"
+huffyuv_encoder_select="dsputil huffman llviddsp"
 iac_decoder_select="dsputil fft mdct sinewin"
 imc_decoder_select="dsputil fft mdct sinewin"
 indeo3_decoder_select="hpeldsp"
@@ -1963,9 +1966,9 @@ mpc8_decoder_select="dsputil mpegaudiodsp"
 mpeg_xvmc_decoder_deps="X11_extensions_XvMClib_h"
 mpeg_xvmc_decoder_select="mpeg2video_decoder"
 mpeg1video_decoder_select="error_resilience mpegvideo"
-mpeg1video_encoder_select="aandcttables mpegvideoenc"
+mpeg1video_encoder_select="aandcttables mpegvideoenc h263dsp"
 mpeg2video_decoder_select="error_resilience mpegvideo"
-mpeg2video_encoder_select="aandcttables mpegvideoenc"
+mpeg2video_encoder_select="aandcttables mpegvideoenc h263dsp"
 mpeg4_decoder_select="h263_decoder mpeg4video_parser"
 mpeg4_encoder_select="h263_encoder"
 msmpeg4v1_decoder_select="h263_decoder"
@@ -2391,6 +2394,7 @@ filtering_audio_example_deps="avfilter avcodec avformat avutil"
 filtering_video_example_deps="avfilter avcodec avformat avutil"
 metadata_example_deps="avformat avutil"
 muxing_example_deps="avcodec avformat avutil swscale"
+remuxing_example_deps="avcodec avformat avutil"
 resampling_audio_example_deps="avutil swresample"
 scaling_video_example_deps="avutil swscale"
 transcode_aac_example_deps="avcodec avformat swresample"
@@ -2516,8 +2520,6 @@ HOSTCC_E='-E -o $@'
 HOSTCC_O='-o $@'
 HOSTLD_O='-o $@'
 
-host_cflags='-O3'
-host_cppflags='-D_ISOC99_SOURCE'
 host_libs='-lm'
 host_cflags_filter=echo
 host_ldflags_filter=echo
@@ -3111,7 +3113,7 @@ probe_cc(){
     elif $_cc -v 2>&1 | grep -q clang; then
         _type=clang
         _ident=$($_cc --version | head -n1)
-        _depflags='-MMD'
+        _depflags='-MMD -MF $(@:.o=.d) -MT $@'
         _cflags_speed='-O3'
         _cflags_size='-Os'
     elif $_cc -V 2>&1 | grep -q Sun; then
@@ -3600,8 +3602,10 @@ check_cc -D_LARGEFILE_SOURCE <<EOF && add_cppflags -D_LARGEFILE_SOURCE
 #include <stdlib.h>
 EOF
 
+add_host_cppflags -D_ISOC99_SOURCE
 check_host_cflags -std=c99
 check_host_cflags -Wall
+check_host_cflags -O3
 
 check_64bit(){
     arch32=$1
@@ -4429,7 +4433,9 @@ enabled libcelt           && require libcelt celt/celt.h celt_decode -lcelt0 &&
                                die "ERROR: libcelt must be installed and version must be >= 0.11.0."; }
 enabled libcaca           && require_pkg_config caca caca.h caca_create_canvas
 enabled libfaac           && require2 libfaac "stdint.h faac.h" faacEncGetVersion -lfaac
-enabled libfdk_aac        && require libfdk_aac fdk-aac/aacenc_lib.h aacEncOpen -lfdk-aac
+enabled libfdk_aac        && require libfdk_aac fdk-aac/aacenc_lib.h aacEncOpen -lfdk-aac &&
+                             { check_cpp_condition fdk-aac/aacenc_lib.h "AACENCODER_LIB_VL0 >= 3 && AACENCODER_LIB_VL1 >= 4 && AACENCODER_LIB_VL2 >= 12" ||
+                               die "ERROR: libfdk_aac must be installed and version must be >= 3.4.12."; }
 flite_libs="-lflite_cmu_time_awb -lflite_cmu_us_awb -lflite_cmu_us_kal -lflite_cmu_us_kal16 -lflite_cmu_us_rms -lflite_cmu_us_slt -lflite_usenglish -lflite_cmulex -lflite"
 enabled libflite          && require2 libflite "flite/flite.h" flite_init $flite_libs
 enabled libfreetype       && require_libfreetype

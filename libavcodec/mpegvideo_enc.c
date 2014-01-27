@@ -34,6 +34,7 @@
 #include "libavutil/mathematics.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/opt.h"
+#include "libavutil/timer.h"
 #include "avcodec.h"
 #include "dct.h"
 #include "dsputil.h"
@@ -226,7 +227,8 @@ av_cold int ff_dct_encode_init(MpegEncContext *s) {
     if (ARCH_X86)
         ff_dct_encode_init_x86(s);
 
-    ff_h263dsp_init(&s->h263dsp);
+    if (CONFIG_H263_ENCODER)
+        ff_h263dsp_init(&s->h263dsp);
     if (!s->dct_quantize)
         s->dct_quantize = ff_dct_quantize_c;
     if (!s->denoise_dct)
@@ -1034,6 +1036,8 @@ static int load_input_picture(MpegEncContext *s, const AVFrame *pic_arg)
         if (pic_arg->linesize[1] != s->uvlinesize)
             direct = 0;
         if (pic_arg->linesize[2] != s->uvlinesize)
+            direct = 0;
+        if ((s->width & 15) || (s->height & 15))
             direct = 0;
 
         av_dlog(s->avctx, "%d %d %td %td\n", pic_arg->linesize[0],
