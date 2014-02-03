@@ -5936,6 +5936,9 @@ It accepts the following values:
 @item yuv420
 force YUV420 output
 
+@item yuv422
+force YUV422 output
+
 @item yuv444
 force YUV444 output
 
@@ -9319,6 +9322,29 @@ verbose logging level
 
 By default, the logging level is set to @var{info}. If the @option{video} or
 the @option{metadata} options are set, it switches to @var{verbose}.
+
+@item peak
+Set peak mode(s).
+
+Available modes can be cumulated (the option is a @code{flag} type). Possible
+values are:
+@table @samp
+@item none
+Disable any peak mode (default).
+@item sample
+Enable sample-peak mode.
+
+Simple peak mode looking for the higher sample value. It logs a message
+for sample-peak (identified by @code{SPK}).
+@item true
+Enable true-peak mode.
+
+If enabled, the peak lookup is done on an over-sampled version of the input
+stream for better peak accuracy. It logs a message for true-peak.
+(identified by @code{TPK}) and true-peak per frame (identified by @code{FTPK}).
+This mode requires a build with @code{libswresample}.
+@end table
+
 @end table
 
 @subsection Examples

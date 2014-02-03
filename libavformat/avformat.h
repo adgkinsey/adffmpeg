@@ -338,6 +338,8 @@ typedef struct AVProbeData {
 } AVProbeData;
 
 #define AVPROBE_SCORE_RETRY (AVPROBE_SCORE_MAX/4)
+#define AVPROBE_SCORE_STREAM_RETRY (AVPROBE_SCORE_MAX/4-1)
+
 #define AVPROBE_SCORE_EXTENSION  50 ///< score for file extension
 #define AVPROBE_SCORE_MAX       100 ///< maximum score
 
@@ -453,6 +455,11 @@ typedef struct AVOutputFormat {
 
     void (*get_output_timestamp)(struct AVFormatContext *s, int stream,
                                  int64_t *dts, int64_t *wall);
+    /**
+     * Allows sending messages from application to device.
+     */
+    int (*control_message)(struct AVFormatContext *s, int type,
+                           void *data, size_t data_size);
 } AVOutputFormat;
 /**
  * @}
@@ -948,6 +955,13 @@ typedef struct AVChapter {
 
 
 /**
+ * Callback used by devices to communicate with application.
+ */
+typedef int (*av_format_control_message)(struct AVFormatContext *s, int type,
+                                         void *data, size_t data_size);
+
+
+/**
  * The duration of a video can be estimated through various ways, and this enum can be used
  * to know how the duration was estimated.
  */
@@ -1240,14 +1254,14 @@ typedef struct AVFormatContext {
     /**
      * Correct single timestamp overflows
      * - encoding: unused
-     * - decoding: Set by user via AVOPtions (NO direct access)
+     * - decoding: Set by user via AVOptions (NO direct access)
      */
     unsigned int correct_ts_overflow;
 
     /**
      * Force seeking to any (also non key) frames.
      * - encoding: unused
-     * - decoding: Set by user via AVOPtions (NO direct access)
+     * - decoding: Set by user via AVOptions (NO direct access)
      */
     int seek2any;
 
@@ -1355,6 +1369,24 @@ typedef struct AVFormatContext {
      * Muxing: Set by user via av_format_set_metadata_header_padding.
      */
     int metadata_header_padding;
+
+    /**
+     * User data.
+     * This is a place for some private data of the user.
+     * Mostly usable with control_message_cb or any future callbacks in device's context.
+     */
+    void *opaque;
+
+    /**
+     * Callback used by devices to communicate with application.
+     */
+    av_format_control_message control_message_cb;
+
+    /**
+     * Output timestamp offset, in microseconds.
+     * Muxing: set by user via AVOptions (NO direct access)
+     */
+    int64_t output_ts_offset;
 } AVFormatContext;
 
 int av_format_get_probe_score(const AVFormatContext *s);
@@ -1366,6 +1398,10 @@ AVCodec * av_format_get_subtitle_codec(const AVFormatContext *s);
 void      av_format_set_subtitle_codec(AVFormatContext *s, AVCodec *c);
 int       av_format_get_metadata_header_padding(const AVFormatContext *s);
 void      av_format_set_metadata_header_padding(AVFormatContext *s, int c);
+void *    av_format_get_opaque(const AVFormatContext *s);
+void      av_format_set_opaque(AVFormatContext *s, void *opaque);
+av_format_control_message av_format_get_control_message_cb(const AVFormatContext *s);
+void      av_format_set_control_message_cb(AVFormatContext *s, av_format_control_message callback);
 
 /**
  * Returns the method used to set ctx->duration.

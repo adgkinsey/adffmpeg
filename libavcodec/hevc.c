@@ -701,6 +701,11 @@ static int hls_slice_header(HEVCContext *s)
 
     sh->slice_ctb_addr_rs = sh->slice_segment_addr;
 
+    if (!s->sh.slice_ctb_addr_rs && s->sh.dependent_slice_segment_flag) {
+        av_log(s->avctx, AV_LOG_ERROR, "Impossible slice segment.\n");
+        return AVERROR_INVALIDDATA;
+    }
+
     s->HEVClc->first_qp_group = !s->sh.dependent_slice_segment_flag;
 
     if (!s->pps->cu_qp_delta_enabled_flag)
@@ -1805,10 +1810,16 @@ static int hls_coding_quadtree(HEVCContext *s, int x0, int y0,
         if (more_data < 0)
             return more_data;
 
-        if (more_data && x1 < s->sps->width)
+        if (more_data && x1 < s->sps->width) {
             more_data = hls_coding_quadtree(s, x1, y0, log2_cb_size - 1, cb_depth + 1);
-        if (more_data && y1 < s->sps->height)
+            if (more_data < 0)
+                return more_data;
+        }
+        if (more_data && y1 < s->sps->height) {
             more_data = hls_coding_quadtree(s, x0, y1, log2_cb_size - 1, cb_depth + 1);
+            if (more_data < 0)
+                return more_data;
+        }
         if (more_data && x1 < s->sps->width &&
             y1 < s->sps->height) {
             return hls_coding_quadtree(s, x1, y1, log2_cb_size - 1, cb_depth + 1);

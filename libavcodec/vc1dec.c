@@ -2132,6 +2132,9 @@ static inline void vc1_pred_b_mv(VC1Context *v, int dmv_x[2], int dmv_y[2],
         return;
     }
     if (!v->field_mode) {
+        if (direct && s->next_picture_ptr->field_picture)
+            av_log(s->avctx, AV_LOG_WARNING, "Mixed frame/field direct mode not supported\n");
+
         s->mv[0][0][0] = scale_mv(s->next_picture.motion_val[1][xy][0], v->bfraction, 0, s->quarter_sample);
         s->mv[0][0][1] = scale_mv(s->next_picture.motion_val[1][xy][1], v->bfraction, 0, s->quarter_sample);
         s->mv[1][0][0] = scale_mv(s->next_picture.motion_val[1][xy][0], v->bfraction, 1, s->quarter_sample);
@@ -4342,6 +4345,10 @@ static void vc1_decode_b_mb_intfi(VC1Context *v)
             if (bmvtype == BMV_TYPE_DIRECT) {
                 dmv_x[0] = dmv_y[0] = pred_flag[0] = 0;
                 dmv_x[1] = dmv_y[1] = pred_flag[0] = 0;
+                if (!s->next_picture_ptr->field_picture) {
+                    av_log(s->avctx, AV_LOG_ERROR, "Mixed field/frame direct mode not supported\n");
+                    return;
+                }
             }
             vc1_pred_b_mv_intfi(v, 0, dmv_x, dmv_y, 1, pred_flag);
             vc1_b_mc(v, dmv_x, dmv_y, (bmvtype == BMV_TYPE_DIRECT), bmvtype);
@@ -4449,6 +4456,8 @@ static int vc1_decode_b_mb_intfr(VC1Context *v)
         direct = v->direct_mb_plane[mb_pos];
 
     if (direct) {
+        if (s->next_picture_ptr->field_picture)
+            av_log(s->avctx, AV_LOG_WARNING, "Mixed frame/field direct mode not supported\n");
         s->mv[0][0][0] = s->current_picture.motion_val[0][s->block_index[0]][0] = scale_mv(s->next_picture.motion_val[1][s->block_index[0]][0], v->bfraction, 0, s->quarter_sample);
         s->mv[0][0][1] = s->current_picture.motion_val[0][s->block_index[0]][1] = scale_mv(s->next_picture.motion_val[1][s->block_index[0]][1], v->bfraction, 0, s->quarter_sample);
         s->mv[1][0][0] = s->current_picture.motion_val[1][s->block_index[0]][0] = scale_mv(s->next_picture.motion_val[1][s->block_index[0]][0], v->bfraction, 1, s->quarter_sample);
@@ -6014,6 +6023,7 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
         goto err;
     }
 
+    v->s.current_picture_ptr->field_picture = v->field_mode;
     v->s.current_picture_ptr->f.interlaced_frame = (v->fcm != PROGRESSIVE);
     v->s.current_picture_ptr->f.top_field_first  = v->tff;
 
