@@ -301,7 +301,7 @@ static int set_codec_from_probe_data(AVFormatContext *s, AVStream *st,
         { "dts",       AV_CODEC_ID_DTS,        AVMEDIA_TYPE_AUDIO },
         { "eac3",      AV_CODEC_ID_EAC3,       AVMEDIA_TYPE_AUDIO },
         { "h264",      AV_CODEC_ID_H264,       AVMEDIA_TYPE_VIDEO },
-        { "hevc"     , AV_CODEC_ID_HEVC      , AVMEDIA_TYPE_VIDEO },
+        { "hevc",      AV_CODEC_ID_HEVC,       AVMEDIA_TYPE_VIDEO },
         { "loas",      AV_CODEC_ID_AAC_LATM,   AVMEDIA_TYPE_AUDIO },
         { "m4v",       AV_CODEC_ID_MPEG4,      AVMEDIA_TYPE_VIDEO },
         { "mp3",       AV_CODEC_ID_MP3,        AVMEDIA_TYPE_AUDIO },
@@ -3480,6 +3480,7 @@ void avformat_free_context(AVFormatContext *s)
     av_freep(&s->chapters);
     av_dict_free(&s->metadata);
     av_freep(&s->streams);
+    av_freep(&s->internal);
     av_free(s);
 }
 

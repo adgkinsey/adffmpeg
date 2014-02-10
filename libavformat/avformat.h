@@ -971,6 +971,8 @@ enum AVDurationEstimationMethod {
     AVFMT_DURATION_FROM_BITRATE ///< Duration estimated from bitrate (less accurate)
 };
 
+typedef struct AVFormatInternal AVFormatInternal;
+
 /**
  * Format I/O context.
  * New fields can be added to the end with minor version bumps.
@@ -1181,6 +1183,24 @@ typedef struct AVFormatContext {
 #define FF_FDEBUG_TS        0x0001
 
     /**
+     * Maximum buffering duration for interleaving.
+     *
+     * To ensure all the streams are interleaved correctly,
+     * av_interleaved_write_frame() will wait until it has at least one packet
+     * for each stream before actually writing any packets to the output file.
+     * When some streams are "sparse" (i.e. there are large gaps between
+     * successive packets), this can result in excessive buffering.
+     *
+     * This field specifies the maximum difference between the timestamps of the
+     * first and the last packet in the muxing queue, above which libavformat
+     * will output a packet regardless of whether it has queued a packet for all
+     * the streams.
+     *
+     * Muxing only, set by the caller before avformat_write_header().
+     */
+    int64_t max_interleave_delta;
+
+    /**
      * Transport stream id.
      * This will be moved into demuxer private options. Thus no API/ABI compatibility
      */
@@ -1330,6 +1350,12 @@ typedef struct AVFormatContext {
      * Timebase for the timestamp offset.
      */
     AVRational offset_timebase;
+
+    /**
+     * An opaque field for libavformat internal usage.
+     * Must not be accessed in any way by callers.
+     */
+    AVFormatInternal *internal;
 
     /**
      * IO repositioned flag.

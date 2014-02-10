@@ -249,6 +249,7 @@ External library support:
                            native MPEG-4/Xvid encoder exists [no]
   --enable-libzmq          enable message passing via libzmq [no]
   --enable-libzvbi         enable teletext support via libzvbi [no]
+  --enable-decklink        enable Blackmagick DeckLink output [no]
   --enable-openal          enable OpenAL 1.1 capture support [no]
   --enable-opencl          enable OpenCL code
   --enable-opengl          enable OpenGL rendering [no]
@@ -1259,6 +1260,7 @@ EXTERNAL_LIBRARY_LIST="
     avisynth
     bzlib
     crystalhd
+    decklink
     fontconfig
     frei0r
     gnutls
@@ -1917,6 +1919,7 @@ ffv1_decoder_select="dsputil golomb rangecoder"
 ffv1_encoder_select="dsputil rangecoder"
 ffvhuff_decoder_select="dsputil llviddsp"
 ffvhuff_encoder_select="dsputil huffman llviddsp"
+fic_decoder_select="dsputil golomb"
 flac_decoder_select="golomb"
 flac_encoder_select="dsputil golomb lpc"
 flashsv_decoder_select="zlib"
@@ -2261,6 +2264,8 @@ alsa_indev_deps="alsa_asoundlib_h snd_pcm_htimestamp"
 alsa_outdev_deps="alsa_asoundlib_h"
 bktr_indev_deps_any="dev_bktr_ioctl_bt848_h machine_ioctl_bt848_h dev_video_bktr_ioctl_bt848_h dev_ic_bt8xx_h"
 caca_outdev_deps="libcaca"
+decklink_outdev_deps="decklink pthreads"
+decklink_outdev_extralibs="-lstdc++"
 dshow_indev_deps="IBaseFilter"
 dshow_indev_extralibs="-lpsapi -lole32 -lstrmiids -luuid"
 dv1394_indev_deps="dv1394"
@@ -4153,7 +4158,8 @@ elif enabled ppc; then
 
     enable local_aligned_8 local_aligned_16
 
-    check_inline_asm dcbzl     '"dcbzl 0, %0" :: "r"(0)'
+    [ $cpu != e500 -a $cpu != e500v2 ] &&
+     check_inline_asm dcbzl    '"dcbzl 0, %0" :: "r"(0)'
     check_inline_asm ibm_asm   '"add 0, 0, 0"'
     check_inline_asm ppc4xx    '"maclhw r10, r11, r12"'
     check_inline_asm xform_asm '"lwzx %1, %y0" :: "Z"(*(int*)0), "r"(0)'
@@ -4430,6 +4436,7 @@ done
 enabled avisynth          && { { check_lib2 "windows.h" LoadLibrary; } ||
                                { check_lib2 "dlfcn.h" dlopen -ldl; } ||
                                die "ERROR: LoadLibrary/dlopen not found for avisynth"; }
+enabled decklink          && { check_header DeckLinkAPI.h || die "ERROR: DeckLinkAPI.h header not found"; }
 enabled fontconfig        && require_pkg_config fontconfig "fontconfig/fontconfig.h" FcInit
 enabled frei0r            && { check_header frei0r.h || die "ERROR: frei0r.h header not found"; }
 enabled gnutls            && require_pkg_config gnutls gnutls/gnutls.h gnutls_global_init
@@ -4443,9 +4450,7 @@ enabled libcelt           && require libcelt celt/celt.h celt_decode -lcelt0 &&
                                die "ERROR: libcelt must be installed and version must be >= 0.11.0."; }
 enabled libcaca           && require_pkg_config caca caca.h caca_create_canvas
 enabled libfaac           && require2 libfaac "stdint.h faac.h" faacEncGetVersion -lfaac
-enabled libfdk_aac        && require libfdk_aac fdk-aac/aacenc_lib.h aacEncOpen -lfdk-aac &&
-                             { check_cpp_condition fdk-aac/aacenc_lib.h "AACENCODER_LIB_VL0 >= 3 && AACENCODER_LIB_VL1 >= 4 && AACENCODER_LIB_VL2 >= 12" ||
-                               die "ERROR: libfdk_aac must be installed and version must be >= 3.4.12."; }
+enabled libfdk_aac        && require libfdk_aac fdk-aac/aacenc_lib.h aacEncOpen -lfdk-aac
 flite_libs="-lflite_cmu_time_awb -lflite_cmu_us_awb -lflite_cmu_us_kal -lflite_cmu_us_kal16 -lflite_cmu_us_rms -lflite_cmu_us_slt -lflite_usenglish -lflite_cmulex -lflite"
 enabled libflite          && require2 libflite "flite/flite.h" flite_init $flite_libs
 enabled libfreetype       && require_libfreetype
@@ -4817,6 +4822,18 @@ elif enabled_any msvc icl; then
         disable inline_asm
     fi
 fi
+
+case $as_type in
+    clang)
+        add_asflags -Qunused-arguments
+    ;;
+esac
+
+case $ld_type in
+    clang)
+        check_ldflags -Qunused-arguments
+    ;;
+esac
 
 case $target_os in
     osf1)
