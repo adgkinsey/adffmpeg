@@ -30,6 +30,9 @@ ffplay:
 ffprobe:
   ffprobe.c                             Stefano Sabatini
 
+ffserver:
+  ffserver.c                            Reynaldo H. Verdejo Pinochet
+
 Commandline utility code:
   cmdutils.c, cmdutils.h                Michael Niedermayer
 
@@ -198,6 +201,7 @@ Codecs:
   libvorbis.c                           David Conrad
   libvpx*                               James Zern
   libx264.c                             Mans Rullgard, Jason Garrett-Glaser
+  libx265.c                             Derek Buitenhuis
   libxavs.c                             Stefan Gehrer
   libzvbi-teletextdec.c                 Marton Balint
   loco.c                                Kostya Shishkov
@@ -332,6 +336,7 @@ Filters:
   avf_avectorscope.c                    Paul B Mahol
   vf_blend.c                            Paul B Mahol
   vf_colorbalance.c                     Paul B Mahol
+  vf_dejudder.c                         Nicholas Robbins
   vf_delogo.c                           Jean Delvare (CC <khali@linux-fr.org>)
   vf_drawbox.c/drawgrid                 Andrey Utkin
   vf_extractplanes.c                    Paul B Mahol

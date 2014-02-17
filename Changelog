@@ -26,6 +26,8 @@ version <next>
   MP3, AIFF, and OMA files), FLAC header, and the AVI "junk" block.
 - Mirillis FIC video decoder
 - Support DNx444
+- libx265 encoder
+- dejudder filter
 
 
 version 2.1:

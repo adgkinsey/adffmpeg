@@ -2162,6 +2162,11 @@ static void mov_build_index(MOVContext *mov, AVStream *st)
                         rap_group_index++;
                     }
                 }
+                if (sc->keyframe_absent
+                    && !sc->stps_count
+                    && !rap_group_present
+                    && st->codec->codec_type == AVMEDIA_TYPE_AUDIO)
+                     keyframe = 1;
                 if (keyframe)
                     distance = 0;
                 sample_size = sc->stsz_sample_size > 0 ? sc->stsz_sample_size : sc->sample_sizes[current_sample];
@@ -3414,7 +3419,7 @@ static int mov_read_header(AVFormatContext *s)
         }
         if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO && sc->nb_frames_for_fps > 0 && sc->duration_for_fps > 0)
             av_reduce(&st->avg_frame_rate.num, &st->avg_frame_rate.den,
-                      sc->time_scale*sc->nb_frames_for_fps, sc->duration_for_fps, INT_MAX);
+                      sc->time_scale*(int64_t)sc->nb_frames_for_fps, sc->duration_for_fps, INT_MAX);
     }
 
     if (mov->trex_data) {

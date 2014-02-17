@@ -417,6 +417,15 @@ int avformat_write_header(AVFormatContext *s, AVDictionary **options)
     return 0;
 }
 
+#define AV_PKT_FLAG_UNCODED_FRAME 0x2000
+
+/* Note: using sizeof(AVFrame) from outside lavu is unsafe in general, but
+   it is only being used internally to this file as a consistency check.
+   The value is chosen to be very unlikely to appear on its own and to cause
+   immediate failure if used anywhere as a real size. */
+#define UNCODED_FRAME_PACKET_SIZE (INT_MIN / 3 * 2 + (int)sizeof(AVFrame))
+
+
 //FIXME merge with compute_pkt_fields
 static int compute_pkt_fields2(AVFormatContext *s, AVStream *st, AVPacket *pkt)
 {
@@ -482,7 +491,9 @@ static int compute_pkt_fields2(AVFormatContext *s, AVStream *st, AVPacket *pkt)
     /* update pts */
     switch (st->codec->codec_type) {
     case AVMEDIA_TYPE_AUDIO:
-        frame_size = ff_get_audio_frame_size(st->codec, pkt->size, 1);
+        frame_size = (pkt->flags & AV_PKT_FLAG_UNCODED_FRAME) ?
+                     ((AVFrame *)pkt->data)->nb_samples :
+                     ff_get_audio_frame_size(st->codec, pkt->size, 1);
 
         /* HACK/FIXME, we skip the initial 0 size packets as they are most
          * likely equal to the encoder delay, but it would be better if we
@@ -549,7 +560,14 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     did_split = av_packet_split_side_data(pkt);
-    ret = s->oformat->write_packet(s, pkt);
+    if ((pkt->flags & AV_PKT_FLAG_UNCODED_FRAME)) {
+        AVFrame *frame = (AVFrame *)pkt->data;
+        av_assert0(pkt->size == UNCODED_FRAME_PACKET_SIZE);
+        ret = s->oformat->write_uncoded_frame(s, pkt->stream_index, &frame, 0);
+        av_frame_free(&frame);
+    } else {
+        ret = s->oformat->write_packet(s, pkt);
+    }
 
     if (s->flush_packets && s->pb && ret >= 0 && s->flags & AVFMT_FLAG_FLUSH_PACKETS)
         avio_flush(s->pb);
@@ -632,8 +650,13 @@ FF_DISABLE_DEPRECATION_WARNINGS
 FF_ENABLE_DEPRECATION_WARNINGS
 #endif
     pkt->buf       = NULL;
-    av_dup_packet(&this_pktl->pkt);  // duplicate the packet if it uses non-allocated memory
-    av_copy_packet_side_data(&this_pktl->pkt, &this_pktl->pkt); // copy side data
+    if ((pkt->flags & AV_PKT_FLAG_UNCODED_FRAME)) {
+        av_assert0(pkt->size == UNCODED_FRAME_PACKET_SIZE);
+        av_assert0(((AVFrame *)pkt->data)->buf);
+    } else {
+        av_dup_packet(&this_pktl->pkt);  // duplicate the packet if it uses non-allocated memory
+        av_copy_packet_side_data(&this_pktl->pkt, &this_pktl->pkt); // copy side data
+    }
 
     if (s->streams[pkt->stream_index]->last_in_packet_buffer) {
         next_point = &(st->last_in_packet_buffer->next);
@@ -808,22 +831,26 @@ int av_interleaved_write_frame(AVFormatContext *s, AVPacket *pkt)
 
     ret = check_packet(s, pkt);
     if (ret < 0)
-        return ret;
+        goto fail;
 
     if (pkt) {
         AVStream *st = s->streams[pkt->stream_index];
 
         //FIXME/XXX/HACK drop zero sized packets
-        if (st->codec->codec_type == AVMEDIA_TYPE_AUDIO && pkt->size == 0)
-            return 0;
+        if (st->codec->codec_type == AVMEDIA_TYPE_AUDIO && pkt->size == 0) {
+            ret = 0;
+            goto fail;
+        }
 
         av_dlog(s, "av_interleaved_write_frame size:%d dts:%s pts:%s\n",
                 pkt->size, av_ts2str(pkt->dts), av_ts2str(pkt->pts));
         if ((ret = compute_pkt_fields2(s, st, pkt)) < 0 && !(s->oformat->flags & AVFMT_NOTIMESTAMPS))
-            return ret;
+            goto fail;
 
-        if (pkt->dts == AV_NOPTS_VALUE && !(s->oformat->flags & AVFMT_NOTIMESTAMPS))
-            return AVERROR(EINVAL);
+        if (pkt->dts == AV_NOPTS_VALUE && !(s->oformat->flags & AVFMT_NOTIMESTAMPS)) {
+            ret = AVERROR(EINVAL);
+            goto fail;
+        }
     } else {
         av_dlog(s, "av_interleaved_write_frame FLUSH\n");
         flush = 1;
@@ -832,6 +859,11 @@ int av_interleaved_write_frame(AVFormatContext *s, AVPacket *pkt)
     for (;; ) {
         AVPacket opkt;
         int ret = interleave_packet(s, &opkt, pkt, flush);
+        if (pkt) {
+            memset(pkt, 0, sizeof(*pkt));
+            av_init_packet(pkt);
+            pkt = NULL;
+        }
         if (ret <= 0) //FIXME cleanup needed for ret<0 ?
             return ret;
 
@@ -840,13 +872,15 @@ int av_interleaved_write_frame(AVFormatContext *s, AVPacket *pkt)
             s->streams[opkt.stream_index]->nb_frames++;
 
         av_free_packet(&opkt);
-        pkt = NULL;
 
         if (ret < 0)
             return ret;
         if(s->pb && s->pb->error)
             return s->pb->error;
     }
+fail:
+    av_packet_unref(pkt);
+    return ret;
 }
 
 int av_write_trailer(AVFormatContext *s)
@@ -920,4 +954,52 @@ int ff_write_chained(AVFormatContext *dst, int dst_stream, AVPacket *pkt,
                                           src->streams[pkt->stream_index]->time_base,
                                           dst->streams[dst_stream]->time_base);
     return av_write_frame(dst, &local_pkt);
+}
+
+static int av_write_uncoded_frame_internal(AVFormatContext *s, int stream_index,
+                                           AVFrame *frame, int interleaved)
+{
+    AVPacket pkt, *pktp;
+
+    av_assert0(s->oformat);
+    if (!s->oformat->write_uncoded_frame)
+        return AVERROR(ENOSYS);
+
+    if (!frame) {
+        pktp = NULL;
+    } else {
+        pktp = &pkt;
+        av_init_packet(&pkt);
+        pkt.data = (void *)frame;
+        pkt.size         = UNCODED_FRAME_PACKET_SIZE;
+        pkt.pts          =
+        pkt.dts          = frame->pts;
+        pkt.duration     = av_frame_get_pkt_duration(frame);
+        pkt.stream_index = stream_index;
+        pkt.flags |= AV_PKT_FLAG_UNCODED_FRAME;
+    }
+
+    return interleaved ? av_interleaved_write_frame(s, pktp) :
+                         av_write_frame(s, pktp);
+}
+
+int av_write_uncoded_frame(AVFormatContext *s, int stream_index,
+                           AVFrame *frame)
+{
+    return av_write_uncoded_frame_internal(s, stream_index, frame, 0);
+}
+
+int av_interleaved_write_uncoded_frame(AVFormatContext *s, int stream_index,
+                                       AVFrame *frame)
+{
+    return av_write_uncoded_frame_internal(s, stream_index, frame, 1);
+}
+
+int av_write_uncoded_frame_query(AVFormatContext *s, int stream_index)
+{
+    av_assert0(s->oformat);
+    if (!s->oformat->write_uncoded_frame)
+        return AVERROR(ENOSYS);
+    return s->oformat->write_uncoded_frame(s, stream_index, NULL,
+                                           AV_WRITE_UNCODED_FRAME_QUERY);
 }

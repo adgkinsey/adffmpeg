@@ -244,6 +244,7 @@ External library support:
   --enable-libwavpack      enable wavpack encoding via libwavpack [no]
   --enable-libwebp         enable WebP encoding via libwebp [no]
   --enable-libx264         enable H.264 encoding via x264 [no]
+  --enable-libx265         enable HEVC encoding via x265 [no]
   --enable-libxavs         enable AVS encoding via xavs [no]
   --enable-libxvid         enable Xvid encoding via xvidcore,
                            native MPEG-4/Xvid encoder exists [no]
@@ -322,6 +323,7 @@ Optimization options (experts only):
   --disable-sse4           disable SSE4 optimizations
   --disable-sse42          disable SSE4.2 optimizations
   --disable-avx            disable AVX optimizations
+  --disable-xop            disable XOP optimizations
   --disable-fma4           disable FMA4 optimizations
   --disable-avx2           disable AVX2 optimizations
   --disable-armv5te        disable armv5te optimizations
@@ -1244,7 +1246,7 @@ COMPONENT_LIST="
 
 EXAMPLE_LIST="
     avio_reading_example
-    decoding_encoding_example
+    avcodec_example
     demuxing_decoding_example
     filtering_audio_example
     filtering_video_example
@@ -1310,6 +1312,7 @@ EXTERNAL_LIBRARY_LIST="
     libwavpack
     libwebp
     libx264
+    libx265
     libxavs
     libxvid
     libzmq
@@ -1453,6 +1456,7 @@ ARCH_EXT_LIST_X86='
     amd3dnowext
     avx
     avx2
+    xop
     fma4
     i686
     mmx
@@ -1825,6 +1829,7 @@ ssse3_deps="sse3"
 sse4_deps="ssse3"
 sse42_deps="sse4"
 avx_deps="sse42"
+xop_deps="avx"
 fma4_deps="avx"
 avx2_deps="avx"
 
@@ -2188,6 +2193,7 @@ libwavpack_encoder_deps="libwavpack"
 libwebp_encoder_deps="libwebp"
 libx264_encoder_deps="libx264"
 libx264rgb_encoder_deps="libx264"
+libx265_encoder_deps="libx265"
 libxavs_encoder_deps="libxavs"
 libxvid_encoder_deps="libxvid"
 libutvideo_decoder_deps="libutvideo"
@@ -2403,7 +2409,7 @@ zmq_filter_deps="libzmq"
 
 # examples
 avio_reading="avformat avcodec avutil"
-decoding_encoding_example_deps="avcodec avutil"
+avcodec_example_deps="avcodec avutil"
 demuxing_decoding_example_deps="avcodec avformat avutil"
 filtering_audio_example_deps="avfilter avcodec avformat avutil"
 filtering_video_example_deps="avfilter avcodec avformat avutil"
@@ -2429,11 +2435,11 @@ ffmpeg_select="aformat_filter anull_filter atrim_filter format_filter
                null_filter
                setpts_filter trim_filter"
 ffplay_deps="avcodec avformat swscale swresample sdl"
+ffplay_libs='$sdl_libs'
 ffplay_select="rdft crop_filter"
 ffprobe_deps="avcodec avformat"
 ffserver_deps="avformat fork sarestart"
 ffserver_select="ffm_muxer rtp_protocol rtsp_demuxer"
-ffserver_extralibs='$ldl'
 
 # documentation
 podpages_deps="perl"
@@ -4014,6 +4020,7 @@ die_license_disabled gpl libcdio
 die_license_disabled gpl libutvideo
 die_license_disabled gpl libvidstab
 die_license_disabled gpl libx264
+die_license_disabled gpl libx265
 die_license_disabled gpl libxavs
 die_license_disabled gpl libxvid
 die_license_disabled gpl libzvbi
@@ -4239,6 +4246,7 @@ EOF
         check_yasm "movbe ecx, [5]" && enable yasm ||
             die "yasm/nasm not found or too old. Use --disable-yasm for a crippled build."
         check_yasm "vextractf128 xmm0, ymm0, 0"      || disable avx_external avresample
+        check_yasm "vpmacsdd xmm0, xmm1, xmm2, xmm3" || disable xop_external
         check_yasm "vfmaddps ymm0, ymm1, ymm2, ymm3" || disable fma4_external
         check_yasm "CPU amdnop" && enable cpunop
     fi
@@ -4502,6 +4510,9 @@ enabled libwebp           && require_pkg_config libwebp webp/encode.h WebPGetEnc
 enabled libx264           && require libx264 x264.h x264_encoder_encode -lx264 &&
                              { check_cpp_condition x264.h "X264_BUILD >= 118" ||
                                die "ERROR: libx264 must be installed and version must be >= 0.118."; }
+enabled libx265           && require_pkg_config x265 x265.h x265_encoder_encode &&
+                             { check_cpp_condition x265.h "X265_BUILD >= 5" ||
+                               die "ERROR: libx265 version must be >= 5."; }
 enabled libxavs           && require libxavs xavs.h xavs_encoder_encode -lxavs
 enabled libxvid           && require libxvid xvid.h xvid_global -lxvidcore
 enabled libzmq            && require_pkg_config libzmq zmq.h zmq_ctx_new
@@ -4632,7 +4643,8 @@ enabled vdpau &&
     disable vdpau
 
 enabled vdpau && enabled xlib &&
-    check_lib2 "vdpau/vdpau.h vdpau/vdpau_x11.h" vdp_device_create_x11 -lvdpau &&
+    check_func_headers "vdpau/vdpau.h vdpau/vdpau_x11.h" vdp_device_create_x11 -lvdpau &&
+    prepend ffmpeg_libs $($ldflags_filter "-lvdpau") &&
     enable vdpau_x11
 
 # Funny iconv installations are not unusual, so check it after all flags have been set
@@ -4920,6 +4932,7 @@ if enabled x86; then
     echo "SSE enabled               ${sse-no}"
     echo "SSSE3 enabled             ${ssse3-no}"
     echo "AVX enabled               ${avx-no}"
+    echo "XOP enabled               ${xop-no}"
     echo "FMA4 enabled              ${fma4-no}"
     echo "i686 features enabled     ${i686-no}"
     echo "CMOV is fast              ${fast_cmov-no}"
@@ -5098,7 +5111,6 @@ HOSTLD_O=$HOSTLD_O
 TARGET_EXEC=$target_exec $target_exec_args
 TARGET_PATH=$target_path
 TARGET_SAMPLES=${target_samples:-\$(SAMPLES)}
-LIBS-ffplay=$sdl_libs
 CFLAGS-ffplay=$sdl_cflags
 ZLIB=$($ldflags_filter -lz)
 LIB_INSTALL_EXTRA_CMD=$LIB_INSTALL_EXTRA_CMD
@@ -5133,6 +5145,13 @@ get_version(){
 }
 
 map 'get_version $v' $LIBRARY_LIST
+
+print_program_libs(){
+    eval "program_libs=\$${1}_libs"
+    eval echo "LIBS-${1}=${program_libs}" >> config.mak
+}
+
+map 'print_program_libs $v' $PROGRAM_LIST
 
 cat > $TMPH <<EOF
 /* Automatically generated by configure - do not modify! */
