@@ -366,9 +366,8 @@ int ff_h264_decode_seq_parameter_set(H264Context *h)
         sps->profile_idc == 128 || sps->profile_idc == 144) {
         sps->chroma_format_idc = get_ue_golomb_31(&h->gb);
         if (sps->chroma_format_idc > 3U) {
-            av_log(h->avctx, AV_LOG_ERROR,
-                   "chroma_format_idc %d is illegal\n",
-                   sps->chroma_format_idc);
+            avpriv_request_sample(h->avctx, "chroma_format_idc %u",
+                                  sps->chroma_format_idc);
             goto fail;
         } else if (sps->chroma_format_idc == 3) {
             sps->residual_color_transform_flag = get_bits1(&h->gb);
@@ -555,7 +554,7 @@ int ff_h264_decode_seq_parameter_set(H264Context *h)
                sps->timing_info_present_flag ? sps->num_units_in_tick : 0,
                sps->timing_info_present_flag ? sps->time_scale : 0,
                sps->bit_depth_luma,
-               h->sps.bitstream_restriction_flag ? sps->num_reorder_frames : -1
+               sps->bitstream_restriction_flag ? sps->num_reorder_frames : -1
                );
     }
     sps->new = 1;

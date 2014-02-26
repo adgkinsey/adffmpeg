@@ -1340,7 +1340,12 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
     }
 
     if (is_last_report) {
-        int64_t raw= audio_size + video_size + data_size + subtitle_size + extra_size;
+        int64_t raw   = audio_size + video_size + data_size + subtitle_size + extra_size;
+        float percent = 0.0;
+
+        if (raw)
+            percent = 100.0 * (total_size - raw) / raw;
+
         av_log(NULL, AV_LOG_INFO, "\n");
         av_log(NULL, AV_LOG_INFO, "video:%1.0fkB audio:%1.0fkB subtitle:%1.0f data:%1.0f global headers:%1.0fkB muxing overhead %f%%\n",
                video_size / 1024.0,
@@ -1348,8 +1353,7 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
                subtitle_size / 1024.0,
                data_size / 1024.0,
                extra_size / 1024.0,
-               100.0 * (total_size - raw) / raw
-        );
+               percent);
         if(video_size + data_size + audio_size + subtitle_size + extra_size == 0){
             av_log(NULL, AV_LOG_WARNING, "Output file is empty, nothing was encoded (check -ss / -t / -frames parameters if used)\n");
         }
@@ -2152,7 +2156,6 @@ static int init_input_stream(int ist_index, char *error, int error_len)
 
     ist->next_pts = AV_NOPTS_VALUE;
     ist->next_dts = AV_NOPTS_VALUE;
-    ist->is_start = 1;
 
     return 0;
 }
@@ -2507,6 +2510,10 @@ static int transcode_init(void)
                 if (ost->enc && ost->enc->supported_framerates && !ost->force_fps) {
                     int idx = av_find_nearest_q_idx(ost->frame_rate, ost->enc->supported_framerates);
                     ost->frame_rate = ost->enc->supported_framerates[idx];
+                }
+                if (codec->codec_id == AV_CODEC_ID_MPEG4) {
+                    av_reduce(&ost->frame_rate.num, &ost->frame_rate.den,
+                              ost->frame_rate.num, ost->frame_rate.den, 65535);
                 }
             }
 
@@ -2956,11 +2963,15 @@ static void *input_thread(void *arg)
 
         av_dup_packet(&pkt);
         av_fifo_generic_write(f->fifo, &pkt, sizeof(pkt), NULL);
+        pthread_cond_signal(&f->fifo_cond);
 
         pthread_mutex_unlock(&f->fifo_lock);
     }
 
+    pthread_mutex_lock(&f->fifo_lock);
     f->finished = 1;
+    pthread_cond_signal(&f->fifo_cond);
+    pthread_mutex_unlock(&f->fifo_lock);
     return NULL;
 }
 
@@ -3012,6 +3023,10 @@ static int init_input_threads(void)
         if (!(f->fifo = av_fifo_alloc(8*sizeof(AVPacket))))
             return AVERROR(ENOMEM);
 
+        if (f->ctx->pb ? !f->ctx->pb->seekable :
+            strcmp(f->ctx->iformat->name, "lavfi"))
+            f->non_blocking = 1;
+
         pthread_mutex_init(&f->fifo_lock, NULL);
         pthread_cond_init (&f->fifo_cond, NULL);
 
@@ -3027,14 +3042,22 @@ static int get_input_packet_mt(InputFile *f, AVPacket *pkt)
 
     pthread_mutex_lock(&f->fifo_lock);
 
+    while (1) {
     if (av_fifo_size(f->fifo)) {
         av_fifo_generic_read(f->fifo, pkt, sizeof(*pkt), NULL);
         pthread_cond_signal(&f->fifo_cond);
+        break;
     } else {
-        if (f->finished)
+        if (f->finished) {
             ret = AVERROR_EOF;
-        else
+            break;
+        }
+        if (f->non_blocking) {
             ret = AVERROR(EAGAIN);
+            break;
+        }
+        pthread_cond_wait(&f->fifo_cond, &f->fifo_lock);
+    }
     }
 
     pthread_mutex_unlock(&f->fifo_lock);

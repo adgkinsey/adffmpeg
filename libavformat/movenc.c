@@ -614,7 +614,12 @@ static int get_cluster_duration(MOVTrack *track, int cluster_idx)
     else
         next_dts = track->cluster[cluster_idx + 1].dts;
 
-    return next_dts - track->cluster[cluster_idx].dts;
+    next_dts -= track->cluster[cluster_idx].dts;
+
+    av_assert0(next_dts >= 0);
+    av_assert0(next_dts <= INT_MAX);
+
+    return next_dts;
 }
 
 static int get_samples_per_packet(MOVTrack *track)
@@ -3255,6 +3260,17 @@ int ff_mov_write_packet(AVFormatContext *s, AVPacket *pkt)
     int size = pkt->size;
     uint8_t *reformatted_data = NULL;
 
+    if (trk->entry) {
+        int64_t duration = pkt->dts - trk->cluster[trk->entry - 1].dts;
+        if (duration < 0 || duration > INT_MAX) {
+            av_log(s, AV_LOG_ERROR, "Application provided duration: %"PRId64" / timestamp: %"PRId64" is out of range for mov/mp4 format\n",
+                duration, pkt->dts
+            );
+
+            pkt->dts = trk->cluster[trk->entry - 1].dts + 1;
+            pkt->pts = AV_NOPTS_VALUE;
+        }
+    }
     if (mov->flags & FF_MOV_FLAG_FRAGMENT) {
         int ret;
         if (mov->fragments > 0) {
@@ -3745,7 +3761,7 @@ static int mov_write_header(AVFormatContext *s)
     }
 
     if (!supports_edts(mov) && s->avoid_negative_ts < 0) {
-        s->avoid_negative_ts = 1;
+        s->avoid_negative_ts = 2;
     }
 
     /* Non-seekable output is ok if using fragmentation. If ism_lookahead
@@ -3926,13 +3942,6 @@ static int mov_write_header(AVFormatContext *s)
 
     enable_tracks(s);
 
-    if (mov->mode == MODE_ISM) {
-        /* If no fragmentation options have been set, set a default. */
-        if (!(mov->flags & (FF_MOV_FLAG_FRAG_KEYFRAME |
-                            FF_MOV_FLAG_FRAG_CUSTOM)) &&
-            !mov->max_fragment_duration && !mov->max_fragment_size)
-            mov->flags |= FF_MOV_FLAG_FRAG_KEYFRAME;
-    }
 
     if (mov->reserved_moov_size){
         mov->reserved_moov_pos= avio_tell(pb);
@@ -3940,7 +3949,13 @@ static int mov_write_header(AVFormatContext *s)
             avio_skip(pb, mov->reserved_moov_size);
     }
 
-    if (!(mov->flags & FF_MOV_FLAG_FRAGMENT)) {
+    if (mov->flags & FF_MOV_FLAG_FRAGMENT) {
+        /* If no fragmentation options have been set, set a default. */
+        if (!(mov->flags & (FF_MOV_FLAG_FRAG_KEYFRAME |
+                            FF_MOV_FLAG_FRAG_CUSTOM)) &&
+            !mov->max_fragment_duration && !mov->max_fragment_size)
+            mov->flags |= FF_MOV_FLAG_FRAG_KEYFRAME;
+    } else {
         if (mov->flags & FF_MOV_FLAG_FASTSTART)
             mov->reserved_moov_pos = avio_tell(pb);
         mov_write_mdat_tag(pb, mov);

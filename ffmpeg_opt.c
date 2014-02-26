@@ -559,13 +559,14 @@ static AVCodec *choose_decoder(OptionsContext *o, AVFormatContext *s, AVStream *
 static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
 {
     int i;
-    char *next, *codec_tag = NULL;
 
     for (i = 0; i < ic->nb_streams; i++) {
         AVStream *st = ic->streams[i];
         AVCodecContext *dec = st->codec;
         InputStream *ist = av_mallocz(sizeof(*ist));
         char *framerate = NULL, *hwaccel = NULL, *hwaccel_device = NULL;
+        char *codec_tag = NULL;
+        char *next;
 
         if (!ist)
             exit_program(1);
@@ -977,14 +978,14 @@ static uint8_t *get_line(AVIOContext *s)
 
 static int get_preset_file_2(const char *preset_name, const char *codec_name, AVIOContext **s)
 {
-    int i, ret = 1;
+    int i, ret = -1;
     char filename[1000];
     const char *base[3] = { getenv("AVCONV_DATADIR"),
                             getenv("HOME"),
                             AVCONV_DATADIR,
                             };
 
-    for (i = 0; i < FF_ARRAY_ELEMS(base) && ret; i++) {
+    for (i = 0; i < FF_ARRAY_ELEMS(base) && ret < 0; i++) {
         if (!base[i])
             continue;
         if (codec_name) {
@@ -992,7 +993,7 @@ static int get_preset_file_2(const char *preset_name, const char *codec_name, AV
                      i != 1 ? "" : "/.avconv", codec_name, preset_name);
             ret = avio_open2(s, filename, AVIO_FLAG_READ, &int_cb, NULL);
         }
-        if (ret) {
+        if (ret < 0) {
             snprintf(filename, sizeof(filename), "%s%s/%s.avpreset", base[i],
                      i != 1 ? "" : "/.avconv", preset_name);
             ret = avio_open2(s, filename, AVIO_FLAG_READ, &int_cb, NULL);
@@ -1265,6 +1266,7 @@ static OutputStream *new_video_stream(OptionsContext *o, AVFormatContext *oc, in
         char *frame_size = NULL;
         char *frame_pix_fmt = NULL;
         char *intra_matrix = NULL, *inter_matrix = NULL;
+        char *chroma_intra_matrix = NULL;
         int do_pass = 0;
         int i;
 
@@ -1296,6 +1298,16 @@ static OutputStream *new_video_stream(OptionsContext *o, AVFormatContext *oc, in
                 exit_program(1);
             }
             parse_matrix_coeffs(video_enc->intra_matrix, intra_matrix);
+        }
+        MATCH_PER_STREAM_OPT(chroma_intra_matrices, str, chroma_intra_matrix, oc, st);
+        if (chroma_intra_matrix) {
+            uint16_t *p = av_mallocz(sizeof(*video_enc->chroma_intra_matrix) * 64);
+            if (!p) {
+                av_log(NULL, AV_LOG_FATAL, "Could not allocate memory for intra matrix.\n");
+                exit_program(1);
+            }
+            av_codec_set_chroma_intra_matrix(video_enc, p);
+            parse_matrix_coeffs(p, chroma_intra_matrix);
         }
         MATCH_PER_STREAM_OPT(inter_matrices, str, inter_matrix, oc, st);
         if (inter_matrix) {
@@ -2769,7 +2781,7 @@ const OptionDef options[] = {
     { "frames",         OPT_INT64 | HAS_ARG | OPT_SPEC | OPT_OUTPUT, { .off = OFFSET(max_frames) },
         "set the number of frames to record", "number" },
     { "tag",            OPT_STRING | HAS_ARG | OPT_SPEC |
-                        OPT_EXPERT | OPT_OUTPUT,                     { .off = OFFSET(codec_tags) },
+                        OPT_EXPERT | OPT_OUTPUT | OPT_INPUT,         { .off = OFFSET(codec_tags) },
         "force codec tag/fourcc", "fourcc/tag" },
     { "q",              HAS_ARG | OPT_EXPERT | OPT_DOUBLE |
                         OPT_SPEC | OPT_OUTPUT,                       { .off = OFFSET(qscale) },
@@ -2860,6 +2872,9 @@ const OptionDef options[] = {
     { "inter_matrix", OPT_VIDEO | HAS_ARG | OPT_EXPERT  | OPT_STRING | OPT_SPEC |
                       OPT_OUTPUT,                                                { .off = OFFSET(inter_matrices) },
         "specify inter matrix coeffs", "matrix" },
+    { "chroma_intra_matrix", OPT_VIDEO | HAS_ARG | OPT_EXPERT  | OPT_STRING | OPT_SPEC |
+                      OPT_OUTPUT,                                                { .off = OFFSET(chroma_intra_matrices) },
+        "specify intra matrix coeffs", "matrix" },
     { "top",          OPT_VIDEO | HAS_ARG | OPT_EXPERT  | OPT_INT| OPT_SPEC |
                       OPT_INPUT | OPT_OUTPUT,                                    { .off = OFFSET(top_field_first) },
         "top=1/bottom=0/auto=-1 field first", "" },

@@ -962,6 +962,48 @@ static AVPacketList *get_next_pkt(AVFormatContext *s, AVStream *st, AVPacketList
     return NULL;
 }
 
+static int64_t select_from_pts_buffer(AVStream *st, int64_t *pts_buffer, int64_t dts) {
+    int onein_oneout = st->codec->codec_id != AV_CODEC_ID_H264 &&
+                       st->codec->codec_id != AV_CODEC_ID_HEVC;
+
+    if(!onein_oneout) {
+        int delay = st->codec->has_b_frames;
+        int i;
+
+        if (dts == AV_NOPTS_VALUE) {
+            int64_t best_score = INT64_MAX;
+            for (i = 0; i<delay; i++) {
+                if (st->pts_reorder_error_count[i]) {
+                    int64_t score = st->pts_reorder_error[i] / st->pts_reorder_error_count[i];
+                    if (score < best_score) {
+                        best_score = score;
+                        dts = pts_buffer[i];
+                    }
+                }
+            }
+        } else {
+            for (i = 0; i<delay; i++) {
+                if (pts_buffer[i] != AV_NOPTS_VALUE) {
+                    int64_t diff =  FFABS(pts_buffer[i] - dts)
+                                    + (uint64_t)st->pts_reorder_error[i];
+                    diff = FFMAX(diff, st->pts_reorder_error[i]);
+                    st->pts_reorder_error[i] = diff;
+                    st->pts_reorder_error_count[i]++;
+                    if (st->pts_reorder_error_count[i] > 250) {
+                        st->pts_reorder_error[i] >>= 1;
+                        st->pts_reorder_error_count[i] >>= 1;
+                    }
+                }
+            }
+        }
+    }
+
+    if (dts == AV_NOPTS_VALUE)
+        dts = pts_buffer[0];
+
+    return dts;
+}
+
 static void update_initial_timestamps(AVFormatContext *s, int stream_index,
                                       int64_t dts, int64_t pts, AVPacket *pkt)
 {
@@ -1004,8 +1046,8 @@ static void update_initial_timestamps(AVFormatContext *s, int stream_index,
             pts_buffer[0] = pktl->pkt.pts;
             for (i = 0; i<delay && pts_buffer[i] > pts_buffer[i + 1]; i++)
                 FFSWAP(int64_t, pts_buffer[i], pts_buffer[i + 1]);
-            if (pktl->pkt.dts == AV_NOPTS_VALUE)
-                pktl->pkt.dts = pts_buffer[0];
+
+            pktl->pkt.dts = select_from_pts_buffer(st, pts_buffer, pktl->pkt.dts);
         }
     }
 
@@ -1072,6 +1114,8 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
     int num, den, presentation_delayed, delay, i;
     int64_t offset;
     AVRational duration;
+    int onein_oneout = st->codec->codec_id != AV_CODEC_ID_H264 &&
+                       st->codec->codec_id != AV_CODEC_ID_HEVC;
 
     if (s->flags & AVFMT_FLAG_NOFILLIN)
         return;
@@ -1154,8 +1198,7 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
     /* Interpolate PTS and DTS if they are not present. We skip H264
      * currently because delay and has_b_frames are not reliably set. */
     if ((delay == 0 || (delay == 1 && pc)) &&
-        st->codec->codec_id != AV_CODEC_ID_H264 &&
-        st->codec->codec_id != AV_CODEC_ID_HEVC) {
+        onein_oneout) {
         if (presentation_delayed) {
             /* DTS = decompression timestamp */
             /* PTS = presentation timestamp */
@@ -1196,12 +1239,11 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
         st->pts_buffer[0] = pkt->pts;
         for (i = 0; i<delay && st->pts_buffer[i] > st->pts_buffer[i + 1]; i++)
             FFSWAP(int64_t, st->pts_buffer[i], st->pts_buffer[i + 1]);
-        if (pkt->dts == AV_NOPTS_VALUE)
-            pkt->dts = st->pts_buffer[0];
+
+        pkt->dts = select_from_pts_buffer(st, st->pts_buffer, pkt->dts);
     }
     // We skipped it above so we try here.
-    if (st->codec->codec_id == AV_CODEC_ID_H264 ||
-        st->codec->codec_id == AV_CODEC_ID_HEVC)
+    if (!onein_oneout)
         // This should happen on the first packet
         update_initial_timestamps(s, pkt->stream_index, pkt->dts, pkt->pts, pkt);
     if (pkt->dts > st->cur_dts)
@@ -2382,7 +2424,9 @@ static void estimate_timings_from_pts(AVFormatContext *ic, int64_t old_offset)
 
     for (i = 0; i < ic->nb_streams; i++) {
         st = ic->streams[i];
-        if (st->start_time == AV_NOPTS_VALUE && st->first_dts == AV_NOPTS_VALUE)
+        if (st->start_time == AV_NOPTS_VALUE &&
+            st->first_dts == AV_NOPTS_VALUE &&
+            st->codec->codec_type != AVMEDIA_TYPE_UNKNOWN)
             av_log(st->codec, AV_LOG_WARNING,
                    "start time is not set in estimate_timings_from_pts\n");
 
@@ -2439,9 +2483,13 @@ static void estimate_timings_from_pts(AVFormatContext *ic, int64_t old_offset)
 
     avio_seek(ic->pb, old_offset, SEEK_SET);
     for (i = 0; i < ic->nb_streams; i++) {
+        int j;
+
         st              = ic->streams[i];
         st->cur_dts     = st->first_dts;
         st->last_IP_pts = AV_NOPTS_VALUE;
+        for (j = 0; j < MAX_REORDER_DELAY + 1; j++)
+            st->pts_buffer[j] = AV_NOPTS_VALUE;
     }
 }
 
@@ -3062,6 +3110,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
             for (i = 0; i < ic->nb_streams; i++)
                 if (!ic->streams[i]->r_frame_rate.num &&
                     ic->streams[i]->info->duration_count <= 1 &&
+                    ic->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO &&
                     strcmp(ic->iformat->name, "image2"))
                     av_log(ic, AV_LOG_WARNING,
                            "Stream #%d: not enough frames to estimate rate; "
@@ -4325,10 +4374,16 @@ AVRational av_guess_sample_aspect_ratio(AVFormatContext *format, AVStream *strea
 AVRational av_guess_frame_rate(AVFormatContext *format, AVStream *st, AVFrame *frame)
 {
     AVRational fr = st->r_frame_rate;
+    AVRational codec_fr = av_inv_q(st->codec->time_base);
+    AVRational   avg_fr = st->avg_frame_rate;
+
+    if (avg_fr.num > 0 && avg_fr.den > 0 && fr.num > 0 && fr.den > 0 &&
+        av_q2d(avg_fr) < 70 && av_q2d(fr) > 210) {
+        fr = avg_fr;
+    }
+
 
     if (st->codec->ticks_per_frame > 1) {
-        AVRational codec_fr = av_inv_q(st->codec->time_base);
-        AVRational   avg_fr = st->avg_frame_rate;
         codec_fr.den *= st->codec->ticks_per_frame;
         if (   codec_fr.num > 0 && codec_fr.den > 0 && av_q2d(codec_fr) < av_q2d(fr)*0.7
             && fabs(1.0 - av_q2d(av_div_q(avg_fr, fr))) > 0.1)
