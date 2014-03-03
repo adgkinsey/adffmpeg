@@ -201,12 +201,14 @@ int64_t avio_seek(AVIOContext *s, int64_t offset, int whence)
     int64_t offset1;
     int64_t pos;
     int force = whence & AVSEEK_FORCE;
+    int buffer_size;
     whence &= ~AVSEEK_FORCE;
 
     if(!s)
         return AVERROR(EINVAL);
 
-    pos = s->pos - (s->write_flag ? 0 : (s->buf_end - s->buffer));
+    buffer_size = s->buf_end - s->buffer;
+    pos = s->pos - (s->write_flag ? 0 : buffer_size);
 
     if (whence != SEEK_CUR && whence != SEEK_SET)
         return AVERROR(EINVAL);
@@ -219,7 +221,7 @@ int64_t avio_seek(AVIOContext *s, int64_t offset, int whence)
     }
     offset1 = offset - pos;
     if (!s->must_flush && (!s->direct || !s->seek) &&
-        offset1 >= 0 && offset1 <= (s->buf_end - s->buffer)) {
+        offset1 >= 0 && offset1 <= buffer_size) {
         /* can do the seek inside the buffer */
         s->buf_ptr = s->buffer + offset1;
     } else if ((!s->seekable ||
@@ -232,9 +234,20 @@ int64_t avio_seek(AVIOContext *s, int64_t offset, int whence)
         if (s->eof_reached)
             return AVERROR_EOF;
         s->buf_ptr = s->buf_end + offset - s->pos;
-    } else {
+    } else if(!s->write_flag && offset1 < 0 && -offset1 < buffer_size>>1 && s->seek && offset > 0) {
         int64_t res;
 
+        pos -= FFMIN(buffer_size>>1, pos);
+        if ((res = s->seek(s->opaque, pos, SEEK_SET)) < 0)
+            return res;
+        s->buf_end =
+        s->buf_ptr = s->buffer;
+        s->pos = pos;
+        s->eof_reached = 0;
+        fill_buffer(s);
+        return avio_seek(s, offset, SEEK_SET | force);
+    } else {
+        int64_t res;
         if (s->write_flag) {
             flush_buffer(s);
             s->must_flush = 1;
