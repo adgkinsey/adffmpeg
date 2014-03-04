@@ -36,6 +36,11 @@ int avresample_open(AVAudioResampleContext *avr)
 {
     int ret;
 
+    if (avresample_is_open(avr)) {
+        av_log(avr, AV_LOG_ERROR, "The resampling context is already open.\n");
+        return AVERROR(EINVAL);
+    }
+
     /* set channel mixing parameters */
     avr->in_channels = av_get_channel_layout_nb_channels(avr->in_channel_layout);
     if (avr->in_channels <= 0 || avr->in_channels > AVRESAMPLE_MAX_CHANNELS) {
@@ -254,6 +259,11 @@ error:
     return ret;
 }
 
+int avresample_is_open(AVAudioResampleContext *avr)
+{
+    return !!avr->out_fifo;
+}
+
 void avresample_close(AVAudioResampleContext *avr)
 {
     ff_audio_data_free(&avr->in_buffer);
@@ -438,7 +448,8 @@ int attribute_align_arg avresample_convert(AVAudioResampleContext *avr,
             resample_out = &output_buffer;
         else
             resample_out = avr->resample_out_buffer;
-        av_dlog(avr, "[resample] %s to %s\n", current_buffer->name,
+        av_dlog(avr, "[resample] %s to %s\n",
+                current_buffer ? current_buffer->name : "null",
                 resample_out->name);
         ret = ff_audio_resample(avr->resample, resample_out,
                                 current_buffer);

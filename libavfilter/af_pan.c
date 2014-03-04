@@ -370,7 +370,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
 
     if (!outsamples)
         return AVERROR(ENOMEM);
-    swr_convert(pan->swr, outsamples->data, n, (void *)insamples->data, n);
+    swr_convert(pan->swr, outsamples->extended_data, n,
+                (void *)insamples->extended_data, n);
     av_frame_copy_props(outsamples, insamples);
     outsamples->channel_layout = outlink->channel_layout;
     av_frame_set_channels(outsamples, outlink->channels);
@@ -413,7 +414,7 @@ static const AVFilterPad pan_outputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_af_pan = {
+AVFilter ff_af_pan = {
     .name          = "pan",
     .description   = NULL_IF_CONFIG_SMALL("Remix channels with coefficients (panning)."),
     .priv_size     = sizeof(PanContext),

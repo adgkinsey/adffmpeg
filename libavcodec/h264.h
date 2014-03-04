@@ -102,19 +102,19 @@
 
 /* NAL unit types */
 enum {
-    NAL_SLICE = 1,
-    NAL_DPA,
-    NAL_DPB,
-    NAL_DPC,
-    NAL_IDR_SLICE,
-    NAL_SEI,
-    NAL_SPS,
-    NAL_PPS,
-    NAL_AUD,
-    NAL_END_SEQUENCE,
-    NAL_END_STREAM,
-    NAL_FILLER_DATA,
-    NAL_SPS_EXT,
+    NAL_SLICE           = 1,
+    NAL_DPA             = 2,
+    NAL_DPB             = 3,
+    NAL_DPC             = 4,
+    NAL_IDR_SLICE       = 5,
+    NAL_SEI             = 6,
+    NAL_SPS             = 7,
+    NAL_PPS             = 8,
+    NAL_AUD             = 9,
+    NAL_END_SEQUENCE    = 10,
+    NAL_END_STREAM      = 11,
+    NAL_FILLER_DATA     = 12,
+    NAL_SPS_EXT         = 13,
     NAL_AUXILIARY_SLICE = 19,
     NAL_FF_IGNORE       = 0xff0f001,
 };
@@ -123,7 +123,7 @@ enum {
  * SEI message types
  */
 typedef enum {
-    SEI_BUFFERING_PERIOD            = 0,   ///< buffering period (H.264, D.1.1)
+    SEI_TYPE_BUFFERING_PERIOD       = 0,   ///< buffering period (H.264, D.1.1)
     SEI_TYPE_PIC_TIMING             = 1,   ///< picture timing
     SEI_TYPE_USER_DATA_ITU_T_T35    = 4,   ///< user data registered by ITU-T Recommendation T.35
     SEI_TYPE_USER_DATA_UNREGISTERED = 5,   ///< unregistered user data
@@ -163,6 +163,7 @@ typedef enum {
  * Sequence parameter set
  */
 typedef struct SPS {
+    unsigned int sps_id;
     int profile_idc;
     int level_idc;
     int chroma_format_idc;
@@ -384,11 +385,7 @@ typedef struct H264Context {
 
     unsigned current_sps_id; ///< id of the current SPS
     SPS sps; ///< current sps
-
-    /**
-     * current pps
-     */
-    PPS pps; // FIXME move to Picture perhaps? (->no) do we need that?
+    PPS pps; ///< current pps
 
     int au_pps_id; ///< pps_id of current access unit
 
@@ -619,6 +616,14 @@ typedef struct H264Context {
     int prev_interlaced_frame;
 
     /**
+     * frame_packing_arrangment SEI message
+     */
+    int sei_frame_packing_present;
+    int frame_packing_arrangement_type;
+    int content_interpretation_type;
+    int quincunx_subsampling;
+
+    /**
      * Bit set of clock types for fields/frames in picture timing SEI message.
      * For each found ct_type, appropriate bit is set (e.g., bit 1 for
      * interlaced).
@@ -643,6 +648,14 @@ typedef struct H264Context {
      * frames.
      */
     int sei_recovery_frame_cnt;
+
+    /**
+     * Are the SEI recovery points looking valid.
+     */
+    int valid_recovery_point;
+
+    FPA sei_fpa;
+
     /**
      * recovery_frame is the frame_num at which the next frame should
      * be fully constructed.
@@ -651,12 +664,18 @@ typedef struct H264Context {
      */
     int recovery_frame;
 
-    /**
-     * Are the SEI recovery points looking valid.
-     */
-    int valid_recovery_point;
+/**
+ * We have seen an IDR, so all the following frames in coded order are correctly
+ * decodable.
+ */
+#define FRAME_RECOVERED_IDR  (1 << 0)
+/**
+ * Sufficient number of frames have been decoded since a SEI recovery point,
+ * so all the following frames in presentation order are correct.
+ */
+#define FRAME_RECOVERED_SEI  (1 << 1)
 
-    FPA sei_fpa;
+    int frame_recovered;    ///< Initial frame has been completely recovered
 
     int luma_weight_flag[2];    ///< 7.4.3.2 luma_weight_lX_flag
     int chroma_weight_flag[2];  ///< 7.4.3.2 chroma_weight_lX_flag
@@ -670,15 +689,11 @@ typedef struct H264Context {
 
     int16_t slice_row[MAX_SLICES]; ///< to detect when MAX_SLICES is too low
 
-    int sync;                      ///< did we had a keyframe or recovery point
-
     uint8_t parse_history[4];
     int parse_history_count;
     int parse_last_mb;
     uint8_t *edge_emu_buffer;
     int16_t *dc_val_base;
-
-    uint8_t *visualization_buffer[3]; ///< temporary buffer vor MV visualization
 
     AVBufferPool *qscale_table_pool;
     AVBufferPool *mb_type_pool;

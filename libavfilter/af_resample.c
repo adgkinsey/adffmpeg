@@ -251,6 +251,14 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
         if (ret > 0) {
             out->nb_samples = ret;
+
+            ret = av_frame_copy_props(out, in);
+            if (ret < 0) {
+                av_frame_free(&out);
+                goto fail;
+            }
+
+            out->sample_rate = outlink->sample_rate;
             if (in->pts != AV_NOPTS_VALUE) {
                 out->pts = av_rescale_q(in->pts, inlink->time_base,
                                             outlink->time_base) -
@@ -314,7 +322,7 @@ static const AVFilterPad avfilter_af_resample_outputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_af_resample = {
+AVFilter ff_af_resample = {
     .name          = "resample",
     .description   = NULL_IF_CONFIG_SMALL("Audio resampling and conversion."),
     .priv_size     = sizeof(ResampleContext),

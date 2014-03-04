@@ -1,4 +1,4 @@
-#! /usr/bin/perl
+#!/usr/bin/env perl
 
 #   Copyright (C) 1999, 2000, 2001 Free Software Foundation, Inc.
 
@@ -329,6 +329,8 @@ $chapters{FOOTNOTES} .= "=back\n" if exists $chapters{FOOTNOTES};
 
 unshift @chapters_sequence, "NAME";
 for $chapter (@chapters_sequence) {
+    # always use utf8
+    print "=encoding utf8\n";
     if (exists $chapters{$chapter}) {
         $head = uc($chapter);
         print "=head1 $head\n\n";
@@ -377,8 +379,8 @@ sub postprocess
     s/\(?\@xref\{(?:[^\}]*)\}(?:[^.<]|(?:<[^<>]*>))*\.\)?//g;
     s/\s+\(\@pxref\{(?:[^\}]*)\}\)//g;
     s/;\s+\@pxref\{(?:[^\}]*)\}//g;
-    s/\@ref\{(?:[^,\}]*,)(?:[^,\}]*,)([^,\}]*).*\}/$1/g;
-    s/\@ref\{([^\}]*)\}/$1/g;
+    s/\@ref\{(?:[^,\}]*,)(?:[^,\}]*,)([^,\}]*).*\}/B<$1>/g;
+    s/\@ref\{([^\}]*)\}/B<$1>/g;
     s/\@noindent\s*//g;
     s/\@refill//g;
     s/\@gol//g;

@@ -246,7 +246,7 @@ static int config_input_ref(AVFilterLink *inlink)
     s->nb_components = desc->nb_components;
     if (ctx->inputs[0]->w != ctx->inputs[1]->w ||
         ctx->inputs[0]->h != ctx->inputs[1]->h) {
-        av_log(ctx, AV_LOG_ERROR, "Width and heigth of input videos must be same.\n");
+        av_log(ctx, AV_LOG_ERROR, "Width and height of input videos must be same.\n");
         return AVERROR(EINVAL);
     }
     if (ctx->inputs[0]->format != ctx->inputs[1]->format) {
@@ -373,7 +373,7 @@ static const AVFilterPad psnr_outputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_vf_psnr = {
+AVFilter ff_vf_psnr = {
     .name          = "psnr",
     .description   = NULL_IF_CONFIG_SMALL("Calculate the PSNR between two video streams."),
     .init          = init,

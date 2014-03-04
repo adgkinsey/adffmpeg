@@ -35,10 +35,12 @@
 #include "get_bits.h"
 #include "avcodec.h"
 #include "bytestream.h"
+#include "internal.h"
 #include "mathops.h"
 #include "thread.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/avassert.h"
+#include "libavutil/opt.h"
 
 enum ExrCompr {
     EXR_RAW   = 0,
@@ -74,6 +76,7 @@ typedef struct EXRThreadData {
 } EXRThreadData;
 
 typedef struct EXRContext {
+    AVClass        *class;
     AVFrame *picture;
     int compr;
     enum ExrPixelType pixel_type;
@@ -97,7 +100,23 @@ typedef struct EXRContext {
 
     EXRThreadData *thread_data;
     int thread_data_size;
+
+    const char* layer;
 } EXRContext;
+
+#define OFFSET(x) offsetof(EXRContext, x)
+#define VD AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_DECODING_PARAM
+static const AVOption options[] = {
+    { "layer", "Set the decoding layer",   OFFSET(layer),        AV_OPT_TYPE_STRING, { .str = "" }, 0, 0, VD},
+    { NULL },
+};
+
+static const AVClass exr_class = {
+    .class_name = "EXR",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
 
 /**
  * Converts from 32-bit float as uint32_t to uint16_t
@@ -989,13 +1008,25 @@ static int decode_frame(AVCodecContext *avctx,
                 int channel_index = -1;
                 int xsub, ysub;
 
-                if (!strcmp(buf, "R"))
+                const char* b = buf;
+
+                if ( strcmp( s->layer, "" ) != 0 ) {
+                    if ( strncmp( b, s->layer, strlen(s->layer) ) == 0 ) {
+                        b += strlen(s->layer);
+                        if ( *b == '.' ) ++b;   /* skip dot if not given */
+                        av_log( avctx, AV_LOG_INFO, "Layer %s.%s matched\n",
+                               s->layer, b );
+                    }
+                }
+
+
+                if (!strcmp(b, "R")||!strcmp(b, "X")||!strcmp(b,"U"))
                     channel_index = 0;
-                else if (!strcmp(buf, "G"))
+                else if (!strcmp(b, "G")||!strcmp(b, "Y")||!strcmp(b,"V"))
                     channel_index = 1;
-                else if (!strcmp(buf, "B"))
+                else if (!strcmp(b, "B")||!strcmp(b, "Z")||!strcmp(b,"W"))
                     channel_index = 2;
-                else if (!strcmp(buf, "A"))
+                else if (!strcmp(b, "A"))
                     channel_index = 3;
                 else
                     av_log(avctx, AV_LOG_WARNING, "Unsupported channel %.256s\n", buf);
@@ -1184,9 +1215,6 @@ static int decode_frame(AVCodecContext *avctx,
         return AVERROR_PATCHWELCOME;
     }
 
-    if (av_image_check_size(w, h, 0, avctx))
-        return AVERROR_INVALIDDATA;
-
     // Verify the xmin, xmax, ymin, ymax and xdelta before setting the actual image size
     if (s->xmin > s->xmax ||
         s->ymin > s->ymax ||
@@ -1196,9 +1224,8 @@ static int decode_frame(AVCodecContext *avctx,
         return AVERROR_INVALIDDATA;
     }
 
-    if (w != avctx->width || h != avctx->height) {
-        avcodec_set_dimensions(avctx, w, h);
-    }
+    if ((ret = ff_set_dimensions(avctx, w, h)) < 0)
+        return ret;
 
     s->desc = av_pix_fmt_desc_get(avctx->pix_fmt);
     out_line_size = avctx->width * 2 * s->desc->nb_components;
@@ -1278,4 +1305,5 @@ AVCodec ff_exr_decoder = {
     .close              = decode_end,
     .decode             = decode_frame,
     .capabilities       = CODEC_CAP_DR1 | CODEC_CAP_FRAME_THREADS | CODEC_CAP_SLICE_THREADS,
+    .priv_class         = &exr_class,
 };

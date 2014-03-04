@@ -174,7 +174,7 @@ static int push_frame(AVFilterContext *ctx, unsigned in_no, AVFrame *buf)
     if (inlink->sample_rate)
         /* use number of audio samples */
         in->pts += av_rescale_q(buf->nb_samples,
-                                (AVRational){ 1, inlink->sample_rate },
+                                av_make_q(1, inlink->sample_rate),
                                 outlink->time_base);
     else if (in->nb_frames >= 2)
         /* use mean duration */
@@ -412,7 +412,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_free(cat->in);
 }
 
-AVFilter avfilter_avf_concat = {
+AVFilter ff_avf_concat = {
     .name          = "concat",
     .description   = NULL_IF_CONFIG_SMALL("Concatenate audio and video streams."),
     .init          = init,
