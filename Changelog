@@ -2,6 +2,7 @@ Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
 version <next>
+- shuffleplanes filter
 
 
 version 2.2:
@@ -31,6 +32,7 @@ version 2.2:
 - Support DNx444
 - libx265 encoder
 - dejudder filter
+- subfile protocol
 
 
 version 2.1:

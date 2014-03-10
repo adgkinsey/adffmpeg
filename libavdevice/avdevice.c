@@ -37,6 +37,52 @@ const char * avdevice_license(void)
     return LICENSE_PREFIX FFMPEG_LICENSE + sizeof(LICENSE_PREFIX) - 1;
 }
 
+static void *av_device_next(void *prev, int output,
+                            AVClassCategory c1, AVClassCategory c2)
+{
+    const AVClass *pc;
+    AVClassCategory category = AV_CLASS_CATEGORY_NA;
+    do {
+        if (output) {
+            if (!(prev = av_oformat_next(prev)))
+                break;
+            pc = ((AVOutputFormat *)prev)->priv_class;
+        } else {
+            if (!(prev = av_iformat_next(prev)))
+                break;
+            pc = ((AVInputFormat *)prev)->priv_class;
+        }
+        if (!pc)
+            continue;
+        category = pc->category;
+    } while (category != c1 && category != c2);
+    return prev;
+}
+
+AVInputFormat *av_input_audio_device_next(AVInputFormat  *d)
+{
+    return av_device_next(d, 0, AV_CLASS_CATEGORY_DEVICE_AUDIO_INPUT,
+                          AV_CLASS_CATEGORY_DEVICE_INPUT);
+}
+
+AVInputFormat *av_input_video_device_next(AVInputFormat  *d)
+{
+    return av_device_next(d, 0, AV_CLASS_CATEGORY_DEVICE_VIDEO_INPUT,
+                          AV_CLASS_CATEGORY_DEVICE_INPUT);
+}
+
+AVOutputFormat *av_output_audio_device_next(AVOutputFormat *d)
+{
+    return av_device_next(d, 1, AV_CLASS_CATEGORY_DEVICE_AUDIO_OUTPUT,
+                          AV_CLASS_CATEGORY_DEVICE_OUTPUT);
+}
+
+AVOutputFormat *av_output_video_device_next(AVOutputFormat *d)
+{
+    return av_device_next(d, 1, AV_CLASS_CATEGORY_DEVICE_VIDEO_OUTPUT,
+                          AV_CLASS_CATEGORY_DEVICE_OUTPUT);
+}
+
 int avdevice_app_to_dev_control_message(struct AVFormatContext *s, enum AVAppToDevMessageType type,
                                         void *data, size_t data_size)
 {
@@ -55,6 +101,7 @@ int avdevice_dev_to_app_control_message(struct AVFormatContext *s, enum AVDevToA
 
 int avdevice_list_devices(AVFormatContext *s, AVDeviceInfoList **device_list)
 {
+    int ret;
     av_assert0(s);
     av_assert0(device_list);
     av_assert0(s->oformat || s->iformat);
@@ -67,8 +114,12 @@ int avdevice_list_devices(AVFormatContext *s, AVDeviceInfoList **device_list)
     if (!(*device_list))
         return AVERROR(ENOMEM);
     if (s->oformat)
-        return s->oformat->get_device_list(s, *device_list);
-    return s->iformat->get_device_list(s, *device_list);
+        ret = s->oformat->get_device_list(s, *device_list);
+    else
+        ret = s->iformat->get_device_list(s, *device_list);
+    if (ret < 0)
+        avdevice_free_list_devices(device_list);
+    return ret;
 }
 
 void avdevice_free_list_devices(AVDeviceInfoList **device_list)

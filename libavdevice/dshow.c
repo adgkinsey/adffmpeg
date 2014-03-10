@@ -89,7 +89,7 @@ static enum AVPixelFormat dshow_pixfmt(DWORD biCompression, WORD biBitCount)
             case 24:
                 return AV_PIX_FMT_BGR24;
             case 32:
-                return AV_PIX_FMT_RGB32;
+                return AV_PIX_FMT_0RGB32;
         }
     }
     return avpriv_find_pix_fmt(ff_raw_pix_fmt_tags, biCompression); // all others
@@ -773,6 +773,7 @@ dshow_add_device(AVFormatContext *avctx,
         codec->codec_type = AVMEDIA_TYPE_VIDEO;
         codec->width      = bih->biWidth;
         codec->height     = bih->biHeight;
+        codec->codec_tag  = bih->biCompression;
         codec->pix_fmt    = dshow_pixfmt(bih->biCompression, bih->biBitCount);
         if (bih->biCompression == MKTAG('H', 'D', 'Y', 'C')) {
             av_log(avctx, AV_LOG_DEBUG, "attempt to use full range for HDYC...\n");
@@ -1081,6 +1082,7 @@ static const AVClass dshow_class = {
     .item_name  = av_default_item_name,
     .option     = options,
     .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_DEVICE_VIDEO_INPUT,
 };
 
 AVInputFormat ff_dshow_demuxer = {

@@ -41,6 +41,9 @@ fate-filter-drawbox: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf drawbox=224:24:88:
 FATE_FILTER_VSYNTH-$(CONFIG_FADE_FILTER) += fate-filter-fade
 fate-filter-fade: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf fade=in:5:15,fade=out:30:15
 
+FATE_FILTER_VSYNTH-$(call ALLYES, TELECINE_FILTER FIELDMATCH_FILTER) += fate-filter-fieldmatch
+fate-filter-fieldmatch: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf telecine,fieldmatch
+
 FATE_FILTER_VSYNTH-$(call ALLYES, INTERLACE_FILTER FIELDORDER_FILTER) += fate-filter-fieldorder
 fate-filter-fieldorder: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf interlace=tff,fieldorder=bff -sws_flags +accurate_rnd+bitexact
 
@@ -99,6 +102,14 @@ fate-filter-select-alternate: CMD = framecrc -c:v pgmyuv -i $(SRC) -filter_scrip
 FATE_FILTER_VSYNTH-$(call ALLYES, SETPTS_FILTER  SETTB_FILTER) += fate-filter-setpts
 fate-filter-setpts: tests/data/filtergraphs/setpts
 fate-filter-setpts: CMD = framecrc -c:v pgmyuv -i $(SRC) -filter_script $(TARGET_PATH)/tests/data/filtergraphs/setpts
+
+FATE_SHUFFLEPLANES += fate-filter-shuffleplanes-dup-luma
+fate-filter-shuffleplanes-dup-luma: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf format=yuva444p,shuffleplanes=0:0:0:0
+
+FATE_SHUFFLEPLANES += fate-filter-shuffleplanes-swapuv
+fate-filter-shuffleplanes-swapuv: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf shuffleplanes=0:2:1
+
+FATE_FILTER_VSYNTH-$(CONFIG_SHUFFLEPLANES_FILTER) += $(FATE_SHUFFLEPLANES)
 
 FATE_FILTER_VSYNTH-$(CONFIG_TELECINE_FILTER) += fate-filter-telecine
 fate-filter-telecine: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf telecine

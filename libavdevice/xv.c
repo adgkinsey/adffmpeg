@@ -130,8 +130,15 @@ static int xv_write_header(AVFormatContext *s)
     xv->image_width  = encctx->width;
     xv->image_height = encctx->height;
     if (!xv->window_width && !xv->window_height) {
+        AVRational sar = encctx->sample_aspect_ratio;
         xv->window_width  = encctx->width;
         xv->window_height = encctx->height;
+        if (sar.num) {
+            if (sar.num > sar.den)
+                xv->window_width = av_rescale(xv->window_width, sar.num, sar.den);
+            if (sar.num < sar.den)
+                xv->window_height = av_rescale(xv->window_height, sar.den, sar.num);
+        }
     }
     xv->window = XCreateSimpleWindow(xv->display, DefaultRootWindow(xv->display),
                                      xv->window_x, xv->window_y,
@@ -255,6 +262,7 @@ static const AVClass xv_class = {
     .item_name  = av_default_item_name,
     .option     = options,
     .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_DEVICE_VIDEO_OUTPUT,
 };
 
 AVOutputFormat ff_xv_muxer = {

@@ -778,7 +778,6 @@ static int http_buf_read(URLContext *h, uint8_t *buf, int size)
     }
     if (len > 0) {
         s->off += len;
-        s->icy_data_read += len;
         if (s->chunksize > 0)
             s->chunksize -= len;
     }
@@ -817,7 +816,7 @@ static int http_buf_read_compressed(URLContext *h, uint8_t *buf, int size)
 }
 #endif
 
-static int http_read(URLContext *h, uint8_t *buf, int size)
+static int http_read_stream(URLContext *h, uint8_t *buf, int size)
 {
     HTTPContext *s = h->priv_data;
     int err, new_location;
@@ -852,6 +851,31 @@ static int http_read(URLContext *h, uint8_t *buf, int size)
         }
         size = FFMIN(size, s->chunksize);
     }
+#if CONFIG_ZLIB
+    if (s->compressed)
+        return http_buf_read_compressed(h, buf, size);
+#endif
+    return http_buf_read(h, buf, size);
+}
+
+// Like http_read_stream(), but no short reads.
+// Assumes partial reads are an error.
+static int http_read_stream_all(URLContext *h, uint8_t *buf, int size)
+{
+    int pos = 0;
+    while (pos < size) {
+        int len = http_read_stream(h, buf + pos, size - pos);
+        if (len < 0)
+            return len;
+        pos += len;
+    }
+    return pos;
+}
+
+static int http_read(URLContext *h, uint8_t *buf, int size)
+{
+    HTTPContext *s = h->priv_data;
+
     if (s->icy_metaint > 0) {
         int remaining = s->icy_metaint - s->icy_data_read; /* until next metadata packet */
         if (!remaining) {
@@ -859,17 +883,18 @@ static int http_read(URLContext *h, uint8_t *buf, int size)
             // which sets the length of the packet (divided by 16). If it's 0,
             // the metadata doesn't change. After the packet, icy_metaint bytes
             // of normal data follow.
-            int ch = http_getc(s);
-            if (ch < 0)
-                return ch;
+            uint8_t ch;
+            int len = http_read_stream_all(h, &ch, 1);
+            if (len < 1)
+                return len;
             if (ch > 0) {
                 char data[255 * 16 + 1];
-                int n;
                 int ret;
-                ch *= 16;
-                for (n = 0; n < ch; n++)
-                    data[n] = http_getc(s);
-                data[ch + 1] = 0;
+                len = ch * 16;
+                ret = http_read_stream_all(h, data, len);
+                if (ret < len)
+                    return ret;
+                data[len + 1] = 0;
                 if ((ret = av_opt_set(s, "icy_metadata_packet", data, 0)) < 0)
                     return ret;
             }
@@ -878,11 +903,10 @@ static int http_read(URLContext *h, uint8_t *buf, int size)
         }
         size = FFMIN(size, remaining);
     }
-#if CONFIG_ZLIB
-    if (s->compressed)
-        return http_buf_read_compressed(h, buf, size);
-#endif
-    return http_buf_read(h, buf, size);
+    size = http_read_stream(h, buf, size);
+    if (size > 0)
+        s->icy_data_read += size;
+    return size;
 }
 
 /* used only when posting data */
@@ -965,15 +989,20 @@ static int64_t http_seek(URLContext *h, int64_t off, int whence)
     else if ((s->filesize == -1 && whence == SEEK_END) || h->is_streamed)
         return -1;
 
-    /* we save the old context in case the seek fails */
-    old_buf_size = s->buf_end - s->buf_ptr;
-    memcpy(old_buf, s->buf_ptr, old_buf_size);
-    s->hd = NULL;
     if (whence == SEEK_CUR)
         off += s->off;
     else if (whence == SEEK_END)
         off += s->filesize;
+    else if (whence != SEEK_SET)
+        return AVERROR(EINVAL);
+    if (off < 0)
+        return AVERROR(EINVAL);
     s->off = off;
+
+    /* we save the old context in case the seek fails */
+    old_buf_size = s->buf_end - s->buf_ptr;
+    memcpy(old_buf, s->buf_ptr, old_buf_size);
+    s->hd = NULL;
 
     /* if it fails, continue on old connection */
     av_dict_copy(&options, s->chained_options, 0);
