@@ -213,7 +213,7 @@ m3u8 files.
 
 HTTP (Hyper Text Transfer Protocol).
 
-This protocol accepts the following options.
+This protocol accepts the following options:
 
 @table @option
 @item seekable
@@ -223,24 +223,25 @@ if set to -1 it will try to autodetect if it is seekable. Default
 value is -1.
 
 @item chunked_post
-If set to 1 use chunked transfer-encoding for posts, default is 1.
+If set to 1 use chunked Transfer-Encoding for posts, default is 1.
+
+@item content_type
+Set a specific content type for the POST messages.
 
 @item headers
 Set custom HTTP headers, can override built in default headers. The
 value must be a string encoding the headers.
 
-@item content_type
-Force a content type.
-
-@item user-agent
-Override User-Agent header. If not specified the protocol will use a
-string describing the libavformat build.
-
 @item multiple_requests
-Use persistent connections if set to 1. By default it is 0.
+Use persistent connections if set to 1, default is 0.
 
 @item post_data
 Set custom HTTP post data.
+
+@item user-agent
+@item user_agent
+Override the User-Agent header. If not specified the protocol will use a
+string describing the libavformat build. ("Lavf/<version>")
 
 @item timeout
 Set timeout of socket I/O operations used by the underlying low level
@@ -248,7 +249,7 @@ operation. By default it is set to -1, which means that the timeout is
 not specified.
 
 @item mime_type
-Set MIME type.
+Export the MIME type.
 
 @item icy
 If set to 1 request ICY (SHOUTcast) metadata from the server. If the server
@@ -257,17 +258,25 @@ the @option{icy_metadata_headers} and @option{icy_metadata_packet} options.
 The default is 0.
 
 @item icy_metadata_headers
-If the server supports ICY metadata, this contains the ICY specific HTTP reply
-headers, separated with newline characters.
+If the server supports ICY metadata, this contains the ICY-specific HTTP reply
+headers, separated by newline characters.
 
 @item icy_metadata_packet
 If the server supports ICY metadata, and @option{icy} was set to 1, this
-contains the last non-empty metadata packet sent by the server.
+contains the last non-empty metadata packet sent by the server. It should be
+polled in regular intervals by applications interested in mid-stream metadata
+updates.
 
 @item cookies
 Set the cookies to be sent in future requests. The format of each cookie is the
 same as the value of a Set-Cookie HTTP response field. Multiple cookies can be
 delimited by a newline character.
+
+@item offset
+Set initial byte offset.
+
+@item end_offset
+Try to limit the request to bytes preceding this offset.
 @end table
 
 @subsection HTTP Cookies
@@ -682,7 +691,7 @@ data transferred over RDT).
 
 The muxer can be used to send a stream using RTSP ANNOUNCE to a server
 supporting it (currently Darwin Streaming Server and Mischa Spiegelmock's
-@uref{http://github.com/revmischa/rtsp-server, RTSP server}).
+@uref{https://github.com/revmischa/rtsp-server, RTSP server}).
 
 The required syntax for a RTSP url is:
 @example

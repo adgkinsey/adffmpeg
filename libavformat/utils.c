@@ -3223,7 +3223,9 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
                 t = FFMAX(t, av_rescale_q(st->info->fps_last_dts - st->info->fps_first_dts, st->time_base, AV_TIME_BASE_Q));
 
             if (t >= ic->max_analyze_duration) {
-                av_log(ic, AV_LOG_VERBOSE, "max_analyze_duration %d reached at %"PRId64" microseconds\n", ic->max_analyze_duration, t);
+                av_log(ic, AV_LOG_VERBOSE, "max_analyze_duration %d reached at %"PRId64" microseconds\n",
+                       ic->max_analyze_duration,
+                       t);
                 break;
             }
             if (pkt->duration) {
@@ -4466,12 +4468,14 @@ int avformat_match_stream_specifier(AVFormatContext *s, AVStream *st,
                     return 1;
         }
         return 0;
-    } else if (*spec == '#') {
-        int sid;
+    } else if (*spec == '#' ||
+               (*spec == 'i' && *(spec + 1) == ':')) {
+        int stream_id;
         char *endptr;
-        sid = strtol(spec + 1, &endptr, 0);
+        spec += 1 + (*spec == 'i');
+        stream_id = strtol(spec, &endptr, 0);
         if (!*endptr)
-            return st->id == sid;
+            return stream_id == st->id;
     } else if (!*spec) /* empty specifier, matches everything */
         return 1;
 

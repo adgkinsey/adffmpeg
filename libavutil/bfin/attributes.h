@@ -1,4 +1,6 @@
 /*
+ * Copyright (C) 2007 Marc Hoffman <mmh@pleasantst.com>
+ *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -16,13 +18,17 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVCODEC_SPARC_DSPUTIL_VIS_H
-#define AVCODEC_SPARC_DSPUTIL_VIS_H
+#ifndef AVUTIL_BFIN_ATTRIBUTES_H
+#define AVUTIL_BFIN_ATTRIBUTES_H
 
-#include <stdint.h>
+#include "config.h"
 
-void ff_simple_idct_put_vis(uint8_t *dest, int line_size, int16_t *data);
-void ff_simple_idct_add_vis(uint8_t *dest, int line_size, int16_t *data);
-void ff_simple_idct_vis(int16_t *data);
+#if defined(__FDPIC__) && CONFIG_SRAM
+#define attribute_l1_text   __attribute__((l1_text))
+#define attribute_l1_data_b __attribute__((l1_data_B))
+#else
+#define attribute_l1_text
+#define attribute_l1_data_b
+#endif
 
-#endif /* AVCODEC_SPARC_DSPUTIL_VIS_H */
+#endif /* AVUTIL_BFIN_ATTRIBUTES_H */

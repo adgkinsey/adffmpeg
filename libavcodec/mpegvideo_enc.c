@@ -43,6 +43,7 @@
 #include "h261.h"
 #include "h263.h"
 #include "mathops.h"
+#include "mpegutils.h"
 #include "mjpegenc.h"
 #include "msmpeg4.h"
 #include "faandct.h"
@@ -1038,6 +1039,10 @@ static int load_input_picture(MpegEncContext *s, const AVFrame *pic_arg)
         if (pic_arg->linesize[2] != s->uvlinesize)
             direct = 0;
         if ((s->width & 15) || (s->height & 15))
+            direct = 0;
+        if (((intptr_t)(pic_arg->data[0])) & (STRIDE_ALIGN-1))
+            direct = 0;
+        if (s->linesize & (STRIDE_ALIGN-1))
             direct = 0;
 
         av_dlog(s->avctx, "%d %d %td %td\n", pic_arg->linesize[0],
@@ -2443,7 +2448,7 @@ static inline void encode_mb_hq(MpegEncContext *s, MpegEncContext *backup, MpegE
 }
 
 static int sse(MpegEncContext *s, uint8_t *src1, uint8_t *src2, int w, int h, int stride){
-    uint32_t *sq = ff_squareTbl + 256;
+    uint32_t *sq = ff_square_tab + 256;
     int acc=0;
     int x,y;
 

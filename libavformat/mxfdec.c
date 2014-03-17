@@ -43,7 +43,7 @@
  * Only tracks with associated descriptors will be decoded. "Highly Desirable" SMPTE 377M D.1
  */
 
-#include <stdint.h>
+#include <inttypes.h>
 
 #include "libavutil/aes.h"
 #include "libavutil/avassert.h"
@@ -542,8 +542,10 @@ static int mxf_read_partition_pack(void *arg, AVIOContext *pb, int tag, int size
 
             /* only nag once */
             if (!mxf->op)
-                av_log(mxf->fc, AV_LOG_WARNING, "\"OPAtom\" with %u ECs - assuming %s\n",
-                       nb_essence_containers, op == OP1a ? "OP1a" : "OPAtom");
+                av_log(mxf->fc, AV_LOG_WARNING,
+                       "\"OPAtom\" with %"PRIu32" ECs - assuming %s\n",
+                       nb_essence_containers,
+                       op == OP1a ? "OP1a" : "OPAtom");
 
             mxf->op = op;
         } else
@@ -554,14 +556,15 @@ static int mxf_read_partition_pack(void *arg, AVIOContext *pb, int tag, int size
     }
 
     if (partition->kag_size <= 0 || partition->kag_size > (1 << 20)) {
-        av_log(mxf->fc, AV_LOG_WARNING, "invalid KAGSize %i - guessing ", partition->kag_size);
+        av_log(mxf->fc, AV_LOG_WARNING, "invalid KAGSize %"PRId32" - guessing ",
+               partition->kag_size);
 
         if (mxf->op == OPSONYOpt)
             partition->kag_size = 512;
         else
             partition->kag_size = 1;
 
-        av_log(mxf->fc, AV_LOG_WARNING, "%i\n", partition->kag_size);
+        av_log(mxf->fc, AV_LOG_WARNING, "%"PRId32"\n", partition->kag_size);
     }
 
     return 0;
@@ -1704,9 +1707,14 @@ static int mxf_timestamp_to_str(uint64_t timestamp, char **str)
     time.tm_min  = (timestamp >> 16 & 0xFF);
     time.tm_sec  = (timestamp >> 8  & 0xFF);
 
-    /* ensure month/day are valid */
-    time.tm_mon  = FFMAX(time.tm_mon, 0);
-    time.tm_mday = FFMAX(time.tm_mday, 1);
+    /* msvcrt versions of strftime calls the invalid parameter handler
+     * (aborting the process if one isn't set) if the parameters are out
+     * of range. */
+    time.tm_mon  = av_clip(time.tm_mon,  0, 11);
+    time.tm_mday = av_clip(time.tm_mday, 1, 31);
+    time.tm_hour = av_clip(time.tm_hour, 0, 23);
+    time.tm_min  = av_clip(time.tm_min,  0, 59);
+    time.tm_sec  = av_clip(time.tm_sec,  0, 59);
 
     *str = av_mallocz(32);
     if (!*str)
@@ -2319,7 +2327,9 @@ static int mxf_read_packet_old(AVFormatContext *s, AVPacket *pkt)
             AVCodecContext *codec;
 
             if (index < 0) {
-                av_log(s, AV_LOG_ERROR, "error getting stream index %d\n", AV_RB32(klv.key+12));
+                av_log(s, AV_LOG_ERROR,
+                       "error getting stream index %"PRIu32"\n",
+                       AV_RB32(klv.key + 12));
                 goto skip;
             }
 

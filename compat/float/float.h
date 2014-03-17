@@ -1,4 +1,6 @@
 /*
+ * Work around broken floating point limits on some systems.
+ *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -16,13 +18,18 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVCODEC_SH4_DSPUTIL_SH4_H
-#define AVCODEC_SH4_DSPUTIL_SH4_H
+#include_next <float.h>
 
-#include "libavcodec/avcodec.h"
-#include "libavcodec/dsputil.h"
-#include "libavcodec/hpeldsp.h"
+#ifdef FLT_MAX
+#undef  FLT_MAX
+#define FLT_MAX 3.40282346638528859812e+38F
 
-void ff_idct_sh4(int16_t *block);
+#undef  FLT_MIN
+#define FLT_MIN 1.17549435082228750797e-38F
 
-#endif /* AVCODEC_SH4_DSPUTIL_SH4_H */
+#undef  DBL_MAX
+#define DBL_MAX ((double)1.79769313486231570815e+308L)
+
+#undef  DBL_MIN
+#define DBL_MIN ((double)2.22507385850720138309e-308L)
+#endif

@@ -1275,7 +1275,12 @@ typedef struct AVFormatContext {
      * Start time of the stream in real world time, in microseconds
      * since the Unix epoch (00:00 1st January 1970). That is, pts=0 in the
      * stream was captured at this real world time.
-     * Muxing only, set by the caller before avformat_write_header().
+     * - muxing: Set by the caller before avformat_write_header(). If set to
+     *           either 0 or AV_NOPTS_VALUE, then the current wall-time will
+     *           be used.
+     * - demuxing: Set by libavformat. AV_NOPTS_VALUE if unknown. Note that
+     *             the value may become known after some number of frames
+     *             have been received.
      */
     int64_t start_time_realtime;
 
@@ -2371,7 +2376,13 @@ void av_url_split(char *proto,         int proto_size,
                   char *path,          int path_size,
                   const char *url);
 
-
+/**
+ * log a nice Dump of input format context or output format context
+ * @param ic already initialized Format Context, must not be NULL.
+ * @param index index of the stream to dump information about
+ * @param url name of file or URL of stream to print information about
+ * @param is_output Select whether specified context is of input(0) or output(1)
+ */
 void av_dump_format(AVFormatContext *ic,
                     int index,
                     const char *url,

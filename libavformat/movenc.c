@@ -918,10 +918,13 @@ static AVRational find_fps(AVFormatContext *s, AVStream *st)
 
 static int mov_get_mpeg2_xdcam_codec_tag(AVFormatContext *s, MOVTrack *track)
 {
-    int tag = MKTAG('m', '2', 'v', '1'); //fallback tag
+    int tag = track->enc->codec_tag;
     int interlaced = track->enc->field_order > AV_FIELD_PROGRESSIVE;
     AVStream *st = track->st;
     int rate = av_q2d(find_fps(s, st));
+
+    if (!tag)
+        tag = MKTAG('m', '2', 'v', '1'); //fallback tag
 
     if (track->enc->pix_fmt == AV_PIX_FMT_YUV420P) {
         if (track->enc->width == 1280 && track->enc->height == 720) {
@@ -2222,7 +2225,8 @@ static int mov_write_ilst_tag(AVIOContext *pb, MOVMuxContext *mov,
     mov_write_string_metadata(s, pb, "\251wrt", "composer" , 1);
     mov_write_string_metadata(s, pb, "\251alb", "album"    , 1);
     mov_write_string_metadata(s, pb, "\251day", "date"     , 1);
-    if (!mov_write_string_metadata(s, pb, "\251too", "encoding_tool", 1))
+    if (!mov->exact &&
+        !mov_write_string_metadata(s, pb, "\251too", "encoding_tool", 1))
         mov_write_string_tag(pb, "\251too", LIBAVFORMAT_IDENT, 0, 1);
     mov_write_string_metadata(s, pb, "\251cmt", "comment"  , 1);
     mov_write_string_metadata(s, pb, "\251gen", "genre"    , 1);
@@ -2239,6 +2243,7 @@ static int mov_write_ilst_tag(AVIOContext *pb, MOVMuxContext *mov,
     mov_write_int8_metadata  (s, pb, "stik",    "media_type",1);
     mov_write_int8_metadata  (s, pb, "hdvd",    "hd_video",  1);
     mov_write_int8_metadata  (s, pb, "pgap",    "gapless_playback",1);
+    mov_write_int8_metadata  (s, pb, "cpil",    "compilation", 1);
     mov_write_trkn_tag(pb, mov, s, 0); // track number
     mov_write_trkn_tag(pb, mov, s, 1); // disc number
     mov_write_tmpo_tag(pb, s);
@@ -2341,13 +2346,8 @@ static int mov_write_udta_tag(AVIOContext *pb, MOVMuxContext *mov,
                               AVFormatContext *s)
 {
     AVIOContext *pb_buf;
-    int i, ret, size;
+    int ret, size;
     uint8_t *buf;
-
-    for (i = 0; i < s->nb_streams; i++)
-        if (mov->tracks[i].enc->flags & CODEC_FLAG_BITEXACT) {
-            return 0;
-        }
 
     ret = avio_open_dyn_buf(&pb_buf);
     if (ret < 0)
@@ -2408,6 +2408,7 @@ static void mov_write_psp_udta_tag(AVIOContext *pb,
 
 static int mov_write_uuidusmt_tag(AVIOContext *pb, AVFormatContext *s)
 {
+    MOVMuxContext *mov = s->priv_data;
     AVDictionaryEntry *title = av_dict_get(s->metadata, "title", NULL, 0);
     int64_t pos, pos2;
 
@@ -2432,7 +2433,8 @@ static int mov_write_uuidusmt_tag(AVIOContext *pb, AVFormatContext *s)
         avio_wb16(pb, 0x0);                  /* ? */
         avio_wb16(pb, 0x021C);               /* data */
 
-        mov_write_psp_udta_tag(pb, LIBAVCODEC_IDENT,      "eng", 0x04);
+        if (!mov->exact)
+            mov_write_psp_udta_tag(pb, LIBAVCODEC_IDENT,      "eng", 0x04);
         mov_write_psp_udta_tag(pb, title->value,          "eng", 0x01);
         mov_write_psp_udta_tag(pb, "2006/04/01 11:11:11", "und", 0x03);
 
@@ -2502,7 +2504,10 @@ static int mov_write_moov_tag(AVIOContext *pb, MOVMuxContext *mov,
             int src_trk = mov->tracks[i].src_track;
             mov->tracks[src_trk].tref_tag = mov->tracks[i].tag;
             mov->tracks[src_trk].tref_id  = mov->tracks[i].track_id;
-            mov->tracks[i].track_duration = mov->tracks[src_trk].track_duration;
+            //src_trk may have a different timescale than the tmcd track
+            mov->tracks[i].track_duration = av_rescale(mov->tracks[src_trk].track_duration,
+                                                       mov->tracks[i].timescale,
+                                                       mov->tracks[src_trk].timescale);
         }
     }
 
@@ -2561,7 +2566,8 @@ static int mov_write_isml_manifest(AVIOContext *pb, MOVMuxContext *mov)
     avio_printf(pb, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n");
     avio_printf(pb, "<smil xmlns=\"http://www.w3.org/2001/SMIL20/Language\">\n");
     avio_printf(pb, "<head>\n");
-    avio_printf(pb, "<meta name=\"creator\" content=\"%s\" />\n",
+    if (!mov->exact)
+        avio_printf(pb, "<meta name=\"creator\" content=\"%s\" />\n",
                     LIBAVFORMAT_IDENT);
     avio_printf(pb, "</head>\n");
     avio_printf(pb, "<body>\n");
@@ -3598,7 +3604,7 @@ static int mov_create_chapter_track(AVFormatContext *s, int tracknum)
             track->enc->extradata = buf;
             track->enc->extradata_size = size;
         } else {
-            av_free(&buf);
+            av_freep(&buf);
         }
     }
 #endif
@@ -3759,6 +3765,10 @@ static int mov_write_header(AVFormatContext *s)
         else if (!strcmp("ismv",s->oformat->name)) mov->mode = MODE_ISM;
         else if (!strcmp("f4v", s->oformat->name)) mov->mode = MODE_F4V;
     }
+
+    for (i = 0; i < s->nb_streams; i++)
+        if (s->streams[i]->codec->flags & CODEC_FLAG_BITEXACT)
+            mov->exact = 1;
 
     /* Set the FRAGMENT flag if any of the fragmentation methods are
      * enabled. */

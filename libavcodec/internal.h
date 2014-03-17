@@ -35,6 +35,12 @@
 
 #define FF_SANE_NB_CHANNELS 63U
 
+#if HAVE_NEON || ARCH_PPC || HAVE_MMX
+#   define STRIDE_ALIGN 16
+#else
+#   define STRIDE_ALIGN 8
+#endif
+
 typedef struct FramePool {
     /**
      * Pools for each data plane. For audio all the planes have the same size,
@@ -244,5 +250,7 @@ int ff_set_dimensions(AVCodecContext *s, int width, int height);
  */
 int ff_side_data_update_matrix_encoding(AVFrame *frame,
                                         enum AVMatrixEncoding matrix_encoding);
+
+extern const uint8_t ff_log2_run[41];
 
 #endif /* AVCODEC_INTERNAL_H */
