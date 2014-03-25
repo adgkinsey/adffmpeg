@@ -348,11 +348,11 @@ static int decode_tilehdr(WmallDecodeCtx *s)
             if (num_samples[c] == min_channel_len) {
                 if (fixed_channel_layout || channels_for_cur_subframe == 1 ||
                    (min_channel_len == s->samples_per_frame - s->min_samples_per_subframe)) {
-                    contains_subframe[c] = in_use = 1;
+                    contains_subframe[c] = 1;
                 } else {
-                    if (get_bits1(&s->gb))
-                        contains_subframe[c] = in_use = 1;
+                    contains_subframe[c] = get_bits1(&s->gb);
                 }
+                in_use |= contains_subframe[c];
             } else
                 contains_subframe[c] = 0;
         }
@@ -652,10 +652,10 @@ static void mclms_update(WmallDecodeCtx *s, int icoef, int *pred)
     if (s->mclms_recent == 0) {
         memcpy(&s->mclms_prevvalues[order * num_channels],
                s->mclms_prevvalues,
-               2 * order * num_channels);
+               sizeof(int16_t) * order * num_channels);
         memcpy(&s->mclms_updates[order * num_channels],
                s->mclms_updates,
-               2 * order * num_channels);
+               sizeof(int16_t) * order * num_channels);
         s->mclms_recent = num_channels * order;
     }
 }

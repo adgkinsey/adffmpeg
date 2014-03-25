@@ -195,7 +195,7 @@ static char *doubles2str(double *dp, int count, const char *sep)
     char *ap, *ap0;
     uint64_t component_len;
     if (!sep) sep = ", ";
-    component_len = 15LL + strlen(sep);
+    component_len = 24LL + strlen(sep);
     if (count >= (INT_MAX - 1)/component_len)
         return NULL;
     ap = av_malloc(component_len * count + 1);
@@ -204,7 +204,7 @@ static char *doubles2str(double *dp, int count, const char *sep)
     ap0   = ap;
     ap[0] = '\0';
     for (i = 0; i < count; i++) {
-        unsigned l = snprintf(ap, component_len, "%f%s", dp[i], sep);
+        unsigned l = snprintf(ap, component_len, "%.15g%s", dp[i], sep);
         if(l >= component_len) {
             av_free(ap0);
             return NULL;
@@ -547,9 +547,9 @@ static int init_image(TiffContext *s, ThreadFrame *frame)
         return AVERROR_INVALIDDATA;
     }
     if (s->width != s->avctx->width || s->height != s->avctx->height) {
-        if ((ret = av_image_check_size(s->width, s->height, 0, s->avctx)) < 0)
+        ret = ff_set_dimensions(s->avctx, s->width, s->height);
+        if (ret < 0)
             return ret;
-        avcodec_set_dimensions(s->avctx, s->width, s->height);
     }
     if ((ret = ff_thread_get_buffer(s->avctx, frame, 0)) < 0)
         return ret;

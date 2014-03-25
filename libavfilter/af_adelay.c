@@ -16,7 +16,6 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- *
  */
 
 #include "libavutil/avstring.h"
@@ -270,7 +269,7 @@ static const AVFilterPad adelay_outputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_af_adelay = {
+AVFilter ff_af_adelay = {
     .name          = "adelay",
     .description   = NULL_IF_CONFIG_SMALL("Delay one or more audio channels."),
     .query_formats = query_formats,

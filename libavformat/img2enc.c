@@ -59,13 +59,12 @@ static int write_header(AVFormatContext *s)
         img->muxer = "gif";
     } else if (st->codec->codec_id == AV_CODEC_ID_RAWVIDEO) {
         const char *str = strrchr(img->path, '.');
-        /* TODO: reindent */
-    img->split_planes =     str
-                         && !av_strcasecmp(str + 1, "y")
-                         && s->nb_streams == 1
-                         && desc
-                         &&(desc->flags & AV_PIX_FMT_FLAG_PLANAR)
-                         && desc->nb_components >= 3;
+        img->split_planes =     str
+                             && !av_strcasecmp(str + 1, "y")
+                             && s->nb_streams == 1
+                             && desc
+                             &&(desc->flags & AV_PIX_FMT_FLAG_PLANAR)
+                             && desc->nb_components >= 3;
     }
     return 0;
 }
@@ -107,7 +106,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
 
             if (!img->split_planes || i+1 >= desc->nb_components)
                 break;
-            filename[strlen(filename) - 1] = ((int[]){'U','V','A','x'})[i];
+            filename[strlen(filename) - 1] = "UVAx"[i];
         }
     } else {
         pb[0] = s->pb;
@@ -195,7 +194,7 @@ AVOutputFormat ff_image2_muxer = {
     .long_name      = NULL_IF_CONFIG_SMALL("image2 sequence"),
     .extensions     = "bmp,dpx,jls,jpeg,jpg,ljpg,pam,pbm,pcx,pgm,pgmyuv,png,"
                       "ppm,sgi,tga,tif,tiff,jp2,j2c,j2k,xwd,sun,ras,rs,im1,im8,im24,"
-                      "sunras,xbm,xface",
+                      "sunras,webp,xbm,xface",
     .priv_data_size = sizeof(VideoMuxData),
     .video_codec    = AV_CODEC_ID_MJPEG,
     .write_header   = write_header,

@@ -16,7 +16,6 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- *
  */
 
 /**
@@ -144,7 +143,7 @@ static const AVFilterPad apad_outputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_af_apad = {
+AVFilter ff_af_apad = {
     .name          = "apad",
     .description   = NULL_IF_CONFIG_SMALL("Pad audio with silence."),
     .init          = init,
