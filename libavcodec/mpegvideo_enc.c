@@ -1039,6 +1039,10 @@ static int load_input_picture(MpegEncContext *s, const AVFrame *pic_arg)
             direct = 0;
         if ((s->width & 15) || (s->height & 15))
             direct = 0;
+        if (((intptr_t)(pic_arg->data[0])) & (STRIDE_ALIGN-1))
+            direct = 0;
+        if (s->linesize & (STRIDE_ALIGN-1))
+            direct = 0;
 
         av_dlog(s->avctx, "%d %d %td %td\n", pic_arg->linesize[0],
                 pic_arg->linesize[1], s->linesize, s->uvlinesize);
@@ -3439,7 +3443,7 @@ static int encode_picture(MpegEncContext *s, int picture_number)
             s->mb_type[i]= CANDIDATE_MB_TYPE_INTRA;
         if(s->msmpeg4_version >= 3)
             s->no_rounding=1;
-        av_dlog(s, "Scene change detected, encoding as I Frame %d %d\n",
+        av_dlog(s, "Scene change detected, encoding as I Frame %"PRId64" %"PRId64"\n",
                 s->current_picture.mb_var_sum, s->current_picture.mc_mb_var_sum);
     }
 
