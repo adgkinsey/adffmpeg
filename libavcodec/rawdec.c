@@ -89,17 +89,6 @@ static const PixelFormatTag pix_fmt_bps_mov[] = {
     { AV_PIX_FMT_NONE,      0 },
 };
 
-enum AVPixelFormat avpriv_find_pix_fmt(const PixelFormatTag *tags,
-                                       unsigned int fourcc)
-{
-    while (tags->pix_fmt >= 0) {
-        if (tags->fourcc == fourcc)
-            return tags->pix_fmt;
-        tags++;
-    }
-    return AV_PIX_FMT_NONE;
-}
-
 #if LIBAVCODEC_VERSION_MAJOR < 55
 enum AVPixelFormat ff_find_pix_fmt(const PixelFormatTag *tags, unsigned int fourcc)
 {
@@ -220,8 +209,11 @@ static int raw_decode(AVCodecContext *avctx, void *data, int *got_frame,
 
     frame->pict_type        = AV_PICTURE_TYPE_I;
     frame->key_frame        = 1;
-    frame->reordered_opaque = avctx->reordered_opaque;
-    frame->pkt_pts          = avctx->internal->pkt->pts;
+
+    res = ff_decode_frame_props(avctx, frame);
+    if (res < 0)
+        return res;
+
     av_frame_set_pkt_pos     (frame, avctx->internal->pkt->pos);
     av_frame_set_pkt_duration(frame, avctx->internal->pkt->duration);
 

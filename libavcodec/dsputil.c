@@ -50,6 +50,7 @@ uint32_t ff_square_tab[512] = { 0, };
 #undef BIT_DEPTH
 
 #define BIT_DEPTH 8
+#include "tpel_template.c"
 #include "dsputil_template.c"
 
 // 0x7f7f7f7f or 0x7f7f7f7f7f7f7f7f or whatever, depending on the cpu's native arithmetic size
@@ -254,7 +255,8 @@ static void bswap16_buf(uint16_t *dst, const uint16_t *src, int len)
         *dst++ = av_bswap16(*src++);
 }
 
-static int sse4_c(void *v, uint8_t *pix1, uint8_t *pix2, int line_size, int h)
+static int sse4_c(MpegEncContext *v, uint8_t *pix1, uint8_t *pix2,
+                  int line_size, int h)
 {
     int s = 0, i;
     uint32_t *sq = ff_square_tab + 256;
@@ -270,7 +272,8 @@ static int sse4_c(void *v, uint8_t *pix1, uint8_t *pix2, int line_size, int h)
     return s;
 }
 
-static int sse8_c(void *v, uint8_t *pix1, uint8_t *pix2, int line_size, int h)
+static int sse8_c(MpegEncContext *v, uint8_t *pix1, uint8_t *pix2,
+                  int line_size, int h)
 {
     int s = 0, i;
     uint32_t *sq = ff_square_tab + 256;
@@ -290,7 +293,8 @@ static int sse8_c(void *v, uint8_t *pix1, uint8_t *pix2, int line_size, int h)
     return s;
 }
 
-static int sse16_c(void *v, uint8_t *pix1, uint8_t *pix2, int line_size, int h)
+static int sse16_c(MpegEncContext *v, uint8_t *pix1, uint8_t *pix2,
+                   int line_size, int h)
 {
     int s = 0, i;
     uint32_t *sq = ff_square_tab + 256;
@@ -598,284 +602,6 @@ void ff_gmc_c(uint8_t *dst, uint8_t *src, int stride, int h, int ox, int oy,
         }
         ox += dxy;
         oy += dyy;
-    }
-}
-
-static inline void put_tpel_pixels_mc00_c(uint8_t *dst, const uint8_t *src,
-                                          int stride, int width, int height)
-{
-    switch (width) {
-    case 2:
-        put_pixels2_8_c(dst, src, stride, height);
-        break;
-    case 4:
-        put_pixels4_8_c(dst, src, stride, height);
-        break;
-    case 8:
-        put_pixels8_8_c(dst, src, stride, height);
-        break;
-    case 16:
-        put_pixels16_8_c(dst, src, stride, height);
-        break;
-    }
-}
-
-static inline void put_tpel_pixels_mc10_c(uint8_t *dst, const uint8_t *src,
-                                          int stride, int width, int height)
-{
-    int i, j;
-
-    for (i = 0; i < height; i++) {
-        for (j = 0; j < width; j++)
-            dst[j] = ((2 * src[j] + src[j + 1] + 1) *
-                      683) >> 11;
-        src += stride;
-        dst += stride;
-    }
-}
-
-static inline void put_tpel_pixels_mc20_c(uint8_t *dst, const uint8_t *src,
-                                          int stride, int width, int height)
-{
-    int i, j;
-
-    for (i = 0; i < height; i++) {
-        for (j = 0; j < width; j++)
-            dst[j] = ((src[j] + 2 * src[j + 1] + 1) *
-                      683) >> 11;
-        src += stride;
-        dst += stride;
-    }
-}
-
-static inline void put_tpel_pixels_mc01_c(uint8_t *dst, const uint8_t *src,
-                                          int stride, int width, int height)
-{
-    int i, j;
-
-    for (i = 0; i < height; i++) {
-        for (j = 0; j < width; j++)
-            dst[j] = ((2 * src[j] + src[j + stride] + 1) *
-                      683) >> 11;
-        src += stride;
-        dst += stride;
-    }
-}
-
-static inline void put_tpel_pixels_mc11_c(uint8_t *dst, const uint8_t *src,
-                                          int stride, int width, int height)
-{
-    int i, j;
-
-    for (i = 0; i < height; i++) {
-        for (j = 0; j < width; j++)
-            dst[j] = ((4 * src[j]          + 3 * src[j + 1] +
-                       3 * src[j + stride] + 2 * src[j + stride + 1] + 6) *
-                      2731) >> 15;
-        src += stride;
-        dst += stride;
-    }
-}
-
-static inline void put_tpel_pixels_mc12_c(uint8_t *dst, const uint8_t *src,
-                                          int stride, int width, int height)
-{
-    int i, j;
-
-    for (i = 0; i < height; i++) {
-        for (j = 0; j < width; j++)
-            dst[j] = ((3 * src[j]          + 2 * src[j + 1] +
-                       4 * src[j + stride] + 3 * src[j + stride + 1] + 6) *
-                      2731) >> 15;
-        src += stride;
-        dst += stride;
-    }
-}
-
-static inline void put_tpel_pixels_mc02_c(uint8_t *dst, const uint8_t *src,
-                                          int stride, int width, int height)
-{
-    int i, j;
-
-    for (i = 0; i < height; i++) {
-        for (j = 0; j < width; j++)
-            dst[j] = ((src[j] + 2 * src[j + stride] + 1) *
-                      683) >> 11;
-        src += stride;
-        dst += stride;
-    }
-}
-
-static inline void put_tpel_pixels_mc21_c(uint8_t *dst, const uint8_t *src,
-                                          int stride, int width, int height)
-{
-    int i, j;
-
-    for (i = 0; i < height; i++) {
-        for (j = 0; j < width; j++)
-            dst[j] = ((3 * src[j]          + 4 * src[j + 1] +
-                       2 * src[j + stride] + 3 * src[j + stride + 1] + 6) *
-                      2731) >> 15;
-        src += stride;
-        dst += stride;
-    }
-}
-
-static inline void put_tpel_pixels_mc22_c(uint8_t *dst, const uint8_t *src,
-                                          int stride, int width, int height)
-{
-    int i, j;
-
-    for (i = 0; i < height; i++) {
-        for (j = 0; j < width; j++)
-            dst[j] = ((2 * src[j]          + 3 * src[j + 1] +
-                       3 * src[j + stride] + 4 * src[j + stride + 1] + 6) *
-                      2731) >> 15;
-        src += stride;
-        dst += stride;
-    }
-}
-
-static inline void avg_tpel_pixels_mc00_c(uint8_t *dst, const uint8_t *src,
-                                          int stride, int width, int height)
-{
-    switch (width) {
-    case 2:
-        avg_pixels2_8_c(dst, src, stride, height);
-        break;
-    case 4:
-        avg_pixels4_8_c(dst, src, stride, height);
-        break;
-    case 8:
-        avg_pixels8_8_c(dst, src, stride, height);
-        break;
-    case 16:
-        avg_pixels16_8_c(dst, src, stride, height);
-        break;
-    }
-}
-
-static inline void avg_tpel_pixels_mc10_c(uint8_t *dst, const uint8_t *src,
-                                          int stride, int width, int height)
-{
-    int i, j;
-
-    for (i = 0; i < height; i++) {
-        for (j = 0; j < width; j++)
-            dst[j] = (dst[j] +
-                      (((2 * src[j] + src[j + 1] + 1) *
-                        683) >> 11) + 1) >> 1;
-        src += stride;
-        dst += stride;
-    }
-}
-
-static inline void avg_tpel_pixels_mc20_c(uint8_t *dst, const uint8_t *src,
-                                          int stride, int width, int height)
-{
-    int i, j;
-
-    for (i = 0; i < height; i++) {
-        for (j = 0; j < width; j++)
-            dst[j] = (dst[j] +
-                      (((src[j] + 2 * src[j + 1] + 1) *
-                        683) >> 11) + 1) >> 1;
-        src += stride;
-        dst += stride;
-    }
-}
-
-static inline void avg_tpel_pixels_mc01_c(uint8_t *dst, const uint8_t *src,
-                                          int stride, int width, int height)
-{
-    int i, j;
-
-    for (i = 0; i < height; i++) {
-        for (j = 0; j < width; j++)
-            dst[j] = (dst[j] +
-                      (((2 * src[j] + src[j + stride] + 1) *
-                        683) >> 11) + 1) >> 1;
-        src += stride;
-        dst += stride;
-    }
-}
-
-static inline void avg_tpel_pixels_mc11_c(uint8_t *dst, const uint8_t *src,
-                                          int stride, int width, int height)
-{
-    int i, j;
-
-    for (i = 0; i < height; i++) {
-        for (j = 0; j < width; j++)
-            dst[j] = (dst[j] +
-                      (((4 * src[j]          + 3 * src[j + 1] +
-                         3 * src[j + stride] + 2 * src[j + stride + 1] + 6) *
-                        2731) >> 15) + 1) >> 1;
-        src += stride;
-        dst += stride;
-    }
-}
-
-static inline void avg_tpel_pixels_mc12_c(uint8_t *dst, const uint8_t *src,
-                                          int stride, int width, int height)
-{
-    int i, j;
-
-    for (i = 0; i < height; i++) {
-        for (j = 0; j < width; j++)
-            dst[j] = (dst[j] +
-                      (((3 * src[j]          + 2 * src[j + 1] +
-                         4 * src[j + stride] + 3 * src[j + stride + 1] + 6) *
-                        2731) >> 15) + 1) >> 1;
-        src += stride;
-        dst += stride;
-    }
-}
-
-static inline void avg_tpel_pixels_mc02_c(uint8_t *dst, const uint8_t *src,
-                                          int stride, int width, int height)
-{
-    int i, j;
-
-    for (i = 0; i < height; i++) {
-        for (j = 0; j < width; j++)
-            dst[j] = (dst[j] +
-                      (((src[j] + 2 * src[j + stride] + 1) *
-                        683) >> 11) + 1) >> 1;
-        src += stride;
-        dst += stride;
-    }
-}
-
-static inline void avg_tpel_pixels_mc21_c(uint8_t *dst, const uint8_t *src,
-                                          int stride, int width, int height)
-{
-    int i, j;
-
-    for (i = 0; i < height; i++) {
-        for (j = 0; j < width; j++)
-            dst[j] = (dst[j] +
-                      (((3 * src[j]          + 4 * src[j + 1] +
-                         2 * src[j + stride] + 3 * src[j + stride + 1] + 6) *
-                        2731) >> 15) + 1) >> 1;
-        src += stride;
-        dst += stride;
-    }
-}
-
-static inline void avg_tpel_pixels_mc22_c(uint8_t *dst, const uint8_t *src,
-                                          int stride, int width, int height)
-{
-    int i, j;
-
-    for (i = 0; i < height; i++) {
-        for (j = 0; j < width; j++)
-            dst[j] = (dst[j] +
-                      (((2 * src[j]          + 3 * src[j + 1] +
-                         3 * src[j + stride] + 4 * src[j + stride + 1] + 6) *
-                        2731) >> 15) + 1) >> 1;
-        src += stride;
-        dst += stride;
     }
 }
 
@@ -1742,7 +1468,7 @@ static void put_mspel8_mc22_c(uint8_t *dst, uint8_t *src, ptrdiff_t stride)
     wmv2_mspel8_v_lowpass(dst, halfH + 8, stride, 8, 8);
 }
 
-static inline int pix_abs16_c(void *v, uint8_t *pix1, uint8_t *pix2,
+static inline int pix_abs16_c(MpegEncContext *v, uint8_t *pix1, uint8_t *pix2,
                               int line_size, int h)
 {
     int s = 0, i;
@@ -1770,7 +1496,7 @@ static inline int pix_abs16_c(void *v, uint8_t *pix1, uint8_t *pix2,
     return s;
 }
 
-static int pix_abs16_x2_c(void *v, uint8_t *pix1, uint8_t *pix2,
+static int pix_abs16_x2_c(MpegEncContext *v, uint8_t *pix1, uint8_t *pix2,
                           int line_size, int h)
 {
     int s = 0, i;
@@ -1798,7 +1524,7 @@ static int pix_abs16_x2_c(void *v, uint8_t *pix1, uint8_t *pix2,
     return s;
 }
 
-static int pix_abs16_y2_c(void *v, uint8_t *pix1, uint8_t *pix2,
+static int pix_abs16_y2_c(MpegEncContext *v, uint8_t *pix1, uint8_t *pix2,
                           int line_size, int h)
 {
     int s = 0, i;
@@ -1828,7 +1554,7 @@ static int pix_abs16_y2_c(void *v, uint8_t *pix1, uint8_t *pix2,
     return s;
 }
 
-static int pix_abs16_xy2_c(void *v, uint8_t *pix1, uint8_t *pix2,
+static int pix_abs16_xy2_c(MpegEncContext *v, uint8_t *pix1, uint8_t *pix2,
                            int line_size, int h)
 {
     int s = 0, i;
@@ -1858,7 +1584,7 @@ static int pix_abs16_xy2_c(void *v, uint8_t *pix1, uint8_t *pix2,
     return s;
 }
 
-static inline int pix_abs8_c(void *v, uint8_t *pix1, uint8_t *pix2,
+static inline int pix_abs8_c(MpegEncContext *v, uint8_t *pix1, uint8_t *pix2,
                              int line_size, int h)
 {
     int s = 0, i;
@@ -1878,7 +1604,7 @@ static inline int pix_abs8_c(void *v, uint8_t *pix1, uint8_t *pix2,
     return s;
 }
 
-static int pix_abs8_x2_c(void *v, uint8_t *pix1, uint8_t *pix2,
+static int pix_abs8_x2_c(MpegEncContext *v, uint8_t *pix1, uint8_t *pix2,
                          int line_size, int h)
 {
     int s = 0, i;
@@ -1898,7 +1624,7 @@ static int pix_abs8_x2_c(void *v, uint8_t *pix1, uint8_t *pix2,
     return s;
 }
 
-static int pix_abs8_y2_c(void *v, uint8_t *pix1, uint8_t *pix2,
+static int pix_abs8_y2_c(MpegEncContext *v, uint8_t *pix1, uint8_t *pix2,
                          int line_size, int h)
 {
     int s = 0, i;
@@ -1920,7 +1646,7 @@ static int pix_abs8_y2_c(void *v, uint8_t *pix1, uint8_t *pix2,
     return s;
 }
 
-static int pix_abs8_xy2_c(void *v, uint8_t *pix1, uint8_t *pix2,
+static int pix_abs8_xy2_c(MpegEncContext *v, uint8_t *pix1, uint8_t *pix2,
                           int line_size, int h)
 {
     int s = 0, i;
@@ -1942,9 +1668,8 @@ static int pix_abs8_xy2_c(void *v, uint8_t *pix1, uint8_t *pix2,
     return s;
 }
 
-static int nsse16_c(void *v, uint8_t *s1, uint8_t *s2, int stride, int h)
+static int nsse16_c(MpegEncContext *c, uint8_t *s1, uint8_t *s2, int stride, int h)
 {
-    MpegEncContext *c = v;
     int score1 = 0, score2 = 0, x, y;
 
     for (y = 0; y < h; y++) {
@@ -1967,9 +1692,8 @@ static int nsse16_c(void *v, uint8_t *s1, uint8_t *s2, int stride, int h)
         return score1 + FFABS(score2) * 8;
 }
 
-static int nsse8_c(void *v, uint8_t *s1, uint8_t *s2, int stride, int h)
+static int nsse8_c(MpegEncContext *c, uint8_t *s1, uint8_t *s2, int stride, int h)
 {
-    MpegEncContext *c = v;
     int score1 = 0, score2 = 0, x, y;
 
     for (y = 0; y < h; y++) {
@@ -2021,7 +1745,8 @@ static void add_8x8basis_c(int16_t rem[64], int16_t basis[64], int scale)
                   (BASIS_SHIFT - RECON_SHIFT);
 }
 
-static int zero_cmp(void *s, uint8_t *a, uint8_t *b, int stride, int h)
+static int zero_cmp(MpegEncContext *s, uint8_t *a, uint8_t *b,
+                    int stride, int h)
 {
     return 0;
 }
@@ -2245,7 +1970,7 @@ static void add_hfyu_left_prediction_bgr32_c(uint8_t *dst, const uint8_t *src,
 
 #define BUTTERFLYA(x, y) (FFABS((x) + (y)) + FFABS((x) - (y)))
 
-static int hadamard8_diff8x8_c(/* MpegEncContext */ void *s, uint8_t *dst,
+static int hadamard8_diff8x8_c(MpegEncContext *s, uint8_t *dst,
                                uint8_t *src, int stride, int h)
 {
     int i, temp[64], sum = 0;
@@ -2297,7 +2022,7 @@ static int hadamard8_diff8x8_c(/* MpegEncContext */ void *s, uint8_t *dst,
     return sum;
 }
 
-static int hadamard8_intra8x8_c(/* MpegEncContext */ void *s, uint8_t *src,
+static int hadamard8_intra8x8_c(MpegEncContext *s, uint8_t *src,
                                 uint8_t *dummy, int stride, int h)
 {
     int i, temp[64], sum = 0;
@@ -2349,10 +2074,9 @@ static int hadamard8_intra8x8_c(/* MpegEncContext */ void *s, uint8_t *src,
     return sum;
 }
 
-static int dct_sad8x8_c(/* MpegEncContext */ void *c, uint8_t *src1,
+static int dct_sad8x8_c(MpegEncContext *s, uint8_t *src1,
                         uint8_t *src2, int stride, int h)
 {
-    MpegEncContext *const s = (MpegEncContext *) c;
     LOCAL_ALIGNED_16(int16_t, temp, [64]);
 
     av_assert2(h == 8);
@@ -2391,10 +2115,9 @@ static int dct_sad8x8_c(/* MpegEncContext */ void *c, uint8_t *src1,
         DST(7, (a4 >> 2) - a7);                         \
     }
 
-static int dct264_sad8x8_c(/* MpegEncContext */ void *c, uint8_t *src1,
+static int dct264_sad8x8_c(MpegEncContext *s, uint8_t *src1,
                            uint8_t *src2, int stride, int h)
 {
-    MpegEncContext *const s = (MpegEncContext *) c;
     int16_t dct[8][8];
     int i, sum = 0;
 
@@ -2417,10 +2140,9 @@ static int dct264_sad8x8_c(/* MpegEncContext */ void *c, uint8_t *src1,
 }
 #endif
 
-static int dct_max8x8_c(/* MpegEncContext */ void *c, uint8_t *src1,
+static int dct_max8x8_c(MpegEncContext *s, uint8_t *src1,
                         uint8_t *src2, int stride, int h)
 {
-    MpegEncContext *const s = (MpegEncContext *) c;
     LOCAL_ALIGNED_16(int16_t, temp, [64]);
     int sum = 0, i;
 
@@ -2435,10 +2157,9 @@ static int dct_max8x8_c(/* MpegEncContext */ void *c, uint8_t *src1,
     return sum;
 }
 
-static int quant_psnr8x8_c(/* MpegEncContext */ void *c, uint8_t *src1,
+static int quant_psnr8x8_c(MpegEncContext *s, uint8_t *src1,
                            uint8_t *src2, int stride, int h)
 {
-    MpegEncContext *const s = c;
     LOCAL_ALIGNED_16(int16_t, temp, [64 * 2]);
     int16_t *const bak = temp + 64;
     int sum = 0, i;
@@ -2461,10 +2182,9 @@ static int quant_psnr8x8_c(/* MpegEncContext */ void *c, uint8_t *src1,
     return sum;
 }
 
-static int rd8x8_c(/* MpegEncContext */ void *c, uint8_t *src1, uint8_t *src2,
+static int rd8x8_c(MpegEncContext *s, uint8_t *src1, uint8_t *src2,
                    int stride, int h)
 {
-    MpegEncContext *const s  = (MpegEncContext *) c;
     const uint8_t *scantable = s->intra_scantable.permutated;
     LOCAL_ALIGNED_16(int16_t, temp, [64]);
     LOCAL_ALIGNED_16(uint8_t, lsrc1, [64]);
@@ -2539,10 +2259,9 @@ static int rd8x8_c(/* MpegEncContext */ void *c, uint8_t *src1, uint8_t *src2,
     return distortion + ((bits * s->qscale * s->qscale * 109 + 64) >> 7);
 }
 
-static int bit8x8_c(/* MpegEncContext */ void *c, uint8_t *src1, uint8_t *src2,
+static int bit8x8_c(MpegEncContext *s, uint8_t *src1, uint8_t *src2,
                     int stride, int h)
 {
-    MpegEncContext *const s  = (MpegEncContext *) c;
     const uint8_t *scantable = s->intra_scantable.permutated;
     LOCAL_ALIGNED_16(int16_t, temp, [64]);
     int i, last, run, bits, level, start_i;
@@ -2602,7 +2321,7 @@ static int bit8x8_c(/* MpegEncContext */ void *c, uint8_t *src1, uint8_t *src2,
 }
 
 #define VSAD_INTRA(size)                                                \
-static int vsad_intra ## size ## _c(/* MpegEncContext */ void *c,       \
+static int vsad_intra ## size ## _c(MpegEncContext *c,                  \
                                     uint8_t *s, uint8_t *dummy,         \
                                     int stride, int h)                  \
 {                                                                       \
@@ -2623,7 +2342,7 @@ static int vsad_intra ## size ## _c(/* MpegEncContext */ void *c,       \
 VSAD_INTRA(8)
 VSAD_INTRA(16)
 
-static int vsad16_c(/* MpegEncContext */ void *c, uint8_t *s1, uint8_t *s2,
+static int vsad16_c(MpegEncContext *c, uint8_t *s1, uint8_t *s2,
                     int stride, int h)
 {
     int score = 0, x, y;
@@ -2640,7 +2359,7 @@ static int vsad16_c(/* MpegEncContext */ void *c, uint8_t *s1, uint8_t *s2,
 
 #define SQ(a) ((a) * (a))
 #define VSSE_INTRA(size)                                                \
-static int vsse_intra ## size ## _c(/* MpegEncContext */ void *c,       \
+static int vsse_intra ## size ## _c(MpegEncContext *c,                  \
                                     uint8_t *s, uint8_t *dummy,         \
                                     int stride, int h)                  \
 {                                                                       \
@@ -2661,7 +2380,7 @@ static int vsse_intra ## size ## _c(/* MpegEncContext */ void *c,       \
 VSSE_INTRA(8)
 VSSE_INTRA(16)
 
-static int vsse16_c(/* MpegEncContext */ void *c, uint8_t *s1, uint8_t *s2,
+static int vsse16_c(MpegEncContext *c, uint8_t *s1, uint8_t *s2,
                     int stride, int h)
 {
     int score = 0, x, y;
@@ -2687,8 +2406,7 @@ static int ssd_int8_vs_int16_c(const int8_t *pix1, const int16_t *pix2,
 }
 
 #define WRAPPER8_16_SQ(name8, name16)                                   \
-static int name16(void /*MpegEncContext*/ *s,                           \
-                  uint8_t *dst, uint8_t *src,                           \
+static int name16(MpegEncContext *s, uint8_t *dst, uint8_t *src,        \
                   int stride, int h)                                    \
 {                                                                       \
     int score = 0;                                                      \
@@ -2884,6 +2602,8 @@ int ff_check_alignment(void)
 
 av_cold void ff_dsputil_init(DSPContext *c, AVCodecContext *avctx)
 {
+    const unsigned high_bit_depth = avctx->bits_per_raw_sample > 8;
+
     ff_check_alignment();
 
 #if CONFIG_ENCODERS
@@ -2976,26 +2696,6 @@ av_cold void ff_dsputil_init(DSPContext *c, AVCodecContext *avctx)
     c->pix_abs[1][1] = pix_abs8_x2_c;
     c->pix_abs[1][2] = pix_abs8_y2_c;
     c->pix_abs[1][3] = pix_abs8_xy2_c;
-
-    c->put_tpel_pixels_tab[0]  = put_tpel_pixels_mc00_c;
-    c->put_tpel_pixels_tab[1]  = put_tpel_pixels_mc10_c;
-    c->put_tpel_pixels_tab[2]  = put_tpel_pixels_mc20_c;
-    c->put_tpel_pixels_tab[4]  = put_tpel_pixels_mc01_c;
-    c->put_tpel_pixels_tab[5]  = put_tpel_pixels_mc11_c;
-    c->put_tpel_pixels_tab[6]  = put_tpel_pixels_mc21_c;
-    c->put_tpel_pixels_tab[8]  = put_tpel_pixels_mc02_c;
-    c->put_tpel_pixels_tab[9]  = put_tpel_pixels_mc12_c;
-    c->put_tpel_pixels_tab[10] = put_tpel_pixels_mc22_c;
-
-    c->avg_tpel_pixels_tab[0]  = avg_tpel_pixels_mc00_c;
-    c->avg_tpel_pixels_tab[1]  = avg_tpel_pixels_mc10_c;
-    c->avg_tpel_pixels_tab[2]  = avg_tpel_pixels_mc20_c;
-    c->avg_tpel_pixels_tab[4]  = avg_tpel_pixels_mc01_c;
-    c->avg_tpel_pixels_tab[5]  = avg_tpel_pixels_mc11_c;
-    c->avg_tpel_pixels_tab[6]  = avg_tpel_pixels_mc21_c;
-    c->avg_tpel_pixels_tab[8]  = avg_tpel_pixels_mc02_c;
-    c->avg_tpel_pixels_tab[9]  = avg_tpel_pixels_mc12_c;
-    c->avg_tpel_pixels_tab[10] = avg_tpel_pixels_mc22_c;
 
 #define dspfunc(PFX, IDX, NUM)                              \
     c->PFX ## _pixels_tab[IDX][0]  = PFX ## NUM ## _mc00_c; \
@@ -3127,13 +2827,13 @@ av_cold void ff_dsputil_init(DSPContext *c, AVCodecContext *avctx)
     if (ARCH_ALPHA)
         ff_dsputil_init_alpha(c, avctx);
     if (ARCH_ARM)
-        ff_dsputil_init_arm(c, avctx);
+        ff_dsputil_init_arm(c, avctx, high_bit_depth);
     if (ARCH_BFIN)
-        ff_dsputil_init_bfin(c, avctx);
+        ff_dsputil_init_bfin(c, avctx, high_bit_depth);
     if (ARCH_PPC)
-        ff_dsputil_init_ppc(c, avctx);
+        ff_dsputil_init_ppc(c, avctx, high_bit_depth);
     if (ARCH_X86)
-        ff_dsputil_init_x86(c, avctx);
+        ff_dsputil_init_x86(c, avctx, high_bit_depth);
 
     ff_init_scantable_permutation(c->idct_permutation,
                                   c->idct_permutation_type);

@@ -27,9 +27,11 @@
 #include "libavutil/x86/cpu.h"
 #include "libavcodec/avcodec.h"
 #include "libavcodec/dsputil.h"
+#include "libavcodec/pixels.h"
 #include "libavcodec/simple_idct.h"
 #include "libavcodec/version.h"
 #include "dsputil_x86.h"
+#include "fpel.h"
 #include "idct_xvid.h"
 
 void ff_put_pixels8_l2_mmxext(uint8_t *dst, uint8_t *src1, uint8_t *src2,
@@ -110,8 +112,8 @@ void ff_vector_clip_int32_sse4(int32_t *dst, const int32_t *src,
 
 #if HAVE_YASM
 
-PIXELS16(static, ff_avg, , , _mmxext)
-PIXELS16(static, ff_put, , , _mmxext)
+CALL_2X_PIXELS(ff_avg_pixels16_mmxext, ff_avg_pixels8_mmxext, 8)
+CALL_2X_PIXELS(ff_put_pixels16_mmxext, ff_put_pixels8_mmxext, 8)
 
 #define QPEL_OP(OPNAME, RND, MMX)                                       \
 static void OPNAME ## qpel8_mc00_ ## MMX(uint8_t *dst, uint8_t *src,    \
@@ -521,11 +523,9 @@ do {                                                                         \
 } while (0)
 
 static av_cold void dsputil_init_mmx(DSPContext *c, AVCodecContext *avctx,
-                                     int cpu_flags)
+                                     int cpu_flags, unsigned high_bit_depth)
 {
 #if HAVE_MMX_INLINE
-    const int high_bit_depth = avctx->bits_per_raw_sample > 8;
-
     c->put_pixels_clamped        = ff_put_pixels_clamped_mmx;
     c->put_signed_pixels_clamped = ff_put_signed_pixels_clamped_mmx;
     c->add_pixels_clamped        = ff_add_pixels_clamped_mmx;
@@ -549,11 +549,9 @@ static av_cold void dsputil_init_mmx(DSPContext *c, AVCodecContext *avctx,
 }
 
 static av_cold void dsputil_init_mmxext(DSPContext *c, AVCodecContext *avctx,
-                                        int cpu_flags)
+                                        int cpu_flags, unsigned high_bit_depth)
 {
 #if HAVE_MMXEXT_INLINE
-    const int high_bit_depth = avctx->bits_per_raw_sample > 8;
-
     if (!high_bit_depth && avctx->idct_algo == FF_IDCT_XVIDMMX && avctx->lowres == 0) {
         c->idct_put = ff_idct_xvid_mmxext_put;
         c->idct_add = ff_idct_xvid_mmxext_add;
@@ -580,11 +578,9 @@ static av_cold void dsputil_init_mmxext(DSPContext *c, AVCodecContext *avctx,
 }
 
 static av_cold void dsputil_init_sse(DSPContext *c, AVCodecContext *avctx,
-                                     int cpu_flags)
+                                     int cpu_flags, unsigned high_bit_depth)
 {
 #if HAVE_SSE_INLINE
-    const int high_bit_depth = avctx->bits_per_raw_sample > 8;
-
     c->vector_clipf = ff_vector_clipf_sse;
 
     /* XvMCCreateBlocks() may not allocate 16-byte aligned blocks */
@@ -605,11 +601,9 @@ static av_cold void dsputil_init_sse(DSPContext *c, AVCodecContext *avctx,
 }
 
 static av_cold void dsputil_init_sse2(DSPContext *c, AVCodecContext *avctx,
-                                      int cpu_flags)
+                                      int cpu_flags, unsigned high_bit_depth)
 {
 #if HAVE_SSE2_INLINE
-    const int high_bit_depth = avctx->bits_per_raw_sample > 8;
-
     if (!high_bit_depth && avctx->idct_algo == FF_IDCT_XVIDMMX && avctx->lowres == 0) {
         c->idct_put              = ff_idct_xvid_sse2_put;
         c->idct_add              = ff_idct_xvid_sse2_add;
@@ -631,7 +625,7 @@ static av_cold void dsputil_init_sse2(DSPContext *c, AVCodecContext *avctx,
 }
 
 static av_cold void dsputil_init_ssse3(DSPContext *c, AVCodecContext *avctx,
-                                       int cpu_flags)
+                                       int cpu_flags, unsigned high_bit_depth)
 {
 #if HAVE_SSSE3_EXTERNAL
     c->add_hfyu_left_prediction = ff_add_hfyu_left_prediction_ssse3;
@@ -645,14 +639,15 @@ static av_cold void dsputil_init_ssse3(DSPContext *c, AVCodecContext *avctx,
 }
 
 static av_cold void dsputil_init_sse4(DSPContext *c, AVCodecContext *avctx,
-                                      int cpu_flags)
+                                      int cpu_flags, unsigned high_bit_depth)
 {
 #if HAVE_SSE4_EXTERNAL
     c->vector_clip_int32 = ff_vector_clip_int32_sse4;
 #endif /* HAVE_SSE4_EXTERNAL */
 }
 
-av_cold void ff_dsputil_init_x86(DSPContext *c, AVCodecContext *avctx)
+av_cold void ff_dsputil_init_x86(DSPContext *c, AVCodecContext *avctx,
+                                 unsigned high_bit_depth)
 {
     int cpu_flags = av_get_cpu_flags();
 
@@ -665,7 +660,7 @@ av_cold void ff_dsputil_init_x86(DSPContext *c, AVCodecContext *avctx)
 #if HAVE_INLINE_ASM
         const int idct_algo = avctx->idct_algo;
 
-        if (avctx->lowres == 0 && avctx->bits_per_raw_sample <= 8) {
+        if (avctx->lowres == 0 && !high_bit_depth) {
             if (idct_algo == FF_IDCT_AUTO || idct_algo == FF_IDCT_SIMPLEMMX) {
                 c->idct_put              = ff_simple_idct_put_mmx;
                 c->idct_add              = ff_simple_idct_add_mmx;
@@ -679,24 +674,24 @@ av_cold void ff_dsputil_init_x86(DSPContext *c, AVCodecContext *avctx)
         }
 #endif /* HAVE_INLINE_ASM */
 
-        dsputil_init_mmx(c, avctx, cpu_flags);
+        dsputil_init_mmx(c, avctx, cpu_flags, high_bit_depth);
     }
 
     if (X86_MMXEXT(cpu_flags))
-        dsputil_init_mmxext(c, avctx, cpu_flags);
+        dsputil_init_mmxext(c, avctx, cpu_flags, high_bit_depth);
 
     if (X86_SSE(cpu_flags))
-        dsputil_init_sse(c, avctx, cpu_flags);
+        dsputil_init_sse(c, avctx, cpu_flags, high_bit_depth);
 
     if (X86_SSE2(cpu_flags))
-        dsputil_init_sse2(c, avctx, cpu_flags);
+        dsputil_init_sse2(c, avctx, cpu_flags, high_bit_depth);
 
     if (EXTERNAL_SSSE3(cpu_flags))
-        dsputil_init_ssse3(c, avctx, cpu_flags);
+        dsputil_init_ssse3(c, avctx, cpu_flags, high_bit_depth);
 
     if (EXTERNAL_SSE4(cpu_flags))
-        dsputil_init_sse4(c, avctx, cpu_flags);
+        dsputil_init_sse4(c, avctx, cpu_flags, high_bit_depth);
 
     if (CONFIG_ENCODERS)
-        ff_dsputilenc_init_mmx(c, avctx);
+        ff_dsputilenc_init_mmx(c, avctx, high_bit_depth);
 }

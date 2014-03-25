@@ -73,6 +73,7 @@ Other:
   bprint                                Nicolas George
   bswap.h
   des                                   Reimar Doeffinger
+  dynarray.h                            Nicolas George
   eval.c, eval.h                        Michael Niedermayer
   float_dsp                             Loren Merritt
   hash                                  Reimar Doeffinger
@@ -420,7 +421,8 @@ Muxers/Demuxers:
   mpc.c                                 Kostya Shishkov
   mpeg.c                                Michael Niedermayer
   mpegenc.c                             Michael Niedermayer
-  mpegts*                               Baptiste Coudurier
+  mpegts.c                              Marton Balint
+  mpegtsenc.c                           Baptiste Coudurier
   msnwc_tcp.c                           Ramiro Polla
   mtv.c                                 Reynaldo H. Verdejo Pinochet
   mxf*                                  Baptiste Coudurier

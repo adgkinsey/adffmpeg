@@ -34,14 +34,23 @@
 #    define FELEML double
 #    define OUT(d, v) d = v
 
-#elif defined(TEMPLATE_RESAMPLE_FLT)
-#    define RENAME(N) N ## _float
+#elif    defined(TEMPLATE_RESAMPLE_FLT)     \
+      || defined(TEMPLATE_RESAMPLE_FLT_SSE)
+
 #    define FILTER_SHIFT 0
 #    define DELEM  float
 #    define FELEM  float
 #    define FELEM2 float
 #    define FELEML float
 #    define OUT(d, v) d = v
+
+#    if defined(TEMPLATE_RESAMPLE_FLT)
+#        define RENAME(N) N ## _float
+#    elif defined(TEMPLATE_RESAMPLE_FLT_SSE)
+#        define COMMON_CORE COMMON_CORE_FLT_SSE
+#        define LINEAR_CORE LINEAR_CORE_FLT_SSE
+#        define RENAME(N) N ## _float_sse
+#    endif
 
 #elif defined(TEMPLATE_RESAMPLE_S32)
 #    define RENAME(N) N ## _int32
@@ -57,7 +66,7 @@
 
 #elif    defined(TEMPLATE_RESAMPLE_S16)      \
       || defined(TEMPLATE_RESAMPLE_S16_MMX2) \
-      || defined(TEMPLATE_RESAMPLE_S16_SSSE3)
+      || defined(TEMPLATE_RESAMPLE_S16_SSE2)
 
 #    define FILTER_SHIFT 15
 #    define DELEM  int16_t
@@ -73,10 +82,12 @@
 #        define RENAME(N) N ## _int16
 #    elif defined(TEMPLATE_RESAMPLE_S16_MMX2)
 #        define COMMON_CORE COMMON_CORE_INT16_MMX2
+#        define LINEAR_CORE LINEAR_CORE_INT16_MMX2
 #        define RENAME(N) N ## _int16_mmx2
-#    elif defined(TEMPLATE_RESAMPLE_S16_SSSE3)
-#        define COMMON_CORE COMMON_CORE_INT16_SSSE3
-#        define RENAME(N) N ## _int16_ssse3
+#    elif defined(TEMPLATE_RESAMPLE_S16_SSE2)
+#        define COMMON_CORE COMMON_CORE_INT16_SSE2
+#        define LINEAR_CORE LINEAR_CORE_INT16_SSE2
+#        define RENAME(N) N ## _int16_sse2
 #    endif
 
 #endif
@@ -152,20 +163,29 @@ int RENAME(swri_resample)(ResampleContext *c, DELEM *dst, const DELEM *src, int 
             }else if(sample_index < 0){
                 for(i=0; i<c->filter_length; i++)
                     val += src[FFABS(sample_index + i)] * (FELEM2)filter[i];
+                OUT(dst[dst_index], val);
             }else if(c->linear){
                 FELEM2 v2=0;
+#ifdef LINEAR_CORE
+                LINEAR_CORE
+#else
                 for(i=0; i<c->filter_length; i++){
                     val += src[sample_index + i] * (FELEM2)filter[i];
                     v2  += src[sample_index + i] * (FELEM2)filter[i + c->filter_alloc];
                 }
+#endif
                 val+=(v2-val)*(FELEML)frac / c->src_incr;
+                OUT(dst[dst_index], val);
             }else{
+#ifdef COMMON_CORE
+                COMMON_CORE
+#else
                 for(i=0; i<c->filter_length; i++){
                     val += src[sample_index + i] * (FELEM2)filter[i];
                 }
+                OUT(dst[dst_index], val);
+#endif
             }
-
-            OUT(dst[dst_index], val);
 
             frac += dst_incr_frac;
             index += dst_incr;
@@ -200,6 +220,7 @@ int RENAME(swri_resample)(ResampleContext *c, DELEM *dst, const DELEM *src, int 
 }
 
 #undef COMMON_CORE
+#undef LINEAR_CORE
 #undef RENAME
 #undef FILTER_SHIFT
 #undef DELEM

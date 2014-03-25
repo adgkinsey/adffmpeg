@@ -31,20 +31,13 @@
 #define AVCODEC_DSPUTIL_H
 
 #include "avcodec.h"
-#include "rnd_avg.h"
 
 /* encoding scans */
 extern const uint8_t ff_alternate_horizontal_scan[64];
 extern const uint8_t ff_alternate_vertical_scan[64];
-extern const uint8_t ff_zigzag_direct[64];
 extern const uint8_t ff_zigzag248_direct[64];
 
-/* pixel operations */
-#define MAX_NEG_CROP 1024
-
-/* temporary */
 extern uint32_t ff_square_tab[512];
-extern const uint8_t ff_crop_tab[256 + 2 * MAX_NEG_CROP];
 
 void ff_put_pixels8x8_c(uint8_t *dst, uint8_t *src, ptrdiff_t stride);
 void ff_avg_pixels8x8_c(uint8_t *dst, uint8_t *src, ptrdiff_t stride);
@@ -78,9 +71,6 @@ void ff_gmc_c(uint8_t *dst, uint8_t *src, int stride, int h, int ox, int oy,
  * Block sizes for op_pixels_func are 8x4,8x8 16x8 16x16.
  * h for op_pixels_func is limited to { width / 2, width },
  * but never larger than 16 and never smaller than 4. */
-typedef void (*tpel_mc_func)(uint8_t *block /* align width (8 or 16) */,
-                             const uint8_t *pixels /* align 1 */,
-                             int line_size, int w, int h);
 typedef void (*qpel_mc_func)(uint8_t *dst /* align width (8 or 16) */,
                              uint8_t *src /* align 1 */, ptrdiff_t stride);
 
@@ -108,12 +98,13 @@ DEF_OLD_QPEL(qpel8_mc32_old_c)
 DEF_OLD_QPEL(qpel8_mc13_old_c)
 DEF_OLD_QPEL(qpel8_mc33_old_c)
 
+struct MpegEncContext;
 /* Motion estimation:
  * h is limited to { width / 2, width, 2 * width },
  * but never larger than 16 and never smaller than 2.
  * Although currently h < 4 is not used as functions with
  * width < 8 are neither used nor implemented. */
-typedef int (*me_cmp_func)(void /* MpegEncContext */ *s,
+typedef int (*me_cmp_func)(struct MpegEncContext *c,
                            uint8_t *blk1 /* align width (8 or 16) */,
                            uint8_t *blk2 /* align 1 */, int line_size, int h);
 
@@ -195,19 +186,6 @@ typedef struct DSPContext {
 
     int (*ssd_int8_vs_int16)(const int8_t *pix1, const int16_t *pix2,
                              int size);
-
-    /**
-     * Thirdpel motion compensation with rounding (a + b + 1) >> 1.
-     * this is an array[12] of motion compensation functions for the
-     * 9 thirdpel positions<br>
-     * *pixels_tab[xthirdpel + 4 * ythirdpel]
-     * @param block destination where the result is stored
-     * @param pixels source
-     * @param line_size number of bytes in a horizontal line of block
-     * @param h height
-     */
-    tpel_mc_func put_tpel_pixels_tab[11]; // FIXME individual func ptr per width?
-    tpel_mc_func avg_tpel_pixels_tab[11]; // FIXME individual func ptr per width?
 
     qpel_mc_func put_qpel_pixels_tab[2][16];
     qpel_mc_func avg_qpel_pixels_tab[2][16];
@@ -355,10 +333,14 @@ int ff_check_alignment(void);
 void ff_set_cmp(DSPContext *c, me_cmp_func *cmp, int type);
 
 void ff_dsputil_init_alpha(DSPContext* c, AVCodecContext *avctx);
-void ff_dsputil_init_arm(DSPContext *c, AVCodecContext *avctx);
-void ff_dsputil_init_bfin(DSPContext *c, AVCodecContext *avctx);
-void ff_dsputil_init_ppc(DSPContext *c, AVCodecContext *avctx);
-void ff_dsputil_init_x86(DSPContext *c, AVCodecContext *avctx);
+void ff_dsputil_init_arm(DSPContext *c, AVCodecContext *avctx,
+                         unsigned high_bit_depth);
+void ff_dsputil_init_bfin(DSPContext *c, AVCodecContext *avctx,
+                          unsigned high_bit_depth);
+void ff_dsputil_init_ppc(DSPContext *c, AVCodecContext *avctx,
+                         unsigned high_bit_depth);
+void ff_dsputil_init_x86(DSPContext *c, AVCodecContext *avctx,
+                         unsigned high_bit_depth);
 
 void ff_dsputil_init_dwt(DSPContext *c);
 

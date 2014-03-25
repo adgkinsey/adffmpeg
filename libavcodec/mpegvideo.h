@@ -93,6 +93,7 @@ struct MpegEncContext;
  */
 typedef struct Picture{
     struct AVFrame f;
+    uint8_t avframe_padding[1024]; // hack to allow linking to a avutil with larger AVFrame
     ThreadFrame tf;
 
     AVBufferRef *qscale_table_buf;
@@ -130,8 +131,8 @@ typedef struct Picture{
 
     int field_picture;          ///< whether or not the picture was encoded in separate fields
 
-    int mb_var_sum;             ///< sum of MB variance for current frame
-    int mc_mb_var_sum;          ///< motion compensated MB variance for current frame
+    int64_t mb_var_sum;         ///< sum of MB variance for current frame
+    int64_t mc_mb_var_sum;      ///< motion compensated MB variance for current frame
 
     int b_frame_score;
     int needs_realloc;          ///< Picture needs to be reallocated (eg due to a frame size change)
@@ -180,8 +181,8 @@ typedef struct MotionEstContext{
     int stride;
     int uvstride;
     /* temp variables for picture complexity calculation */
-    int mc_mb_var_sum_temp;
-    int mb_var_sum_temp;
+    int64_t mc_mb_var_sum_temp;
+    int64_t mb_var_sum_temp;
     int scene_change_score;
 /*    cmp, chroma_cmp;*/
     op_pixels_func (*hpel_put)[4];
@@ -761,8 +762,6 @@ void ff_MPV_motion(MpegEncContext *s,
  * The pixels are allocated/set by calling get_buffer() if shared = 0.
  */
 int ff_alloc_picture(MpegEncContext *s, Picture *pic, int shared);
-
-extern const enum AVPixelFormat ff_pixfmt_list_420[];
 
 /**
  * permute block according to permuatation.

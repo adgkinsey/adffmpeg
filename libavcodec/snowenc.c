@@ -38,12 +38,6 @@ static av_cold int encode_init(AVCodecContext *avctx)
     SnowContext *s = avctx->priv_data;
     int plane_index, ret;
 
-    if(avctx->strict_std_compliance > FF_COMPLIANCE_EXPERIMENTAL){
-        av_log(avctx, AV_LOG_ERROR, "This codec is under development, files encoded with it may not be decodable with future versions!!!\n"
-               "Use vstrict=-2 / -strict -2 to use it anyway.\n");
-        return -1;
-    }
-
     if(avctx->prediction_method == DWT_97
        && (avctx->flags & CODEC_FLAG_QSCALE)
        && avctx->global_quality == 0){
@@ -1502,8 +1496,8 @@ static int ratecontrol_1pass(SnowContext *s, AVFrame *pict)
     }
 
     /* ugly, ratecontrol just takes a sqrt again */
-    coef_sum = (uint64_t)coef_sum * coef_sum >> 16;
     av_assert0(coef_sum < INT_MAX);
+    coef_sum = (uint64_t)coef_sum * coef_sum >> 16;
 
     if(pict->pict_type == AV_PICTURE_TYPE_I){
         s->m.current_picture.mb_var_sum= coef_sum;
@@ -1664,10 +1658,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
 
 redo_frame:
 
-    if (pic->pict_type == AV_PICTURE_TYPE_I)
-        s->spatial_decomposition_count= 5;
-    else
-        s->spatial_decomposition_count= 5;
+    s->spatial_decomposition_count= 5;
 
     while(   !(width >>(s->chroma_h_shift + s->spatial_decomposition_count))
           || !(height>>(s->chroma_v_shift + s->spatial_decomposition_count)))
