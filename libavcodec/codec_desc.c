@@ -1174,13 +1174,6 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .props     = AV_CODEC_PROP_LOSSY,
     },
     {
-        .id        = AV_CODEC_ID_PAF_VIDEO,
-        .type      = AVMEDIA_TYPE_VIDEO,
-        .name      = "paf_video",
-        .long_name = NULL_IF_CONFIG_SMALL("Amazing Studio Packed Animation File Video"),
-        .props     = AV_CODEC_PROP_LOSSY,
-    },
-    {
         .id        = AV_CODEC_ID_AVRN,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "avrn",
@@ -1198,13 +1191,6 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "xface",
         .long_name = NULL_IF_CONFIG_SMALL("X-face image"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
-    },
-    {
-        .id        = AV_CODEC_ID_BRENDER_PIX,
-        .type      = AVMEDIA_TYPE_VIDEO,
-        .name      = "brender_pix",
-        .long_name = NULL_IF_CONFIG_SMALL("BRender PIX image"),
-        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
     },
     {
         .id        = AV_CODEC_ID_SMVJPEG,
@@ -1241,14 +1227,42 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("Mirillis FIC"),
         .props     = AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_PAF_VIDEO,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "paf_video",
+        .long_name = NULL_IF_CONFIG_SMALL("Amazing Studio Packed Animation File Video"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_VP7,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "vp7",
+        .long_name = NULL_IF_CONFIG_SMALL("On2 VP7"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
 
     /* image codecs */
+    {
+        .id        = AV_CODEC_ID_ALIAS_PIX,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "alias_pix",
+        .long_name = NULL_IF_CONFIG_SMALL("Alias/Wavefront PIX image"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
+    },
     {
         .id        = AV_CODEC_ID_ANSI,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "ansi",
         .long_name = NULL_IF_CONFIG_SMALL("ASCII/ANSI art"),
         .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_BRENDER_PIX,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "brender_pix",
+        .long_name = NULL_IF_CONFIG_SMALL("BRender PIX image"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
     },
     {
         .id        = AV_CODEC_ID_DPX,
@@ -2398,13 +2412,6 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("Sonic lossless"),
     },
     {
-        .id        = AV_CODEC_ID_PAF_AUDIO,
-        .type      = AVMEDIA_TYPE_AUDIO,
-        .name      = "paf_audio",
-        .long_name = NULL_IF_CONFIG_SMALL("Amazing Studio Packed Animation File Audio"),
-        .props     = AV_CODEC_PROP_LOSSY,
-    },
-    {
         .id        = AV_CODEC_ID_OPUS,
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "opus",
@@ -2430,6 +2437,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "metasound",
         .long_name = NULL_IF_CONFIG_SMALL("Voxware MetaSound"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_PAF_AUDIO,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "paf_audio",
+        .long_name = NULL_IF_CONFIG_SMALL("Amazing Studio Packed Animation File Audio"),
         .props     = AV_CODEC_PROP_LOSSY,
     },
     {

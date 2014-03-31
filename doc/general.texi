@@ -205,7 +205,7 @@ library:
 @item American Laser Games MM   @tab   @tab X
     @tab Multimedia format used in games like Mad Dog McCree.
 @item 3GPP AMR                  @tab X @tab X
-@item Amazing Studio Packed Animation File        @tab   @tab X
+@item Amazing Studio Packed Animation File  @tab   @tab X
     @tab Multimedia format used in game Heart Of Darkness.
 @item Apple HTTP Live Streaming @tab   @tab X
 @item Artworx Data Format       @tab   @tab X
@@ -489,11 +489,13 @@ following image formats are supported:
 @item Name @tab Encoding @tab Decoding @tab Comments
 @item .Y.U.V       @tab X @tab X
     @tab one raw file per component
+@item Alias PIX    @tab X @tab X
+    @tab Alias/Wavefront PIX image format
 @item animated GIF @tab X @tab X
 @item BMP          @tab X @tab X
     @tab Microsoft BMP image
-@item PIX          @tab   @tab X
-    @tab PIX is an image format used in the Argonaut BRender engine.
+@item BRender PIX  @tab   @tab X
+    @tab Argonaut BRender 3D engine image format.
 @item DPX          @tab X @tab X
     @tab Digital Picture Exchange
 @item EXR          @tab   @tab X
@@ -717,6 +719,8 @@ following image formats are supported:
     @tab fourcc: VP50
 @item On2 VP6                @tab     @tab  X
     @tab fourcc: VP60,VP61,VP62
+@item On2 VP7                @tab     @tab  X
+    @tab fourcc: VP70,VP71
 @item VP8                    @tab  E  @tab  X
     @tab fourcc: VP80, encoding supported through external library libvpx
 @item VP9                    @tab  E  @tab  X

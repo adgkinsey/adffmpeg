@@ -100,6 +100,7 @@ void avcodec_register_all(void)
     REGISTER_ENCODER(A64MULTI5,         a64multi5);
     REGISTER_DECODER(AASC,              aasc);
     REGISTER_DECODER(AIC,               aic);
+    REGISTER_ENCDEC (ALIAS_PIX,         alias_pix);
     REGISTER_ENCDEC (AMV,               amv);
     REGISTER_DECODER(ANM,               anm);
     REGISTER_DECODER(ANSI,              ansi);
@@ -292,6 +293,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER(VP6,               vp6);
     REGISTER_DECODER(VP6A,              vp6a);
     REGISTER_DECODER(VP6F,              vp6f);
+    REGISTER_DECODER(VP7,               vp7);
     REGISTER_DECODER(VP8,               vp8);
     REGISTER_DECODER(VP9,               vp9);
     REGISTER_DECODER(VQA,               vqa);

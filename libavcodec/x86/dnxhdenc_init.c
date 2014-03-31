@@ -1,4 +1,9 @@
 /*
+ * VC3/DNxHD SIMD functions
+ * Copyright (c) 2007 Baptiste Coudurier <baptiste dot coudurier at smartjog dot com>
+ *
+ * VC-3 encoder funded by the British Broadcasting Corporation
+ *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -16,22 +21,19 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "config.h"
-#include "libavcodec/pixels.h"
-#include "hpeldsp.h"
-#include "inline_asm.h"
+#include "libavutil/attributes.h"
+#include "libavutil/x86/cpu.h"
+#include "libavcodec/dnxhdenc.h"
 
-#if HAVE_INLINE_ASM
+void ff_get_pixels_8x4_sym_sse2(int16_t *block, const uint8_t *pixels,
+                                ptrdiff_t line_size);
 
-#define DEF(x, y) ff_ ## x ## _ ## y ## _mmx
-#define SET_RND  MOVQ_WTWO
-#define PAVGBP(a, b, c, d, e, f)        PAVGBP_MMX(a, b, c, d, e, f)
-#define PAVGB(a, b, c, e)               PAVGB_MMX(a, b, c, e)
-#define STATIC
-
-#include "rnd_template.c"
-
-CALL_2X_PIXELS_EXPORT(ff_avg_pixels16_xy2_mmx, ff_avg_pixels8_xy2_mmx, 8)
-CALL_2X_PIXELS_EXPORT(ff_put_pixels16_xy2_mmx, ff_put_pixels8_xy2_mmx, 8)
-
-#endif /* HAVE_INLINE_ASM */
+av_cold void ff_dnxhdenc_init_x86(DNXHDEncContext *ctx)
+{
+#if HAVE_SSE2_EXTERNAL
+    if (EXTERNAL_SSE2(av_get_cpu_flags())) {
+        if (ctx->cid_table->bit_depth == 8)
+            ctx->get_pixels_8x4_sym = ff_get_pixels_8x4_sym_sse2;
+    }
+#endif /* HAVE_SSE2_EXTERNAL */
+}

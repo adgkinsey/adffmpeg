@@ -6,6 +6,11 @@ version <next>:
 - subfile protocol
 - Phantom Cine demuxer
 - replaygain data export
+- VP7 video decoder
+- Alias PIX image encoder and decoder
+- Improvments to the BRender PIX image decoder
+- Improvments to the XBM decoder
+- QTKit input device
 
 
 version 2.2:
