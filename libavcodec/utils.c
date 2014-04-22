@@ -285,6 +285,7 @@ void avcodec_align_dimensions2(AVCodecContext *s, int *width, int *height,
     switch (s->pix_fmt) {
     case AV_PIX_FMT_YUV420P:
     case AV_PIX_FMT_YUYV422:
+    case AV_PIX_FMT_YVYU422:
     case AV_PIX_FMT_UYVY422:
     case AV_PIX_FMT_YUV422P:
     case AV_PIX_FMT_YUV440P:
@@ -2675,18 +2676,25 @@ static enum AVCodecID remap_deprecated_codec_id(enum AVCodecID id)
         //This is for future deprecatec codec ids, its empty since
         //last major bump but will fill up again over time, please don't remove it
 //         case AV_CODEC_ID_UTVIDEO_DEPRECATED: return AV_CODEC_ID_UTVIDEO;
-        case AV_CODEC_ID_BRENDER_PIX_DEPRECATED: return AV_CODEC_ID_BRENDER_PIX;
-        case AV_CODEC_ID_OPUS_DEPRECATED: return AV_CODEC_ID_OPUS;
-        case AV_CODEC_ID_TAK_DEPRECATED : return AV_CODEC_ID_TAK;
-        case AV_CODEC_ID_PAF_AUDIO_DEPRECATED : return AV_CODEC_ID_PAF_AUDIO;
-        case AV_CODEC_ID_PCM_S24LE_PLANAR_DEPRECATED : return AV_CODEC_ID_PCM_S24LE_PLANAR;
-        case AV_CODEC_ID_PCM_S32LE_PLANAR_DEPRECATED : return AV_CODEC_ID_PCM_S32LE_PLANAR;
-        case AV_CODEC_ID_ESCAPE130_DEPRECATED : return AV_CODEC_ID_ESCAPE130;
-        case AV_CODEC_ID_G2M_DEPRECATED : return AV_CODEC_ID_G2M;
-        case AV_CODEC_ID_PAF_VIDEO_DEPRECATED : return AV_CODEC_ID_PAF_VIDEO;
-        case AV_CODEC_ID_WEBP_DEPRECATED: return AV_CODEC_ID_WEBP;
-        case AV_CODEC_ID_HEVC_DEPRECATED: return AV_CODEC_ID_HEVC;
-        default                         : return id;
+        case AV_CODEC_ID_BRENDER_PIX_DEPRECATED         : return AV_CODEC_ID_BRENDER_PIX;
+        case AV_CODEC_ID_OPUS_DEPRECATED                : return AV_CODEC_ID_OPUS;
+        case AV_CODEC_ID_TAK_DEPRECATED                 : return AV_CODEC_ID_TAK;
+        case AV_CODEC_ID_PAF_AUDIO_DEPRECATED           : return AV_CODEC_ID_PAF_AUDIO;
+        case AV_CODEC_ID_PCM_S24LE_PLANAR_DEPRECATED    : return AV_CODEC_ID_PCM_S24LE_PLANAR;
+        case AV_CODEC_ID_PCM_S32LE_PLANAR_DEPRECATED    : return AV_CODEC_ID_PCM_S32LE_PLANAR;
+        case AV_CODEC_ID_ADPCM_VIMA_DEPRECATED          : return AV_CODEC_ID_ADPCM_VIMA;
+        case AV_CODEC_ID_ESCAPE130_DEPRECATED           : return AV_CODEC_ID_ESCAPE130;
+        case AV_CODEC_ID_EXR_DEPRECATED                 : return AV_CODEC_ID_EXR;
+        case AV_CODEC_ID_G2M_DEPRECATED                 : return AV_CODEC_ID_G2M;
+        case AV_CODEC_ID_PAF_VIDEO_DEPRECATED           : return AV_CODEC_ID_PAF_VIDEO;
+        case AV_CODEC_ID_WEBP_DEPRECATED                : return AV_CODEC_ID_WEBP;
+        case AV_CODEC_ID_HEVC_DEPRECATED                : return AV_CODEC_ID_HEVC;
+        case AV_CODEC_ID_MVC1_DEPRECATED                : return AV_CODEC_ID_MVC1;
+        case AV_CODEC_ID_MVC2_DEPRECATED                : return AV_CODEC_ID_MVC2;
+        case AV_CODEC_ID_SANM_DEPRECATED                : return AV_CODEC_ID_SANM;
+        case AV_CODEC_ID_SGIRLE_DEPRECATED              : return AV_CODEC_ID_SGIRLE;
+        case AV_CODEC_ID_VP7_DEPRECATED                 : return AV_CODEC_ID_VP7;
+        default                                         : return id;
     }
 }
 
@@ -2990,6 +2998,10 @@ int av_get_exact_bits_per_sample(enum AVCodecID codec_id)
     case AV_CODEC_ID_ADPCM_G722:
     case AV_CODEC_ID_ADPCM_YAMAHA:
         return 4;
+    case AV_CODEC_ID_DSD_LSBF:
+    case AV_CODEC_ID_DSD_MSBF:
+    case AV_CODEC_ID_DSD_LSBF_PLANAR:
+    case AV_CODEC_ID_DSD_MSBF_PLANAR:
     case AV_CODEC_ID_PCM_ALAW:
     case AV_CODEC_ID_PCM_MULAW:
     case AV_CODEC_ID_PCM_S8:
@@ -3432,7 +3444,8 @@ int ff_thread_get_buffer(AVCodecContext *avctx, ThreadFrame *f, int flags)
 
 void ff_thread_release_buffer(AVCodecContext *avctx, ThreadFrame *f)
 {
-    av_frame_unref(f->f);
+    if (f->f)
+        av_frame_unref(f->f);
 }
 
 void ff_thread_finish_setup(AVCodecContext *avctx)

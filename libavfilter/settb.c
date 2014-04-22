@@ -32,9 +32,9 @@
 #include "libavutil/mathematics.h"
 #include "libavutil/opt.h"
 #include "libavutil/rational.h"
+#include "audio.h"
 #include "avfilter.h"
 #include "internal.h"
-#include "audio.h"
 #include "video.h"
 
 static const char *const var_names[] = {
@@ -51,7 +51,7 @@ enum var_name {
     VAR_VARS_NB
 };
 
-typedef struct {
+typedef struct SetTBContext {
     const AVClass *class;
     char *tb_expr;
     double var_values[VAR_VARS_NB];
@@ -151,7 +151,7 @@ AVFilter ff_vf_settb = {
     .inputs      = avfilter_vf_settb_inputs,
     .outputs     = avfilter_vf_settb_outputs,
 };
-#endif
+#endif /* CONFIG_SETTB_FILTER */
 
 #if CONFIG_ASETTB_FILTER
 
@@ -184,4 +184,4 @@ AVFilter ff_af_asettb = {
     .outputs     = avfilter_af_asettb_outputs,
     .priv_class  = &asettb_class,
 };
-#endif
+#endif /* CONFIG_ASETTB_FILTER */

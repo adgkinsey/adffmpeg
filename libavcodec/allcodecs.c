@@ -323,7 +323,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC (AAC,               aac);
     REGISTER_DECODER(AAC_LATM,          aac_latm);
     REGISTER_ENCDEC (AC3,               ac3);
-    REGISTER_ENCODER(AC3_FIXED,         ac3_fixed);
+    REGISTER_ENCDEC (AC3_FIXED,         ac3_fixed);
     REGISTER_ENCDEC (ALAC,              alac);
     REGISTER_DECODER(ALS,               als);
     REGISTER_DECODER(AMRNB,             amrnb);
@@ -337,6 +337,10 @@ void avcodec_register_all(void)
     REGISTER_DECODER(BMV_AUDIO,         bmv_audio);
     REGISTER_DECODER(COOK,              cook);
     REGISTER_ENCDEC (DCA,               dca);
+    REGISTER_DECODER(DSD_LSBF,          dsd_lsbf);
+    REGISTER_DECODER(DSD_MSBF,          dsd_msbf);
+    REGISTER_DECODER(DSD_LSBF_PLANAR,   dsd_lsbf_planar);
+    REGISTER_DECODER(DSD_MSBF_PLANAR,   dsd_msbf_planar);
     REGISTER_DECODER(DSICINAUDIO,       dsicinaudio);
     REGISTER_ENCDEC (EAC3,              eac3);
     REGISTER_DECODER(EVRC,              evrc);
@@ -464,6 +468,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER(ADPCM_SBPRO_4,     adpcm_sbpro_4);
     REGISTER_ENCDEC (ADPCM_SWF,         adpcm_swf);
     REGISTER_DECODER(ADPCM_THP,         adpcm_thp);
+    REGISTER_DECODER(ADPCM_VIMA,        adpcm_vima);
     REGISTER_DECODER(ADPCM_XA,          adpcm_xa);
     REGISTER_ENCDEC (ADPCM_YAMAHA,      adpcm_yamaha);
     REGISTER_DECODER(VIMA,              vima);

@@ -62,33 +62,6 @@ static const AVClass rawdec_class = {
     .version    = LIBAVUTIL_VERSION_INT,
 };
 
-static const PixelFormatTag pix_fmt_bps_avi[] = {
-    { AV_PIX_FMT_MONOWHITE, 1 },
-    { AV_PIX_FMT_PAL8,    2 },
-    { AV_PIX_FMT_PAL8,    4 },
-    { AV_PIX_FMT_PAL8,    8 },
-    { AV_PIX_FMT_RGB444LE, 12 },
-    { AV_PIX_FMT_RGB555LE, 15 },
-    { AV_PIX_FMT_RGB555LE, 16 },
-    { AV_PIX_FMT_BGR24,  24 },
-    { AV_PIX_FMT_BGRA,   32 },
-    { AV_PIX_FMT_NONE,    0 },
-};
-
-static const PixelFormatTag pix_fmt_bps_mov[] = {
-    { AV_PIX_FMT_MONOWHITE, 1 },
-    { AV_PIX_FMT_PAL8,      2 },
-    { AV_PIX_FMT_PAL8,      4 },
-    { AV_PIX_FMT_PAL8,      8 },
-    // FIXME swscale does not support 16 bit in .mov, sample 16bit.mov
-    // http://developer.apple.com/documentation/QuickTime/QTFF/QTFFChap3/qtff3.html
-    { AV_PIX_FMT_RGB555BE, 16 },
-    { AV_PIX_FMT_RGB24,    24 },
-    { AV_PIX_FMT_ARGB,     32 },
-    { AV_PIX_FMT_MONOWHITE,33 },
-    { AV_PIX_FMT_NONE,      0 },
-};
-
 #if LIBAVCODEC_VERSION_MAJOR < 55
 enum AVPixelFormat ff_find_pix_fmt(const PixelFormatTag *tags, unsigned int fourcc)
 {
@@ -105,15 +78,15 @@ static av_cold int raw_init_decoder(AVCodecContext *avctx)
 
     if (   avctx->codec_tag == MKTAG('r','a','w',' ')
         || avctx->codec_tag == MKTAG('N','O','1','6'))
-        avctx->pix_fmt = avpriv_find_pix_fmt(pix_fmt_bps_mov,
+        avctx->pix_fmt = avpriv_find_pix_fmt(avpriv_pix_fmt_bps_mov,
                                       avctx->bits_per_coded_sample);
     else if (avctx->codec_tag == MKTAG('W', 'R', 'A', 'W'))
-        avctx->pix_fmt = avpriv_find_pix_fmt(pix_fmt_bps_avi,
+        avctx->pix_fmt = avpriv_find_pix_fmt(avpriv_pix_fmt_bps_avi,
                                       avctx->bits_per_coded_sample);
     else if (avctx->codec_tag && (avctx->codec_tag & 0xFFFFFF) != MKTAG('B','I','T', 0))
         avctx->pix_fmt = avpriv_find_pix_fmt(ff_raw_pix_fmt_tags, avctx->codec_tag);
     else if (avctx->pix_fmt == AV_PIX_FMT_NONE && avctx->bits_per_coded_sample)
-        avctx->pix_fmt = avpriv_find_pix_fmt(pix_fmt_bps_avi,
+        avctx->pix_fmt = avpriv_find_pix_fmt(avpriv_pix_fmt_bps_avi,
                                       avctx->bits_per_coded_sample);
 
     desc = av_pix_fmt_desc_get(avctx->pix_fmt);
@@ -370,16 +343,6 @@ static int raw_decode(AVCodecContext *avctx, void *data, int *got_frame,
         for (y = 0; y < avctx->height; y++) {
             for (x = 0; x < avctx->width; x++)
                 line[2 * x + 1] ^= 0x80;
-            line += picture->linesize[0];
-        }
-    }
-    if (avctx->codec_tag == AV_RL32("YVYU") &&
-        avctx->pix_fmt   == AV_PIX_FMT_YUYV422) {
-        int x, y;
-        uint8_t *line = picture->data[0];
-        for(y = 0; y < avctx->height; y++) {
-            for(x = 0; x < avctx->width - 1; x += 2)
-                FFSWAP(uint8_t, line[2*x + 1], line[2*x + 3]);
             line += picture->linesize[0];
         }
     }

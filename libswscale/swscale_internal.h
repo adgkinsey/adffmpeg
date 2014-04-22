@@ -417,18 +417,18 @@ typedef struct SwsContext {
 #define U_OFFSET              "9*8"
 #define V_OFFSET              "10*8"
 #define LUM_MMX_FILTER_OFFSET "11*8"
-#define CHR_MMX_FILTER_OFFSET "11*8+4*4*256"
-#define DSTW_OFFSET           "11*8+4*4*256*2" //do not change, it is hardcoded in the ASM
-#define ESP_OFFSET            "11*8+4*4*256*2+8"
-#define VROUNDER_OFFSET       "11*8+4*4*256*2+16"
-#define U_TEMP                "11*8+4*4*256*2+24"
-#define V_TEMP                "11*8+4*4*256*2+32"
-#define Y_TEMP                "11*8+4*4*256*2+40"
-#define ALP_MMX_FILTER_OFFSET "11*8+4*4*256*2+48"
-#define UV_OFF_PX             "11*8+4*4*256*3+48"
-#define UV_OFF_BYTE           "11*8+4*4*256*3+56"
-#define DITHER16              "11*8+4*4*256*3+64"
-#define DITHER32              "11*8+4*4*256*3+80"
+#define CHR_MMX_FILTER_OFFSET "11*8+4*4*"AV_STRINGIFY(MAX_FILTER_SIZE)
+#define DSTW_OFFSET           "11*8+4*4*"AV_STRINGIFY(MAX_FILTER_SIZE)"*2"
+#define ESP_OFFSET            "11*8+4*4*"AV_STRINGIFY(MAX_FILTER_SIZE)"*2+8"
+#define VROUNDER_OFFSET       "11*8+4*4*"AV_STRINGIFY(MAX_FILTER_SIZE)"*2+16"
+#define U_TEMP                "11*8+4*4*"AV_STRINGIFY(MAX_FILTER_SIZE)"*2+24"
+#define V_TEMP                "11*8+4*4*"AV_STRINGIFY(MAX_FILTER_SIZE)"*2+32"
+#define Y_TEMP                "11*8+4*4*"AV_STRINGIFY(MAX_FILTER_SIZE)"*2+40"
+#define ALP_MMX_FILTER_OFFSET "11*8+4*4*"AV_STRINGIFY(MAX_FILTER_SIZE)"*2+48"
+#define UV_OFF_PX             "11*8+4*4*"AV_STRINGIFY(MAX_FILTER_SIZE)"*3+48"
+#define UV_OFF_BYTE           "11*8+4*4*"AV_STRINGIFY(MAX_FILTER_SIZE)"*3+56"
+#define DITHER16              "11*8+4*4*"AV_STRINGIFY(MAX_FILTER_SIZE)"*3+64"
+#define DITHER32              "11*8+4*4*"AV_STRINGIFY(MAX_FILTER_SIZE)"*3+80"
 
     DECLARE_ALIGNED(8, uint64_t, redDither);
     DECLARE_ALIGNED(8, uint64_t, greenDither);
@@ -617,6 +617,8 @@ void ff_yuv2rgb_init_tables_ppc(SwsContext *c, const int inv_table[4],
 void updateMMXDitherTables(SwsContext *c, int dstY, int lumBufIndex, int chrBufIndex,
                            int lastInLumBuf, int lastInChrBuf);
 
+av_cold void ff_sws_init_range_convert(SwsContext *c);
+
 SwsFunc ff_yuv2rgb_init_x86(SwsContext *c);
 SwsFunc ff_yuv2rgb_init_ppc(SwsContext *c);
 SwsFunc ff_yuv2rgb_init_bfin(SwsContext *c);
@@ -783,6 +785,7 @@ static av_always_inline int isALPHA(enum AVPixelFormat pix_fmt)
 #define isPacked(x)         (       \
            (x)==AV_PIX_FMT_PAL8        \
         || (x)==AV_PIX_FMT_YUYV422     \
+        || (x)==AV_PIX_FMT_YVYU422     \
         || (x)==AV_PIX_FMT_UYVY422     \
         || (x)==AV_PIX_FMT_Y400A       \
         ||  isRGBinInt(x)           \

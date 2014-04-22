@@ -34,6 +34,8 @@
 #include "dv.h"
 #include "internal.h"
 #include "riff.h"
+#include "libavcodec/bytestream.h"
+#include "libavcodec/exif.h"
 
 typedef struct AVIStream {
     int64_t frame_offset;   /* current frame (video) or byte (audio) counter
@@ -377,6 +379,44 @@ static void avi_read_nikon(AVFormatContext *s, uint64_t end)
             break;
         }
     }
+}
+
+static int avi_extract_stream_metadata(AVStream *st)
+{
+    GetByteContext gb;
+    uint8_t *data = st->codec->extradata;
+    int data_size = st->codec->extradata_size;
+    int tag, offset;
+
+    if (!data || data_size < 8) {
+        return AVERROR_INVALIDDATA;
+    }
+
+    bytestream2_init(&gb, data, data_size);
+
+    tag = bytestream2_get_le32(&gb);
+
+    switch (tag) {
+    case MKTAG('A', 'V', 'I', 'F'):
+        // skip 4 byte padding
+        bytestream2_skip(&gb, 4);
+        offset = bytestream2_tell(&gb);
+        bytestream2_init(&gb, data + offset, data_size - offset);
+
+        // decode EXIF tags from IFD, AVI is always little-endian
+        return avpriv_exif_decode_ifd(st->codec, &gb, 1, 0, &st->metadata);
+        break;
+    case MKTAG('C', 'A', 'S', 'I'):
+        avpriv_request_sample(st->codec, "RIFF stream data tag type CASI (%u)", tag);
+        break;
+    case MKTAG('Z', 'o', 'r', 'a'):
+        avpriv_request_sample(st->codec, "RIFF stream data tag type Zora (%u)", tag);
+        break;
+    default:
+        break;
+    }
+
+    return 0;
 }
 
 static int calculate_bitrate(AVFormatContext *s)
@@ -829,6 +869,11 @@ static int avi_read_header(AVFormatContext *s)
 
                 if (st->codec->extradata_size & 1) //FIXME check if the encoder really did this correctly
                     avio_r8(pb);
+
+                ret = avi_extract_stream_metadata(st);
+                if (ret < 0) {
+                    av_log(s, AV_LOG_WARNING, "could not decoding EXIF data in stream header.\n");
+                }
             }
             break;
         case MKTAG('i', 'n', 'd', 'x'):
@@ -905,7 +950,11 @@ fail:
         avi_load_index(s);
     calculate_bitrate(s);
     avi->index_loaded    |= 1;
-    avi->non_interleaved |= guess_ni_flag(s) | (s->flags & AVFMT_FLAG_SORT_DTS);
+
+    if ((ret = guess_ni_flag(s)) < 0)
+        return ret;
+
+    avi->non_interleaved |= ret | (s->flags & AVFMT_FLAG_SORT_DTS);
 
     dict_entry = av_dict_get(s->metadata, "ISFT", NULL, 0);
     if (dict_entry && !strcmp(dict_entry->value, "PotEncoder"))
@@ -1364,7 +1413,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
                 AVIndexEntry *e;
                 int index;
 
-                index = av_index_search_timestamp(st, ast->frame_offset, 0);
+                index = av_index_search_timestamp(st, ast->frame_offset, AVSEEK_FLAG_ANY);
                 e     = &st->index_entries[index];
 
                 if (index >= 0 && e->timestamp == ast->frame_offset) {
@@ -1504,14 +1553,69 @@ static int avi_read_idx1(AVFormatContext *s, int size)
     return 0;
 }
 
+/* Scan the index and consider any file with streams more than
+ * 2 seconds or 64MB apart non-interleaved. */
+static int check_stream_max_drift(AVFormatContext *s)
+{
+    int64_t min_pos, pos;
+    int i;
+    int *idx = av_mallocz_array(s->nb_streams, sizeof(*idx));
+    if (!idx)
+        return AVERROR(ENOMEM);
+    for (min_pos = pos = 0; min_pos != INT64_MAX; pos = min_pos + 1LU) {
+        int64_t max_dts = INT64_MIN / 2;
+        int64_t min_dts = INT64_MAX / 2;
+        int64_t max_buffer = 0;
+
+        min_pos = INT64_MAX;
+
+        for (i = 0; i < s->nb_streams; i++) {
+            AVStream *st = s->streams[i];
+            AVIStream *ast = st->priv_data;
+            int n = st->nb_index_entries;
+            while (idx[i] < n && st->index_entries[idx[i]].pos < pos)
+                idx[i]++;
+            if (idx[i] < n) {
+                int64_t dts;
+                dts = av_rescale_q(st->index_entries[idx[i]].timestamp /
+                                   FFMAX(ast->sample_size, 1),
+                                   st->time_base, AV_TIME_BASE_Q);
+                min_dts = FFMIN(min_dts, dts);
+                min_pos = FFMIN(min_pos, st->index_entries[idx[i]].pos);
+            }
+        }
+        for (i = 0; i < s->nb_streams; i++) {
+            AVStream *st = s->streams[i];
+            AVIStream *ast = st->priv_data;
+
+            if (idx[i] && min_dts != INT64_MAX / 2) {
+                int64_t dts;
+                dts = av_rescale_q(st->index_entries[idx[i] - 1].timestamp /
+                                   FFMAX(ast->sample_size, 1),
+                                   st->time_base, AV_TIME_BASE_Q);
+                max_dts = FFMAX(max_dts, dts);
+                max_buffer = FFMAX(max_buffer,
+                                   av_rescale(dts - min_dts,
+                                              st->codec->bit_rate,
+                                              AV_TIME_BASE));
+            }
+        }
+        if (max_dts - min_dts > 2 * AV_TIME_BASE ||
+            max_buffer > 1024 * 1024 * 8 * 8) {
+            av_free(idx);
+            return 1;
+        }
+    }
+    av_free(idx);
+    return 0;
+}
+
 static int guess_ni_flag(AVFormatContext *s)
 {
     int i;
     int64_t last_start = 0;
     int64_t first_end  = INT64_MAX;
     int64_t oldpos     = avio_tell(s->pb);
-    int *idx;
-    int64_t min_pos, pos;
 
     for (i = 0; i < s->nb_streams; i++) {
         AVStream *st = s->streams[i];
@@ -1535,46 +1639,11 @@ static int guess_ni_flag(AVFormatContext *s)
             first_end = st->index_entries[n - 1].pos;
     }
     avio_seek(s->pb, oldpos, SEEK_SET);
+
     if (last_start > first_end)
         return 1;
-    idx= av_calloc(s->nb_streams, sizeof(*idx));
-    if (!idx)
-        return 0;
-    for (min_pos=pos=0; min_pos!=INT64_MAX; pos= min_pos+1LU) {
-        int64_t max_dts = INT64_MIN/2, min_dts= INT64_MAX/2;
-        int64_t max_buffer = 0;
-        min_pos = INT64_MAX;
 
-        for (i=0; i<s->nb_streams; i++) {
-            AVStream *st = s->streams[i];
-            AVIStream *ast = st->priv_data;
-            int n= st->nb_index_entries;
-            while (idx[i]<n && st->index_entries[idx[i]].pos < pos)
-                idx[i]++;
-            if (idx[i] < n) {
-                min_dts = FFMIN(min_dts, av_rescale_q(st->index_entries[idx[i]].timestamp/FFMAX(ast->sample_size, 1), st->time_base, AV_TIME_BASE_Q));
-                min_pos = FFMIN(min_pos, st->index_entries[idx[i]].pos);
-            }
-        }
-        for (i=0; i<s->nb_streams; i++) {
-            AVStream *st = s->streams[i];
-            AVIStream *ast = st->priv_data;
-
-            if (idx[i] && min_dts != INT64_MAX/2) {
-                int64_t dts = av_rescale_q(st->index_entries[idx[i]-1].timestamp/FFMAX(ast->sample_size, 1), st->time_base, AV_TIME_BASE_Q);
-                max_dts = FFMAX(max_dts, dts);
-                max_buffer = FFMAX(max_buffer, av_rescale(dts - min_dts, st->codec->bit_rate, AV_TIME_BASE));
-            }
-        }
-        if (max_dts - min_dts > 2*AV_TIME_BASE ||
-            max_buffer > 1024 * 1024 * 8 *8
-        ) {
-            av_free(idx);
-            return 1;
-        }
-    }
-    av_free(idx);
-    return 0;
+    return check_stream_max_drift(s);
 }
 
 static int avi_load_index(AVFormatContext *s)
@@ -1793,6 +1862,7 @@ AVInputFormat ff_avi_demuxer = {
     .name           = "avi",
     .long_name      = NULL_IF_CONFIG_SMALL("AVI (Audio Video Interleaved)"),
     .priv_data_size = sizeof(AVIContext),
+    .extensions     = "avi",
     .read_probe     = avi_probe,
     .read_header    = avi_read_header,
     .read_packet    = avi_read_packet,

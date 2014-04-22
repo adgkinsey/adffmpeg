@@ -292,6 +292,12 @@ enum AVCodecID {
     AV_CODEC_ID_ALIAS_PIX,
     AV_CODEC_ID_BRENDER_PIX_DEPRECATED,
     AV_CODEC_ID_PAF_VIDEO_DEPRECATED,
+    AV_CODEC_ID_EXR_DEPRECATED,
+    AV_CODEC_ID_VP7_DEPRECATED,
+    AV_CODEC_ID_SANM_DEPRECATED,
+    AV_CODEC_ID_SGIRLE_DEPRECATED,
+    AV_CODEC_ID_MVC1_DEPRECATED,
+    AV_CODEC_ID_MVC2_DEPRECATED,
 
     AV_CODEC_ID_BRENDER_PIX= MKBETAG('B','P','I','X'),
     AV_CODEC_ID_Y41P       = MKBETAG('Y','4','1','P'),
@@ -389,6 +395,8 @@ enum AVCodecID {
     AV_CODEC_ID_ADPCM_IMA_ISS,
     AV_CODEC_ID_ADPCM_G722,
     AV_CODEC_ID_ADPCM_IMA_APC,
+    AV_CODEC_ID_ADPCM_VIMA_DEPRECATED,
+    AV_CODEC_ID_ADPCM_VIMA = MKBETAG('V','I','M','A'),
     AV_CODEC_ID_VIMA       = MKBETAG('V','I','M','A'),
     AV_CODEC_ID_ADPCM_AFC  = MKBETAG('A','F','C',' '),
     AV_CODEC_ID_ADPCM_IMA_OKI = MKBETAG('O','K','I',' '),
@@ -487,6 +495,10 @@ enum AVCodecID {
     AV_CODEC_ID_TAK         = MKBETAG('t','B','a','K'),
     AV_CODEC_ID_EVRC        = MKBETAG('s','e','v','c'),
     AV_CODEC_ID_SMV         = MKBETAG('s','s','m','v'),
+    AV_CODEC_ID_DSD_LSBF    = MKBETAG('D','S','D','L'),
+    AV_CODEC_ID_DSD_MSBF    = MKBETAG('D','S','D','M'),
+    AV_CODEC_ID_DSD_LSBF_PLANAR = MKBETAG('D','S','D','1'),
+    AV_CODEC_ID_DSD_MSBF_PLANAR = MKBETAG('D','S','D','8'),
 
     /* subtitle codecs */
     AV_CODEC_ID_FIRST_SUBTITLE = 0x17000,          ///< A dummy ID pointing at the start of subtitle codecs.
@@ -3609,14 +3621,14 @@ int av_dup_packet(AVPacket *pkt);
  *
  * @return 0 on success, negative AVERROR on fail
  */
-int av_copy_packet(AVPacket *dst, AVPacket *src);
+int av_copy_packet(AVPacket *dst, const AVPacket *src);
 
 /**
  * Copy packet side data
  *
  * @return 0 on success, negative AVERROR on fail
  */
-int av_copy_packet_side_data(AVPacket *dst, AVPacket *src);
+int av_copy_packet_side_data(AVPacket *dst, const AVPacket *src);
 
 /**
  * Free a packet.
@@ -3705,7 +3717,7 @@ void av_packet_free_side_data(AVPacket *pkt);
  *
  * @return 0 on success, a negative AVERROR on error.
  */
-int av_packet_ref(AVPacket *dst, AVPacket *src);
+int av_packet_ref(AVPacket *dst, const AVPacket *src);
 
 /**
  * Wipe the packet.

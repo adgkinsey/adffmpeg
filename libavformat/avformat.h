@@ -262,6 +262,7 @@
 struct AVFormatContext;
 
 struct AVDeviceInfoList;
+struct AVDeviceCapabilitiesQuery;
 
 /**
  * @defgroup metadata_api Public Metadata API
@@ -531,6 +532,16 @@ typedef struct AVOutputFormat {
      * @see avdevice_list_devices() for more details.
      */
     int (*get_device_list)(struct AVFormatContext *s, struct AVDeviceInfoList *device_list);
+    /**
+     * Initialize device capabilities submodule.
+     * @see avdevice_capabilities_create() for more details.
+     */
+    int (*create_device_capabilities)(struct AVFormatContext *s, struct AVDeviceCapabilitiesQuery *caps);
+    /**
+     * Free device capabilities submodule.
+     * @see avdevice_capabilities_free() for more details.
+     */
+    int (*free_device_capabilities)(struct AVFormatContext *s, struct AVDeviceCapabilitiesQuery *caps);
 } AVOutputFormat;
 /**
  * @}
@@ -665,6 +676,18 @@ typedef struct AVInputFormat {
      * @see avdevice_list_devices() for more details.
      */
     int (*get_device_list)(struct AVFormatContext *s, struct AVDeviceInfoList *device_list);
+
+    /**
+     * Initialize device capabilities submodule.
+     * @see avdevice_capabilities_create() for more details.
+     */
+    int (*create_device_capabilities)(struct AVFormatContext *s, struct AVDeviceCapabilitiesQuery *caps);
+
+    /**
+     * Free device capabilities submodule.
+     * @see avdevice_capabilities_free() for more details.
+     */
+    int (*free_device_capabilities)(struct AVFormatContext *s, struct AVDeviceCapabilitiesQuery *caps);
 } AVInputFormat;
 /**
  * @}
@@ -839,6 +862,8 @@ typedef struct AVStream {
      * - muxing: May be set by the caller before avformat_write_header().
      *
      * Freed by libavformat in avformat_free_context().
+     *
+     * @see av_format_inject_global_side_data()
      */
     AVPacketSideData *side_data;
     /**
@@ -866,6 +891,12 @@ typedef struct AVStream {
         double (*duration_error)[2][MAX_STD_TIMEBASES];
         int64_t codec_info_duration;
         int64_t codec_info_duration_fields;
+
+        /**
+         * 0  -> decoder has not been searched for yet.
+         * >0 -> decoder found
+         * <0 -> decoder with codec_id == -found_decoder has not been found
+         */
         int found_decoder;
 
         int64_t last_duration;
@@ -1016,6 +1047,11 @@ typedef struct AVStream {
     int64_t last_dts_for_order_check;
     uint8_t dts_ordered;
     uint8_t dts_misordered;
+
+    /**
+     * Internal data to inject global side data
+     */
+    int inject_global_side_data;
 
 } AVStream;
 
@@ -1583,6 +1619,12 @@ void *    av_format_get_opaque(const AVFormatContext *s);
 void      av_format_set_opaque(AVFormatContext *s, void *opaque);
 av_format_control_message av_format_get_control_message_cb(const AVFormatContext *s);
 void      av_format_set_control_message_cb(AVFormatContext *s, av_format_control_message callback);
+
+/**
+ * This function will cause global side data to be injected in the next packet
+ * of each stream as well as after any subsequent seek.
+ */
+void av_format_inject_global_side_data(AVFormatContext *s);
 
 /**
  * Returns the method used to set ctx->duration.
@@ -2298,7 +2340,7 @@ void av_hex_dump_log(void *avcl, int level, const uint8_t *buf, int size);
  * @param dump_payload True if the payload must be displayed, too.
  * @param st AVStream that the packet belongs to
  */
-void av_pkt_dump2(FILE *f, AVPacket *pkt, int dump_payload, AVStream *st);
+void av_pkt_dump2(FILE *f, const AVPacket *pkt, int dump_payload, const AVStream *st);
 
 
 /**
@@ -2312,8 +2354,8 @@ void av_pkt_dump2(FILE *f, AVPacket *pkt, int dump_payload, AVStream *st);
  * @param dump_payload True if the payload must be displayed, too.
  * @param st AVStream that the packet belongs to
  */
-void av_pkt_dump_log2(void *avcl, int level, AVPacket *pkt, int dump_payload,
-                      AVStream *st);
+void av_pkt_dump_log2(void *avcl, int level, const AVPacket *pkt, int dump_payload,
+                      const AVStream *st);
 
 /**
  * Get the AVCodecID for the given codec tag tag.

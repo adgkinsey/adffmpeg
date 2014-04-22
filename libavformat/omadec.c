@@ -295,7 +295,7 @@ static int oma_read_header(AVFormatContext *s)
     ID3v2ExtraMeta *extra_meta = NULL;
     OMAContext *oc = s->priv_data;
 
-    ff_id3v2_read(s, ID3v2_EA3_MAGIC, &extra_meta);
+    ff_id3v2_read(s, ID3v2_EA3_MAGIC, &extra_meta, 0);
     ret = avio_read(s->pb, buf, EA3_HEADER_SIZE);
     if (ret < EA3_HEADER_SIZE)
         return -1;
@@ -450,7 +450,7 @@ static int oma_read_probe(AVProbeData *p)
     /* This check cannot overflow as tag_len has at most 28 bits */
     if (p->buf_size < tag_len + 5)
         /* EA3 header comes late, might be outside of the probe buffer */
-        return tag_len ? AVPROBE_SCORE_EXTENSION : 0;
+        return tag_len ? AVPROBE_SCORE_EXTENSION/2 : 0;
 
     buf += tag_len;
 

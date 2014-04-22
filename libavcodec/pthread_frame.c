@@ -356,8 +356,10 @@ static int submit_packet(PerThreadContext *p, AVPacket *avpkt)
         memcpy(p->buf, avpkt->data, avpkt->size);
         memset(p->buf + avpkt->size, 0, FF_INPUT_BUFFER_PADDING_SIZE);
     }
-    if ((ret = av_copy_packet_side_data(&p->avpkt, avpkt)) < 0)
+    if ((ret = av_copy_packet_side_data(&p->avpkt, avpkt)) < 0) {
+        pthread_mutex_unlock(&p->mutex);
         return ret;
+    }
 
     p->state = STATE_SETTING_UP;
     pthread_cond_signal(&p->input_cond);
@@ -873,7 +875,7 @@ FF_DISABLE_DEPRECATION_WARNINGS
                            avctx->get_buffer2 == avcodec_default_get_buffer2);
 FF_ENABLE_DEPRECATION_WARNINGS
 
-    if (!f->f->buf[0])
+    if (!f->f || !f->f->buf[0])
         return;
 
     if (avctx->debug & FF_DEBUG_BUFFERS)

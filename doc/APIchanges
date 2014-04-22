@@ -15,6 +15,33 @@ libavutil:     2012-10-22
 
 API changes, most recent first:
 
+2014-04-xx - xxxxxxx - lavu 53.12.0 / 52.77.100 - crc.h
+  Add AV_CRC_16_ANSI_LE crc variant.
+
+2014-04-XX - xxxxxxx - lavf xx.xx.1xx - avformat.h
+  Add av_format_inject_global_side_data()
+
+2014-04-12 - xxxxxxx - lavu 52.76.100 - log.h
+  Add av_log_get_flags()
+
+2014-04-xx - xxxxxxx - lavd 55.12.100 - avdevice.h
+  Add avdevice_capabilities_create() function.
+  Add avdevice_capabilities_free() function.
+
+2014-04-xx - xxxxxxx - lavu 53.11.0 - pixfmt.h
+  Add AV_PIX_FMT_YVYU422 pixel format.
+
+2014-04-xx - xxxxxxx - lavu 53.10.0 - replaygain.h
+  Full scale for peak values is now 100000 (instead of UINT32_MAX) and values
+  may overflow.
+
+2014-04-xx - xxxxxxx - lavu 53.09.0 - log.h
+  Add AV_LOG(c) macro to have 256 color debug messages.
+
+2014-04-xx - xxxxxxx - lavu 52.72.100 - opt.h
+  Add AV_OPT_MULTI_COMPONENT_RANGE define to allow return
+  multi-component option ranges.
+
 2014-03-xx - xxxxxxx - lavu 52.70.100 - mem.h
   Add av_dynarray_add_nofree() function.
 

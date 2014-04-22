@@ -74,8 +74,7 @@ static int set_metadata_int(AVDictionary **dict, const char *key, int value)
 {
     if (value) {
         char buf[64];
-        snprintf(buf, sizeof(buf - 1), "%i", value);
-        buf[sizeof(buf) - 1] = 0;
+        snprintf(buf, sizeof(buf), "%i", value);
         return av_dict_set(dict, key, buf, 0);
     }
     return 0;
@@ -126,8 +125,10 @@ static int cine_read_header(AVFormatContext *avctx)
         return AVERROR_INVALIDDATA;
 
     biBitCount = avio_rl16(pb);
-    if (biBitCount != 8 && biBitCount != 16 && biBitCount != 24 && biBitCount != 48)
+    if (biBitCount != 8 && biBitCount != 16 && biBitCount != 24 && biBitCount != 48) {
+        avpriv_request_sample(avctx, "unsupported biBitCount %i", biBitCount);
         return AVERROR_INVALIDDATA;
+    }
 
     switch (avio_rl32(pb)) {
     case BMP_RGB:

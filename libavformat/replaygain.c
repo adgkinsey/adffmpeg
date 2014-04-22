@@ -35,19 +35,23 @@
 #include "avformat.h"
 #include "replaygain.h"
 
-static int32_t parse_gain(const char *gain)
+static int32_t parse_value(const char *value, int32_t min)
 {
     char *fraction;
     int  scale = 10000;
     int32_t mb = 0;
+    int sign   = 1;
     int db;
 
-    if (!gain)
-        return INT32_MIN;
+    if (!value)
+        return min;
 
-    gain += strspn(gain, " \t");
+    value += strspn(value, " \t");
 
-    db = strtol(gain, &fraction, 0);
+    if (*value == '-')
+        sign = -1;
+
+    db = strtol(value, &fraction, 0);
     if (*fraction++ == '.') {
         while (av_isdigit(*fraction) && scale) {
             mb += scale * (*fraction - '0');
@@ -57,59 +61,27 @@ static int32_t parse_gain(const char *gain)
     }
 
     if (abs(db) > (INT32_MAX - mb) / 100000)
-        return INT32_MIN;
+        return min;
 
-    return db * 100000 + FFSIGN(db) * mb;
+    return db * 100000 + sign * mb;
 }
 
-static uint32_t parse_peak(const uint8_t *peak)
-{
-    int64_t val = 0;
-    int64_t scale = 1;
-
-    if (!peak)
-        return 0;
-
-    peak += strspn(peak, " \t");
-
-    if (peak[0] == '1' && peak[1] == '.')
-        return UINT32_MAX;
-    else if (!(peak[0] == '0' && peak[1] == '.'))
-        return 0;
-
-    peak += 2;
-
-    while (av_isdigit(*peak)) {
-        int digit = *peak - '0';
-
-        if (scale > INT64_MAX / 10)
-            break;
-
-        val    = 10 * val + digit;
-        scale *= 10;
-
-        peak++;
-    }
-
-    return av_rescale(val, UINT32_MAX, scale);
-}
-
-static int replaygain_export(AVStream *st,
-                             const uint8_t *track_gain, const uint8_t *track_peak,
-                             const uint8_t *album_gain, const uint8_t *album_peak)
+int ff_replaygain_export_raw(AVStream *st, int32_t tg, uint32_t tp,
+                             int32_t ag, uint32_t ap)
 {
     AVPacketSideData *sd, *tmp;
     AVReplayGain *replaygain;
-    int32_t tg, ag;
-    uint32_t tp, ap;
-
-    tg = parse_gain(track_gain);
-    ag = parse_gain(album_gain);
-    tp = parse_peak(track_peak);
-    ap = parse_peak(album_peak);
+    int i;
 
     if (tg == INT32_MIN && ag == INT32_MIN)
         return 0;
+
+    for (i = 0; i < st->nb_side_data; i++) {
+        AVPacketSideData *src_sd = &st->side_data[i];
+
+        if (src_sd->type == AV_PKT_DATA_REPLAYGAIN)
+            return 0;
+    }
 
     replaygain = av_mallocz(sizeof(*replaygain));
     if (!replaygain)
@@ -145,9 +117,9 @@ int ff_replaygain_export(AVStream *st, AVDictionary *metadata)
     ag = av_dict_get(metadata, "REPLAYGAIN_ALBUM_GAIN", NULL, 0);
     ap = av_dict_get(metadata, "REPLAYGAIN_ALBUM_PEAK", NULL, 0);
 
-    return replaygain_export(st,
-                             tg ? tg->value : NULL,
-                             tp ? tp->value : NULL,
-                             ag ? ag->value : NULL,
-                             ap ? ap->value : NULL);
+    return ff_replaygain_export_raw(st,
+                             parse_value(tg ? tg->value : NULL, INT32_MIN),
+                             parse_value(tp ? tp->value : NULL, 0),
+                             parse_value(ag ? ag->value : NULL, INT32_MIN),
+                             parse_value(ap ? ap->value : NULL, 0));
 }

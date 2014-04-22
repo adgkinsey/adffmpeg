@@ -662,13 +662,6 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
     {
-        .id        = AV_CODEC_ID_SGIRLE,
-        .type      = AVMEDIA_TYPE_VIDEO,
-        .name      = "sgirle",
-        .long_name = NULL_IF_CONFIG_SMALL("SGI RLE 8-bit"),
-        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
-    },
-    {
         .id        = AV_CODEC_ID_C93,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "c93",
@@ -1103,14 +1096,6 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .props     = AV_CODEC_PROP_LOSSY,
     },
     {
-        .id        = AV_CODEC_ID_EXR,
-        .type      = AVMEDIA_TYPE_VIDEO,
-        .name      = "exr",
-        .long_name = NULL_IF_CONFIG_SMALL("OpenEXR image"),
-        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY |
-                     AV_CODEC_PROP_LOSSLESS,
-    },
-    {
         .id        = AV_CODEC_ID_AVRP,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "avrp",
@@ -1165,13 +1150,6 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "yuv4",
         .long_name = NULL_IF_CONFIG_SMALL("Uncompressed packed 4:2:0"),
         .props     = AV_CODEC_PROP_INTRA_ONLY,
-    },
-    {
-        .id        = AV_CODEC_ID_SANM,
-        .type      = AVMEDIA_TYPE_VIDEO,
-        .name      = "sanm",
-        .long_name = NULL_IF_CONFIG_SMALL("LucasArts SMUSH video"),
-        .props     = AV_CODEC_PROP_LOSSY,
     },
     {
         .id        = AV_CODEC_ID_AVRN,
@@ -1241,6 +1219,20 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("On2 VP7"),
         .props     = AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_SANM,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "sanm",
+        .long_name = NULL_IF_CONFIG_SMALL("LucasArts SANM/SMUSH video"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_SGIRLE,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "sgirle",
+        .long_name = NULL_IF_CONFIG_SMALL("SGI RLE 8-bit"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
+    },
 
     /* image codecs */
     {
@@ -1270,6 +1262,14 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "dpx",
         .long_name = NULL_IF_CONFIG_SMALL("DPX (Digital Picture Exchange) image"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
+    },
+    {
+        .id        = AV_CODEC_ID_EXR,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "exr",
+        .long_name = NULL_IF_CONFIG_SMALL("OpenEXR image"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY |
+                     AV_CODEC_PROP_LOSSLESS,
     },
     {
         .id        = AV_CODEC_ID_GIF,
@@ -1893,6 +1893,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("G.726 ADPCM little-endian"),
         .props     = AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_ADPCM_VIMA,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_vima",
+        .long_name = NULL_IF_CONFIG_SMALL("LucasArts VIMA audio"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
 
     /* AMR */
     {
@@ -2387,13 +2394,6 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .props     = AV_CODEC_PROP_LOSSY,
     },
     {
-        .id        = AV_CODEC_ID_VIMA,
-        .type      = AVMEDIA_TYPE_AUDIO,
-        .name      = "vima",
-        .long_name = NULL_IF_CONFIG_SMALL("LucasArts VIMA audio"),
-        .props     = AV_CODEC_PROP_LOSSY,
-    },
-    {
         .id        = AV_CODEC_ID_FFWAVESYNTH,
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "wavesynth",
@@ -2458,6 +2458,34 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "smv",
         .long_name = NULL_IF_CONFIG_SMALL("SMV (Selectable Mode Vocoder)"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_DSD_LSBF,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "dsd_lsbf",
+        .long_name = NULL_IF_CONFIG_SMALL("DSD (Direct Stream Digital), least significant bit first"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_DSD_MSBF,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "dsd_msbf",
+        .long_name = NULL_IF_CONFIG_SMALL("DSD (Direct Stream Digital), most significant bit first"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_DSD_LSBF_PLANAR,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "dsd_lsbf_planar",
+        .long_name = NULL_IF_CONFIG_SMALL("DSD (Direct Stream Digital), least significant bit first, planar"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_DSD_MSBF_PLANAR,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "dsd_msbf_planar",
+        .long_name = NULL_IF_CONFIG_SMALL("DSD (Direct Stream Digital), most significant bit first, planar"),
         .props     = AV_CODEC_PROP_LOSSY,
     },
 

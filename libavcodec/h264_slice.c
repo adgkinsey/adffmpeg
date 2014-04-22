@@ -576,6 +576,7 @@ int ff_h264_update_thread_context(AVCodecContext *dst,
         memset(&h->mb, 0, sizeof(h->mb));
         memset(&h->mb_luma_dc, 0, sizeof(h->mb_luma_dc));
         memset(&h->mb_padding, 0, sizeof(h->mb_padding));
+        memset(&h->cur_pic, 0, sizeof(h->cur_pic));
 
         h->avctx             = dst;
         h->DPB               = NULL;
@@ -1419,10 +1420,7 @@ int ff_h264_decode_slice_header(H264Context *h, H264Context *h0)
     }
 
     if (h->context_initialized &&
-        (h->width  != h->avctx->coded_width   ||
-         h->height != h->avctx->coded_height  ||
-         must_reinit ||
-         needs_reinit)) {
+        (must_reinit || needs_reinit)) {
         if (h != h0) {
             av_log(h->avctx, AV_LOG_ERROR,
                    "changing width %d -> %d / height %d -> %d on "

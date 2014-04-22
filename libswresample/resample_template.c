@@ -104,9 +104,11 @@ int RENAME(swri_resample)(ResampleContext *c, DELEM *dst, const DELEM *src, int 
     av_assert1(c->felem_size == sizeof(FELEM));
 
     if(compensation_distance == 0 && c->filter_length == 1 && c->phase_shift==0){
-        int64_t index2= ((int64_t)index)<<32;
+        int64_t index2= (1LL<<32)*c->frac/c->src_incr + (1LL<<32)*index;
         int64_t incr= (1LL<<32) * c->dst_incr / c->src_incr;
-        dst_size= FFMIN(dst_size, (src_size-1-index) * (int64_t)c->src_incr / c->dst_incr);
+        int new_size = (src_size * (int64_t)c->src_incr - frac + c->dst_incr - 1) / c->dst_incr;
+
+        dst_size= FFMIN(dst_size, new_size);
 
         for(dst_index=0; dst_index < dst_size; dst_index++){
             dst[dst_index] = src[index2>>32];
@@ -116,8 +118,8 @@ int RENAME(swri_resample)(ResampleContext *c, DELEM *dst, const DELEM *src, int 
         index += (frac + dst_index * (int64_t)dst_incr_frac) / c->src_incr;
         frac   = (frac + dst_index * (int64_t)dst_incr_frac) % c->src_incr;
         av_assert2(index >= 0);
-        *consumed= index >> c->phase_shift;
-        index &= c->phase_mask;
+        *consumed= index;
+        index = 0;
     }else if(compensation_distance == 0 && !c->linear && index >= 0){
         int sample_index = 0;
         for(dst_index=0; dst_index < dst_size; dst_index++){

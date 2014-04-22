@@ -97,6 +97,7 @@ static const FormatEntry format_entries[AV_PIX_FMT_NB] = {
     [AV_PIX_FMT_YUVJ411P]    = { 1, 1 },
     [AV_PIX_FMT_YUVJ422P]    = { 1, 1 },
     [AV_PIX_FMT_YUVJ444P]    = { 1, 1 },
+    [AV_PIX_FMT_YVYU422]     = { 1, 1 },
     [AV_PIX_FMT_UYVY422]     = { 1, 1 },
     [AV_PIX_FMT_UYYVYY411]   = { 0, 0 },
     [AV_PIX_FMT_BGR8]        = { 1, 1 },
@@ -142,8 +143,8 @@ static const FormatEntry format_entries[AV_PIX_FMT_NB] = {
     [AV_PIX_FMT_YUVA444P16LE]= { 1, 1 },
     [AV_PIX_FMT_RGB48BE]     = { 1, 1 },
     [AV_PIX_FMT_RGB48LE]     = { 1, 1 },
-    [AV_PIX_FMT_RGBA64BE]    = { 1, 1 },
-    [AV_PIX_FMT_RGBA64LE]    = { 1, 1 },
+    [AV_PIX_FMT_RGBA64BE]    = { 1, 1, 1 },
+    [AV_PIX_FMT_RGBA64LE]    = { 1, 1, 1 },
     [AV_PIX_FMT_RGB565BE]    = { 1, 1 },
     [AV_PIX_FMT_RGB565LE]    = { 1, 1 },
     [AV_PIX_FMT_RGB555BE]    = { 1, 1 },
@@ -165,8 +166,8 @@ static const FormatEntry format_entries[AV_PIX_FMT_NB] = {
     [AV_PIX_FMT_Y400A]       = { 1, 0 },
     [AV_PIX_FMT_BGR48BE]     = { 1, 1 },
     [AV_PIX_FMT_BGR48LE]     = { 1, 1 },
-    [AV_PIX_FMT_BGRA64BE]    = { 0, 0 },
-    [AV_PIX_FMT_BGRA64LE]    = { 0, 0 },
+    [AV_PIX_FMT_BGRA64BE]    = { 1, 1, 1 },
+    [AV_PIX_FMT_BGRA64LE]    = { 1, 1, 1 },
     [AV_PIX_FMT_YUV420P9BE]  = { 1, 1 },
     [AV_PIX_FMT_YUV420P9LE]  = { 1, 1 },
     [AV_PIX_FMT_YUV420P10BE] = { 1, 1 },
@@ -577,9 +578,12 @@ static av_cold int initFilter(int16_t **outFilter, int32_t **filterPos,
     filterSize = (minFilterSize + (filterAlign - 1)) & (~(filterAlign - 1));
     av_assert0(filterSize > 0);
     filter = av_malloc(filterSize * dstW * sizeof(*filter));
+    if (!filter)
+        goto fail;
     if (filterSize >= MAX_FILTER_SIZE * 16 /
-                      ((flags & SWS_ACCURATE_RND) ? APCK_SIZE : 16) || !filter) {
-        av_log(NULL, AV_LOG_ERROR, "sws: filterSize %d is too large, try less extreme scaling or increase MAX_FILTER_SIZE and recompile\n", filterSize);
+                      ((flags & SWS_ACCURATE_RND) ? APCK_SIZE : 16)) {
+        av_log(NULL, AV_LOG_ERROR, "sws: filterSize %d is too large, try less extreme scaling or increase MAX_FILTER_SIZE and recompile\n",
+               FF_CEIL_RSHIFT((filterSize+1) * ((flags & SWS_ACCURATE_RND) ? APCK_SIZE : 16), 4));
         goto fail;
     }
     *outFilterSize = filterSize;
@@ -979,6 +983,7 @@ int sws_setColorspaceDetails(struct SwsContext *c, const int inv_table[4],
 {
     const AVPixFmtDescriptor *desc_dst;
     const AVPixFmtDescriptor *desc_src;
+    int need_reinit = 0;
     memmove(c->srcColorspaceTable, inv_table, sizeof(int) * 4);
     memmove(c->dstColorspaceTable, table, sizeof(int) * 4);
 
@@ -994,8 +999,13 @@ int sws_setColorspaceDetails(struct SwsContext *c, const int inv_table[4],
     c->brightness = brightness;
     c->contrast   = contrast;
     c->saturation = saturation;
+    if (c->srcRange != srcRange || c->dstRange != dstRange)
+        need_reinit = 1;
     c->srcRange   = srcRange;
     c->dstRange   = dstRange;
+
+    if (need_reinit && c->srcBpc == 8)
+        ff_sws_init_range_convert(c);
 
     if ((isYUV(c->dstFormat) || isGray(c->dstFormat)) && (isYUV(c->srcFormat) || isGray(c->srcFormat)))
         return -1;
@@ -1330,20 +1340,6 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
 
     FF_ALLOC_OR_GOTO(c, c->formatConvBuffer, FFALIGN(srcW*2+78, 16) * 2, fail);
 
-    /* unscaled special cases */
-    if (unscaled && !usesHFilter && !usesVFilter &&
-        (c->srcRange == c->dstRange || isAnyRGB(dstFormat))) {
-        ff_get_unscaled_swscale(c);
-
-        if (c->swscale) {
-            if (flags & SWS_PRINT_INFO)
-                av_log(c, AV_LOG_INFO,
-                       "using unscaled %s -> %s special converter\n",
-                       av_get_pix_fmt_name(srcFormat), av_get_pix_fmt_name(dstFormat));
-            return 0;
-        }
-    }
-
     c->srcBpc = 1 + desc_src->comp[0].depth_minus1;
     if (c->srcBpc < 8)
         c->srcBpc = 8;
@@ -1637,6 +1633,20 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
                "chr srcW=%d srcH=%d dstW=%d dstH=%d xInc=%d yInc=%d\n",
                c->chrSrcW, c->chrSrcH, c->chrDstW, c->chrDstH,
                c->chrXInc, c->chrYInc);
+    }
+
+    /* unscaled special cases */
+    if (unscaled && !usesHFilter && !usesVFilter &&
+        (c->srcRange == c->dstRange || isAnyRGB(dstFormat))) {
+        ff_get_unscaled_swscale(c);
+
+        if (c->swscale) {
+            if (flags & SWS_PRINT_INFO)
+                av_log(c, AV_LOG_INFO,
+                       "using unscaled %s -> %s special converter\n",
+                       av_get_pix_fmt_name(srcFormat), av_get_pix_fmt_name(dstFormat));
+            return 0;
+        }
     }
 
     c->swscale = ff_getSwsFunc(c);

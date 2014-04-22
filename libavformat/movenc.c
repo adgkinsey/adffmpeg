@@ -22,6 +22,7 @@
  */
 
 #include <stdint.h>
+#include <inttypes.h>
 
 #include "movenc.h"
 #include "avformat.h"
@@ -33,12 +34,14 @@
 #include "libavcodec/get_bits.h"
 #include "libavcodec/put_bits.h"
 #include "libavcodec/vc1.h"
+#include "libavcodec/raw.h"
 #include "internal.h"
 #include "libavutil/avstring.h"
 #include "libavutil/intfloat.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/opt.h"
 #include "libavutil/dict.h"
+#include "libavutil/pixdesc.h"
 #include "hevc.h"
 #include "rtpenc.h"
 #include "mov_chan.h"
@@ -1008,6 +1011,7 @@ static int mov_get_rawvideo_codec_tag(AVFormatContext *s, MOVTrack *track)
 {
     int tag = track->enc->codec_tag;
     int i;
+    enum AVPixelFormat pix_fmt;
 
     for (i = 0; i < FF_ARRAY_ELEMS(mov_pix_fmt_tags); i++) {
         if (track->enc->pix_fmt == mov_pix_fmt_tags[i].pix_fmt) {
@@ -1018,6 +1022,13 @@ static int mov_get_rawvideo_codec_tag(AVFormatContext *s, MOVTrack *track)
         }
     }
 
+    pix_fmt = avpriv_find_pix_fmt(avpriv_pix_fmt_bps_mov,
+                                  track->enc->bits_per_coded_sample);
+    if (tag == MKTAG('r','a','w',' ') &&
+        track->enc->pix_fmt != pix_fmt &&
+        track->enc->pix_fmt != AV_PIX_FMT_NONE)
+        av_log(s, AV_LOG_ERROR, "%s rawvideo cannot be written to mov, output file will be unreadable\n",
+               av_get_pix_fmt_name(track->enc->pix_fmt));
     return tag;
 }
 
@@ -1589,9 +1600,13 @@ static int mov_write_hdlr_tag(AVIOContext *pb, MOVTrack *track)
                 hdlr_type = "clcp";
                 descr = "ClosedCaptionHandler";
             } else {
-            if (track->tag == MKTAG('t','x','3','g')) hdlr_type = "sbtl";
-            else if (track->tag == MKTAG('m','p','4','s')) hdlr_type = "subp";
-            else                                      hdlr_type = "text";
+                if (track->tag == MKTAG('t','x','3','g')) {
+                    hdlr_type = "sbtl";
+                } else if (track->tag == MKTAG('m','p','4','s')) {
+                    hdlr_type = "subp";
+                } else {
+                    hdlr_type = "text";
+                }
             descr = "SubtitleHandler";
             }
         } else if (track->enc->codec_tag == MKTAG('r','t','p',' ')) {
@@ -3783,8 +3798,10 @@ static int mov_create_dvd_sub_decoder_specific_info(MOVTrack *track,
         if (strncmp("palette:", cur, 8) == 0) {
             int i, count;
             count = sscanf(cur + 8,
-                "%06x, %06x, %06x, %06x, %06x, %06x, %06x, %06x, "
-                "%06x, %06x, %06x, %06x, %06x, %06x, %06x, %06x",
+                "%06"PRIx32", %06"PRIx32", %06"PRIx32", %06"PRIx32", "
+                "%06"PRIx32", %06"PRIx32", %06"PRIx32", %06"PRIx32", "
+                "%06"PRIx32", %06"PRIx32", %06"PRIx32", %06"PRIx32", "
+                "%06"PRIx32", %06"PRIx32", %06"PRIx32", %06"PRIx32"",
                 &palette[ 0], &palette[ 1], &palette[ 2], &palette[ 3],
                 &palette[ 4], &palette[ 5], &palette[ 6], &palette[ 7],
                 &palette[ 8], &palette[ 9], &palette[10], &palette[11],

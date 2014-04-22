@@ -316,6 +316,7 @@ void term_exit(void)
 
 static volatile int received_sigterm = 0;
 static volatile int received_nb_signals = 0;
+static volatile int transcode_init_done = 0;
 static int main_return_code = 0;
 
 static void
@@ -422,7 +423,7 @@ static int read_key(void)
 
 static int decode_interrupt_cb(void *ctx)
 {
-    return received_nb_signals > 1;
+    return received_nb_signals > transcode_init_done;
 }
 
 const AVIOInterruptCB int_cb = { decode_interrupt_cb, NULL };
@@ -895,7 +896,7 @@ static void do_video_out(AVFormatContext *s,
     nb_frames = FFMIN(nb_frames, ost->max_frames - ost->frame_number);
     if (nb_frames == 0) {
         nb_frames_drop++;
-        av_log(NULL, AV_LOG_WARNING,
+        av_log(NULL, AV_LOG_VERBOSE,
                "*** dropping frame %d from stream %d at ts %"PRId64"\n",
                ost->frame_number, ost->st->index, in_picture->pts);
         return;
@@ -2889,6 +2890,8 @@ static int transcode_init(void)
         print_sdp();
     }
 
+    transcode_init_done = 1;
+
     return 0;
 }
 
@@ -3320,6 +3323,8 @@ static int process_input(int file_index)
 
     /* add the stream-global side data to the first packet */
     if (ist->nb_packets == 1)
+        if (ist->st->nb_side_data)
+            av_packet_split_side_data(&pkt);
         for (i = 0; i < ist->st->nb_side_data; i++) {
             AVPacketSideData *src_sd = &ist->st->side_data[i];
             uint8_t *dst_data;

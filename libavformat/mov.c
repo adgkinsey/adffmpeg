@@ -47,6 +47,7 @@
 #include "libavcodec/get_bits.h"
 #include "id3v1.h"
 #include "mov_chan.h"
+#include "replaygain.h"
 
 #if CONFIG_ZLIB
 #include <zlib.h>
@@ -127,74 +128,6 @@ static int mov_metadata_gnre(MOVContext *c, AVIOContext *pb,
     snprintf(buf, sizeof(buf), "%s", ff_id3v1_genre_str[genre-1]);
     av_dict_set(&c->fc->metadata, key, buf, 0);
 
-    return 0;
-}
-
-static int mov_read_custom_metadata(MOVContext *c, AVIOContext *pb, MOVAtom atom)
-{
-    char key[1024]={0}, data[1024]={0};
-    int i;
-    AVStream *st;
-    MOVStreamContext *sc;
-
-    if (c->fc->nb_streams < 1)
-        return 0;
-    st = c->fc->streams[c->fc->nb_streams-1];
-    sc = st->priv_data;
-
-    if (atom.size <= 8) return 0;
-
-    for (i = 0; i < 3; i++) { // Parse up to three sub-atoms looking for name and data.
-        int data_size = avio_rb32(pb);
-        int tag = avio_rl32(pb);
-        int str_size = 0, skip_size = 0;
-        char *target = NULL;
-
-        switch (tag) {
-        case MKTAG('n','a','m','e'):
-            avio_rb32(pb); // version/flags
-            str_size = skip_size = data_size - 12;
-            atom.size -= 12;
-            target = key;
-            break;
-        case MKTAG('d','a','t','a'):
-            avio_rb32(pb); // version/flags
-            avio_rb32(pb); // reserved (zero)
-            str_size = skip_size = data_size - 16;
-            atom.size -= 16;
-            target = data;
-            break;
-        default:
-            skip_size = data_size - 8;
-            str_size = 0;
-            break;
-        }
-
-        if (target) {
-            str_size = FFMIN3(sizeof(data)-1, str_size, atom.size);
-            avio_read(pb, target, str_size);
-            target[str_size] = 0;
-        }
-        atom.size -= skip_size;
-
-        // If we didn't read the full data chunk for the sub-atom, skip to the end of it.
-        if (skip_size > str_size) avio_skip(pb, skip_size - str_size);
-    }
-
-    if (*key && *data) {
-        if (strcmp(key, "iTunSMPB") == 0) {
-            int priming, remainder, samples;
-            if(sscanf(data, "%*X %X %X %X", &priming, &remainder, &samples) == 3){
-                if(priming>0 && priming<16384)
-                    sc->start_pad = priming;
-                return 1;
-            }
-        }
-        if (strcmp(key, "cdec") == 0) {
-//             av_dict_set(&st->metadata, key, data, 0);
-            return 1;
-        }
-    }
     return 0;
 }
 
@@ -298,9 +231,6 @@ static int mov_read_udta_string(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     uint16_t langcode = 0;
     uint32_t data_type = 0, str_size;
     int (*parse)(MOVContext*, AVIOContext*, unsigned, const char*) = NULL;
-
-    if (c->itunes_metadata && atom.type == MKTAG('-','-','-','-'))
-        return mov_read_custom_metadata(c, pb, atom);
 
     switch (atom.type) {
     case MKTAG(0xa9,'n','a','m'): key = "title";     break;
@@ -1523,7 +1453,7 @@ static int mov_rewrite_dvd_sub_extradata(AVStream *st)
         uint32_t yuv = AV_RB32(src + i * 4);
         uint32_t rgba = yuv_to_rgba(yuv);
 
-        av_strlcatf(buf, sizeof(buf), "%06x%s", rgba, i != 15 ? ", " : "");
+        av_strlcatf(buf, sizeof(buf), "%06"PRIx32"%s", rgba, i != 15 ? ", " : "");
     }
 
     if (av_strlcat(buf, "\n", sizeof(buf)) >= sizeof(buf))
@@ -2508,6 +2438,103 @@ static int mov_read_ilst(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     return ret;
 }
 
+static int mov_read_custom_2plus(MOVContext *c, AVIOContext *pb, int size)
+{
+    int64_t end = avio_tell(pb) + size;
+    uint8_t *key = NULL, *val = NULL;
+    int i;
+    AVStream *st;
+    MOVStreamContext *sc;
+
+    if (c->fc->nb_streams < 1)
+        return 0;
+    st = c->fc->streams[c->fc->nb_streams-1];
+    sc = st->priv_data;
+
+    for (i = 0; i < 2; i++) {
+        uint8_t **p;
+        uint32_t len, tag;
+
+        if (end - avio_tell(pb) <= 12)
+            break;
+
+        len = avio_rb32(pb);
+        tag = avio_rl32(pb);
+        avio_skip(pb, 4); // flags
+
+        if (len < 12 || len - 12 > end - avio_tell(pb))
+            break;
+        len -= 12;
+
+        if (tag == MKTAG('n', 'a', 'm', 'e'))
+            p = &key;
+        else if (tag == MKTAG('d', 'a', 't', 'a') && len > 4) {
+            avio_skip(pb, 4);
+            len -= 4;
+            p = &val;
+        } else
+            break;
+
+        *p = av_malloc(len + 1);
+        if (!*p)
+            break;
+        avio_read(pb, *p, len);
+        (*p)[len] = 0;
+    }
+
+    if (key && val) {
+        if (strcmp(key, "iTunSMPB") == 0) {
+            int priming, remainder, samples;
+            if(sscanf(val, "%*X %X %X %X", &priming, &remainder, &samples) == 3){
+                if(priming>0 && priming<16384)
+                    sc->start_pad = priming;
+            }
+        } else if (strcmp(key, "cdec") == 0) {
+        } else {
+            av_dict_set(&c->fc->metadata, key, val,
+                        AV_DICT_DONT_STRDUP_KEY | AV_DICT_DONT_STRDUP_VAL);
+            key = val = NULL;
+        }
+    }
+
+    avio_seek(pb, end, SEEK_SET);
+    av_freep(&key);
+    av_freep(&val);
+    return 0;
+}
+
+static int mov_read_custom(MOVContext *c, AVIOContext *pb, MOVAtom atom)
+{
+    int64_t end = avio_tell(pb) + atom.size;
+    uint32_t tag, len;
+
+    if (atom.size < 8)
+        goto fail;
+
+    len = avio_rb32(pb);
+    tag = avio_rl32(pb);
+
+    if (len > atom.size)
+        goto fail;
+
+    if (tag == MKTAG('m', 'e', 'a', 'n') && len > 12) {
+        uint8_t domain[128];
+        int domain_len;
+
+        avio_skip(pb, 4); // flags
+        len -= 12;
+
+        domain_len = avio_get_str(pb, len, domain, sizeof(domain));
+        avio_skip(pb, len - domain_len);
+        return mov_read_custom_2plus(c, pb, end - avio_tell(pb));
+    }
+
+fail:
+    av_log(c->fc, AV_LOG_VERBOSE,
+           "Unhandled or malformed custom metadata of size %"PRId64"\n", atom.size);
+    return 0;
+}
+
 static int mov_read_meta(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
     while (atom.size > 8) {
@@ -3051,6 +3078,7 @@ static const MOVParseTableEntry mov_default_parse_table[] = {
 { MKTAG('h','v','c','C'), mov_read_glbl },
 { MKTAG('u','u','i','d'), mov_read_uuid },
 { MKTAG('C','i','n', 0x8e), mov_read_targa_y216 },
+{ MKTAG('-','-','-','-'), mov_read_custom },
 { 0, NULL }
 };
 
@@ -3348,6 +3376,9 @@ static int mov_read_close(AVFormatContext *s)
             av_freep(&sc->drefs[j].dir);
         }
         av_freep(&sc->drefs);
+
+        sc->drefs_count = 0;
+
         if (!sc->pb_is_copied)
             avio_close(sc->pb);
 
@@ -3478,7 +3509,7 @@ static int mov_read_header(AVFormatContext *s)
             av_reduce(&st->avg_frame_rate.num, &st->avg_frame_rate.den,
                       sc->time_scale*(int64_t)sc->nb_frames_for_fps, sc->duration_for_fps, INT_MAX);
         if (st->codec->codec_type == AVMEDIA_TYPE_SUBTITLE) {
-            if (st->codec->width <= 0 && st->codec->width <= 0) {
+            if (st->codec->width <= 0 && st->codec->height <= 0) {
                 st->codec->width  = sc->width;
                 st->codec->height = sc->height;
             }
@@ -3505,6 +3536,19 @@ static int mov_read_header(AVFormatContext *s)
     }
 
     ff_rfps_calculate(s);
+
+    for (i = 0; i < s->nb_streams; i++) {
+        AVStream *st = s->streams[i];
+
+        if (st->codec->codec_type != AVMEDIA_TYPE_AUDIO)
+            continue;
+
+        err = ff_replaygain_export(st, s->metadata);
+        if (err < 0) {
+            mov_read_close(s);
+            return err;
+        }
+    }
 
     return 0;
 }
@@ -3709,6 +3753,7 @@ AVInputFormat ff_mov_demuxer = {
     .name           = "mov,mp4,m4a,3gp,3g2,mj2",
     .long_name      = NULL_IF_CONFIG_SMALL("QuickTime / MOV"),
     .priv_data_size = sizeof(MOVContext),
+    .extensions     = "mov,mp4,m4a,3gp,3g2,mj2",
     .read_probe     = mov_probe,
     .read_header    = mov_read_header,
     .read_packet    = mov_read_packet,

@@ -2,6 +2,7 @@ Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
 version <next>:
+- AC3 fixed-point decoding
 - shuffleplanes filter
 - subfile protocol
 - Phantom Cine demuxer
@@ -11,6 +12,13 @@ version <next>:
 - Improvments to the BRender PIX image decoder
 - Improvments to the XBM decoder
 - QTKit input device
+- improvments to OpenEXR image decoder
+- support decoding 16-bit RLE SGI images
+- GDI screen grabbing for Windows
+- alternative rendition support for HTTP Live Streaming
+- AVFoundation input device
+- Direct Stream Digital (DSD) decoder
+- Magic Lantern Video (MLV) demuxer
 
 
 version 2.2:
@@ -228,7 +236,7 @@ version 1.1:
 - JSON captions for TED talks decoding support
 - SOX Resampler support in libswresample
 - aselect filter
-- SGI RLE 8-bit decoder
+- SGI RLE 8-bit / Silicon Graphics RLE 8-bit video decoder
 - Silicon Graphics Motion Video Compressor 1 & 2 decoder
 - Silicon Graphics Movie demuxer
 - apad filter
@@ -272,7 +280,9 @@ version 1.0:
 - RTMPE protocol support
 - RTMPTE protocol support
 - showwaves and showspectrum filter
-- LucasArts SMUSH playback support
+- LucasArts SMUSH SANM playback support
+- LucasArts SMUSH VIMA audio decoder (ADPCM)
+- LucasArts SMUSH demuxer
 - SAMI, RealText and SubViewer demuxers and decoders
 - Heart Of Darkness PAF playback support
 - iec61883 device
@@ -396,6 +406,7 @@ version 0.10:
 - ffwavesynth decoder
 - aviocat tool
 - ffeval tool
+- support encoding and decoding 4-channel SGI images
 
 
 version 0.9:
