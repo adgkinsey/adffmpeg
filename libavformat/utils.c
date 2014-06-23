@@ -2623,13 +2623,15 @@ static int try_decode_frame(AVFormatContext *s, AVStream *st, AVPacket *avpkt,
     if (!frame)
         return AVERROR(ENOMEM);
 
-    if (!avcodec_is_open(st->codec) && !st->info->found_decoder) {
+    if (!avcodec_is_open(st->codec) &&
+        st->info->found_decoder <= 0 &&
+        (st->codec->codec_id != -st->info->found_decoder || !st->codec->codec_id)) {
         AVDictionary *thread_opt = NULL;
 
         codec = find_decoder(s, st, st->codec->codec_id);
 
         if (!codec) {
-            st->info->found_decoder = -1;
+            st->info->found_decoder = -st->codec->codec_id;
             ret                     = -1;
             goto fail;
         }
@@ -2641,7 +2643,7 @@ static int try_decode_frame(AVFormatContext *s, AVStream *st, AVPacket *avpkt,
         if (!options)
             av_dict_free(&thread_opt);
         if (ret < 0) {
-            st->info->found_decoder = -1;
+            st->info->found_decoder = -st->codec->codec_id;
             goto fail;
         }
         st->info->found_decoder = 1;
@@ -3232,7 +3234,8 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
             }
         }
 #if FF_API_R_FRAME_RATE
-        ff_rfps_add_frame(ic, st, pkt->dts);
+        if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO)
+            ff_rfps_add_frame(ic, st, pkt->dts);
 #endif
         if (st->parser && st->parser->parser->split && !st->codec->extradata) {
             int i = st->parser->parser->split(st->codec, pkt->data, pkt->size);

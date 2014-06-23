@@ -1251,7 +1251,7 @@ static int mjpeg_decode_scan_progressive_ac(MJpegDecodeContext *s, int ss,
     }
 
     if (!Al) {
-        s->coefs_finished[c] |= (1LL << (se + 1)) - (1LL << ss);
+        s->coefs_finished[c] |= (2LL << se) - (1LL << ss);
         last_scan = !~s->coefs_finished[c];
     }
 
@@ -1718,7 +1718,7 @@ static int mjpeg_decode_com(MJpegDecodeContext *s)
                 parse_avid(s, cbuf, len);
             } else if (!strcmp(cbuf, "CS=ITU601"))
                 s->cs_itu601 = 1;
-            else if ((!strncmp(cbuf, "Intel(R) JPEG Library, version 1", 32)) ||
+            else if ((!strncmp(cbuf, "Intel(R) JPEG Library, version 1", 32) && s->avctx->codec_tag) ||
                      (!strncmp(cbuf, "Metasoft MJPEG Codec", 20)))
                 s->flipped = 1;
 
