@@ -328,9 +328,11 @@ int ff_init_me(MpegEncContext *s){
 /*FIXME s->no_rounding b_type*/
     if(s->flags&CODEC_FLAG_QPEL){
         c->sub_motion_search= qpel_motion_search;
-        c->qpel_avg= s->dsp.avg_qpel_pixels_tab;
-        if(s->no_rounding) c->qpel_put= s->dsp.put_no_rnd_qpel_pixels_tab;
-        else               c->qpel_put= s->dsp.put_qpel_pixels_tab;
+        c->qpel_avg = s->qdsp.avg_qpel_pixels_tab;
+        if (s->no_rounding)
+            c->qpel_put = s->qdsp.put_no_rnd_qpel_pixels_tab;
+        else
+            c->qpel_put = s->qdsp.put_qpel_pixels_tab;
     }else{
         if(c->avctx->me_sub_cmp&FF_CMP_CHROMA)
             c->sub_motion_search= hpel_motion_search;
@@ -618,7 +620,11 @@ static inline int h263_mv4_search(MpegEncContext *s, int mx, int my, int shift)
         P_MV1[0]= mx;
         P_MV1[1]= my;
         if(saftey_cliping)
-            for(i=0; i<10; i++){
+            for(i=1; i<10; i++){
+                if (s->first_slice_line && block<2 && i>1 && i<9)
+                    continue;
+                if (i>4 && i<9)
+                    continue;
                 if(P[i][0] > (c->xmax<<shift)) P[i][0]= (c->xmax<<shift);
                 if(P[i][1] > (c->ymax<<shift)) P[i][1]= (c->ymax<<shift);
             }
@@ -636,9 +642,9 @@ static inline int h263_mv4_search(MpegEncContext *s, int mx, int my, int shift)
                 dxy = ((my4 & 3) << 2) | (mx4 & 3);
 
                 if(s->no_rounding)
-                    s->dsp.put_no_rnd_qpel_pixels_tab[1][dxy](dest_y   , ref    , stride);
+                    s->qdsp.put_no_rnd_qpel_pixels_tab[1][dxy](dest_y, ref, stride);
                 else
-                    s->dsp.put_qpel_pixels_tab       [1][dxy](dest_y   , ref    , stride);
+                    s->qdsp.put_qpel_pixels_tab[1][dxy](dest_y, ref, stride);
             }else{
                 uint8_t *ref= c->ref[block][0] + (mx4>>1) + (my4>>1)*stride;
                 dxy = ((my4 & 1) << 1) | (mx4 & 1);
@@ -991,7 +997,7 @@ void ff_estimate_p_frame_motion(MpegEncContext * s,
 //        if (varc*2 + 200*256 + 50*(s->lambda2>>FF_LAMBDA_SHIFT) > vard){
             mb_type|= CANDIDATE_MB_TYPE_INTER;
             c->sub_motion_search(s, &mx, &my, dmin, 0, 0, 0, 16);
-            if(s->flags&CODEC_FLAG_MV0)
+            if (s->mpv_flags & FF_MPV_FLAG_MV0)
                 if(mx || my)
                     mb_type |= CANDIDATE_MB_TYPE_SKIPPED; //FIXME check difference
         }else{
@@ -1226,14 +1232,14 @@ static inline int check_bidir_mv(MpegEncContext * s,
         src_y = motion_fy >> 2;
 
         ptr = ref_data[0] + (src_y * stride) + src_x;
-        s->dsp.put_qpel_pixels_tab[0][dxy](dest_y    , ptr    , stride);
+        s->qdsp.put_qpel_pixels_tab[0][dxy](dest_y, ptr, stride);
 
         dxy = ((motion_by & 3) << 2) | (motion_bx & 3);
         src_x = motion_bx >> 2;
         src_y = motion_by >> 2;
 
         ptr = ref2_data[0] + (src_y * stride) + src_x;
-        s->dsp.avg_qpel_pixels_tab[size][dxy](dest_y    , ptr    , stride);
+        s->qdsp.avg_qpel_pixels_tab[size][dxy](dest_y, ptr, stride);
     }else{
         dxy = ((motion_fy & 1) << 1) | (motion_fx & 1);
         src_x = motion_fx >> 1;
@@ -1610,7 +1616,8 @@ void ff_estimate_b_frame_motion(MpegEncContext * s,
         }
          //FIXME something smarter
         if(dmin>256*256*16) type&= ~CANDIDATE_MB_TYPE_DIRECT; //do not try direct mode if it is invalid for this MB
-        if(s->codec_id == AV_CODEC_ID_MPEG4 && type&CANDIDATE_MB_TYPE_DIRECT && s->flags&CODEC_FLAG_MV0 && *(uint32_t*)s->b_direct_mv_table[xy])
+        if (s->codec_id == AV_CODEC_ID_MPEG4 && type&CANDIDATE_MB_TYPE_DIRECT &&
+            s->mpv_flags & FF_MPV_FLAG_MV0 && *(uint32_t*)s->b_direct_mv_table[xy])
             type |= CANDIDATE_MB_TYPE_DIRECT0;
     }
 

@@ -39,6 +39,7 @@
 #include "h264qpel.h"
 #include "mpegutils.h"
 #include "parser.h"
+#include "qpeldsp.h"
 #include "rectangle.h"
 #include "videodsp.h"
 
@@ -67,10 +68,10 @@
 #define MAX_SLICES 16
 
 #ifdef ALLOW_INTERLACE
-#define MB_MBAFF(h)    h->mb_mbaff
-#define MB_FIELD(h)    h->mb_field_decoding_flag
-#define FRAME_MBAFF(h) h->mb_aff_frame
-#define FIELD_PICTURE(h) (h->picture_structure != PICT_FRAME)
+#define MB_MBAFF(h)    (h)->mb_mbaff
+#define MB_FIELD(h)    (h)->mb_field_decoding_flag
+#define FRAME_MBAFF(h) (h)->mb_aff_frame
+#define FIELD_PICTURE(h) ((h)->picture_structure != PICT_FRAME)
 #define LEFT_MBS 2
 #define LTOP     0
 #define LBOT     1
@@ -90,12 +91,12 @@
 #define FIELD_OR_MBAFF_PICTURE(h) (FRAME_MBAFF(h) || FIELD_PICTURE(h))
 
 #ifndef CABAC
-#define CABAC(h) h->pps.cabac
+#define CABAC(h) (h)->pps.cabac
 #endif
 
-#define CHROMA(h)    (h->sps.chroma_format_idc)
-#define CHROMA422(h) (h->sps.chroma_format_idc == 2)
-#define CHROMA444(h) (h->sps.chroma_format_idc == 3)
+#define CHROMA(h)    ((h)->sps.chroma_format_idc)
+#define CHROMA422(h) ((h)->sps.chroma_format_idc == 2)
+#define CHROMA444(h) ((h)->sps.chroma_format_idc == 3)
 
 #define EXTENDED_SAR       255
 
@@ -324,6 +325,7 @@ typedef struct H264Picture {
     int reference;
     int recovered;          ///< picture at IDR or recovery point + recovery count
     int invalid_gap;
+    int sei_recovery_frame_cnt;
 
     int crop;
     int crop_left;
@@ -725,6 +727,8 @@ typedef struct H264Context {
 
     int frame_recovered;    ///< Initial frame has been completely recovered
 
+    int has_recovery_point;
+
     int luma_weight_flag[2];    ///< 7.4.3.2 luma_weight_lX_flag
     int chroma_weight_flag[2];  ///< 7.4.3.2 chroma_weight_lX_flag
 
@@ -1094,6 +1098,9 @@ int ff_pred_weight_table(H264Context *h);
 int ff_set_ref_count(H264Context *h);
 
 int ff_h264_decode_slice_header(H264Context *h, H264Context *h0);
+#define SLICE_SINGLETHREAD 1
+#define SLICE_SKIPED 2
+
 int ff_h264_execute_decode_slices(H264Context *h, unsigned context_count);
 int ff_h264_update_thread_context(AVCodecContext *dst,
                                   const AVCodecContext *src);

@@ -1561,6 +1561,7 @@ again:
                 if(!idr_cleared)
                     idr(h); // FIXME ensure we don't lose some frames if there is reordering
                 idr_cleared = 1;
+                h->has_recovery_point = 1;
             case NAL_SLICE:
                 init_get_bits(&hx->gb, ptr, bit_length);
                 hx->intra_gb_ptr      =
@@ -1616,14 +1617,7 @@ again:
                         ff_vdpau_h264_picture_start(h);
                 }
 
-                if (hx->redundant_pic_count == 0 &&
-                    (avctx->skip_frame < AVDISCARD_NONREF ||
-                     hx->nal_ref_idc) &&
-                    (avctx->skip_frame < AVDISCARD_BIDIR  ||
-                     hx->slice_type_nos != AV_PICTURE_TYPE_B) &&
-                    (avctx->skip_frame < AVDISCARD_NONKEY ||
-                     hx->slice_type_nos == AV_PICTURE_TYPE_I) &&
-                    avctx->skip_frame < AVDISCARD_ALL) {
+                if (hx->redundant_pic_count == 0) {
                     if (avctx->hwaccel) {
                         ret = avctx->hwaccel->decode_slice(avctx,
                                                            &buf[buf_index - consumed],
@@ -1654,7 +1648,7 @@ again:
                 hx->intra_gb_ptr =
                 hx->inter_gb_ptr = NULL;
 
-                if ((err = ff_h264_decode_slice_header(hx, h)) < 0) {
+                if ((err = ff_h264_decode_slice_header(hx, h))) {
                     /* make sure data_partitioning is cleared if it was set
                      * before, so we don't try decoding a slice without a valid
                      * slice header later */
@@ -1682,7 +1676,7 @@ again:
                     (avctx->skip_frame < AVDISCARD_NONREF || hx->nal_ref_idc) &&
                     (avctx->skip_frame < AVDISCARD_BIDIR  ||
                      hx->slice_type_nos != AV_PICTURE_TYPE_B) &&
-                    (avctx->skip_frame < AVDISCARD_NONKEY ||
+                    (avctx->skip_frame < AVDISCARD_NONINTRA ||
                      hx->slice_type_nos == AV_PICTURE_TYPE_I) &&
                     avctx->skip_frame < AVDISCARD_ALL)
                     context_count++;
@@ -1729,10 +1723,11 @@ again:
                 context_count = 0;
             }
 
-            if (err < 0) {
-                av_log(h->avctx, AV_LOG_ERROR, "decode_slice_header error\n");
+            if (err < 0 || err == SLICE_SKIPED) {
+                if (err < 0)
+                    av_log(h->avctx, AV_LOG_ERROR, "decode_slice_header error\n");
                 h->ref_count[0] = h->ref_count[1] = h->list_count = 0;
-            } else if (err == 1) {
+            } else if (err == SLICE_SINGLETHREAD) {
                 /* Slice could not be decoded in parallel mode, copy down
                  * NAL unit stuff to context 0 and restart. Note that
                  * rbsp_buffer is not transferred, but since we no longer
@@ -1781,6 +1776,8 @@ static int output_frame(H264Context *h, AVFrame *dst, H264Picture *srcp)
 
     av_dict_set(&dst->metadata, "stereo_mode", ff_h264_sei_stereo_mode(h), 0);
 
+    if (srcp->sei_recovery_frame_cnt == 0)
+        dst->key_frame = 1;
     if (!srcp->crop)
         return 0;
 

@@ -589,7 +589,7 @@ static int decode_residual_block(AVSContext *h, GetBitContext *gb,
                       dequant_shift[qp], i)) < 0)
         return ret;
     h->cdsp.cavs_idct8_add(dst, block, stride);
-    h->dsp.clear_block(block);
+    h->bdsp.clear_block(block);
     return 0;
 }
 
@@ -904,7 +904,7 @@ static inline int decode_slice_header(AVSContext *h, GetBitContext *gb)
 
     /* mark top macroblocks as unavailable */
     h->flags &= ~(B_AVAIL | C_AVAIL);
-    if ((h->mby == 0) && (!h->qp_fixed)) {
+    if (!h->pic_qp_fixed) {
         h->qp_fixed = get_bits1(gb);
         h->qp       = get_bits(gb, 6);
     }
@@ -1003,11 +1003,11 @@ static int decode_pic(AVSContext *h)
 
     /* get temporal distances and MV scaling factors */
     if (h->cur.f->pict_type != AV_PICTURE_TYPE_B) {
-        h->dist[0] = (h->cur.poc - h->DPB[0].poc  + 512) % 512;
+        h->dist[0] = (h->cur.poc - h->DPB[0].poc) & 511;
     } else {
-        h->dist[0] = (h->DPB[0].poc  - h->cur.poc + 512) % 512;
+        h->dist[0] = (h->DPB[0].poc  - h->cur.poc) & 511;
     }
-    h->dist[1] = (h->cur.poc - h->DPB[1].poc  + 512) % 512;
+    h->dist[1] = (h->cur.poc - h->DPB[1].poc) & 511;
     h->scale_den[0] = h->dist[0] ? 512/h->dist[0] : 0;
     h->scale_den[1] = h->dist[1] ? 512/h->dist[1] : 0;
     if (h->cur.f->pict_type == AV_PICTURE_TYPE_B) {
@@ -1027,6 +1027,7 @@ static int decode_pic(AVSContext *h)
         skip_bits1(&h->gb);     //advanced_pred_mode_disable
     skip_bits1(&h->gb);        //top_field_first
     skip_bits1(&h->gb);        //repeat_first_field
+    h->pic_qp_fixed =
     h->qp_fixed = get_bits1(&h->gb);
     h->qp       = get_bits(&h->gb, 6);
     if (h->cur.f->pict_type == AV_PICTURE_TYPE_I) {
@@ -1198,8 +1199,8 @@ static int cavs_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
                 break;
             *got_frame = 1;
             if (h->cur.f->pict_type != AV_PICTURE_TYPE_B) {
-                if (h->DPB[1].f->data[0]) {
-                    if ((ret = av_frame_ref(data, h->DPB[1].f)) < 0)
+                if (h->DPB[!h->low_delay].f->data[0]) {
+                    if ((ret = av_frame_ref(data, h->DPB[!h->low_delay].f)) < 0)
                         return ret;
                 } else {
                     *got_frame = 0;

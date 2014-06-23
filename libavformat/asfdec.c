@@ -372,7 +372,8 @@ static int asf_read_stream_properties(AVFormatContext *s, int64_t size)
 
     if (!(asf->hdr.flags & 0x01)) { // if we aren't streaming...
         int64_t fsize = avio_size(pb);
-        if (fsize <= 0 || (int64_t)asf->hdr.file_size <= 0 || FFABS(fsize - (int64_t)asf->hdr.file_size) < 10000)
+        if (fsize <= 0 || (int64_t)asf->hdr.file_size <= 0 ||
+            FFABS(fsize - (int64_t)asf->hdr.file_size) / (float)FFMIN(fsize, asf->hdr.file_size) < 0.05)
             st->duration = asf->hdr.play_time /
                        (10000000 / 1000) - start_time;
     }
@@ -500,6 +501,8 @@ static int asf_read_stream_properties(AVFormatContext *s, int64_t size)
             st->codec->extradata_size = 0;
         }
         if (st->codec->codec_id == AV_CODEC_ID_H264)
+            st->need_parsing = AVSTREAM_PARSE_FULL_ONCE;
+        if (st->codec->codec_id == AV_CODEC_ID_MPEG4)
             st->need_parsing = AVSTREAM_PARSE_FULL_ONCE;
     }
     pos2 = avio_tell(pb);

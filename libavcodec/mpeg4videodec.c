@@ -614,7 +614,7 @@ static int mpeg4_decode_partition_a(Mpeg4DecContext *ctx)
                     cbpc = get_vlc2(&s->gb, ff_h263_intra_MCBPC_vlc.table, INTRA_MCBPC_VLC_BITS, 2);
                     if (cbpc < 0) {
                         av_log(s->avctx, AV_LOG_ERROR,
-                               "cbpc corrupted at %d %d\n", s->mb_x, s->mb_y);
+                               "mcbpc corrupted at %d %d\n", s->mb_x, s->mb_y);
                         return -1;
                     }
                 } while (cbpc == 8);
@@ -686,7 +686,7 @@ try_again:
                 cbpc = get_vlc2(&s->gb, ff_h263_inter_MCBPC_vlc.table, INTER_MCBPC_VLC_BITS, 2);
                 if (cbpc < 0) {
                     av_log(s->avctx, AV_LOG_ERROR,
-                           "cbpc corrupted at %d %d\n", s->mb_x, s->mb_y);
+                           "mcbpc corrupted at %d %d\n", s->mb_x, s->mb_y);
                     return -1;
                 }
                 if (cbpc == 20)
@@ -1084,7 +1084,8 @@ static inline int mpeg4_decode_block(Mpeg4DecContext *ctx, int16_t *block,
                                 if (SHOW_UBITS(re, &s->gb, 1) == 0) {
                                     av_log(s->avctx, AV_LOG_ERROR,
                                            "1. marker bit missing in 3. esc\n");
-                                    return -1;
+                                    if (!(s->err_recognition & AV_EF_IGNORE_ERR))
+                                        return -1;
                                 }
                                 SKIP_CACHE(re, &s->gb, 1);
 
@@ -1094,7 +1095,8 @@ static inline int mpeg4_decode_block(Mpeg4DecContext *ctx, int16_t *block,
                                 if (SHOW_UBITS(re, &s->gb, 1) == 0) {
                                     av_log(s->avctx, AV_LOG_ERROR,
                                            "2. marker bit missing in 3. esc\n");
-                                    return -1;
+                                    if (!(s->err_recognition & AV_EF_IGNORE_ERR))
+                                        return -1;
                                 }
 
                                 SKIP_COUNTER(re, &s->gb, 1 + 12 + 1);
@@ -1165,6 +1167,7 @@ static inline int mpeg4_decode_block(Mpeg4DecContext *ctx, int16_t *block,
                 level = (level ^ SHOW_SBITS(re, &s->gb, 1)) - SHOW_SBITS(re, &s->gb, 1);
                 LAST_SKIP_BITS(re, &s->gb, 1);
             }
+            tprintf(s->avctx, "dct[%d][%d] = %- 4d end?:%d\n", scan_table[i&63]&7, scan_table[i&63] >> 3, level, i>62);
             if (i > 62) {
                 i -= 192;
                 if (i & (~63)) {
@@ -1258,7 +1261,7 @@ static int mpeg4_decode_partitioned_mb(MpegEncContext *s, int16_t block[6][64])
 
     if (!IS_SKIP(mb_type)) {
         int i;
-        s->dsp.clear_blocks(s->block[0]);
+        s->bdsp.clear_blocks(s->block[0]);
         /* decode each block */
         for (i = 0; i < 6; i++) {
             if (mpeg4_decode_block(ctx, block[i], i, cbp & 32, s->mb_intra, ctx->rvlc) < 0) {
@@ -1331,12 +1334,12 @@ static int mpeg4_decode_mb(MpegEncContext *s, int16_t block[6][64])
             cbpc = get_vlc2(&s->gb, ff_h263_inter_MCBPC_vlc.table, INTER_MCBPC_VLC_BITS, 2);
             if (cbpc < 0) {
                 av_log(s->avctx, AV_LOG_ERROR,
-                       "cbpc damaged at %d %d\n", s->mb_x, s->mb_y);
+                       "mcbpc damaged at %d %d\n", s->mb_x, s->mb_y);
                 return -1;
             }
         } while (cbpc == 20);
 
-        s->dsp.clear_blocks(s->block[0]);
+        s->bdsp.clear_blocks(s->block[0]);
         dquant      = cbpc & 8;
         s->mb_intra = ((cbpc & 4) != 0);
         if (s->mb_intra)
@@ -1482,7 +1485,7 @@ static int mpeg4_decode_mb(MpegEncContext *s, int16_t block[6][64])
             if (modb2) {
                 cbp = 0;
             } else {
-                s->dsp.clear_blocks(s->block[0]);
+                s->bdsp.clear_blocks(s->block[0]);
                 cbp = get_bits(&s->gb, 6);
             }
 
@@ -1617,7 +1620,7 @@ intra:
         if (!s->progressive_sequence)
             s->interlaced_dct = get_bits1(&s->gb);
 
-        s->dsp.clear_blocks(s->block[0]);
+        s->bdsp.clear_blocks(s->block[0]);
         /* decode each block */
         for (i = 0; i < 6; i++) {
             if (mpeg4_decode_block(ctx, block[i], i, cbp & 32, 1, 0) < 0)
@@ -1740,7 +1743,7 @@ static int decode_vol_header(Mpeg4DecContext *ctx, GetBitContext *gb)
         }
     } else {
         /* is setting low delay flag only once the smartest thing to do?
-         * low delay detection won't be overriden. */
+         * low delay detection won't be overridden. */
         if (s->picture_number == 0)
             s->low_delay = 0;
     }
@@ -2154,9 +2157,9 @@ int ff_mpeg4_workaround_bugs(AVCodecContext *avctx)
             s->workaround_bugs |= FF_BUG_DC_CLIP;
 
 #define SET_QPEL_FUNC(postfix1, postfix2)                           \
-    s->dsp.put_        ## postfix1 = ff_put_        ## postfix2;    \
-    s->dsp.put_no_rnd_ ## postfix1 = ff_put_no_rnd_ ## postfix2;    \
-    s->dsp.avg_        ## postfix1 = ff_avg_        ## postfix2;
+    s->qdsp.put_        ## postfix1 = ff_put_        ## postfix2;   \
+    s->qdsp.put_no_rnd_ ## postfix1 = ff_put_no_rnd_ ## postfix2;   \
+    s->qdsp.avg_        ## postfix1 = ff_avg_        ## postfix2;
 
         if (ctx->lavc_build < 4653U)
             s->workaround_bugs |= FF_BUG_STD_QPEL;

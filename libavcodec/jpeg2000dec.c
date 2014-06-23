@@ -27,6 +27,7 @@
 
 #include <inttypes.h>
 
+#include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
 #include "libavutil/common.h"
 #include "libavutil/opt.h"
@@ -782,7 +783,7 @@ static int jpeg2000_decode_packet(Jpeg2000DecoderContext *s,
                 return ret;
             if (ret > sizeof(cblk->data)) {
                 avpriv_request_sample(s->avctx,
-                                      "Block with lengthinc greater than %zu",
+                                      "Block with lengthinc greater than %"SIZE_SPECIFIER"",
                                       sizeof(cblk->data));
                 return AVERROR_PATCHWELCOME;
             }
@@ -1691,7 +1692,7 @@ end:
     return ret;
 }
 
-static void jpeg2000_init_static_data(AVCodec *codec)
+static av_cold void jpeg2000_init_static_data(AVCodec *codec)
 {
     ff_jpeg2000_init_tier1_luts();
     ff_mqc_init_context_tables();

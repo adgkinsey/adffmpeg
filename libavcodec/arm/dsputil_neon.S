@@ -21,22 +21,6 @@
 
 #include "libavutil/arm/asm.S"
 
-function ff_clear_block_neon, export=1
-        vmov.i16        q0,  #0
-        .rept           8
-        vst1.16         {q0}, [r0,:128]!
-        .endr
-        bx              lr
-endfunc
-
-function ff_clear_blocks_neon, export=1
-        vmov.i16        q0,  #0
-        .rept           8*6
-        vst1.16         {q0}, [r0,:128]!
-        .endr
-        bx              lr
-endfunc
-
 function ff_put_pixels_clamped_neon, export=1
         vld1.16         {d16-d19}, [r0,:128]!
         vqmovun.s16     d0, q8
@@ -140,47 +124,5 @@ function ff_add_pixels_clamped_neon, export=1
         vqmovun.s16     d6, q3
         vst1.8          {d4},    [r3,:64], r2
         vst1.8          {d6},    [r3,:64], r2
-        bx              lr
-endfunc
-
-function ff_vector_clipf_neon, export=1
-VFP     vdup.32         q1,  d0[1]
-VFP     vdup.32         q0,  d0[0]
-NOVFP   vdup.32         q0,  r2
-NOVFP   vdup.32         q1,  r3
-NOVFP   ldr             r2,  [sp]
-        vld1.f32        {q2},[r1,:128]!
-        vmin.f32        q10, q2,  q1
-        vld1.f32        {q3},[r1,:128]!
-        vmin.f32        q11, q3,  q1
-1:      vmax.f32        q8,  q10, q0
-        vmax.f32        q9,  q11, q0
-        subs            r2,  r2,  #8
-        beq             2f
-        vld1.f32        {q2},[r1,:128]!
-        vmin.f32        q10, q2,  q1
-        vld1.f32        {q3},[r1,:128]!
-        vmin.f32        q11, q3,  q1
-        vst1.f32        {q8},[r0,:128]!
-        vst1.f32        {q9},[r0,:128]!
-        b               1b
-2:      vst1.f32        {q8},[r0,:128]!
-        vst1.f32        {q9},[r0,:128]!
-        bx              lr
-endfunc
-
-function ff_vector_clip_int32_neon, export=1
-        vdup.32         q0,  r2
-        vdup.32         q1,  r3
-        ldr             r2,  [sp]
-1:
-        vld1.32         {q2-q3},  [r1,:128]!
-        vmin.s32        q2,  q2,  q1
-        vmin.s32        q3,  q3,  q1
-        vmax.s32        q2,  q2,  q0
-        vmax.s32        q3,  q3,  q0
-        vst1.32         {q2-q3},  [r0,:128]!
-        subs            r2,  r2,  #8
-        bgt             1b
         bx              lr
 endfunc

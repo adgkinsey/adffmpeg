@@ -19,6 +19,7 @@ HEADERS = adler32.h                                                     \
           common.h                                                      \
           cpu.h                                                         \
           crc.h                                                         \
+          display.h                                                     \
           downmix_info.h                                                \
           error.h                                                       \
           eval.h                                                        \
@@ -51,6 +52,7 @@ HEADERS = adler32.h                                                     \
           sha.h                                                         \
           sha512.h                                                      \
           stereo3d.h                                                    \
+          threadmessage.h                                               \
           time.h                                                        \
           timecode.h                                                    \
           timestamp.h                                                   \
@@ -82,6 +84,7 @@ OBJS = adler32.o                                                        \
        cpu.o                                                            \
        crc.o                                                            \
        des.o                                                            \
+       display.o                                                        \
        downmix_info.o                                                   \
        error.o                                                          \
        eval.o                                                           \
@@ -117,6 +120,7 @@ OBJS = adler32.o                                                        \
        sha.o                                                            \
        sha512.o                                                         \
        stereo3d.o                                                       \
+       threadmessage.o                                                  \
        time.o                                                           \
        timecode.o                                                       \
        tree.o                                                           \
@@ -164,6 +168,7 @@ TESTPROGS = adler32                                                     \
             opt                                                         \
             pca                                                         \
             parseutils                                                  \
+            pixdesc                                                     \
             random_seed                                                 \
             rational                                                    \
             ripemd                                                      \

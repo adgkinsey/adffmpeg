@@ -271,7 +271,7 @@ do {                                                                    \
 
         if (planes > FF_ARRAY_ELEMS(frame->buf)) {
             frame->nb_extended_buf = planes - FF_ARRAY_ELEMS(frame->buf);
-            frame->extended_buf = av_mallocz(sizeof(*frame->extended_buf) *
+            frame->extended_buf = av_mallocz_array(sizeof(*frame->extended_buf),
                                              frame->nb_extended_buf);
             if (!frame->extended_buf) {
                 ret = AVERROR(ENOMEM);
@@ -426,8 +426,7 @@ static av_cold void uninit(AVFilterContext *ctx)
         av_fifo_generic_read(s->fifo, &frame, sizeof(frame), NULL);
         av_frame_free(&frame);
     }
-    av_fifo_free(s->fifo);
-    s->fifo = NULL;
+    av_fifo_freep(&s->fifo);
 }
 
 static int query_formats(AVFilterContext *ctx)

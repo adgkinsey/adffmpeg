@@ -251,6 +251,10 @@ av_cold void swr_free(SwrContext **ss){
     av_freep(ss);
 }
 
+av_cold void swr_close(SwrContext *s){
+    clear_context(s);
+}
+
 av_cold int swr_init(struct SwrContext *s){
     int ret;
 
@@ -536,6 +540,12 @@ static int resample(SwrContext *s, AudioData *out_param, int out_count,
 
     tmp=out=*out_param;
     in =  *in_param;
+
+    border = s->resampler->invert_initial_buffer(s->resample, &s->in_buffer,
+                 &in, in_count, &s->in_buffer_index, &s->in_buffer_count);
+    if (border == INT_MAX) return 0;
+    else if (border < 0) return border;
+    else if (border) { buf_set(&in, &in, border); in_count -= border; s->resample_in_constraint = 0; }
 
     do{
         int ret, size, consumed;

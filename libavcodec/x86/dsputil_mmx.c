@@ -28,10 +28,7 @@
 #include "libavutil/x86/asm.h"
 #include "libavcodec/pixels.h"
 #include "libavcodec/videodsp.h"
-#include "constants.h"
-#include "diracdsp_mmx.h"
 #include "dsputil_x86.h"
-#include "fpel.h"
 #include "inline_asm.h"
 
 #if HAVE_INLINE_ASM
@@ -94,42 +91,6 @@ void ff_put_pixels_clamped_mmx(const int16_t *block, uint8_t *pixels,
         : "memory");
 }
 
-#define put_signed_pixels_clamped_mmx_half(off)             \
-    "movq          "#off"(%2), %%mm1        \n\t"           \
-    "movq     16 + "#off"(%2), %%mm2        \n\t"           \
-    "movq     32 + "#off"(%2), %%mm3        \n\t"           \
-    "movq     48 + "#off"(%2), %%mm4        \n\t"           \
-    "packsswb  8 + "#off"(%2), %%mm1        \n\t"           \
-    "packsswb 24 + "#off"(%2), %%mm2        \n\t"           \
-    "packsswb 40 + "#off"(%2), %%mm3        \n\t"           \
-    "packsswb 56 + "#off"(%2), %%mm4        \n\t"           \
-    "paddb              %%mm0, %%mm1        \n\t"           \
-    "paddb              %%mm0, %%mm2        \n\t"           \
-    "paddb              %%mm0, %%mm3        \n\t"           \
-    "paddb              %%mm0, %%mm4        \n\t"           \
-    "movq               %%mm1, (%0)         \n\t"           \
-    "movq               %%mm2, (%0, %3)     \n\t"           \
-    "movq               %%mm3, (%0, %3, 2)  \n\t"           \
-    "movq               %%mm4, (%0, %1)     \n\t"
-
-void ff_put_signed_pixels_clamped_mmx(const int16_t *block, uint8_t *pixels,
-                                      int line_size)
-{
-    x86_reg line_skip = line_size;
-    x86_reg line_skip3;
-
-    __asm__ volatile (
-        "movq "MANGLE(ff_pb_80)", %%mm0     \n\t"
-        "lea         (%3, %3, 2), %1        \n\t"
-        put_signed_pixels_clamped_mmx_half(0)
-        "lea         (%0, %3, 4), %0        \n\t"
-        put_signed_pixels_clamped_mmx_half(64)
-        : "+&r" (pixels), "=&r" (line_skip3)
-        : "r" (block), "r" (line_skip)
-          NAMED_CONSTRAINTS_ADD(ff_pb_80)
-        : "memory");
-}
-
 void ff_add_pixels_clamped_mmx(const int16_t *block, uint8_t *pixels,
                                int line_size)
 {
@@ -170,88 +131,6 @@ void ff_add_pixels_clamped_mmx(const int16_t *block, uint8_t *pixels,
         pix += line_size * 2;
         p   += 16;
     } while (--i);
-}
-
-#define CLEAR_BLOCKS(name, n)                           \
-void name(int16_t *blocks)                              \
-{                                                       \
-    __asm__ volatile (                                  \
-        "pxor %%mm7, %%mm7              \n\t"           \
-        "mov     %1,        %%"REG_a"   \n\t"           \
-        "1:                             \n\t"           \
-        "movq %%mm7,   (%0, %%"REG_a")  \n\t"           \
-        "movq %%mm7,  8(%0, %%"REG_a")  \n\t"           \
-        "movq %%mm7, 16(%0, %%"REG_a")  \n\t"           \
-        "movq %%mm7, 24(%0, %%"REG_a")  \n\t"           \
-        "add    $32, %%"REG_a"          \n\t"           \
-        "js      1b                     \n\t"           \
-        :: "r"(((uint8_t *) blocks) + 128 * n),         \
-           "i"(-128 * n)                                \
-        : "%"REG_a);                                    \
-}
-CLEAR_BLOCKS(ff_clear_blocks_mmx, 6)
-CLEAR_BLOCKS(ff_clear_block_mmx, 1)
-
-void ff_clear_block_sse(int16_t *block)
-{
-    __asm__ volatile (
-        "xorps  %%xmm0, %%xmm0          \n"
-        "movaps %%xmm0,    (%0)         \n"
-        "movaps %%xmm0,  16(%0)         \n"
-        "movaps %%xmm0,  32(%0)         \n"
-        "movaps %%xmm0,  48(%0)         \n"
-        "movaps %%xmm0,  64(%0)         \n"
-        "movaps %%xmm0,  80(%0)         \n"
-        "movaps %%xmm0,  96(%0)         \n"
-        "movaps %%xmm0, 112(%0)         \n"
-        :: "r" (block)
-        : "memory");
-}
-
-void ff_clear_blocks_sse(int16_t *blocks)
-{
-    __asm__ volatile (
-        "xorps  %%xmm0, %%xmm0              \n"
-        "mov        %1,         %%"REG_a"   \n"
-        "1:                                 \n"
-        "movaps %%xmm0,    (%0, %%"REG_a")  \n"
-        "movaps %%xmm0,  16(%0, %%"REG_a")  \n"
-        "movaps %%xmm0,  32(%0, %%"REG_a")  \n"
-        "movaps %%xmm0,  48(%0, %%"REG_a")  \n"
-        "movaps %%xmm0,  64(%0, %%"REG_a")  \n"
-        "movaps %%xmm0,  80(%0, %%"REG_a")  \n"
-        "movaps %%xmm0,  96(%0, %%"REG_a")  \n"
-        "movaps %%xmm0, 112(%0, %%"REG_a")  \n"
-        "add      $128,         %%"REG_a"   \n"
-        "js         1b                      \n"
-        :: "r"(((uint8_t *) blocks) + 128 * 6), "i"(-128 * 6)
-        : "%"REG_a);
-}
-
-void ff_add_bytes_mmx(uint8_t *dst, uint8_t *src, int w)
-{
-    x86_reg i = 0;
-
-    __asm__ volatile (
-        "jmp          2f                \n\t"
-        "1:                             \n\t"
-        "movq   (%1, %0), %%mm0         \n\t"
-        "movq   (%2, %0), %%mm1         \n\t"
-        "paddb     %%mm0, %%mm1         \n\t"
-        "movq      %%mm1, (%2, %0)      \n\t"
-        "movq  8(%1, %0), %%mm0         \n\t"
-        "movq  8(%2, %0), %%mm1         \n\t"
-        "paddb     %%mm0, %%mm1         \n\t"
-        "movq      %%mm1, 8(%2, %0)     \n\t"
-        "add         $16, %0            \n\t"
-        "2:                             \n\t"
-        "cmp          %3, %0            \n\t"
-        "js           1b                \n\t"
-        : "+r" (i)
-        : "r" (src), "r" (dst), "r" ((x86_reg) w - 15));
-
-    for (; i < w; i++)
-        dst[i + 0] += src[i + 0];
 }
 
 /* Draw the edges of width 'w' of an image of size width, height
@@ -368,17 +247,11 @@ void ff_draw_edges_mmx(uint8_t *buf, int wrap, int width, int height,
     }
 }
 
-typedef void emulated_edge_mc_func(uint8_t *dst, const uint8_t *src,
-                                   ptrdiff_t dst_stride,
-                                   ptrdiff_t src_linesize,
-                                   int block_w, int block_h,
-                                   int src_x, int src_y, int w, int h);
-
-static av_always_inline void gmc(uint8_t *dst, uint8_t *src,
-                                 int stride, int h, int ox, int oy,
-                                 int dxx, int dxy, int dyx, int dyy,
-                                 int shift, int r, int width, int height,
-                                 emulated_edge_mc_func *emu_edge_fn)
+#if CONFIG_VIDEODSP
+void ff_gmc_mmx(uint8_t *dst, uint8_t *src,
+                int stride, int h, int ox, int oy,
+                int dxx, int dxy, int dyx, int dyy,
+                int shift, int r, int width, int height)
 {
     const int w    = 8;
     const int ix   = ox  >> (16 + shift);
@@ -419,7 +292,7 @@ static av_always_inline void gmc(uint8_t *dst, uint8_t *src,
 
     src += ix + iy * stride;
     if (need_emu) {
-        emu_edge_fn(edge_buf, src, stride, stride, w + 1, h + 1, ix, iy, width, height);
+        ff_emulated_edge_mc_8(edge_buf, src, stride, stride, w + 1, h + 1, ix, iy, width, height);
         src = edge_buf;
     }
 
@@ -496,140 +369,5 @@ static av_always_inline void gmc(uint8_t *dst, uint8_t *src,
         src += 4 - h * stride;
     }
 }
-
-#if CONFIG_VIDEODSP
-#if HAVE_YASM
-#if ARCH_X86_32
-void ff_gmc_mmx(uint8_t *dst, uint8_t *src,
-                int stride, int h, int ox, int oy,
-                int dxx, int dxy, int dyx, int dyy,
-                int shift, int r, int width, int height)
-{
-    gmc(dst, src, stride, h, ox, oy, dxx, dxy, dyx, dyy, shift, r,
-        width, height, &ff_emulated_edge_mc_8);
-}
 #endif
-void ff_gmc_sse(uint8_t *dst, uint8_t *src,
-                int stride, int h, int ox, int oy,
-                int dxx, int dxy, int dyx, int dyy,
-                int shift, int r, int width, int height)
-{
-    gmc(dst, src, stride, h, ox, oy, dxx, dxy, dyx, dyy, shift, r,
-        width, height, &ff_emulated_edge_mc_8);
-}
-#else
-void ff_gmc_mmx(uint8_t *dst, uint8_t *src,
-                int stride, int h, int ox, int oy,
-                int dxx, int dxy, int dyx, int dyy,
-                int shift, int r, int width, int height)
-{
-    gmc(dst, src, stride, h, ox, oy, dxx, dxy, dyx, dyy, shift, r,
-        width, height, &ff_emulated_edge_mc_8);
-}
-#endif
-#endif
-
-#if CONFIG_DIRAC_DECODER
-#define DIRAC_PIXOP(OPNAME2, OPNAME, EXT)\
-void ff_ ## OPNAME2 ## _dirac_pixels8_ ## EXT(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
-{\
-    if (h&3)\
-        ff_ ## OPNAME2 ## _dirac_pixels8_c(dst, src, stride, h);\
-    else\
-        OPNAME ## _pixels8_ ## EXT(dst, src[0], stride, h);\
-}\
-void ff_ ## OPNAME2 ## _dirac_pixels16_ ## EXT(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
-{\
-    if (h&3)\
-        ff_ ## OPNAME2 ## _dirac_pixels16_c(dst, src, stride, h);\
-    else\
-        OPNAME ## _pixels16_ ## EXT(dst, src[0], stride, h);\
-}\
-void ff_ ## OPNAME2 ## _dirac_pixels32_ ## EXT(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
-{\
-    if (h&3) {\
-        ff_ ## OPNAME2 ## _dirac_pixels32_c(dst, src, stride, h);\
-    } else {\
-        OPNAME ## _pixels16_ ## EXT(dst   , src[0]   , stride, h);\
-        OPNAME ## _pixels16_ ## EXT(dst+16, src[0]+16, stride, h);\
-    }\
-}
-
-#if HAVE_MMX_INLINE
-CALL_2X_PIXELS(ff_avg_pixels16_mmxext, ff_avg_pixels8_mmxext, 8)
-DIRAC_PIXOP(put, ff_put, mmx)
-DIRAC_PIXOP(avg, ff_avg, mmx)
-#endif
-
-#if HAVE_YASM
-DIRAC_PIXOP(avg, ff_avg, mmxext)
-
-void ff_put_dirac_pixels16_sse2(uint8_t *dst, const uint8_t *src[5], int stride, int h)
-{
-    if (h&3)
-        ff_put_dirac_pixels16_c(dst, src, stride, h);
-    else
-    ff_put_pixels16_sse2(dst, src[0], stride, h);
-}
-void ff_avg_dirac_pixels16_sse2(uint8_t *dst, const uint8_t *src[5], int stride, int h)
-{
-    if (h&3)
-        ff_avg_dirac_pixels16_c(dst, src, stride, h);
-    else
-    ff_avg_pixels16_sse2(dst, src[0], stride, h);
-}
-void ff_put_dirac_pixels32_sse2(uint8_t *dst, const uint8_t *src[5], int stride, int h)
-{
-    if (h&3) {
-        ff_put_dirac_pixels32_c(dst, src, stride, h);
-    } else {
-    ff_put_pixels16_sse2(dst   , src[0]   , stride, h);
-    ff_put_pixels16_sse2(dst+16, src[0]+16, stride, h);
-    }
-}
-void ff_avg_dirac_pixels32_sse2(uint8_t *dst, const uint8_t *src[5], int stride, int h)
-{
-    if (h&3) {
-        ff_avg_dirac_pixels32_c(dst, src, stride, h);
-    } else {
-    ff_avg_pixels16_sse2(dst   , src[0]   , stride, h);
-    ff_avg_pixels16_sse2(dst+16, src[0]+16, stride, h);
-    }
-}
-#endif
-#endif
-
-void ff_vector_clipf_sse(float *dst, const float *src,
-                         float min, float max, int len)
-{
-    x86_reg i = (len - 16) * 4;
-    __asm__ volatile (
-        "movss          %3, %%xmm4      \n\t"
-        "movss          %4, %%xmm5      \n\t"
-        "shufps $0, %%xmm4, %%xmm4      \n\t"
-        "shufps $0, %%xmm5, %%xmm5      \n\t"
-        "1:                             \n\t"
-        "movaps   (%2, %0), %%xmm0      \n\t" // 3/1 on intel
-        "movaps 16(%2, %0), %%xmm1      \n\t"
-        "movaps 32(%2, %0), %%xmm2      \n\t"
-        "movaps 48(%2, %0), %%xmm3      \n\t"
-        "maxps      %%xmm4, %%xmm0      \n\t"
-        "maxps      %%xmm4, %%xmm1      \n\t"
-        "maxps      %%xmm4, %%xmm2      \n\t"
-        "maxps      %%xmm4, %%xmm3      \n\t"
-        "minps      %%xmm5, %%xmm0      \n\t"
-        "minps      %%xmm5, %%xmm1      \n\t"
-        "minps      %%xmm5, %%xmm2      \n\t"
-        "minps      %%xmm5, %%xmm3      \n\t"
-        "movaps     %%xmm0,   (%1, %0)  \n\t"
-        "movaps     %%xmm1, 16(%1, %0)  \n\t"
-        "movaps     %%xmm2, 32(%1, %0)  \n\t"
-        "movaps     %%xmm3, 48(%1, %0)  \n\t"
-        "sub           $64, %0          \n\t"
-        "jge            1b              \n\t"
-        : "+&r" (i)
-        : "r" (dst), "r" (src), "m" (min), "m" (max)
-        : "memory");
-}
-
 #endif /* HAVE_INLINE_ASM */
