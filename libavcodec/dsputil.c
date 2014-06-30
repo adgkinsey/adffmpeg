@@ -3,8 +3,6 @@
  * Copyright (c) 2000, 2001 Fabrice Bellard
  * Copyright (c) 2002-2004 Michael Niedermayer <michaelni@gmx.at>
  *
- * gmc & q-pel & 32/64 bit based MC by Michael Niedermayer <michaelni@gmx.at>
- *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -51,20 +49,6 @@ uint32_t ff_square_tab[512] = { 0, };
 #define BIT_DEPTH 8
 #include "dsputilenc_template.c"
 
-/* Input permutation for the simple_idct_mmx */
-static const uint8_t simple_mmx_permutation[64] = {
-    0x00, 0x08, 0x04, 0x09, 0x01, 0x0C, 0x05, 0x0D,
-    0x10, 0x18, 0x14, 0x19, 0x11, 0x1C, 0x15, 0x1D,
-    0x20, 0x28, 0x24, 0x29, 0x21, 0x2C, 0x25, 0x2D,
-    0x12, 0x1A, 0x16, 0x1B, 0x13, 0x1E, 0x17, 0x1F,
-    0x02, 0x0A, 0x06, 0x0B, 0x03, 0x0E, 0x07, 0x0F,
-    0x30, 0x38, 0x34, 0x39, 0x31, 0x3C, 0x35, 0x3D,
-    0x22, 0x2A, 0x26, 0x2B, 0x23, 0x2E, 0x27, 0x2F,
-    0x32, 0x3A, 0x36, 0x3B, 0x33, 0x3E, 0x37, 0x3F,
-};
-
-static const uint8_t idct_sse2_row_perm[8] = { 0, 4, 1, 5, 2, 6, 3, 7 };
-
 av_cold void ff_init_scantable(uint8_t *permutation, ScanTable *st,
                                const uint8_t *src_scantable)
 {
@@ -91,6 +75,11 @@ av_cold void ff_init_scantable_permutation(uint8_t *idct_permutation,
 {
     int i;
 
+    if (ARCH_X86)
+        if (ff_init_scantable_permutation_x86(idct_permutation,
+                                              idct_permutation_type))
+            return;
+
     switch (idct_permutation_type) {
     case FF_NO_IDCT_PERM:
         for (i = 0; i < 64; i++)
@@ -100,10 +89,6 @@ av_cold void ff_init_scantable_permutation(uint8_t *idct_permutation,
         for (i = 0; i < 64; i++)
             idct_permutation[i] = (i & 0x38) | ((i & 6) >> 1) | ((i & 1) << 2);
         break;
-    case FF_SIMPLE_IDCT_PERM:
-        for (i = 0; i < 64; i++)
-            idct_permutation[i] = simple_mmx_permutation[i];
-        break;
     case FF_TRANSPOSE_IDCT_PERM:
         for (i = 0; i < 64; i++)
             idct_permutation[i] = ((i & 7) << 3) | (i >> 3);
@@ -111,10 +96,6 @@ av_cold void ff_init_scantable_permutation(uint8_t *idct_permutation,
     case FF_PARTTRANS_IDCT_PERM:
         for (i = 0; i < 64; i++)
             idct_permutation[i] = (i & 0x24) | ((i & 3) << 3) | ((i >> 3) & 3);
-        break;
-    case FF_SSE2_IDCT_PERM:
-        for (i = 0; i < 64; i++)
-            idct_permutation[i] = (i & 0x38) | idct_sse2_row_perm[i & 7];
         break;
     default:
         av_log(NULL, AV_LOG_ERROR,
@@ -188,30 +169,6 @@ static int pix_norm1_c(uint8_t *pix, int line_size)
         pix += line_size - 16;
     }
     return s;
-}
-
-static void bswap_buf(uint32_t *dst, const uint32_t *src, int w)
-{
-    int i;
-
-    for (i = 0; i + 8 <= w; i += 8) {
-        dst[i + 0] = av_bswap32(src[i + 0]);
-        dst[i + 1] = av_bswap32(src[i + 1]);
-        dst[i + 2] = av_bswap32(src[i + 2]);
-        dst[i + 3] = av_bswap32(src[i + 3]);
-        dst[i + 4] = av_bswap32(src[i + 4]);
-        dst[i + 5] = av_bswap32(src[i + 5]);
-        dst[i + 6] = av_bswap32(src[i + 6]);
-        dst[i + 7] = av_bswap32(src[i + 7]);
-    }
-    for (; i < w; i++)
-        dst[i + 0] = av_bswap32(src[i + 0]);
-}
-
-static void bswap16_buf(uint16_t *dst, const uint16_t *src, int len)
-{
-    while (len--)
-        *dst++ = av_bswap16(*src++);
 }
 
 static int sse4_c(MpegEncContext *v, uint8_t *pix1, uint8_t *pix2,
@@ -438,92 +395,6 @@ static int sum_abs_dctelem_c(int16_t *block)
 
 #define avg2(a, b) ((a + b + 1) >> 1)
 #define avg4(a, b, c, d) ((a + b + c + d + 2) >> 2)
-
-static void gmc1_c(uint8_t *dst, uint8_t *src, int stride, int h,
-                   int x16, int y16, int rounder)
-{
-    const int A = (16 - x16) * (16 - y16);
-    const int B = (x16)      * (16 - y16);
-    const int C = (16 - x16) * (y16);
-    const int D = (x16)      * (y16);
-    int i;
-
-    for (i = 0; i < h; i++) {
-        dst[0] = (A * src[0] + B * src[1] + C * src[stride + 0] + D * src[stride + 1] + rounder) >> 8;
-        dst[1] = (A * src[1] + B * src[2] + C * src[stride + 1] + D * src[stride + 2] + rounder) >> 8;
-        dst[2] = (A * src[2] + B * src[3] + C * src[stride + 2] + D * src[stride + 3] + rounder) >> 8;
-        dst[3] = (A * src[3] + B * src[4] + C * src[stride + 3] + D * src[stride + 4] + rounder) >> 8;
-        dst[4] = (A * src[4] + B * src[5] + C * src[stride + 4] + D * src[stride + 5] + rounder) >> 8;
-        dst[5] = (A * src[5] + B * src[6] + C * src[stride + 5] + D * src[stride + 6] + rounder) >> 8;
-        dst[6] = (A * src[6] + B * src[7] + C * src[stride + 6] + D * src[stride + 7] + rounder) >> 8;
-        dst[7] = (A * src[7] + B * src[8] + C * src[stride + 7] + D * src[stride + 8] + rounder) >> 8;
-        dst   += stride;
-        src   += stride;
-    }
-}
-
-void ff_gmc_c(uint8_t *dst, uint8_t *src, int stride, int h, int ox, int oy,
-              int dxx, int dxy, int dyx, int dyy, int shift, int r,
-              int width, int height)
-{
-    int y, vx, vy;
-    const int s = 1 << shift;
-
-    width--;
-    height--;
-
-    for (y = 0; y < h; y++) {
-        int x;
-
-        vx = ox;
-        vy = oy;
-        for (x = 0; x < 8; x++) { // FIXME: optimize
-            int index;
-            int src_x  = vx >> 16;
-            int src_y  = vy >> 16;
-            int frac_x = src_x & (s - 1);
-            int frac_y = src_y & (s - 1);
-
-            src_x >>= shift;
-            src_y >>= shift;
-
-            if ((unsigned) src_x < width) {
-                if ((unsigned) src_y < height) {
-                    index = src_x + src_y * stride;
-                    dst[y * stride + x] =
-                        ((src[index]                        * (s - frac_x) +
-                          src[index + 1]          * frac_x) * (s - frac_y) +
-                         (src[index + stride]               * (s - frac_x) +
-                          src[index + stride + 1] * frac_x) *      frac_y  +
-                         r) >> (shift * 2);
-                } else {
-                    index = src_x + av_clip(src_y, 0, height) * stride;
-                    dst[y * stride + x] =
-                        ((src[index]               * (s - frac_x) +
-                          src[index + 1] * frac_x) *  s           +
-                         r) >> (shift * 2);
-                }
-            } else {
-                if ((unsigned) src_y < height) {
-                    index = av_clip(src_x, 0, width) + src_y * stride;
-                    dst[y * stride + x] =
-                        ((src[index]                    * (s - frac_y) +
-                          src[index + stride] * frac_y) *  s           +
-                         r) >> (shift * 2);
-                } else {
-                    index = av_clip(src_x, 0, width) +
-                            av_clip(src_y, 0, height) * stride;
-                    dst[y * stride + x] = src[index];
-                }
-            }
-
-            vx += dxx;
-            vy += dyx;
-        }
-        ox += dxy;
-        oy += dyy;
-    }
-}
 
 static inline int pix_abs16_c(MpegEncContext *v, uint8_t *pix1, uint8_t *pix2,
                               int line_size, int h)
@@ -1524,9 +1395,6 @@ av_cold void ff_dsputil_init(DSPContext *c, AVCodecContext *avctx)
 
     c->sum_abs_dctelem = sum_abs_dctelem_c;
 
-    c->gmc1 = gmc1_c;
-    c->gmc  = ff_gmc_c;
-
     c->pix_sum   = pix_sum_c;
     c->pix_norm1 = pix_norm1_c;
 
@@ -1573,9 +1441,6 @@ av_cold void ff_dsputil_init(DSPContext *c, AVCodecContext *avctx)
 #if CONFIG_SNOW_DECODER || CONFIG_SNOW_ENCODER
     ff_dsputil_init_dwt(c);
 #endif
-
-    c->bswap_buf   = bswap_buf;
-    c->bswap16_buf = bswap16_buf;
 
     c->try_8x8basis = try_8x8basis_c;
     c->add_8x8basis = add_8x8basis_c;
