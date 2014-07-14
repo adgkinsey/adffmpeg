@@ -163,6 +163,7 @@ void av_register_all(void)
     REGISTER_MUXDEMUX(LATM,             latm);
     REGISTER_DEMUXER (LMLM4,            lmlm4);
     REGISTER_DEMUXER (LOAS,             loas);
+    REGISTER_MUXDEMUX(LRC,              lrc);
     REGISTER_DEMUXER (LVF,              lvf);
     REGISTER_DEMUXER (LXF,              lxf);
     REGISTER_MUXDEMUX(M4V,              m4v);
@@ -373,6 +374,7 @@ void av_register_all(void)
     REGISTER_PROTOCOL (NETVU, netvu);
 
     /* external libraries */
+    REGISTER_MUXDEMUX(LIBPARREADER,     libparreader);
     REGISTER_DEMUXER (LIBGME,           libgme);
     REGISTER_DEMUXER (LIBMODPLUG,       libmodplug);
     REGISTER_MUXDEMUX(LIBNUT,           libnut);
@@ -383,5 +385,5 @@ void av_register_all(void)
     REGISTER_PROTOCOL(LIBRTMPT,         librtmpt);
     REGISTER_PROTOCOL(LIBRTMPTE,        librtmpte);
     REGISTER_PROTOCOL(LIBSSH,           libssh);
-    REGISTER_MUXDEMUX (LIBPARREADER,    libparreader);
+    REGISTER_PROTOCOL(LIBSMBCLIENT,     libsmbclient);
 }
