@@ -166,6 +166,7 @@ Codecs:
   dnxhd*                                Baptiste Coudurier
   dpcm.c                                Mike Melanson
   dv.c                                  Roman Shaposhnik
+  dvbsubdec.c                           Anshul Maheshwari
   dxa.c                                 Kostya Shishkov
   eacmv*, eaidct*, eat*                 Peter Ross
   exif.c, exif.h                        Thilo Borgmann
@@ -527,8 +528,8 @@ x86                                     Michael Niedermayer
 Releases
 ========
 
+2.3                                     Michael Niedermayer
 2.2                                     Michael Niedermayer
-2.1                                     Michael Niedermayer
 1.2                                     Michael Niedermayer
 
 If you want to maintain an older release, please contact us

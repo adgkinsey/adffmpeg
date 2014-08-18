@@ -1,7 +1,25 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
-version <next>:
+version 2.3.2:
+- snow: fix null pointer dereference
+- huffyucdec: fix overread
+- vc1dec: fix crash
+- iff: fix out of array access
+- matroskaenc: fix assertion failure
+- cdgraphics: fix infinite loop
+- dvdsub_parser: fix infinite loop
+- mpeg12dec: support decoding some broken files
+- v4l2enc: fix crash
+- h264_parser: fix handling huge resolutions
+- h264_mp4toannexb_bsf: multiple bugfixes
+
+version 2.3.1:
+- public AVDCT API/ABI for DCT functions
+- g2meet: allow size changes within original sizes
+- dv: improved error resilience, fixing Ticket2340 and Ticket2341
+
+version 2.3:
 - AC3 fixed-point decoding
 - shuffleplanes filter
 - subfile protocol
@@ -34,6 +52,8 @@ version <next>:
 - Image format auto-detection
 - LRC demuxer and muxer
 - Samba protocol (via libsmbclient)
+- WebM DASH Manifest muxer
+- libfribidi support in drawtext
 
 
 version 2.2:

@@ -335,6 +335,24 @@ av_cold int ff_MPV_encode_init(AVCodecContext *avctx)
     s->mpeg_quant         = avctx->mpeg_quant;
     s->rtp_mode           = !!avctx->rtp_payload_size;
     s->intra_dc_precision = avctx->intra_dc_precision;
+
+    // workaround some differences between how applications specify dc precission
+    if (s->intra_dc_precision < 0) {
+        s->intra_dc_precision += 8;
+    } else if (s->intra_dc_precision >= 8)
+        s->intra_dc_precision -= 8;
+
+    if (s->intra_dc_precision < 0) {
+        av_log(avctx, AV_LOG_ERROR,
+                "intra dc precision must be positive, note some applications use"
+                " 0 and some 8 as base meaning 8bit, the value must not be smaller than that\n");
+        return AVERROR(EINVAL);
+    }
+
+    if (s->intra_dc_precision > (avctx->codec_id == AV_CODEC_ID_MPEG2VIDEO ? 3 : 0)) {
+        av_log(avctx, AV_LOG_ERROR, "intra dc precision too large\n");
+        return AVERROR(EINVAL);
+    }
     s->user_specified_pts = AV_NOPTS_VALUE;
 
     if (s->gop_size <= 1) {
@@ -388,8 +406,7 @@ av_cold int ff_MPV_encode_init(AVCodecContext *avctx)
 
     if ((!avctx->rc_max_rate) != (!avctx->rc_buffer_size)) {
         av_log(avctx, AV_LOG_ERROR, "Either both buffer size and max rate or neither must be specified\n");
-        if (avctx->rc_max_rate && !avctx->rc_buffer_size)
-            return -1;
+        return -1;
     }
 
     if (avctx->rc_min_rate && avctx->rc_max_rate != avctx->rc_min_rate) {
@@ -1129,7 +1146,8 @@ static int load_input_picture(MpegEncContext *s, const AVFrame *pic_arg)
                     int vpad = 16;
 
                     if (   s->codec_id == AV_CODEC_ID_MPEG2VIDEO
-                        && !s->progressive_sequence)
+                        && !s->progressive_sequence
+                        && FFALIGN(s->height, 32) - s->height > 16)
                         vpad = 32;
 
                     if (!s->avctx->rc_buffer_size)
