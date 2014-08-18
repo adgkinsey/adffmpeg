@@ -654,7 +654,6 @@ static int http_read_header(URLContext *h, int *new_location)
 
         av_strlcat(s->response_headers, line, sizeof(s->response_headers));
         av_strlcat(s->response_headers, "\n", sizeof(s->response_headers));
-        
         av_log(h, AV_LOG_DEBUG, "header='%s'\n", line);
 
         err = process_line(h, line, s->line_count, new_location);
@@ -757,7 +756,7 @@ static int http_connect(URLContext *h, const char *path, const char *local_path,
                            "Content-Type: %s\r\n", s->content_type);
     if (!has_header(s->headers, "\r\nCookie: ") && s->cookies) {
         char *cookies = NULL;
-        if (!get_cookies(s, &cookies, path, hoststr)) {
+        if (!get_cookies(s, &cookies, path, hoststr) && cookies) {
             len += av_strlcatf(headers + len, sizeof(headers) - len,
                                "Cookie: %s\r\n", cookies);
             av_free(cookies);
@@ -786,17 +785,14 @@ static int http_connect(URLContext *h, const char *path, const char *local_path,
              authstr ? authstr : "",
              proxyauthstr ? "Proxy-" : "", proxyauthstr ? proxyauthstr : "");
 
-    av_freep(&authstr);
-    av_freep(&proxyauthstr);
-
     av_log(h, AV_LOG_DEBUG, "request: %s\n", s->buffer);
 
     if ((err = ffurl_write(s->hd, s->buffer, strlen(s->buffer))) < 0)
-        return err;
+        goto done;
 
     if (s->post_data)
         if ((err = ffurl_write(s->hd, s->post_data, s->post_datalen)) < 0)
-            return err;
+            goto done;
 
     /* init input buffer */
     s->buf_ptr = s->buffer;
@@ -813,15 +809,20 @@ static int http_connect(URLContext *h, const char *path, const char *local_path,
          * we've still to send the POST data, but the code calling this
          * function will check http_code after we return. */
         s->http_code = 200;
-        return 0;
+        err = 0;
+        goto done;
     }
 
     /* wait for header */
     err = http_read_header(h, new_location);
     if (err < 0)
-        return err;
+        goto done;
 
-    return (off == s->off) ? 0 : -1;
+    err = (off == s->off) ? 0 : -1;
+done:
+    av_freep(&authstr);
+    av_freep(&proxyauthstr);
+    return err;
 }
 
 
@@ -899,7 +900,6 @@ static int http_read_stream(URLContext *h, uint8_t *buf, int size)
         if (!s->chunksize) {
             char line[32];
 
-            for(;;) {
                 do {
                     if ((err = http_get_line(s, line, sizeof(line))) < 0)
                         return err;
@@ -911,8 +911,6 @@ static int http_read_stream(URLContext *h, uint8_t *buf, int size)
 
                 if (!s->chunksize)
                     return 0;
-                break;
-            }
         }
         size = FFMIN(size, s->chunksize);
     }
@@ -1070,15 +1068,20 @@ static int64_t http_seek(URLContext *h, int64_t off, int whence)
     else if ((s->filesize == -1 && whence == SEEK_END) || h->is_streamed)
         return AVERROR(ENOSYS);
 
-    /* we save the old context in case the seek fails */
-    old_buf_size = s->buf_end - s->buf_ptr;
-    memcpy(old_buf, s->buf_ptr, old_buf_size);
-    s->hd = NULL;
     if (whence == SEEK_CUR)
         off += s->off;
     else if (whence == SEEK_END)
         off += s->filesize;
+    else if (whence != SEEK_SET)
+        return AVERROR(EINVAL);
+    if (off < 0)
+        return AVERROR(EINVAL);
     s->off = off;
+
+    /* we save the old context in case the seek fails */
+    old_buf_size = s->buf_end - s->buf_ptr;
+    memcpy(old_buf, s->buf_ptr, old_buf_size);
+    s->hd = NULL;
 
     /* if it fails, continue on old connection */
     av_dict_copy(&options, s->chained_options, 0);
