@@ -244,7 +244,7 @@ int ff_mjpeg_decode_dht(MJpegDecodeContext *s)
 
 int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
 {
-    int len, nb_components, i, width, height, pix_fmt_id, ret;
+    int len, nb_components, i, width, height, bits, pix_fmt_id, ret;
     int h_count[MAX_COMPONENTS];
     int v_count[MAX_COMPONENTS];
 
@@ -254,11 +254,11 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
     /* XXX: verify len field validity */
     len     = get_bits(&s->gb, 16);
     s->avctx->bits_per_raw_sample =
-    s->bits = get_bits(&s->gb, 8);
+    bits = get_bits(&s->gb, 8);
 
     if (s->pegasus_rct)
-        s->bits = 9;
-    if (s->bits == 9 && !s->pegasus_rct)
+        bits = 9;
+    if (bits == 9 && !s->pegasus_rct)
         s->rct  = 1;    // FIXME ugly
 
     if(s->lossless && s->avctx->lowres){
@@ -291,7 +291,7 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
             return AVERROR_INVALIDDATA;
         }
     }
-    if (s->ls && !(s->bits <= 8 || nb_components == 1)) {
+    if (s->ls && !(bits <= 8 || nb_components == 1)) {
         avpriv_report_missing_feature(s->avctx,
                                       "JPEG-LS that is not <= 8 "
                                       "bits/component or 16-bit gray");
@@ -337,11 +337,13 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
 
     /* if different size, realloc/alloc picture */
     if (   width != s->width || height != s->height
+        || bits != s->bits
         || memcmp(s->h_count, h_count, sizeof(h_count))
         || memcmp(s->v_count, v_count, sizeof(v_count))) {
 
         s->width      = width;
         s->height     = height;
+        s->bits       = bits;
         memcpy(s->h_count, h_count, sizeof(h_count));
         memcpy(s->v_count, v_count, sizeof(v_count));
         s->interlaced = 0;
@@ -2096,8 +2098,11 @@ the_end:
                 continue;
             if (p==1 || p==2)
                 w >>= hshift;
+            av_assert0(w > 0);
             for (i = 0; i < s->chroma_height; i++) {
-                for (index = w - 1; index; index--) {
+                if (is16bit) ((uint16_t*)line)[w - 1] = ((uint16_t*)line)[(w - 1) / 2];
+                else                      line[w - 1] = line[(w - 1) / 2];
+                for (index = w - 2; index > 0; index--) {
                     if (is16bit)
                         ((uint16_t*)line)[index] = (((uint16_t*)line)[index / 2] + ((uint16_t*)line)[(index + 1) / 2]) >> 1;
                     else
@@ -2127,7 +2132,7 @@ the_end:
             for (i = s->height - 1; i; i--) {
                 uint8_t *src1 = &((uint8_t *)s->picture_ptr->data[p])[i / 2 * s->linesize[p]];
                 uint8_t *src2 = &((uint8_t *)s->picture_ptr->data[p])[(i + 1) / 2 * s->linesize[p]];
-                if (src1 == src2) {
+                if (src1 == src2 || i == s->height - 1) {
                     memcpy(dst, src1, w);
                 } else {
                     for (index = 0; index < w; index++)
